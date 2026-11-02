@@ -243,3 +243,18 @@ def test_region_bias_without_bbox_is_plain_truncation() -> None:
         "3",
         "4",
     ]
+
+
+def test_region_bias_pulls_in_region_item_from_beyond_limit() -> None:
+    """후보를 넉넉히 받는 이유 — 지역 안 장소가 전국 순위 limit 밖(20위)에 있어도 앞으로 당긴다."""
+    items = [_item(f"far-{i}", 126.9, 37.5) for i in range(20)]
+    items.append(_item("andong", 128.53, 36.55))
+    ordered = region_biased_items(items, bbox=_ANDONG_BBOX, limit=8)
+    assert ordered[0]["feature_id"] == "andong"
+    assert len(ordered) == 8
+
+
+def test_region_bias_is_off_when_limit_is_one() -> None:
+    items = [_item("exact-far", 129.04, 35.11), _item("near", 128.5, 36.6)]
+    ordered = region_biased_items(items, bbox=_ANDONG_BBOX, limit=1)
+    assert [item["feature_id"] for item in ordered] == ["exact-far"]

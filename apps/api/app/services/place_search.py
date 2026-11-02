@@ -151,7 +151,10 @@ def region_biased_items(
             and lat_min <= lat <= lat_max
         )
 
-    regional_cap = max(1, limit // 2)
+    # 절반(내림) — limit 1이면 편향하지 않는다(유일한 자리를 지역 안 퍼지 매칭에 내주지 않게).
+    regional_cap = limit // 2
+    if regional_cap == 0:
+        return dicts[:limit]
     regional = [item for item in dicts if inside(item)][:regional_cap]
     picked = {id(item) for item in regional}
     rest = [item for item in dicts if id(item) not in picked]

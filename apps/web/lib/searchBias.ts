@@ -13,8 +13,9 @@ import { toBboxParam } from '@/lib/featureBounds';
 export const TRIP_BIAS_PADDING_DEGREES = 0.25;
 
 /**
- * 편향 bbox는 소수 2자리(≈1km)로 거칠게 보낸다 — 순서 편향에는 그만큼이면 충분하고, 탐색 지도 화면은
- * 동의 후 기기 위치로 자동 센터링될 수 있으므로 정밀한 화면 좌표를 검색 로그(`api_call_log`)에 남기지 않는다.
+ * 편향 bbox는 소수 2자리(≈1km)로 거칠게 보낸다 — 순서 편향에는 그만큼이면 충분하고, 탐색 지도 화면은 동의 후
+ * 기기 위치로 자동 센터링될 수 있으므로 정밀한 화면 좌표를 PinVi API 요청(접근 로그)에 싣지 않는다. bbox는
+ * PinVi API 밖(Map·Kakao·Naver)으로는 나가지 않는다.
  */
 const BIAS_PRECISION = 2;
 
