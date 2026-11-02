@@ -172,7 +172,8 @@ prod 점검에서 httpx의 INFO 줄(`HTTP Request: POST http://…/v2/geocode?ke
   - `Authorization: [Bearer|Basic|Token|KakaoAK] …`. 구분은 공백·`%20`·`+`이고, JSON 안의 escape된 따옴표도 잡는다.
   - 가린 뒤에도 JSON 줄은 JSON이다. 값은 escape를 먹지 않는다.
 - structlog event-dict의 비밀 이름 키(`log.info("x", api_key=…)`)는 렌더 전에 가린다(`redact_event_dict`). JSON에서는 `"api_key": "…"` 꼴이라 문자열 필터가 못 보기 때문이다.
-  - 중첩 dict는 3단계까지 **복사해서** 가린다. 호출자의 dict는 바꾸지 않는다.
+  - 중첩 dict·list는 3단계까지 **복사해서** 가린다. 호출자의 객체는 바꾸지 않는다.
+- `authorization` 값이 JSON 비문자열(`null`·`true`·숫자·`{`·`[`)이면 건드리지 않는다. 가리면 JSON 줄이 깨진다.
 - 남는 한계:
   - `=`가 바로 붙지 않은 꼴은 가리지 못한다. 예: dict repr `{'password': …}`, SQLAlchemy 오류의 parameters, `x-api-key: …`, `key = …`.
   - 접미사가 붙은 이름도 가리지 못한다. 예: `db_password=`, `bot_token=`.
