@@ -9,8 +9,8 @@
  */
 
 export const MAP_FIT_PADDING = 64;
-/** 오버레이 아래와 핀 머리 사이 간격. */
-export const OVERLAY_GAP = 16;
+/** 피할 영역(검색 입력 줄) 아래와 핀 머리 사이 간격 — 입력 줄을 감싼 카드의 안쪽 여백·테두리(≈9px)를 넘는다. */
+export const OVERLAY_GAP = 24;
 const MAX_TOP_SHARE = 0.6;
 
 export interface VerticalRect {

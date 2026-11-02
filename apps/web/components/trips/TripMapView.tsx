@@ -44,9 +44,9 @@ import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
 const DEFAULT_CENTER: [number, number] = [127.5, 36.5];
 const DEFAULT_ZOOM = 7;
 const TRIP_MAP_MARKER_SIZE = 27;
-// PinMarker는 너비 size, 높이 size×1.5 물방울을 아래 꼭짓점(anchor bottom)에 건다.
-// 선택된 핀은 1.18배(≈48px)로 커지지만 맞춤 여백의 간격(OVERLAY_GAP) 안에 든다.
-const TRIP_MAP_PIN_HEIGHT = Math.ceil(TRIP_MAP_MARKER_SIZE * 1.5);
+// PinMarker는 너비 size, 높이 size×1.5 물방울을 아래(anchor bottom)에 건다. 실제 마커 상자는
+// 물방울보다 크다(실지도 측정 ≈49px: inline SVG 아래 여백 포함). 그래서 선택 배율(1.18)까지 넣어 잡는다.
+const TRIP_MAP_PIN_HEIGHT = Math.ceil(TRIP_MAP_MARKER_SIZE * 1.5 * 1.18);
 const FEATURE_MARKER_SIZE = 22;
 const FEATURE_DEBOUNCE_MS = 250;
 const MAKI_ICON_BASE_URL = 'https://unpkg.com/@mapbox/maki@8.0.0/icons';

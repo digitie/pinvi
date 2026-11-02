@@ -9,7 +9,7 @@ import {
 // 2026-11-02 prod e2e — 여행 지도의 fitBounds가 사방 64px만 띄워, 가장 북쪽 장소(영월 고씨굴) 핀이
 // 왼쪽 위 장소 검색창 밑에 숨었다(데스크톱·모바일). 위쪽 여백은 오버레이 아래로 내려야 한다.
 const rect = (top: number, height: number) => ({ top, bottom: top + height, height });
-const PIN_HEIGHT = 41; // 여행 지도 핀: size 27 × 1.5
+const PIN_HEIGHT = 48; // 여행 지도 핀 상자: size 27 × 1.5 × 선택 배율 1.18(실지도 측정 ≈49px)
 const domBox = (top: number, height: number) => () =>
   ({
     x: 0,
