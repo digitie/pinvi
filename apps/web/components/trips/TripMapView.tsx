@@ -142,6 +142,8 @@ export interface TripMapViewProps {
    * 길어질 수 있으므로 max-height와 세로 스크롤을 함께 준다.
    */
   overlayTopLeftClassName?: string;
+  /** 지도 화면이 바뀔 때마다(로드·이동·줌) 그 bbox를 알린다 — 장소 검색 지역 편향의 화면 fallback. */
+  onViewportBboxChange?: (bbox: string) => void;
 }
 
 export function TripMapView({
@@ -161,6 +163,7 @@ export function TripMapView({
   transportLayers = false,
   overlayTopLeft,
   overlayTopLeftClassName = 'pointer-events-none absolute left-2 right-2 top-2 z-10',
+  onViewportBboxChange,
 }: TripMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const featureAbortRef = useRef<AbortController | null>(null);
@@ -262,22 +265,32 @@ export function TripMapView({
     [points],
   );
 
+  const onViewportBboxChangeRef = useRef(onViewportBboxChange);
+  useEffect(() => {
+    onViewportBboxChangeRef.current = onViewportBboxChange;
+  }, [onViewportBboxChange]);
+  const reportViewport = useCallback((map: MapLibreMap) => {
+    onViewportBboxChangeRef.current?.(boundsToBbox(map.getBounds()));
+  }, []);
+
   const handleLoad = useCallback(
     (map: MapLibreMap) => {
       mapRef.current = map;
       fitToPoints(map);
       scheduleFeatureFetch(map);
       transportViewportChange(map);
+      reportViewport(map);
     },
-    [fitToPoints, scheduleFeatureFetch, transportViewportChange],
+    [fitToPoints, scheduleFeatureFetch, transportViewportChange, reportViewport],
   );
 
   const handleViewportChange = useCallback(
     (map: MapLibreMap) => {
       scheduleFeatureFetch(map);
       transportViewportChange(map);
+      reportViewport(map);
     },
-    [scheduleFeatureFetch, transportViewportChange],
+    [scheduleFeatureFetch, transportViewportChange, reportViewport],
   );
 
   // POI 목록이 바뀌면 경계 재조정.

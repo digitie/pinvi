@@ -10,6 +10,11 @@ import { isAbortError } from '@/lib/abort';
 export interface MapSearchBoxProps {
   onSelect: (result: PlaceSearchResult) => void;
   className?: string;
+  /**
+   * 검색 시점의 지역 편향 bbox(`lng_min,lat_min,lng_max,lat_max`)를 돌려준다 — 여행 장소 범위 또는
+   * 지금 지도 화면. 그 범위 안의 장소가 먼저 나온다(밖의 결과도 뒤에 남는다). 없으면 null.
+   */
+  getBias?: () => string | null;
 }
 
 type Source = PlaceSearchResult['source'];
@@ -41,12 +46,17 @@ function resultKey(r: PlaceSearchResult, index: number): string {
   return `${r.source}-${r.feature_id ?? r.poi_id ?? r.external_id ?? index}`;
 }
 
-export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
+export function MapSearchBox({ onSelect, className, getBias }: MapSearchBoxProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlaceSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const searchAbort = useRef<AbortController | null>(null);
+  // 최신 편향 함수를 검색 시점에 읽는다(runSearch는 안정 참조라 prop을 직접 닫으면 낡는다).
+  const getBiasRef = useRef(getBias);
+  useEffect(() => {
+    getBiasRef.current = getBias;
+  }, [getBias]);
 
   const runSearch = useCallback(async (term: string) => {
     // 직전 검색을 취소하고(서버 작업·커넥션 낭비 방지), 이 controller가 최신일 때만 상태 반영.
@@ -58,7 +68,7 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
     try {
       // 서버가 internal(feature/address/my_poi) → kakao → naver 순으로 정렬해 준다(순서 유지).
       const res = await geoApi(apiClient).searchPlaces(
-        { q: term, limit: 8 },
+        { q: term, limit: 8, bbox: getBiasRef.current?.() ?? null },
         { signal: controller.signal },
       );
       if (searchAbort.current !== controller) return;

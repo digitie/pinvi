@@ -91,12 +91,25 @@ function TripDayRiseSet({ day }: { day: TripDayHeaderProps['day'] }) {
     );
   }
   // 준비 중(pending_*)일 때만 안내. failed / success-무값 / null은 표시하지 않는다(잘못된 "준비 중" 방지).
+  // 무엇을 기다리는지에 따라 문구를 나눈다 — 장소가 없는 날에 "준비 중"이라고 하면 사용자는 기다리기만
+  // 한다(2026-11-02 prod e2e: 빈 일자가 계속 "일출·일몰 준비 중"이었다). 상태는 `trip_day_rise_set.py`
+  // `_status_for`가 정한다.
   if (rs != null && rs.status.startsWith('pending')) {
     return (
-      <p className="mt-1 text-xs text-muted" data-testid="trip-day-rise-set-pending">
-        일출·일몰 준비 중
+      <p
+        className="mt-1 text-xs text-muted"
+        data-testid="trip-day-rise-set-pending"
+        data-rise-set-status={rs.status}
+      >
+        {risePendingMessage(rs.status)}
       </p>
     );
   }
   return null;
+}
+
+function risePendingMessage(status: NonNullable<TripViewDay['rise_set']>['status']): string {
+  if (status === 'pending_coord') return '장소를 추가하면 일출·일몰을 표시합니다';
+  if (status === 'pending_date') return '날짜를 정하면 일출·일몰을 표시합니다';
+  return '일출·일몰 준비 중';
 }

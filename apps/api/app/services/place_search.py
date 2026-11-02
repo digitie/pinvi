@@ -124,6 +124,31 @@ def feature_item_to_result(
     )
 
 
+def merge_region_biased_items(
+    regional: list[Any], everywhere: list[Any], *, limit: int
+) -> list[dict[str, Any]]:
+    """지역 편향 검색 결과 병합 — 지역(bbox) 안의 결과를 먼저, 그다음 전국 결과(중복 제외), `limit`까지.
+
+    Map `/v1/features/search`의 bbox는 **필터**라 bbox만 주면 지역 밖 장소(다른 지역의 같은 이름)가
+    사라진다. 그래서 bbox 검색과 전국 검색을 함께 받아 순서로만 편향한다(2026-11-02 소유자 결정:
+    "하회마을"에서 서울 식당 3곳이 안동 마을보다 위에 나왔다).
+    """
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in [*regional, *everywhere]:
+        if not isinstance(item, dict):
+            continue
+        key = item.get("feature_id")
+        if isinstance(key, str):
+            if key in seen:
+                continue
+            seen.add(key)
+        merged.append(item)
+        if len(merged) >= limit:
+            break
+    return merged
+
+
 # geo v2 `match_kind` 중 도로명 주소 후보. 나머지(parcel=지번, region 등)는 `address`에 둔다.
 _ROAD_MATCH_KINDS = frozenset({"road"})
 

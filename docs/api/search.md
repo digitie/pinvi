@@ -19,6 +19,7 @@ GET /search?q=<검색어>&limit=<n>&lat=<위도>&lon=<경도>
 | `q`           | string(2–120) | 필수   | 검색어(최소 2자). 클라이언트는 디바운스·in-flight 취소 유지                     |
 | `limit`       | int(1–50)     | 아니오 | 소스별 상한(기본 10). Naver는 자체 상한 5로 clamp                               |
 | `lat` / `lon` | float         | 아니오 | **"내 주변 검색"일 때만**. 함께 와야 하며 좌표를 **Kakao에만** 전달(§위치 감사) |
+| `bbox`        | string        | 아니오 | 지역 **편향** `lng_min,lat_min,lng_max,lat_max` — 여행 장소 범위(웹은 여백 0.25°) 또는 지금 지도 화면. 범위 안 feature를 먼저, 밖은 뒤에(필터 아님). 한국 범위로 좁히고 형식 오류는 400. 사용자 위치가 아니므로 감사·외부 provider 전달 대상이 아니다 |
 
 인증 필요(로그인 쿠키). 좌표가 오면 위치정보 제3자 제공으로 감사된다(아래).
 
@@ -55,6 +56,10 @@ GET /search?q=<검색어>&limit=<n>&lat=<위도>&lon=<경도>
 ## 동작
 
 - **정렬**: internal(feature → address → my_poi) → **kakao** → **naver**. 부분 degrade에도 안정적.
+- **지역 편향(`bbox`)**: Map `/v1/features/search`의 bbox는 필터라, `bbox`가 오면 전국 검색과
+  bbox 검색을 함께 받아 bbox 결과 → 전국 결과(중복 제외) 순으로 `limit`까지 합친다. bbox 검색이
+  실패해도 전국 결과만으로 계속한다(2026-11-02 결정 — "하회마을"에서 서울 식당 셋이 안동 마을보다
+  먼저 나왔다).
 - **feature·address 동시 조회**: 두 소스는 독립 HTTP라 동시에 보낸다. address(kor-travel-geo
   `/v2/search`)는 **1회·3초**만 기다린다 — 짧은 검색어에서 geo가 504(DB statement timeout)를 내면
   재시도해도 같으므로 `addresses`를 degrade로 둔다(2026-11-02 prod e2e: "하회"가 5초×3회로 16초).
