@@ -135,7 +135,7 @@ async def test_flushed_writes_flag_clears_when_the_transaction_ends(session_fact
 
 
 async def test_weather_card_resolve_hang_opens_the_circuit(session_factory) -> None:  # type: ignore[no-untyped-def]
-    """카드 범위 배선: 예산(0.4 s)이 read(1 s)의 절반보다 짧아도 응답 없는 `/resolve`를 세서, 카드 3회 뒤엔
+    """카드 범위 배선: 예산(1 s)이 read(4 s)의 절반보다 짧아도 응답 없는 `/resolve`를 세서, 카드 3회 뒤엔
     회로가 열려 4번째 카드는 weather에 닿지 않는다."""
     import asyncio
 
@@ -155,7 +155,7 @@ async def test_weather_card_resolve_hang_opens_the_circuit(session_factory) -> N
         httpx.AsyncClient(
             base_url="http://kor-travel-weather.test",
             transport=httpx.MockTransport(hang),
-            timeout=httpx.Timeout(1.0, connect=0.2),
+            timeout=httpx.Timeout(4.0, connect=0.2),
         ),
         max_attempts=3,
         backoff_base_seconds=0.0,
@@ -170,7 +170,7 @@ async def test_weather_card_resolve_hang_opens_the_circuit(session_factory) -> N
                     lon=128.84,
                     asof=None,
                     weather_client=client,
-                    budget_seconds=0.4,
+                    budget_seconds=1.0,
                 )
             assert values == []
     finally:

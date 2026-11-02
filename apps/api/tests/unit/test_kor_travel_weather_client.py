@@ -766,10 +766,56 @@ async def test_card_scope_counts_short_deadline_resolve_timeouts_so_the_circuit_
         with _card_scope(loop, 0.05):
             with pytest.raises(KorTravelWeatherUnavailable):
                 await client.resolve(lat=36.7, lon=128.8)
-    with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
-        await client.resolve(lat=36.7, lon=128.8)
+    with _card_scope(loop, 0.05):
+        with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
+            await client.resolve(lat=36.7, lon=128.8)
     assert len(read_waits) == 3
+    # 카드의 실패는 카드 전용 회로에 쌓였다 — trip view 등이 공유하는 `resolve` 회로는 닫힌 채다.
+    with pytest.raises(KorTravelWeatherUnavailable):
+        await client.resolve(lat=36.7, lon=128.8)
+    assert len(read_waits) == 4
     await client.aclose()
+
+
+async def test_card_scope_does_not_count_attempts_below_the_card_minimum() -> None:
+    """카드 예산의 절반도 못 받은 attempt(예산 끝에서 시작한 호출)는 세지 않는다."""
+    read_waits: list[float] = []
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(_hanging_handler(read_waits)),
+        timeout=httpx.Timeout(1.0, connect=0.2),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    loop = asyncio.get_running_loop()
+    for _ in range(4):
+        with _card_scope(loop, 0.2):
+            await asyncio.sleep(0.12)  # 남은 시간 ≈0.08 < 최소 0.1
+            with pytest.raises(KorTravelWeatherDeadlineExhausted):
+                await client.resolve(lat=36.7, lon=128.8)
+    assert len(read_waits) == 4
+    await client.aclose()
+
+
+async def test_pool_timeout_is_not_a_weather_failure() -> None:
+    """우리 쪽 httpx 연결 풀 경합(`PoolTimeout`)은 피호출자 장애가 아니다 — 회로를 열지 않는다."""
+    attempts = {"n": 0}
+
+    def pool_busy(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        raise httpx.PoolTimeout("pool busy", request=request)
+
+    client = _client(pool_busy, max_attempts=3)
+    for _ in range(4):
+        with pytest.raises(KorTravelWeatherDeadlineExhausted, match="연결 풀"):
+            await client.latest("loc-1")
+    assert attempts["n"] == 4
+    await client.aclose()
+
+
+def test_card_scope_rejects_a_bare_string() -> None:
+    with pytest.raises(TypeError):
+        with kor_travel_weather_call_deadline(0.0, count_short_timeouts_for="resolve"):
+            pass
 
 
 async def test_card_scope_does_not_count_latest_forecast_shared_with_trip_view() -> None:
