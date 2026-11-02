@@ -84,12 +84,12 @@
     - page.request.get(<api>/admin/users?page=1&limit=1), /admin/feature-requests, /admin/audit?limit=1 호출
   expected:
     - 세 응답 모두 HTTP 404, body.error.code == 'RESOURCE_NOT_FOUND' (존재 자체 은닉)
-    - 403 은 오지 않는다 (브리프의 '403' 가정은 PinVi 계약과 다름 — rbac.py SPEC V8 M-4)
+    - 403 은 오지 않는다 (rbac.py SPEC V8 M-4; 소유자 확인 2026-11-03, #632 closed)
   cleanup:
     - 없음
   automation: scripted
   spec: specs/admin/admin-auth.live.spec.ts#ADM-004
-  notes: 계약이 404 이므로 '403' 을 기대값으로 두면 영구 실패한다.
+  notes: 계약은 404 로 확정(#632 closed, 변경 없음). '403' 을 기대값으로 두면 영구 실패한다.
 
 - id: ADM-005
   title: 비로그인 상태로 /admin 진입 시 /admin/login 으로 이동

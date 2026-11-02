@@ -756,7 +756,7 @@
     - 케이스 자체가 삭제; afterEach 재삭제 제외
   automation: scripted
   spec: specs/trip/trip-list.live.spec.ts#TRIP-043
-  notes: soft_delete(status=archived, deleted_at) — UI에 undo 없음(제품 확인 질문).
+  notes: soft_delete(status=archived, deleted_at) — 되돌리기는 제공하지 않는다(소유자 결정 2026-11-03, #633 not planned). 부재를 계속 단언한다.
 
 - id: TRIP-044
   title: 버킷 전환 — 예정/지난 여행 필터가 aria-pressed로 바뀌고 카드 집합이 분리된다

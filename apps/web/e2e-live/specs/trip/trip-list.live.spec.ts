@@ -92,7 +92,7 @@ test('[TRIP-043] 여행 삭제 — 확인 2단계, 목록에서 사라지고 상
   await expect(tripListCard(page, title)).toHaveCount(0);
   await bucketButton(page, '지난 여행').click();
   await expect(tripListCard(page, title)).toHaveCount(0);
-  // no undo affordance anywhere on the dashboard
+  // no undo affordance anywhere on the dashboard — by design (owner decision, #633 not planned)
   await expect(page.getByRole('button', { name: /되돌리기|실행 취소/ })).toHaveCount(0);
 
   await page.goto(`/trips/${id}`);

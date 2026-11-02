@@ -1,4 +1,4 @@
-// ADM-001..006 — admin auth: login, role gate (404 not 403), redirects, session refresh.
+// ADM-001..006 — admin auth: login, role gate (404 not 403 — owner-confirmed, #632 closed), redirects, session refresh.
 // Selectors re-verified against origin/main b1cef056:
 //   apps/web/app/(admin)/admin/login/page.tsx  -> LoginForm from @kor-travel/ui: data-slot login-username/password/submit/error,
 //                                                 wrapper data-testid="admin-login", brand text 'Pinvi Admin'
@@ -74,6 +74,8 @@ test.describe('ADM auth', () => {
 
   test('ADM-004 ordinary-user session calling admin API gets 404 RESOURCE_NOT_FOUND (not 403)', async ({ page }) => {
     test.skip(({ isMobile }) => isMobile, 'desktop only');
+    // Owner decision 2026-11-03 (#632 closed, no change): admin routes hide their existence from
+    // non-admin sessions — 404 RESOURCE_NOT_FOUND is the contract (rbac.py SPEC V8 M-4).
     const apiOrigin = captureApiOrigin(page);
     await loginAsOrdinaryUser(page);
     // Any app page triggers /auth/me, which reveals the API origin.

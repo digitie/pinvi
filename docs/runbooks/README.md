@@ -14,6 +14,7 @@ Pinvi 로컬 개발 / Docker / ETL / Admin / N150 배포 / 백업 / 파일 저�
 | [v100-live-gate.md](./v100-live-gate.md)                       | v1.0.0 E2E / live gate 오케스트레이션                            | 6        |
 | [admin-live-e2e.md](./admin-live-e2e.md)                       | N150/live Admin UI e2e 매트릭스 실행                             | 4~6      |
 | [live-mutating-e2e.md](./live-mutating-e2e.md)                 | N150/live 상태 변경 e2e 실행                                     | 5~6      |
+| [live-e2e-catalog.md](./live-e2e-catalog.md)                   | 운영 웹 대상 live UI 케이스 카탈로그(9 영역 346건) 실행          | ops      |
 | [file-storage.md](./file-storage.md)                           | RustFS 운영 + kor-travel-map 공유                                | 2        |
 | [odroid-docker.md](./odroid-docker.md)                         | Odroid 실행 경로 퇴역 안내                                       | 6        |
 | [backup-restore.md](./backup-restore.md)                       | Backup/Restore 핫스왑 (ADR-022) — pg_dump + 신규 schema cut-over | 5~6      |

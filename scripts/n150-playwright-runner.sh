@@ -183,6 +183,16 @@ if [[ "$generic_live_requested" == "1" ]]; then
     fi
   fi
 fi
+# Live catalog(scripts/n150-live-catalog.sh)의 결과 디렉터리. test-results/playwright-report는 tmpfs라
+# 컨테이너와 함께 사라지므로, 카탈로그 run은 report·trace·shots를 호출자가 만든 절대 경로 디렉터리에
+# 같은 경로로 mount해 남긴다. M04/M05 evidence directory와는 별개의 mount다.
+output_dir="${PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR:-}"
+if [[ -n "$output_dir" ]]; then
+  if [[ "$output_dir" != /* || ! -d "$output_dir" ]]; then
+    echo "error: PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR must be an existing absolute directory" >&2
+    exit 1
+  fi
+fi
 evidence_dir="${PINVI_M05_UI_EVIDENCE_DIR:-${PINVI_M04_UI_EVIDENCE_DIR:-}}"
 if [[ -n "${PINVI_M04_UI_EVIDENCE_DIR:-}" && -n "${PINVI_M05_UI_EVIDENCE_DIR:-}" ]]; then
   echo "error: only one M04/M05 UI evidence directory may be mounted per runner invocation" >&2
@@ -288,6 +298,24 @@ allowed_env_names=(
   PINVI_BACKUP_LIVE_STAGING
   PINVI_BACKUP_LIVE_STORAGE_STATE
   PINVI_BACKUP_LIVE_THROTTLE_MS
+  PINVI_E2E_ADMIN_EMAIL
+  PINVI_E2E_ADMIN_PASSWORD
+  PINVI_E2E_ALLOW_RESIDUAL_SUGGESTIONS
+  PINVI_E2E_API_URL
+  PINVI_E2E_COMPANION_EMAIL
+  PINVI_E2E_OUTPUT_DIR
+  PINVI_E2E_SEED_SUN_TRIP
+  PINVI_E2E_SESSION
+  PINVI_E2E_SESSION_MINUTES
+  PINVI_E2E_SHOT_DIR
+  PINVI_E2E_TELEGRAM_CHAT_ID
+  PINVI_E2E_TELEGRAM_FORBIDDEN_CHAT_ID
+  PINVI_E2E_TRIP_VIEW_BUDGET_MS
+  PINVI_E2E_USER2_EMAIL
+  PINVI_E2E_USER2_PASSWORD
+  PINVI_E2E_USER_EMAIL
+  PINVI_E2E_USER_PASSWORD
+  PINVI_E2E_WEATHER_VIA_MAP
   PINVI_LIVE_API_URL
   PINVI_LIVE_ATTACHMENT_E2E
   PINVI_LIVE_EMAIL
@@ -367,6 +395,9 @@ docker_args+=(
 if [[ -n "$evidence_dir" ]]; then
   docker_args+=( -v "$evidence_dir:$evidence_dir" )
 fi
+if [[ -n "$output_dir" ]]; then
+  docker_args+=( -v "$output_dir:$output_dir" -e "PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR=$output_dir" )
+fi
 docker_args+=(
   -w /work
   "$image"
@@ -395,6 +426,10 @@ if [[ -n "$marker_path" && -e "$marker_path" ]]; then
   fi
   chown "$PINVI_PLAYWRIGHT_RUNNER_EVIDENCE_OWNER" "$marker_path"
   chmod 600 "$marker_path"
+fi
+# live catalog 결과 디렉터리는 호출자 소유로 되돌린다(컨테이너는 root).
+if [[ -n "${PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR:-}" && -d "${PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR}" ]]; then
+  chown -R "$PINVI_PLAYWRIGHT_RUNNER_EVIDENCE_OWNER" "${PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR}"
 fi
 exit "$test_status"'
   bash
