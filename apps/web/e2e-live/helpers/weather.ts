@@ -106,6 +106,14 @@ export interface WxCard {
   metrics: WxMetric[];
 }
 export type WxResolution = { state: 'found'; card_key: string } | { state: string };
+
+/** `card_key` of a `found` resolution; throws with the actual state otherwise (contract invariant). */
+export function cardKeyOf(res: WxResolution | undefined): string {
+  if (!res || !('card_key' in res) || res.state !== 'found') {
+    throw new Error(`weather resolution 이 found 가 아니다: ${res?.state ?? 'undefined'}`);
+  }
+  return res.card_key;
+}
 export interface WxPoi {
   poi_id: string;
   feature_id: string | null;
@@ -270,11 +278,11 @@ export async function expectWeatherConsistent(
   expect(resolution, 'weather_by_feature_id 에 이 feature 가 있어야 한다').toBeTruthy();
   const kind = await weatherKind(section);
   if (resolution!.state === 'found') {
-    const card = cards[(resolution as { card_key: string }).card_key];
+    const card = cards[cardKeyOf(resolution)];
     expect(card, 'found 는 참조하는 card 가 있어야 한다(계약 불변식)').toBeTruthy();
     if (kind === 'status') {
       await expect(section).toContainText(TEXT.noData);
-      expect(metricsForDate(card, isoDate).length, '카드에 그 날짜 metric 이 없을 때만 no_data 문구').toBe(0);
+      expect(metricsForDate(card!, isoDate).length, '카드에 그 날짜 metric 이 없을 때만 no_data 문구').toBe(0);
     } else {
       await expect(section).toContainText(/현재|예보|미세먼지|시간대별/);
     }

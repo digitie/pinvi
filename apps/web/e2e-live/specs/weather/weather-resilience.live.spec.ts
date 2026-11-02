@@ -25,6 +25,7 @@ import {
   tripViewPattern,
   useTripCleanup,
   wxTitle,
+  cardKeyOf,
 } from '../../helpers/weather';
 
 test.describe('weather · resilience', () => {
@@ -75,7 +76,7 @@ test.describe('weather · resilience', () => {
     const day1 = dayOf(view, 1);
     const res = day1.weather_by_feature_id[day1.pois[0]!.feature_id!];
     expect(res?.state).toBe('found');
-    const card = day1.weather_cards[(res as { card_key: string }).card_key]!;
+    const card = day1.weather_cards[cardKeyOf(res)]!;
     expect(typeof card.is_stale).toBe('boolean');
     expect(card.latest_at, 'found 카드는 latest_at 이 있어야 한다').toBeTruthy();
     const ageH = (Date.now() - new Date(card.latest_at!).getTime()) / 3_600_000;
@@ -127,7 +128,7 @@ test.describe('weather · resilience', () => {
     for (const [poi, name] of [[day1.pois[0], n1], [day1.pois[1], n2]] as const) {
       const r = day1.weather_by_feature_id[poi!.feature_id!];
       if (r?.state !== 'found') continue;
-      const card = day1.weather_cards[(r as { card_key: string }).card_key]!;
+      const card = day1.weather_cards[cardKeyOf(r)]!;
       const adv = card.metrics.filter((m) => m.forecast_style === 'advisory');
       advisories += adv.length;
       if (adv.length === 0) continue;

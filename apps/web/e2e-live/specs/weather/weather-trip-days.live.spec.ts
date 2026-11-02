@@ -34,6 +34,7 @@ import {
   weatherKind,
   wxTitle,
   type WxResolution,
+  cardKeyOf,
 } from '../../helpers/weather';
 
 test.describe('weather · trip days', () => {
@@ -91,7 +92,7 @@ test.describe('weather · trip days', () => {
     await expect(section).toContainText(TEXT.group.forecast);
     await expect(section).not.toContainText(TEXT.group.current);
     await expect.soft(section).toContainText(/기온|최저|최고|하늘|강수/);
-    const styles = new Set(metricsForDate(day1.weather_cards[(res as { card_key: string }).card_key], day1.effective_date!).map((m) => m.forecast_style));
+    const styles = new Set(metricsForDate(day1.weather_cards[cardKeyOf(res)]!, day1.effective_date!).map((m) => m.forecast_style));
     annotate(`D+4 forecast_styles=${[...styles].join(',')}`);
     await shot(page, 'WX-002', 'mid-forecast');
   });
@@ -152,7 +153,7 @@ test.describe('weather · trip days', () => {
     const r1 = day1.weather_by_feature_id[p1!.feature_id!];
     const r2 = day1.weather_by_feature_id[p2!.feature_id!];
     if (r1?.state === 'found' && r2?.state === 'found') {
-      expect((r1 as { card_key: string }).card_key, '서울과 제주는 다른 location').not.toBe((r2 as { card_key: string }).card_key);
+      expect(cardKeyOf(r1), '서울과 제주는 다른 location').not.toBe(cardKeyOf(r2));
     } else {
       annotate(`states: ${seoul}=${r1?.state} ${jeju}=${r2?.state}`);
     }
@@ -177,7 +178,7 @@ test.describe('weather · trip days', () => {
     const day1 = dayOf(view, 1);
     const res = day1.weather_by_feature_id[day1.pois[0]!.feature_id!];
     expect(res?.state).toBe('found');
-    const card = day1.weather_cards[(res as { card_key: string }).card_key]!;
+    const card = day1.weather_cards[cardKeyOf(res)]!;
     const temps = numericValues(card.metrics, TEMP_KEY_RE, TEMP_UNIT_RE);
     const hums = numericValues(card.metrics, HUMIDITY_KEY_RE);
     const pops = numericValues(card.metrics, POP_KEY_RE);
@@ -212,7 +213,7 @@ test.describe('weather · trip days', () => {
     const section = daySection(article);
     await expectWeatherConsistent(section, res, day1.weather_cards, day1.effective_date!);
     if (res?.state === 'found') {
-      const card = day1.weather_cards[(res as { card_key: string }).card_key]!;
+      const card = day1.weather_cards[cardKeyOf(res)]!;
       for (const t of numericValues(card.metrics, TEMP_KEY_RE, TEMP_UNIT_RE)) {
         expect(t).toBeGreaterThanOrEqual(TEMP_RANGE.min);
         expect(t).toBeLessThanOrEqual(TEMP_RANGE.max);

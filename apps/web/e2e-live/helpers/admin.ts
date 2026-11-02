@@ -54,7 +54,7 @@ export function runTag(): string {
 
 /** mask_email() from apps/api/app/services/admin_users.py — local[0] + '***@' + domain. */
 export function maskedEmail(email: string): string {
-  const [local, domain] = email.split('@');
+  const [local = '', domain] = email.split('@');
   if (!domain) return email;
   return local.length <= 1 ? `${local}***@${domain}` : `${local[0]}***@${domain}`;
 }

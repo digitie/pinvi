@@ -71,8 +71,11 @@ test.describe('CORE a11y', () => {
 
   test('CORE-029 axe-core critical=0 on /login, /trips, /map (패키지 없으면 skip)', async ({ page }, testInfo) => {
     let AxeBuilder: (new (opts: { page: Page }) => { analyze: () => Promise<{ violations: Array<{ impact?: string | null; id: string; nodes: unknown[] }> }> }) | null = null;
+    // Resolved at runtime only: the package is not a devDependency (runbook §8), so the import
+    // specifier is kept out of TypeScript's module resolution.
+    const axeModule = '@axe-core/playwright';
     try {
-      AxeBuilder = (await import('@axe-core/playwright')).default as unknown as typeof AxeBuilder;
+      AxeBuilder = (await import(axeModule)).default as unknown as typeof AxeBuilder;
     } catch {
       test.skip(true, '@axe-core/playwright가 설치되어 있지 않다(apps/web devDependencies에 없음) — manual: Chrome Lighthouse/axe 확장으로 3페이지 critical=0 확인');
     }
