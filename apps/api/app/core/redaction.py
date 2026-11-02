@@ -43,19 +43,19 @@ SENSITIVE_QUERY_KEYS = frozenset(
 REDACTED = "***"
 
 # 값·토큰이 끝나는 문자: query 구분자, 공백, 따옴표, 꺾쇠, fragment, JSON escape(`\`), 닫는 괄호·쉼표.
-_VALUE_END = "&;\s\"'<>#\\,)\]}"
+_VALUE_END = "&;\\s\"'<>#\\\\,)\\]}"
 _TELEGRAM_BOT_PATH_RE = re.compile(r"/bot(\d+):[A-Za-z0-9_-]+")
 # `/bot/` 경로 밖에 나타나는 Telegram bot token(`<bot id>:<35자>`, 콜론이 `%3A`로 인코딩된 것 포함).
 # `clients/telegram.py`의 `mask_token`과 같은 모양이되 숫자 자리수를 좁혀 시각(`13:26`)과 겹치지 않게 한다.
 _TELEGRAM_TOKEN_RE = re.compile(r"(?<!\d)(?P<id>\d{6,12})(?P<sep>:|%3[Aa])[A-Za-z0-9_-]{30,}")
 # path에 실린 PinVi 자체 자격 증명: 여행 공유 링크, 서명된 업로드·다운로드 토큰(uvicorn access 줄).
 _PATH_TOKEN_RE = re.compile(
-    r"(?P<prefix>/trips/[^/?\s\"'<>#\]+/shared/|/storage/(?:uploads|downloads)/)"
+    r"(?P<prefix>/trips/[^/?\s\"'<>#\\]+/shared/|/storage/(?:uploads|downloads)/)"
     rf"(?P<token>[^/?{_VALUE_END}]+)"
 )
 # OAuth callback의 `code`·`state`(callback path에서만 — `code=`는 다른 곳에서 지역 코드 등이다).
 _OAUTH_CALLBACK_RE = re.compile(
-    rf"(?P<path>/oauth/[^/?{_VALUE_END}]+/callback/?\?)(?P<query>[^\s\"'<>#\]*)"
+    rf"(?P<path>/oauth/[^/?{_VALUE_END}]+/callback/?\?)(?P<query>[^\s\"'<>#\\]*)"
 )
 _OAUTH_PARAM_RE = re.compile(rf"(?P<lead>^|&)(?P<name>code|state)=[^{_VALUE_END}]*")
 # URL userinfo의 password(`scheme://user:password@host`).
@@ -68,8 +68,8 @@ _SENSITIVE_NAMES = "|".join(
     sorted((re.escape(name) for name in SENSITIVE_QUERY_KEYS), key=len, reverse=True)
 )
 _QUERY_SECRET_RE = re.compile(
-    rf"(?:(?<![A-Za-z0-9_])|(?<=\[nrt]))(?P<name>{_SENSITIVE_NAMES})"
-    rf"(?P<eq>(?:=|%3[Dd])\?[\"']?)(?P<value>[^{_VALUE_END}]+)",
+    rf"(?:(?<![A-Za-z0-9_])|(?<=\\[nrt]))(?P<name>{_SENSITIVE_NAMES})"
+    rf"(?P<eq>(?:=|%3[Dd])\\?[\"']?)(?P<value>[^{_VALUE_END}]+)",
     re.IGNORECASE,
 )
 
@@ -110,9 +110,7 @@ def sanitize_url(url: object) -> str:
     text = redact_secrets(str(url))
     parts = urlsplit(text)
     pairs = parse_qsl(parts.query, keep_blank_values=True)
-    if not any(
-        key.lower() in SENSITIVE_QUERY_KEYS and value != REDACTED for key, value in pairs
-    ):
+    if not any(key.lower() in SENSITIVE_QUERY_KEYS and value != REDACTED for key, value in pairs):
         return text
     query = urlencode(
         [(key, REDACTED if key.lower() in SENSITIVE_QUERY_KEYS else value) for key, value in pairs],
