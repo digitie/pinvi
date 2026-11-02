@@ -21,13 +21,20 @@ export interface TripDayHeaderProps {
    * 호출부(예: `TripDetail`의 일자 탭)가 이미 그 요약을 렌더할 때 중복을 피하기 위함.
    */
   showSummary?: boolean;
+  /** 읽기 전용(공유 화면) — 대기 안내를 편집 지시 없이 중립 문구로. */
+  readOnly?: boolean;
 }
 
 /**
  * 일자 요약 헤더(ADR-055 §6, F8) — effective date + 공휴일 + 기간 벗어남 + 일출/일몰.
  * owner(`TripDetail`)와 공유 뷰(`SharedTripView`)가 공용으로 쓴다(순수 표현).
  */
-export function TripDayHeader({ day, className, showSummary = true }: TripDayHeaderProps) {
+export function TripDayHeader({
+  day,
+  className,
+  showSummary = true,
+  readOnly = false,
+}: TripDayHeaderProps) {
   const dateLabel = formatTripDate(day.effective_date ?? day.date);
   const holidayNames = Array.from(new Set(day.holidays.map((h) => h.name).filter(Boolean)));
   return (
@@ -56,12 +63,18 @@ export function TripDayHeader({ day, className, showSummary = true }: TripDayHea
           ))}
         </div>
       )}
-      <TripDayRiseSet day={day} />
+      <TripDayRiseSet day={day} readOnly={readOnly} />
     </div>
   );
 }
 
-function TripDayRiseSet({ day }: { day: TripDayHeaderProps['day'] }) {
+function TripDayRiseSet({
+  day,
+  readOnly,
+}: {
+  day: TripDayHeaderProps['day'];
+  readOnly: boolean;
+}) {
   const rs = day.rise_set;
   const reference = day.rise_set_reference;
   const sunrise = formatKstTime(rs?.sunrise_at);
@@ -101,15 +114,21 @@ function TripDayRiseSet({ day }: { day: TripDayHeaderProps['day'] }) {
         data-testid="trip-day-rise-set-pending"
         data-rise-set-status={rs.status}
       >
-        {risePendingMessage(rs.status)}
+        {risePendingMessage(rs.status, readOnly)}
       </p>
     );
   }
   return null;
 }
 
-function risePendingMessage(status: NonNullable<TripViewDay['rise_set']>['status']): string {
-  if (status === 'pending_coord') return '장소를 추가하면 일출·일몰을 표시합니다';
+function risePendingMessage(
+  status: NonNullable<TripViewDay['rise_set']>['status'],
+  readOnly: boolean,
+): string {
+  // 공유(읽기 전용) 화면에서는 "추가하세요" 같은 편집 안내 대신 중립 문구를 쓴다.
+  if (readOnly) return status === 'pending_fetch' ? '일출·일몰 준비 중' : '일출·일몰 정보 없음';
+  // pending_coord는 장소가 아예 없거나, 있어도 좌표가 하나도 없을 때다(`trip_day_rise_set._status_for`).
+  if (status === 'pending_coord') return '좌표가 있는 장소를 추가하면 일출·일몰을 표시합니다';
   if (status === 'pending_date') return '날짜를 정하면 일출·일몰을 표시합니다';
   return '일출·일몰 준비 중';
 }

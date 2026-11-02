@@ -39,9 +39,9 @@ from app.services.place_search import (
     address_candidate_to_result,
     feature_item_to_result,
     kakao_document_to_result,
-    merge_region_biased_items,
     my_poi_to_result,
     naver_item_to_result,
+    region_biased_items,
 )
 
 router = APIRouter(tags=["search"])
@@ -108,6 +108,8 @@ async def _search_my_pois(db: DbSession, *, user_id: uuid.UUID, q: str) -> list[
     return out
 
 
+# 편향이 있을 때 전국 검색에서 받는 후보 수 — 지역 안 장소가 상위 `limit`에 없더라도 끌어올 수 있게.
+_BIAS_CANDIDATES = 40
 _KOREA_LNG = (124.0, 132.0)
 _KOREA_LAT = (33.0, 43.0)
 
@@ -120,12 +122,16 @@ def _parse_bias_bbox(raw: str | None) -> BBox | None:
     lng_min, lat_min, lng_max, lat_max = parsed
     lng_lo, lng_hi = sorted((lng_min, lng_max))
     lat_lo, lat_hi = sorted((lat_min, lat_max))
-    return BBox(
+    clamped = BBox(
         lng_min=min(max(lng_lo, _KOREA_LNG[0]), _KOREA_LNG[1]),
         lat_min=min(max(lat_lo, _KOREA_LAT[0]), _KOREA_LAT[1]),
         lng_max=min(max(lng_hi, _KOREA_LNG[0]), _KOREA_LNG[1]),
         lat_max=min(max(lat_hi, _KOREA_LAT[0]), _KOREA_LAT[1]),
     )
+    # 한국과 겹치지 않아 선/점으로 줄어든 범위(뒤바뀐 위경도 등)는 편향하지 않는다.
+    if clamped.lng_min >= clamped.lng_max or clamped.lat_min >= clamped.lat_max:
+        return None
+    return clamped
 
 
 _AUDIT_PRECISION = Decimal("0.000001")
@@ -154,9 +160,10 @@ async def unified_search(
         Query(
             max_length=100,
             description=(
-                "지역 편향 `lng_min,lat_min,lng_max,lat_max` — 여행 장소 범위 또는 지금 지도 화면. "
-                "이 범위 안의 feature를 먼저 보여 주고 밖의 결과도 뒤에 남긴다(필터 아님). "
-                "사용자 위치가 아니므로 위치 감사·외부 provider 전달 대상이 아니다."
+                "지역 편향 `lng_min,lat_min,lng_max,lat_max` — 여행 장소 범위 또는 지금 지도 화면(웹은 "
+                "소수 2자리로 거칠게 보낸다). 이 범위 안의 feature를 목록 절반까지 앞으로 당기고 밖의 결과도 "
+                "남긴다(필터 아님). 외부 provider(Kakao/Naver)에는 보내지 않는다. 탐색 지도 화면은 동의 후 "
+                "기기 위치로 자동 센터링될 수 있으나 `/features/in-bounds`와 같은 수준의 화면 범위다."
             ),
         ),
     ] = None,
@@ -183,34 +190,22 @@ async def unified_search(
     # ── 내부 소스: feature → address → my_poi ──────────────────────────────
     # feature(Map)와 address(geo)는 서로 독립인 HTTP 호출이라 동시에 보낸다 — 느린 소스 하나가 다른
     # 소스의 결과를 붙잡지 않는다. 표시 순서는 그대로 feature → address다.
-    async def _regional_items() -> list[Any]:
-        # 편향용 보조 검색 — 실패해도 전국 결과만으로 계속한다.
-        if bias is None:
-            return []
-        try:
-            data = await kor_travel_map.search_features(
-                q=q,
-                page_size=limit,
-                min_lon=bias.lng_min,
-                min_lat=bias.lat_min,
-                max_lon=bias.lng_max,
-                max_lat=bias.lat_max,
-            )
-        except KorTravelMapError:
-            return []
-        return list(data.get("items") or [])
-
     async def _feature_results() -> list[PlaceSearchResult] | None:
+        # 편향이 있으면 전국 검색을 한 번 넉넉히 받아(`_BIAS_CANDIDATES`) 지역 안을 앞으로 당긴다 —
+        # bbox 검색을 따로 보내지 않는다(Map 이름 검색은 bbox를 이름 매칭 뒤에 걸러 비용이 같고,
+        # 재시도 예산·호출 로그도 두 배가 된다 — #615 리뷰).
+        page_size = max(limit, _BIAS_CANDIDATES) if bias is not None else limit
         try:
-            feature_data, regional, labels = await asyncio.gather(
-                kor_travel_map.search_features(q=q, page_size=limit),
-                _regional_items(),
+            feature_data, labels = await asyncio.gather(
+                kor_travel_map.search_features(q=q, page_size=page_size),
                 get_category_labels(kor_travel_map),
             )
         except KorTravelMapError:
             return None
-        items = merge_region_biased_items(
-            regional, list(feature_data.get("items") or []), limit=limit
+        items = region_biased_items(
+            list(feature_data.get("items") or []),
+            bbox=bias.as_tuple() if bias is not None else None,
+            limit=limit,
         )
         return [r for item in items if (r := feature_item_to_result(item, labels)) is not None]
 

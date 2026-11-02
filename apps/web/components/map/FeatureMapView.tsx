@@ -13,6 +13,7 @@ import type {
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
+import { viewportSearchBias } from '@/lib/searchBias';
 import { providerLabel } from '@/lib/weatherProviderLabels';
 import {
   DEFAULT_MAP_CENTER,
@@ -221,7 +222,7 @@ export function FeatureMapView({
   const mapRef = useRef<MapLibreMap | null>(null);
   // 장소 검색 지역 편향 — 탐색 지도는 지금 화면 범위(2026-11-02 결정).
   const getSearchBias = useCallback(
-    () => (mapRef.current ? boundsToBbox(mapRef.current.getBounds()) : null),
+    () => (mapRef.current ? viewportSearchBias(mapRef.current.getBounds()) : null),
     [],
   );
   const latestRequest = useRef(0);

@@ -25,6 +25,7 @@ import type { FeatureSummary } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
+import { viewportSearchBias } from '@/lib/searchBias';
 import {
   featureResolutionNotice,
   pointsBounds,
@@ -270,7 +271,7 @@ export function TripMapView({
     onViewportBboxChangeRef.current = onViewportBboxChange;
   }, [onViewportBboxChange]);
   const reportViewport = useCallback((map: MapLibreMap) => {
-    onViewportBboxChangeRef.current?.(boundsToBbox(map.getBounds()));
+    onViewportBboxChangeRef.current?.(viewportSearchBias(map.getBounds()));
   }, []);
 
   const handleLoad = useCallback(

@@ -1,3 +1,4 @@
+import type { LngLatBounds } from 'maplibre-gl';
 import { toBboxParam } from '@/lib/featureBounds';
 
 /**
@@ -10,6 +11,23 @@ import { toBboxParam } from '@/lib/featureBounds';
 
 /** 여행 장소 경계에 붙이는 여백(도) — 약 25km. 하루 동선 주변의 이웃 명소까지 포함되게. */
 export const TRIP_BIAS_PADDING_DEGREES = 0.25;
+
+/**
+ * 편향 bbox는 소수 2자리(≈1km)로 거칠게 보낸다 — 순서 편향에는 그만큼이면 충분하고, 탐색 지도 화면은
+ * 동의 후 기기 위치로 자동 센터링될 수 있으므로 정밀한 화면 좌표를 검색 로그(`api_call_log`)에 남기지 않는다.
+ */
+const BIAS_PRECISION = 2;
+
+/** 지금 지도 화면 → 편향 bbox(거칠게). */
+export function viewportSearchBias(bounds: LngLatBounds): string {
+  return toBboxParam(
+    bounds.getWest(),
+    bounds.getSouth(),
+    bounds.getEast(),
+    bounds.getNorth(),
+    BIAS_PRECISION,
+  );
+}
 
 /** 여행 장소들의 경계를 여백만큼 넓힌 bbox(`lng_min,lat_min,lng_max,lat_max`). 좌표가 없으면 null. */
 export function tripSearchBias(
@@ -33,7 +51,7 @@ export function tripSearchBias(
     south - padDegrees,
     east + padDegrees,
     north + padDegrees,
-    4,
+    BIAS_PRECISION,
   );
 }
 
