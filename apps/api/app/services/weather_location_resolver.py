@@ -43,6 +43,7 @@ from app.clients.kor_travel_weather import (
     KorTravelWeatherNotFound,
     ResolvedWeatherOut,
 )
+from app.db.session import release_read_connection
 from app.models.weather_location_link import WeatherLocationLink
 
 logger = logging.getLogger(__name__)
@@ -104,9 +105,12 @@ async def _cached_or_mark_stale(
     """
     row = await db.get(WeatherLocationLink, feature_id)
     if row is not None and written_by_map(row):
+        await release_read_connection(db)
         return row, None
 
     if row is not None and not row.stale and row.lat == lat and row.lon == lon:
+        # 캐시 적중 — 이어지는 latest·forecast 호출 동안 커넥션을 쥐지 않게 읽기 트랜잭션을 닫는다.
+        await release_read_connection(db)
         return row, WeatherLocationFound(row.location_id, tuple(row.source_location_ids))
 
     if row is not None and not row.stale and (row.lat != lat or row.lon != lon):
@@ -114,6 +118,8 @@ async def _cached_or_mark_stale(
         # 재시도하도록).
         row.stale = True
         await db.commit()
+    # 미스 — `/resolve`(수 초~수십 초) 동안 커넥션을 쥐지 않게 읽기 트랜잭션을 닫는다.
+    await release_read_connection(db)
     return row, None
 
 

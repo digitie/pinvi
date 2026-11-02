@@ -68,7 +68,7 @@ _HOST_CIRCUIT_NAME = "host"
 # 호출자 deadline(event loop 시각) — trip view가 view 예산 안에서 weather를 부를 때 건다.
 # 설정돼 있으면 attempt마다 (a) httpx 단계별 timeout을 남은 시간으로 깎고 (b) attempt 전체를
 # `asyncio.timeout(남은 시간)`으로 묶는다(본문이 찔끔찔끔 와도 deadline을 넘지 않게). 그래야 연결은
-# 받고 응답하지 않는 피호출자(read 10 s x 3회 ≈ 30.6 s)도 예산 안에서 **attempt timeout**으로 끝나
+# 받고 응답하지 않는 피호출자(read 10 s — 2026-11-02부터 read timeout은 재시도하지 않는다)도 예산 안에서 **attempt timeout**으로 끝나
 # 회로차단 실패로 세진다 — 바깥 `asyncio.timeout`의 취소는 실패로 세지 않으므로(결과 없음), 이것이
 # 없으면 trip view 트래픽만으로는 회로가 열리지 않는다.
 #
@@ -87,6 +87,11 @@ _HOST_CIRCUIT_NAME = "host"
 # 성공만 그 엔드포인트의 timeout을 소진으로 보고, 범위당 실패 1회도 엔드포인트마다이며, 회로도 엔드포인트마다
 # 하나라 forecast만 열리고 markers는 계속 산다. 대가: view 예산(≈9.9 s) 안에 한 번도 응답하지 않는 엔드포인트는
 # 느린 것뿐이라도 실패로 센다(같은 view에서 그 엔드포인트가 한 번이라도 응답했으면 보호).
+#
+# 단건 카드(2026-11-02)는 예산(≈3.9 s)이 이 하한(read 10 s의 절반)보다 짧다. 하한을 그대로 두면 연결은 받고
+# 응답하지 않는 피호출자를 카드 트래픽으로는 영영 세지 못한다(카드마다 3.9 s를 쓰고 `/resolve`를 하나씩 더 보낸다).
+# 카드는 병렬 forecast가 함께 끊기는 view가 아니고 범위당 엔드포인트 1회 규칙이 과집계를 막으므로,
+# `kor_travel_weather_call_deadline(..., count_deadline_timeouts=True)`로 하한을 건너뛴다.
 _DEADLINE_MEANINGFUL_READ_FRACTION = 0.5
 
 
@@ -108,6 +113,7 @@ class _ScopeState:
 class _CallScope:
     deadline: float
     state: _ScopeState
+    count_deadline_timeouts: bool = False
 
 
 _call_scope: ContextVar[_CallScope | None] = ContextVar(
@@ -116,17 +122,31 @@ _call_scope: ContextVar[_CallScope | None] = ContextVar(
 
 
 @contextmanager
-def kor_travel_weather_call_deadline(deadline: float) -> Iterator[None]:
+def kor_travel_weather_call_deadline(
+    deadline: float, *, count_deadline_timeouts: bool = False
+) -> Iterator[None]:
     """이 문맥(과 그 안에서 만든 task)의 weather 호출을 `deadline`(loop 시각)까지로 묶는다.
 
     중첩되면 더 이른 deadline을 쓰고(안쪽 범위가 예산을 넓히지 못한다) 집계 상태(엔드포인트별
     실패 1회·성공 관측)는 바깥 범위와 공유한다.
+
+    `count_deadline_timeouts`: 예산이 정상 read의 절반보다 짧아도 deadline이 깎은 timeout을 실패로 센다
+    (단건 카드 — `_DEADLINE_MEANINGFUL_READ_FRACTION` 주석). 같은 범위에서 그 엔드포인트가 이미 응답했으면
+    여전히 소진으로 본다.
     """
     current = _call_scope.get()
     if current is None:
-        scope = _CallScope(deadline=deadline, state=_ScopeState())
+        scope = _CallScope(
+            deadline=deadline,
+            state=_ScopeState(),
+            count_deadline_timeouts=count_deadline_timeouts,
+        )
     else:
-        scope = _CallScope(deadline=min(current.deadline, deadline), state=current.state)
+        scope = _CallScope(
+            deadline=min(current.deadline, deadline),
+            state=current.state,
+            count_deadline_timeouts=current.count_deadline_timeouts or count_deadline_timeouts,
+        )
     token = _call_scope.set(scope)
     try:
         yield
@@ -813,7 +833,10 @@ class KorTravelWeatherClient:
                     scope is not None
                     and remaining is not None
                     and applied is not None
-                    and (remaining < floor or endpoint in scope.state.succeeded_endpoints)
+                    and (
+                        (remaining < floor and not scope.count_deadline_timeouts)
+                        or endpoint in scope.state.succeeded_endpoints
+                    )
                     and _deadline_bound_timeout(exc, base=base, applied=applied)
                 ):
                     # deadline이 끊었지만 장애 증거가 아니다(짧은 예산이거나 같은 범위에서 피호출자가
