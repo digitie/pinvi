@@ -93,7 +93,7 @@ const point = (poiId: string, lat: number): TripMapPoint =>
     color: '#000',
     markerColor: 'P-07',
     labelColor: '#fff',
-    markerSource: 'default',
+    markerSource: 'resolved',
     icon: 'monument',
     category: null,
     kind: null,
