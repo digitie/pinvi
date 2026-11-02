@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # 카탈로그는 정적이라 길게 둔다. 실패는 짧게 — 다음 요청이 곧 다시 시도한다.
 _TTL_SECONDS = 3600.0
 _FAILURE_TTL_SECONDS = 60.0
-# 카탈로그 조회 1회의 전체 예산(Map client 기본 재시도 3회 × 5초를 요청 경로에 끌어들이지 않는다).
+# 카탈로그 조회 1회의 전체 예산(Map client 기본 재시도 3회, 회당 5초를 요청 경로에 끌어들이지 않는다).
 _FETCH_BUDGET_SECONDS = 2.0
 # Map 카테고리 코드는 2자리 단위 계층(대·중·소·세)을 0으로 채운 8자리다.
 _CODE_RE = re.compile(r"^\d{8}$")

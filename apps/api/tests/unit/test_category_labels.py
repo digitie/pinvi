@@ -148,7 +148,7 @@ async def test_cold_failure_degrades_to_empty_and_retries_after_short_ttl(clock:
 async def test_cold_fetch_is_bounded_by_short_budget(
     clock: _Clock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Map client 기본 재시도(3회 × 5초)를 요청 경로에 끌어들이지 않는다."""
+    """Map client 기본 재시도(3회, 회당 5초)를 요청 경로에 끌어들이지 않는다."""
     monkeypatch.setattr(module, "_FETCH_BUDGET_SECONDS", 0.05)
     hanging = _Client(delay=5.0)
     started = asyncio.get_running_loop().time()
