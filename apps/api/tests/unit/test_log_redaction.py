@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from app.core.redaction import SecretRedactingFilter, redact_secrets, sanitize_url
@@ -51,15 +52,16 @@ def test_redact_secrets_review_620_round3() -> None:
         f"redirect_uri=https://pinvi/cb?token={SECRET}": "redirect_uri=https://pinvi/cb?token=***",
         f"?url=https://geo.test/v2?key={SECRET}": "?url=https://geo.test/v2?key=***",
         f"foo=a,key={SECRET}": "foo=a,key=***",
-        f"q=f(key={SECRET})": "q=f(key=***)",
+        # 따옴표 없는 값은 공백·구분자까지 가린다 — `)`도 비밀의 일부일 수 있다(재리뷰 #620 M2)
+        f"q=f(key={SECRET})": "q=f(key=***",
         # 따옴표 값(repr·kwargs)
         f"GeoConfig(base_url='http://g', api_key='{SECRET}')": (
             "GeoConfig(base_url='http://g', api_key='***')"
         ),
         f'call(serviceKey="{SECRET}")': 'call(serviceKey="***")',
         # 이름 앞 문자가 무엇이든(이름 문자만 아니면)
-        f"[key={SECRET}] {{token={SECRET}}} opts:key={SECRET} x|token={SECRET}": (
-            "[key=***] {token=***} opts:key=*** x|token=***"
+        f"[key={SECRET} {{token={SECRET} opts:key={SECRET} x|token={SECRET}": (
+            "[key=*** {token=*** opts:key=*** x|token=***"
         ),
         # JSON 렌더 뒤: 줄바꿈·탭 escape 다음, escape된 따옴표 값
         f'{{"exc": "bad\\nkey={SECRET}", "kw": "token=\\"{SECRET}\\""}}': (
@@ -81,6 +83,65 @@ def test_redact_secrets_review_620_round3() -> None:
     assert redact_secrets("monkey=1 sig_cd=2 sido_code=3 hotkey=4") == (
         "monkey=1 sig_cd=2 sido_code=3 hotkey=4"
     )
+
+
+def test_redact_secrets_review_620_round4() -> None:
+    """세 번째 리뷰 #620: 완전히 인코딩된 중첩 URL, 따옴표 값의 꼬리, 헤더 꼴, 빈 사용자 userinfo."""
+
+    cases = {
+        # 완전히 percent-encoding된 중첩 URL(httpx·urlencode가 쓰는 모양)
+        f"?next=https%3A%2F%2Fpinvi%2Fcb%3Ftoken%3D{SECRET}": (
+            "?next=https%3A%2F%2Fpinvi%2Fcb%3Ftoken%3D***"
+        ),
+        f"redirect_uri=https%3A%2F%2Fx%2Fcb%3Fa%3D1%26key%3D{SECRET}": (
+            "redirect_uri=https%3A%2F%2Fx%2Fcb%3Fa%3D1%26key%3D***"
+        ),
+        # 따옴표 값은 닫는 따옴표까지(쉼표·공백·괄호가 들어 있어도 꼬리가 새지 않는다)
+        f"password='ab,cd{SECRET}'": "password='***'",
+        f'password="ab cd{SECRET}"': 'password="***"',
+        f"password=p){SECRET}": "password=***",
+        # 헤더 꼴
+        f"Authorization: Bearer {SECRET}": "Authorization: Bearer ***",
+        f"{{'authorization': 'Basic {SECRET}'}}": "{'authorization': 'Basic ***'}",
+        # 빈 사용자 userinfo
+        f"redis://:{SECRET}@redis:6379/0": "redis://:***@redis:6379/0",
+    }
+    for raw, expected in cases.items():
+        assert redact_secrets(raw) == expected, raw
+    # 비밀 이름이 아닌 것은 그대로(하이픈·점 뒤 이름, uuid, 포트 뒤 query의 이메일)
+    untouched = [
+        "Idempotency-Key=abc cache-key=x obj.key=z",
+        "trip:123456:11111111-1111-4111-8111-111111111111",
+        "http://host:8080?email=a@b.com",
+    ]
+    for raw in untouched:
+        assert redact_secrets(raw) == raw, raw
+
+
+def test_redacted_json_line_stays_valid_json() -> None:
+    """가린 뒤에도 structlog JSON 줄은 JSON이다(escape를 먹지 않는다)."""
+
+    payload = {
+        "event": f"token=é{SECRET} key={SECRET}\nnext line",
+        "url": f"https://g/?key={SECRET}&q=하회",
+        "kw": f'call(api_key="{SECRET}")',
+    }
+    for ensure_ascii in (True, False):
+        line = json.dumps(payload, ensure_ascii=ensure_ascii)
+        redacted = redact_secrets(line)
+        assert SECRET not in redacted, line
+        json.loads(redacted)
+
+
+def test_structlog_event_dict_secret_keys_are_masked() -> None:
+    """`log.info("x", api_key=…)`처럼 이름=값 꼴이 아닌 event-dict 키도 가린다(JSON에선 `"api_key": "…"`)."""
+
+    from app.core.logging import redact_event_dict
+
+    event = redact_event_dict(
+        None, "info", {"event": "x", "api_key": SECRET, "Token": SECRET, "region_key": "11"}
+    )
+    assert event == {"event": "x", "api_key": "***", "Token": "***", "region_key": "11"}
 
 
 def test_redact_secrets_path_tokens() -> None:
