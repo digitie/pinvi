@@ -42,12 +42,21 @@ SENSITIVE_QUERY_KEYS = frozenset(
 )
 REDACTED = "***"
 
-# 값·토큰이 끝나는 문자: query 구분자, 공백, 따옴표, 꺾쇠, fragment, JSON escape(`\`), 닫는 괄호·쉼표.
-_VALUE_END = "&;\\s\"'<>#\\\\,)\\]}"
+# 따옴표 없는 값·토큰이 끝나는 문자: query 구분자, 공백, 따옴표, 꺾쇠, fragment, JSON escape(`\`).
+# 닫는 괄호·쉼표는 넣지 않는다 — 비밀값의 일부일 수 있어 꼬리가 샌다(괄호를 하나 더 가리는 편이 낫다).
+_VALUE_END = "&;\\s\"'<>#\\\\"
 _TELEGRAM_BOT_PATH_RE = re.compile(r"/bot(\d+):[A-Za-z0-9_-]+")
 # `/bot/` 경로 밖에 나타나는 Telegram bot token(`<bot id>:<35자>`, 콜론이 `%3A`로 인코딩된 것 포함).
-# `clients/telegram.py`의 `mask_token`과 같은 모양이되 숫자 자리수를 좁혀 시각(`13:26`)과 겹치지 않게 한다.
-_TELEGRAM_TOKEN_RE = re.compile(r"(?<!\d)(?P<id>\d{6,12})(?P<sep>:|%3[Aa])[A-Za-z0-9_-]{30,}")
+# `clients/telegram.py`의 `mask_token`과 같은 모양이되 숫자 자리수를 좁혀 시각(`13:26`)과 겹치지 않게 하고,
+# 대문자가 하나는 있어야 한다(소문자 hex인 uuid·해시 `trip:123456:<uuid>`를 건드리지 않게).
+_TELEGRAM_TOKEN_RE = re.compile(
+    r"(?<!\d)(?P<id>\d{6,12})(?P<sep>:|%3[Aa])(?=[A-Za-z0-9_-]*[A-Z])[A-Za-z0-9_-]{30,}"
+)
+# `Authorization: Bearer …`·`{'authorization': 'Basic …'}` 꼴 자격 증명.
+_AUTH_HEADER_RE = re.compile(
+    r"(?P<prefix>authorization[\"']?\s*[:=]\s*[\"']?(?:bearer|basic|token)\s+)[^\s\"',]+",
+    re.IGNORECASE,
+)
 # path에 실린 PinVi 자체 자격 증명: 여행 공유 링크, 서명된 업로드·다운로드 토큰(uvicorn access 줄).
 _PATH_TOKEN_RE = re.compile(
     r"(?P<prefix>/trips/[^/?\s\"'<>#\\]+/shared/|/storage/(?:uploads|downloads)/)"
@@ -58,24 +67,28 @@ _OAUTH_CALLBACK_RE = re.compile(
     rf"(?P<path>/oauth/[^/?{_VALUE_END}]+/callback/?\?)(?P<query>[^\s\"'<>#\\]*)"
 )
 _OAUTH_PARAM_RE = re.compile(rf"(?P<lead>^|&)(?P<name>code|state)=[^{_VALUE_END}]*")
-# URL userinfo의 password(`scheme://user:password@host`).
-_USERINFO_RE = re.compile(r"(?P<prefix>://[^/@\s:\"']+):[^/@\s\"']+@")
+# URL userinfo의 password(`scheme://user:password@host`, 빈 사용자 `redis://:pw@` 포함). password에 `?`·`#`이
+# 있으면 query·fragment로 본다(`http://host:8080?email=a@b.com`을 건드리지 않게).
+_USERINFO_RE = re.compile(r"(?P<prefix>://[^/@\s:\"']*):[^/@\s\"'?#]+@")
 # 비밀 **이름만** 맞춘다 — 비밀이 아닌 `이름=값`의 값(`redirect_uri=…?token=…`)이 뒤의 비밀 쌍을
-# 삼키지 않게. 이름 앞은 이름 문자가 아니어야 한다(`monkey=`·`sig_cd=` 제외). JSON으로 렌더된 줄에서는
-# 줄바꿈·탭이 `\n`·`\t`로 남으므로 그 escape 뒤도 이름의 시작으로 본다. 값은 따옴표(escape 포함)로
-# 감싸여 있을 수 있고(`api_key='…'`, `token=\"…\"`), `=`가 `%3D`로 인코딩됐을 수 있다.
+# 삼키지 않게. 이름 앞: 이름 문자·점·하이픈이 아니거나(`monkey=`·`obj.key=`·`Idempotency-Key=` 제외),
+# JSON escape(`\n`·`\t`·`\r`·`\uXXXX`) 뒤이거나, percent-encoding(`%3F`·`%26`) 뒤다.
+# 값: 따옴표(escape 포함)로 열렸으면 닫는 따옴표까지, 아니면 `_VALUE_END`까지. 값 안의 `\uXXXX`는 값의 일부다.
+# `=`는 `%3D`로 인코딩됐을 수 있다.
 _SENSITIVE_NAMES = "|".join(
     sorted((re.escape(name) for name in SENSITIVE_QUERY_KEYS), key=len, reverse=True)
 )
 _QUERY_SECRET_RE = re.compile(
-    rf"(?:(?<![A-Za-z0-9_])|(?<=\\[nrt]))(?P<name>{_SENSITIVE_NAMES})"
-    rf"(?P<eq>(?:=|%3[Dd])\\?[\"']?)(?P<value>[^{_VALUE_END}]+)",
+    r"(?:(?<![A-Za-z0-9_.-])|(?<=\\[nrt])|(?<=%[0-9A-Fa-f]{2})|(?<=\\u[0-9A-Fa-f]{4}))"
+    rf"(?P<name>{_SENSITIVE_NAMES})(?P<eq>=|%3[Dd])"
+    r"(?:(?P<q>\\?[\"'])(?:\\u[0-9A-Fa-f]{4}|[^\"'\\\n])+"
+    rf"|(?:\\u[0-9A-Fa-f]{{4}}|[^{_VALUE_END}])+)",
     re.IGNORECASE,
 )
 
 
 def _replace_query_secret(match: re.Match[str]) -> str:
-    return f"{match.group('name')}{match.group('eq')}{REDACTED}"
+    return f"{match.group('name')}{match.group('eq')}{match.group('q') or ''}{REDACTED}"
 
 
 def _replace_oauth_callback(match: re.Match[str]) -> str:
@@ -87,7 +100,12 @@ def redact_secrets(text: str) -> str:
     """자유 텍스트(로그 줄·예외 메시지·URL)에서 비밀값을 가린다.
 
     가리는 것: 비밀 이름의 query·kwargs 값, path 토큰(Telegram `/bot…/`, 공유 링크, 저장소 토큰),
-    `/bot/` 밖 Telegram token, OAuth callback의 code·state, URL userinfo password.
+    `/bot/` 밖 Telegram token, OAuth callback의 code·state, URL userinfo password,
+    `Authorization: Bearer|Basic|Token …`.
+
+    못 가리는 꼴(남는 한계): `이름: 값`·`이름 = 값`처럼 `=`가 바로 붙지 않은 것(dict repr `{'password': …}`,
+    SQLAlchemy 오류의 parameters, 헤더 `x-api-key: …`), 접미사가 붙은 이름(`db_password=`, `bot_token=`).
+    structlog event-dict의 비밀 이름 키는 `app.core.logging.redact_event_dict`가 따로 가린다.
     """
 
     if not any(marker in text for marker in ("=", "/", ":", "%")):
@@ -97,6 +115,7 @@ def redact_secrets(text: str) -> str:
     text = _TELEGRAM_TOKEN_RE.sub(rf"\g<id>\g<sep>{REDACTED}", text)
     text = _OAUTH_CALLBACK_RE.sub(_replace_oauth_callback, text)
     text = _USERINFO_RE.sub(rf"\g<prefix>:{REDACTED}@", text)
+    text = _AUTH_HEADER_RE.sub(rf"\g<prefix>{REDACTED}", text)
     return _QUERY_SECRET_RE.sub(_replace_query_secret, text)
 
 

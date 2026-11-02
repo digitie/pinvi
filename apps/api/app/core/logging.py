@@ -8,18 +8,20 @@
 - httpx·httpcore 로거는 WARNING부터만 낸다(요청마다 URL을 찍는 INFO·DEBUG 줄 차단).
 - 방어선 2: root·uvicorn handler와 httpx·uvicorn 로거에 `SecretRedactingFilter`를 단다.
 - structlog 예외 렌더러는 프레임 지역 변수를 찍지 않는다(`show_locals=False`).
+- structlog event-dict의 비밀 이름 키는 렌더 전에 가린다(`redact_event_dict`).
 """
 
 from __future__ import annotations
 
 import logging
 import sys
-from typing import cast
+from collections.abc import MutableMapping
+from typing import Any, cast
 
 import structlog
 from structlog.tracebacks import ExceptionDictTransformer
 
-from app.core.redaction import SecretRedactingFilter
+from app.core.redaction import REDACTED, SENSITIVE_QUERY_KEYS, SecretRedactingFilter
 
 # 요청마다 전체 URL을 INFO/DEBUG로 찍는 HTTP client 로거.
 _QUIET_HTTP_LOGGERS = ("httpx", "httpcore")
@@ -44,10 +46,25 @@ def install_secret_redaction() -> None:
             _attach_redaction(handler)
 
 
+def redact_event_dict(
+    _logger: object, _method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """structlog event-dict에서 비밀 이름 키(`api_key=…`, `token=…`)의 값을 가린다.
+
+    JSON으로 렌더되면 `"api_key": "…"` 꼴이 되어 문자열 필터(`이름=값`)가 못 본다.
+    """
+
+    for key in list(event_dict):
+        if key.lower() in SENSITIVE_QUERY_KEYS and event_dict[key] is not None:
+            event_dict[key] = REDACTED
+    return event_dict
+
+
 def configure_logging(level: str = "INFO") -> None:
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
+            redact_event_dict,
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso", utc=False),
             # `dict_tracebacks`와 같되 프레임 지역 변수는 찍지 않는다 — 지역 변수 repr

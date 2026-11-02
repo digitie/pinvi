@@ -158,14 +158,23 @@ prod 점검에서 httpx의 INFO 줄(`HTTP Request: POST http://…/v2/geocode?ke
   - query 비밀값: `key`, `serviceKey`, `apiKey`, `token`, `access_token`, `X-Amz-Signature` 등. 키 집합은 `SENSITIVE_QUERY_KEYS`가 정한다.
     - 이름이 정확히 일치할 때만 가린다. `sido_code`는 가리지 않는다.
     - 비밀 이름만 찾는다. 비밀이 아닌 쌍의 값이 뒤에 오는 비밀 쌍을 삼키지 않게 하려는 것이다(예: `redirect_uri=…?token=…`).
-    - 이름 앞에는 이름 문자가 오면 안 된다. JSON으로 렌더된 줄에서는 `\n`·`\t` escape 뒤도 이름의 시작으로 본다.
-    - 따옴표로 감싼 값(`api_key='…'`, `token=\"…\"`)과 `%3D`로 인코딩된 `=`도 가린다.
-    - 남는 한계: 값 앞에 `\uXXXX` escape가 오면 가리지 못한다. 비 ASCII 비밀값이 이런 경우다.
-  - Telegram token: `/bot<id>:<token>/`, 그리고 접두가 없는 `<id>:<35자>` 꼴.
+    - 이름 앞에 올 수 없는 것: 이름 문자, 점, 하이픈. 그래서 `obj.key=`, `Idempotency-Key=`는 가리지 않는다.
+    - 이름 앞에 와도 되는 것: JSON escape(`\n`·`\t`·`\uXXXX`), percent-encoding(`%3F`·`%26`). 완전히 인코딩된 중첩 URL도 그래서 잡힌다.
+    - 따옴표로 연 값(`api_key='…'`, `token=\"…\"`)은 닫는 따옴표까지 가린다. 쉼표·공백·괄호가 있어도 꼬리가 새지 않는다.
+    - 따옴표 없는 값은 query 구분자·공백·따옴표·JSON escape까지 가린다. 닫는 괄호·쉼표도 비밀값의 일부일 수 있어 같이 가린다.
+    - 값 안의 `\uXXXX`는 값의 일부로 본다. `%3D`로 인코딩된 `=`도 잡는다.
+  - Telegram token: `/bot<id>:<token>/`, 그리고 접두가 없는 `<id>:<35자>` 꼴(대문자를 포함한 것만, uuid 제외).
   - path 자격 증명: `/trips/{id}/shared/{token}`, `/storage/{uploads,downloads}/{token}`.
   - OAuth callback의 `code`·`state`. callback path에서만 가린다.
-  - URL userinfo의 password(`scheme://user:***@host`).
-  - JSON escape(`\`)와 닫는 괄호·쉼표는 값에 넣지 않는다. 그래야 가린 뒤에도 로그 줄이 JSON으로 남는다.
+  - URL userinfo의 password: `scheme://user:***@host`, 빈 사용자 `redis://:***@`.
+  - `Authorization: Bearer|Basic|Token …`.
+  - 가린 뒤에도 JSON 줄은 JSON이다. 값은 escape를 먹지 않는다.
+- structlog event-dict의 비밀 이름 키(`log.info("x", api_key=…)`)는 렌더 전에 가린다(`redact_event_dict`). JSON에서는 `"api_key": "…"` 꼴이라 문자열 필터가 못 보기 때문이다.
+- 남는 한계:
+  - `=`가 바로 붙지 않은 꼴은 가리지 못한다. 예: dict repr `{'password': …}`, SQLAlchemy 오류의 parameters, `x-api-key: …`, `key = …`.
+  - 접미사가 붙은 이름도 가리지 못한다. 예: `db_password=`, `bot_token=`.
+  - password에 인코딩 안 된 `/`·`'`·`@`가 든 userinfo도 가리지 못한다.
+  - 비밀값을 그런 꼴로 로그에 남기지 않는다.
 - uvicorn access 줄은 args 튜플 모양을 유지한 채 원소만 바꾼다. `AccessFormatter`가 그 튜플을 풀어 쓰기 때문이다.
 - 필터는 예외를 밖으로 내지 않는다. logging은 filter 예외를 잡아 주지 않으므로, 가리기에 실패하면 메시지를 고정 문구로 바꾼다.
 - structlog 예외 렌더러는 프레임 지역 변수를 찍지 않는다(`show_locals=False`). 지역 변수 repr에는 URL 모양이 아닌 비밀값이 들어갈 수 있고, 필터가 그것을 가리지 못한다. 예: `api_key`, DB 접속 인자의 password.
