@@ -19,6 +19,8 @@
     "app/**/*",
     "components/**/*",
     "e2e/**/*",
+    "e2e-live/**/*.ts",
+    "playwright.live-catalog.config.ts",
     "lib/**/*",
     "stores/**/*",
     "tests/**/*"

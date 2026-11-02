@@ -184,7 +184,7 @@ const config = [...nextCoreWebVitals, ...nextTypescript, {
 }, {
   // Playwright fixture 파일의 `use(page)`는 React hook이 아니다 — 이름이 `use*`로 시작한다는
   // 이유만으로 react-hooks/rules-of-hooks가 오탐한다(ESLint 10 + eslint-plugin-react-hooks 7).
-  files: ['e2e/**/*.ts'],
+  files: ['e2e/**/*.ts', 'e2e-live/**/*.ts'],
   rules: {
     'react-hooks/rules-of-hooks': 'off',
   },

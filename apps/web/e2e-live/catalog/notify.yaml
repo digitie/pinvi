@@ -1,0 +1,465 @@
+# AREA notify (NTF) — Telegram alerts, outbox, email queue, in-app feedback.
+# Source of truth for UI text/selectors: PinVi main 620b6046+ (paths in README.md).
+# data_sources are `pinvi:*` because this area exercises PinVi's own notification layer,
+# not Map categories; place-based families are not part of this area.
+
+- id: NTF-001
+  title: 설정 > Telegram 알림 진입 — 탭·안내문·Chat ID 폼 라벨·그룹 경고 표시
+  priority: P1
+  tags: [desktop, mobile, telegram, a11y]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [pinvi:telegram-targets]
+  steps:
+    - 로그인 → 설정 → 'Telegram 알림' 탭(data-testid settings-tab-telegram)
+  expected:
+    - h1 'Telegram 알림', 안내문 'Pinvi 봇을 chat에 추가한 뒤 …', 경고 '그룹/채널을 연결하면 …'
+    - "섹션 '새 대상 연결'/'연결된 대상', label 'Chat ID'↔input 연결, hint '예: -1001234567890 (그룹) 또는 123456789 (개인)'"
+    - "'기본 대상' 체크 기본 on, 오류 alert 없음"
+  cleanup:
+    - "없음(읽기 전용)"
+  automation: scripted
+  spec: specs/notify/notify-settings.live.spec.ts#NTF-001
+
+- id: NTF-002
+  title: Chat ID 비움 제출 → 필드 오류·aria-invalid·포커스, API 호출 없음
+  priority: P2
+  tags: [desktop, mobile, telegram, a11y]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [pinvi:telegram-targets]
+  steps:
+    - /settings/telegram → Chat ID 비운 채 '연결' 클릭
+  expected:
+    - "'#telegram-chat-id-error' = 'chat ID를 입력하세요.', input aria-invalid=true, 포커스 이동"
+    - POST /users/me/telegram-targets 요청 0건
+  cleanup:
+    - "없음"
+  automation: scripted
+  spec: specs/notify/notify-settings.live.spec.ts#NTF-002
+
+- id: NTF-003
+  title: 존재하지 않는 chat ID 등록 → verify 실패(invalid_chat) 알림, 목록 미추가, 입력 보존
+  priority: P1
+  tags: [desktop, telegram]
+  preconditions:
+    - account: test@test.com (user)
+    - env: "prod `PINVI_TELEGRAM_BOT_TOKEN_DEFAULT` 설정됨 (미설정이면 미검증 상태로 저장되는 분기 — 스펙이 감지·annotate 후 정리)"
+  data_sources: [pinvi:telegram-targets, telegram:getChat]
+  steps:
+    - "Chat ID '-1009999999999999', 별칭 '[e2e] NTF-003 bogus' → '연결'"
+  expected:
+    - "422 + detail.code 'invalid_chat'; alert(data-testid telegram-error) = 'telegram verify 실패: invalid_chat'"
+    - "'연결된 대상' 목록에 행 없음(GET 목록에도 없음); Chat ID 입력값 유지"
+  cleanup:
+    - "'[e2e]' 라벨 대상 sweep(분기 시 저장된 행 삭제)"
+  automation: scripted
+  spec: specs/notify/notify-settings.live.spec.ts#NTF-003
+  notes: Telegram getChat 1회 호출(실 API). 반복 실행 시 429 가능성 낮음(1건/실행).
+
+- id: NTF-004
+  title: 테스트 chat 등록 → verify 성공 → 정상·chat type·제목 스냅샷 표시, 폼 리셋
+  priority: P1
+  tags: [desktop, mobile, telegram, mutating]
+  preconditions:
+    - account: test@test.com (user)
+    - env: PINVI_E2E_TELEGRAM_CHAT_ID (전용 테스트 chat, prod Pinvi 봇이 멤버)
+    - env: prod PINVI_TELEGRAM_BOT_TOKEN_DEFAULT 설정됨
+  data_sources: [pinvi:telegram-targets, telegram:getChat]
+  steps:
+    - "Chat ID=테스트 chat, 별칭 '[e2e] NTF-004', 기본 대상 체크 → '연결'"
+  expected:
+    - 201; 행에 ★(aria-label 기본)·chat id·chat type(private|group|supergroup|channel)·'정상'·title_snapshot
+    - Chat ID/별칭 입력 초기화, 오류 없음
+  cleanup:
+    - "행 '[e2e] NTF-004' 삭제(afterEach sweep)"
+  automation: scripted
+  spec: specs/notify/notify-settings.live.spec.ts#NTF-004
+
+- id: NTF-005
+  title: 재검증 버튼 → POST …/verify 200 → 정상 유지·last_verified_at 갱신·버튼 재활성
+  priority: P2
+  tags: [desktop, telegram, mutating]
+  preconditions:
+    - account: test@test.com (user)
+    - env: PINVI_E2E_TELEGRAM_CHAT_ID
+  data_sources: [pinvi:telegram-targets, telegram:getChat]
+  steps:
+    - "'[e2e] NTF-005' 등록 → 행의 '… 재검증' 버튼"
+  expected:
+    - 200, 응답 last_verified_at > 등록 시각, last_send_status 'ok', 행 '정상'
+  cleanup:
+    - "sweep"
+  automation: scripted
+  spec: specs/notify/notify-settings.live.spec.ts#NTF-005
+
+- id: NTF-006
+  title: 대상 삭제 → DELETE 204 → 목록 제거, 비었을 때 안내 문구
+  priority: P1
+  tags: [desktop, mobile, telegram, mutating]
+  preconditions:
+    - account: test@test.com (user)
+    - env: PINVI_E2E_TELEGRAM_CHAT_ID
+  data_sources: [pinvi:telegram-targets]
+  steps:
+    - "'[e2e] NTF-006' 등록 → 행 '… 삭제'"
+  expected:
+    - 204; 행 사라짐; GET 목록에 id 없음; 목록이 비면 '연결된 대상이 없습니다. …' 표시
+  cleanup:
+    - "자체 삭제 + sweep"
+  automation: scripted
+  spec: specs/notify/notify-settings.live.spec.ts#NTF-006
+
+- id: NTF-007
+  title: 기본 대상 전환 — 두 번째를 기본으로 등록하면 ★ 이동, 서버도 기본 1개, 기본 우선 정렬
+  priority: P2
+  tags: [desktop, telegram, mutating]
+  preconditions:
+    - account: test@test.com (user)
+    - env: PINVI_E2E_TELEGRAM_CHAT_ID (같은 chat id를 라벨만 다르게 2회 등록 — DB에 chat id unique 없음)
+  data_sources: [pinvi:telegram-targets]
+  steps:
+    - A(기본) 등록 → B(기본) 등록 → 새로고침
+  expected:
+    - B 행에만 ★; GET 목록에서 is_default=true는 B 하나; 목록 상단이 B
+  cleanup:
+    - "sweep"
+  automation: scripted
+  spec: specs/notify/notify-settings.live.spec.ts#NTF-007
+  notes: 등록 시 _clear_default가 사용자의 모든 기존 기본을 해제하므로 테스트 계정에 실(非 e2e) 대상이 없어야 부작용 0.
+
+- id: NTF-008
+  title: 여행 상세 '공유' 탭 Telegram 섹션 — 대상 없으면 안내+설정 링크, 있으면 셀렉트
+  priority: P1
+  tags: [desktop, mobile, telegram, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [pinvi:trips, pinvi:telegram-targets]
+  steps:
+    - "'[e2e] NTF-008 …' 여행 생성 → 상세 → tab '공유'"
+  expected:
+    - 섹션 h2 'Telegram 알림 대상', 안내 '…(최대 3개)…', 링크 '설정 > Telegram 알림' href=/settings/telegram
+    - "대상 0개: '등록된 Telegram 대상이 없습니다. 먼저 설정에서 대상을 등록하세요.'; 그 외: select '선택하세요'"
+    - 연결 목록 없음, 오류 없음
+  cleanup:
+    - "여행 삭제"
+  automation: scripted
+  spec: specs/notify/notify-trip-link.live.spec.ts#NTF-008
+
+- id: NTF-009
+  title: 여행에 대상 연결 → 목록 표시·옵션 제거 → 해제 → 목록 제거·옵션 복귀
+  priority: P1
+  tags: [desktop, mobile, telegram, mutating]
+  preconditions:
+    - account: test@test.com (user)
+    - env: PINVI_E2E_TELEGRAM_CHAT_ID
+  data_sources: [pinvi:trips, pinvi:trip-telegram-targets]
+  steps:
+    - "대상 '[e2e] NTF-009' 등록 → 여행 생성 → 공유 탭 → select → '연결' → '… 연결 해제'"
+  expected:
+    - POST 201, 목록(trip-telegram-list)에 라벨·chat id·★; select에서 해당 option 사라짐
+    - DELETE 204, 목록 사라짐, option 복귀
+  cleanup:
+    - "여행 삭제"
+    - "sweep"
+  automation: scripted
+  spec: specs/notify/notify-trip-link.live.spec.ts#NTF-009
+
+- id: NTF-010
+  title: 여행당 최대 3개 — 3개 연결 후 셀렉트·버튼 비활성·'최대 3개 연결됨', 4번째 API 422 MAX_TARGETS_REACHED
+  priority: P2
+  tags: [desktop, telegram, mutating]
+  preconditions:
+    - account: test@test.com (user)
+    - env: PINVI_E2E_TELEGRAM_CHAT_ID
+  data_sources: [pinvi:trip-telegram-targets]
+  steps:
+    - "대상 4개 등록(같은 chat id, 라벨 #1~#4) → 여행 생성 → 3개 연결 → 4번째는 API로 직접 POST"
+  expected:
+    - 목록 3행, '최대 3개 연결됨', select/연결 disabled; 4번째 POST 422 code MAX_TARGETS_REACHED
+  cleanup:
+    - "여행 삭제(연결 CASCADE)"
+    - "sweep"
+  automation: scripted
+  spec: specs/notify/notify-trip-link.live.spec.ts#NTF-010
+
+- id: NTF-011
+  title: 설정에서 대상 soft-delete 시 여행의 연결 목록에서도 사라짐(오류 없음)
+  priority: P2
+  tags: [desktop, telegram, mutating]
+  preconditions:
+    - account: test@test.com (user)
+    - env: PINVI_E2E_TELEGRAM_CHAT_ID
+  data_sources: [pinvi:trip-telegram-targets]
+  steps:
+    - 대상 등록·여행에 연결 → /settings/telegram에서 삭제 → 여행 공유 탭 재진입
+  expected:
+    - 연결 목록 없음, trip-telegram-error 없음
+  cleanup:
+    - "여행 삭제"
+    - "sweep"
+  automation: scripted
+  spec: specs/notify/notify-trip-link.live.spec.ts#NTF-011
+
+- id: NTF-012
+  title: trip_created 알림 실제 전송 — 기본 대상=테스트 chat, 여행 생성 → sendMessage 200(admin 로그)·대상 '정상'
+  priority: P1
+  tags: [desktop, telegram, mutating, admin]
+  preconditions:
+    - account: test@test.com (user) + admin
+    - env: PINVI_E2E_TELEGRAM_CHAT_ID; prod PINVI_TELEGRAM_BOT_TOKEN_DEFAULT 설정·outbox worker enabled(기본 true)
+  data_sources: [pinvi:trips, pinvi:telegram-outbox, telegram:sendMessage, pinvi:admin-api-calls]
+  steps:
+    - "대상 '[e2e] NTF-012'(기본) 등록 → 여행 '[e2e] NTF-012 …', 날짜 +30~+32일, 지역 '부산' 저장"
+    - admin 컨텍스트 /admin/api-calls provider=telegram 조회(5s 폴링, ≤60s)
+  expected:
+    - 토스트 '초안 여행을 저장했습니다.'
+    - "생성 시각 이후 endpoint `https://api.telegram.org/bot<id>:***/sendMessage` status 200 행 존재(토큰 원문 없음)"
+    - /settings/telegram 행 '정상', GET last_send_status 'ok', is_enabled true
+  cleanup:
+    - "여행 삭제"
+    - "sweep"
+  automation: scripted
+  spec: specs/notify/notify-delivery.live.spec.ts#NTF-012
+  notes: 메시지 본문은 테스트 chat에 실제로 도착한다(§7 plain text). 본문 검증은 NTF-013.
+
+- id: NTF-013
+  title: trip_created 메시지 본문 정확성 — '🧳 새 여행이 만들어졌습니다 — <제목>' / '📅 M월 D일 ~ M월 D일' / '📍 지역', 날짜 없음 '미정 ~ 미정'
+  priority: P1
+  tags: [telegram, mutating]
+  preconditions:
+    - env: PINVI_E2E_TELEGRAM_CHAT_ID
+    - chat reader: Bot API로는 읽을 수 없음(봇은 다른 봇의 메시지를 getUpdates로 받지 못함) → 전용 테스트 Telegram 사용자 계정의 MTProto 세션(PINVI_E2E_TELEGRAM_READER_SESSION, Telethon/GramJS string session) 또는 소유자 수동 확인 필요
+  data_sources: [telegram:sendMessage]
+  steps:
+    - NTF-012와 동일하게 여행 생성(제목·날짜·지역 알려진 값), 두 번째는 날짜·지역 없이 생성
+    - 테스트 chat의 최신 메시지 2건을 읽는다
+  expected:
+    - "본문 1 == \"🧳 새 여행이 만들어졌습니다 — [e2e] …\\n\\n📅 {M}월 {D}일 ~ {M}월 {D}일\\n📍 부산\" (월·일 0 패딩 없음, apps/api/app/services/telegram_messages.py)"
+    - 본문 2 == "🧳 새 여행이 만들어졌습니다 — …\n\n📅 미정 ~ 미정" (📍 줄 없음)
+    - 이메일·토큰·stack trace 등 PII/비밀 없음(§1)
+  cleanup:
+    - "여행 삭제"
+    - "sweep"
+  automation: blocked
+  notes: "소유자가 reader 세션(테스트 전용 사용자)을 제공하면 helpers `readLatestTelegramMessages(chatId, n)` 추가 후 scripted 전환."
+
+- id: NTF-014
+  title: 대상 미연결 상태에서 여행 생성 → UI 정상, outbox 'skipped', Telegram 호출 없음
+  priority: P1
+  tags: [desktop, telegram, mutating, admin]
+  preconditions:
+    - account: test@test.com (user) + admin
+    - data: 테스트 계정에 Telegram 대상 0개(실 대상 있으면 스킵)
+  data_sources: [pinvi:telegram-outbox, pinvi:admin-etl-summary, pinvi:admin-api-calls]
+  steps:
+    - "여행 '[e2e] NTF-014 …' 저장 → 12s 대기 → admin api-calls provider=telegram / admin ETL 요약"
+  expected:
+    - 토스트 '초안 여행을 저장했습니다.', role=alert 없음
+    - 생성 시각 이후 sendMessage 행 없음
+    - /admin/etl Telegram outbox 카드에 category trip_created(skipped ≥ 1) 표시
+  cleanup:
+    - "여행 삭제"
+  automation: scripted
+  spec: specs/notify/notify-delivery.live.spec.ts#NTF-014
+
+- id: NTF-015
+  title: companion_invited 알림 — 기존 사용자를 동반자로 초대하면 초대자의 기본 대상이 아니라 피초대자의 기본 대상으로 '✉️ … 여행에 초대되었습니다 — <제목>' 전송
+  priority: P2
+  tags: [telegram, mutating, share]
+  preconditions:
+    - account: 제2 전용 테스트 사용자(PINVI_E2E_USER2_EMAIL/PASSWORD, Telegram 대상 0개)가 피초대자; 또는 admin 계정에 Telegram 대상이 없음을 소유자가 확인
+    - env: "PINVI_E2E_TELEGRAM_CHAT_ID (피초대자의 [e2e] 기본 대상으로 등록)"
+  data_sources: [pinvi:trips, pinvi:telegram-outbox, telegram:sendMessage]
+  steps:
+    - "피초대자로 로그인해 '[e2e]' 기본 대상 등록 → 초대자로 여행 생성 → '동행' 탭 → 이메일·권한 → '초대'"
+    - admin api-calls에서 sendMessage 200 확인(+ NTF-013 reader가 있으면 본문 '✉️ {닉네임}님, 여행에 초대되었습니다 — …' / 'Pinvi에서 일정을 확인해 보세요.', 이메일 미포함)
+  expected:
+    - companion-list에 '초대됨' 행; 피초대자 대상 '정상'
+  cleanup:
+    - "동반자 제거"
+    - "여행 삭제"
+    - "양쪽 sweep"
+  automation: blocked
+  notes: 초대자의 trip_created도 초대자 기본 대상으로 가므로 초대자=test@test.com, 피초대자=제2 계정이어야 실 chat에 안 간다. apps/api/app/api/v1/trips.py:1343-1353.
+
+- id: NTF-016
+  title: "bot_forbidden — 봇이 추방된 chat 등록/재검증 → 403, 'telegram verify 실패: bot_forbidden', 저장 안 됨(재검증이면 failed:bot_forbidden·비활성)"
+  priority: P2
+  tags: [desktop, telegram]
+  preconditions:
+    - env: PINVI_E2E_TELEGRAM_FORBIDDEN_CHAT_ID (prod 봇이 추가됐다가 추방된 전용 테스트 chat)
+    - env: prod PINVI_TELEGRAM_BOT_TOKEN_DEFAULT 설정됨
+  data_sources: [telegram:getChat]
+  steps:
+    - Chat ID=추방 chat 등록
+  expected:
+    - 403 code bot_forbidden, alert 문구, 목록 미추가
+  cleanup:
+    - "sweep"
+  automation: scripted
+  spec: specs/notify/notify-settings.live.spec.ts#NTF-016
+  notes: 등록 전 verify 실패는 persist 안 됨. 재검증 경로(기존 행이 나중에 추방)는 chat 상태를 테스트 중 바꿔야 해서 manual.
+
+- id: NTF-017
+  title: "rate_limited(429) — Retry-After 헤더 전달·alert 'telegram verify 실패: rate_limited'"
+  priority: P3
+  tags: [telegram]
+  preconditions:
+    - Telegram API를 prod 봇으로 고의 과호출해야 함 — prod에서 유발 금지
+  data_sources: [telegram:getChat]
+  steps:
+    - "N/A"
+  expected:
+    - "429 + Retry-After"
+    - "행 last_send_status 'failed:rate_limited'"
+  cleanup:
+    - "N/A"
+  automation: blocked
+  notes: 단위/통합 테스트(apps/api/tests/unit/test_telegram_client.py)로 커버. 라이브에서는 수행하지 않음.
+
+- id: NTF-018
+  title: 날씨 특보 Telegram 알림
+  priority: P3
+  tags: [telegram, weather]
+  preconditions:
+    - 기능 부재 — telegram_messages.py에는 trip_created/companion_invited 2종뿐, 특보는 weather card/marker(weather_alert 도메인)에만 존재
+  data_sources: [weather:map-rest]
+  steps:
+    - "N/A"
+  expected:
+    - "N/A"
+  cleanup:
+    - "N/A"
+  automation: blocked
+  notes: 구현되면 메시지 빌더·outbox category 추가 후 NTF-012 패턴으로 scripted 전환.
+
+- id: NTF-019
+  title: 예약 리마인더 — 1주 전 weekly_summary / 1일 전 daily_brief
+  priority: P3
+  tags: [telegram]
+  preconditions:
+    - 미구현 — docs/integrations/telegram.md §10 미체크 항목, Dagster 자산은 pinvi_telegram_system_outbox(운영 집계)뿐
+  data_sources: [pinvi:etl]
+  steps:
+    - "N/A"
+  expected:
+    - "N/A"
+  cleanup:
+    - "N/A"
+  automation: blocked
+
+- id: NTF-020
+  title: "'일정 정보 알람으로 보내기' 수동 전송(여행/일자 요약을 즉시 Telegram으로)"
+  priority: P3
+  tags: [telegram]
+  preconditions:
+    - apps/web에 해당 UI/엔드포인트 없음(grep '알람|알림으로 보내기' 0건). 자동 알림은 trip_created만.
+  data_sources: [pinvi:trips]
+  steps:
+    - "N/A"
+  expected:
+    - "N/A"
+  cleanup:
+    - "N/A"
+  automation: blocked
+
+- id: NTF-021
+  title: 이메일 알림 수신 — 동반자 초대 메일(Resend email_queue) 실제 수신·본문
+  priority: P3
+  tags: [share, mutating]
+  preconditions:
+    - prod Resend 발송 — 전용 테스트 inbox(PINVI_E2E_MAIL_INBOX_URL/토큰 또는 IMAP) 필요
+  data_sources: [pinvi:email-queue, resend]
+  steps:
+    - 여행 생성 → 동행 탭에서 테스트 inbox 주소 초대 → inbox 폴링
+  expected:
+    - "초대 메일 도착"
+    - "링크 유효"
+  cleanup:
+    - "동반자 제거"
+    - "여행 삭제"
+  automation: blocked
+  notes: 실 수신자 주소로 보내면 안 됨. inbox가 생기면 scripted.
+
+- id: NTF-022
+  title: admin /admin/emails 이메일 큐 smoke — 제목·deliverability·상태 필터·새로고침
+  priority: P2
+  tags: [desktop, admin]
+  preconditions:
+    - "account: admin"
+  data_sources: [pinvi:email-queue]
+  steps:
+    - "/admin/emails"
+  expected:
+    - h1 '이메일 큐', admin-email-deliverability 카드·status 값, 상태 필터, alert 없음
+  cleanup:
+    - "없음"
+  automation: scripted
+  spec: specs/notify/notify-admin.live.spec.ts#NTF-022
+
+- id: NTF-023
+  title: admin /admin/etl Telegram outbox 카드 — due/backoff/stuck/retry exhausted·sent/skipped/failed·임계값·카테고리
+  priority: P2
+  tags: [desktop, admin]
+  preconditions:
+    - "account: admin"
+  data_sources: [pinvi:admin-etl-summary]
+  steps:
+    - "/admin/etl → GET /admin/etl/summary 캡처"
+  expected:
+    - telegram_outbox 존재, max_attempts 5, 카드 라벨·'threshold …m / max attempts 5 / 24h categories', 카테고리별 testid
+    - stuck_pending 값을 annotation으로 기록(0 기대, 게이트 아님)
+  cleanup:
+    - "없음"
+  automation: scripted
+  spec: specs/notify/notify-admin.live.spec.ts#NTF-023
+
+- id: NTF-024
+  title: admin /admin/api-calls provider=telegram — 모든 행의 endpoint가 /bot<id>:***/(getChat|sendMessage)로 마스킹
+  priority: P1
+  tags: [desktop, admin, telegram]
+  preconditions:
+    - account: admin
+    - data: api_call_log에 telegram 행 ≥1 (NTF-004 이후 자연 충족)
+  data_sources: [pinvi:admin-api-calls]
+  steps:
+    - "Provider 'telegram' → 조회"
+  expected:
+    - "JSON·표 모두 토큰 원문(`\\d+:[A-Za-z0-9_-]{20,}`) 0건"
+  cleanup:
+    - "없음"
+  automation: scripted
+  spec: specs/notify/notify-admin.live.spec.ts#NTF-024
+
+- id: NTF-025
+  title: 보안 incident Admin 채널 알림(category security_incident → PINVI_TELEGRAM_ADMIN_CHAT_ID)
+  priority: P3
+  tags: [admin, telegram]
+  preconditions:
+    - 운영자 실 채널로 전송됨 — e2e에서 유발 금지
+  data_sources: [pinvi:telegram-outbox]
+  steps:
+    - "N/A"
+  expected:
+    - "N/A"
+  cleanup:
+    - "N/A"
+  automation: blocked
+  notes: apps/api/app/services/admin_security_incidents.py:118. 통합 테스트로만.
+
+- id: NTF-026
+  title: Telegram 설정 모바일 390 — 설정 탭 nav 노출, 폼 세로 스택, 연결 버튼 ≥44px, 가로 스크롤 없음
+  priority: P2
+  tags: [mobile, telegram, a11y]
+  preconditions:
+    - "account: test@test.com (user)"
+  data_sources: [pinvi:telegram-targets]
+  steps:
+    - "/settings/telegram @390x844"
+  expected:
+    - nav '설정 메뉴'·settings-tab-telegram 표시, 별칭 input이 Chat ID 아래, 버튼 높이 ≥44, scrollWidth ≤ clientWidth+1
+  cleanup:
+    - "없음"
+  automation: scripted
+  spec: specs/notify/notify-settings.live.spec.ts#NTF-026

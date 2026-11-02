@@ -1,0 +1,998 @@
+# AREA: trip — itinerary lifecycle & styles (PinVi prod, live backends, user account)
+# Schema: see ../SPEC.md. All mutating cases create '[e2e]'-prefixed trips and delete them in afterEach.
+# Dates are relative to the run date (isoDate(+N)) so bucket logic (예정/지난 여행) stays stable.
+
+# ───────────────────────────── create / shapes / dates ─────────────────────────────
+- id: TRIP-001
+  title: 당일 여행 생성 — 일자 1개 자동 생성, 일자 추가 불가 안내
+  priority: P1
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 여행 목록 → 새 여행 저장 폼: 제목 '[e2e] 당일 …', 지역 '서울', 시작일=종료일=D+7 → '초안 저장'
+    - 목록 카드 '열기/업데이트' → 상세 (모바일: '패널 열기')
+  expected:
+    - 일자 탭 '1일차'만 존재, 일자 목록에 D+7 날짜('YYYY년 M월 D일')
+    - 헤더 '1일 · 0개 장소'(모바일 '1일 · 0곳')
+    - 일자 추가 버튼 비활성 + '여행 기간은 최대 1일입니다. 기간을 먼저 늘려주세요.'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-create.live.spec.ts#TRIP-001
+
+- id: TRIP-002
+  title: 1박2일 여행 생성 — 일자 2개 자동 생성, 날짜 라벨
+  priority: P1
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 새 여행 저장: 제목 '[e2e] 1박2일 …', 지역 '강릉', D+10 ~ D+11
+    - 상세 열기
+  expected:
+    - '1일차','2일차' 탭, '3일차' 없음; 일자 목록에 두 날짜 모두 표시
+    - 일자 추가 비활성
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-create.live.spec.ts#TRIP-002
+
+- id: TRIP-003
+  title: 3박4일 여행 생성 — 일자 4개, 목록 카드에 기간·초안 배지·지역
+  priority: P1
+  tags: [desktop, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 새 여행 저장: '[e2e] 3박4일 …', 지역 '경주', D+14 ~ D+17
+    - 목록 카드 확인 → 상세 열기
+  expected:
+    - 카드: '{D+14} - {D+17}', 배지 '초안', 지역 '경주'
+    - 상세: 1~4일차 탭, 5일차 없음, 헤더 '4일 · 0개 장소'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-create.live.spec.ts#TRIP-003
+
+- id: TRIP-004
+  title: 7일 여행 — 일자 7개, 기간 상한 7일 안내
+  priority: P2
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 새 여행 저장: '[e2e] 7일 …', 지역 '제주', D+20 ~ D+26 → 상세
+  expected:
+    - 1~7일차 탭, 8일차 없음
+    - 일자 추가 비활성 + '여행 기간은 최대 7일입니다.'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-create.live.spec.ts#TRIP-004
+  notes: 기간 상한은 절대값이 아니라 (종료일-시작일+1) — trip_day_limit (apps/api/app/services/trip.py).
+
+- id: TRIP-005
+  title: 날짜 없는 여행 — 일자 0개에서 '1일차 추가'로 미정 일자 생성
+  priority: P2
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 새 여행 저장: 제목만 입력(날짜 비움) → 상세
+    - '1일차 추가' 클릭
+  expected:
+    - 생성 직후 일자 탭 없음, 추가 버튼 활성 '1일차 추가'
+    - 추가 후 '1일차' 탭 + 날짜 '미정', 버튼 라벨 '2일차 추가'(활성)
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-create.live.spec.ts#TRIP-005
+
+- id: TRIP-006
+  title: 지난 날짜 여행 — '지난 여행' 버킷에만 보이고 헤더 카운트 반영
+  priority: P2
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 새 여행 저장: '[e2e] 지난 …', D-10 ~ D-8
+    - 목록 '예정' → '지난 여행' 전환
+  expected:
+    - '예정'에는 카드 없음, '지난 여행'에 카드 표시
+    - 요약 줄 '예정 N · 지난 여행 M(≥1) · 초안 K'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-create.live.spec.ts#TRIP-006
+
+- id: TRIP-007
+  title: 잘못된 날짜 — 종료일 < 시작일은 저장되지 않고 필드 오류
+  priority: P1
+  tags: [desktop, mobile]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 새 여행 폼: 제목, 시작일 D+10, 종료일 D+8 → '초안 저장'
+  expected:
+    - 종료일 필드 오류 '종료일은 시작일 이후여야 합니다.'
+    - POST /trips 요청 0건, 성공 문구 없음, 목록에 카드 없음
+  cleanup:
+    - 생성물 없음
+  automation: scripted
+  spec: specs/trip/trip-create.live.spec.ts#TRIP-007
+
+- id: TRIP-008
+  title: 잘못된 날짜 — 시작일만 입력하면 둘 다 입력하라는 오류
+  priority: P2
+  tags: [desktop, mobile]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 새 여행 폼: 제목 + 시작일만 → '초안 저장'
+  expected:
+    - '시작일과 종료일을 함께 입력하거나 둘 다 비워두세요.'
+  cleanup:
+    - 생성물 없음
+  automation: scripted
+  spec: specs/trip/trip-create.live.spec.ts#TRIP-008
+
+- id: TRIP-009
+  title: 제목 없이 저장 — '여행 제목을 입력하세요.' 오류, 포커스 복귀
+  priority: P3
+  tags: [desktop, mobile, a11y]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 새 여행 폼: 제목 비움, 날짜만 → '초안 저장'
+  expected:
+    - 제목 필드 오류 문구, 제목 input에 포커스
+  cleanup:
+    - 생성물 없음
+  automation: scripted
+  spec: specs/trip/trip-create.live.spec.ts#TRIP-009
+
+- id: TRIP-010
+  title: 장소가 있는 상태에서 기간 축소/확장 — 기간 벗어남 배지와 일자 추가 상한
+  priority: P1
+  tags: [desktop, mobile, mutating, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을 feature
+  data_sources: [map:heritage, geo]
+  steps:
+    - 새 여행 D+30 ~ D+31 → 2일차에 '안동하회마을' 검색·추가
+    - '편집' → 종료일을 D+30으로 축소 → 저장
+    - '편집' → 종료일을 D+32로 확장 → 저장
+  expected:
+    - 축소 후: 2일차 탭 유지 + '기간 벗어남' 배지, 헤더 '2일 · 1개 장소', 일자 추가 비활성 '최대 1일'
+    - 확장 후: 배지 사라짐, '3일차 추가' 활성, 2일차 장소 1개 그대로
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-create.live.spec.ts#TRIP-010
+  notes: ADR-055 F1 — 기간 축소는 일자를 지우지 않고 out_of_range만 표시.
+
+- id: TRIP-011
+  title: 편집 다이얼로그에서 종료일 < 시작일 — 서버는 수용, 화면은 기간 수정 안내로 일자 추가 차단
+  priority: P3
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 새 여행 D+40 ~ D+41 → '편집' → 시작일 D+45, 종료일 D+41 → 저장
+  expected:
+    - 다이얼로그 닫힘(저장됨), 일자 추가 비활성 + '종료일이 시작일보다 빠릅니다. 여행 기간을 먼저 수정해주세요.'
+    - (데스크톱) 헤더 기간 '{D+45} - {D+41}'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-create.live.spec.ts#TRIP-011
+  notes: 문서화된 현행 동작 — TripUpdate(apps/api/app/schemas/trip.py)에는 TripCreate와 달리 날짜 범위 validator가 없다. 제품 결정 필요(README open questions).
+
+# ───────────────────────────── styles / regions ─────────────────────────────
+- id: TRIP-012
+  title: 도시 서울 1박2일 — 경복궁·국립중앙박물관·남산공원·서울역 적재
+  priority: P1
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 경복궁, 국립중앙박물관, 남산공원, 서울역 features
+  data_sources: [map:heritage, map:museum, map:park, map:transport, geo]
+  steps:
+    - 새 여행 D+21~22 지역 '서울' → 1일차 경복궁·국립중앙박물관, 2일차 남산공원·서울역 검색·추가(장소 배지 우선)
+  expected:
+    - 일자별 행 수·추가 순서 일치, 탭 배지 'N곳'
+    - 헤더 '2일 · 4개 장소', 지도 마커 4개, 지도 칩 '장소 4곳'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-styles.live.spec.ts#TRIP-012
+
+- id: TRIP-013
+  title: 도시 부산 1박2일 — 부산역·해운대해수욕장·감천문화마을·호텔(lodging)
+  priority: P2
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:transport, map:park, map:heritage, kakao, naver, geo]
+  steps:
+    - 1일차 부산역·해운대해수욕장, 2일차 감천문화마을, '해운대 호텔'(카카오/네이버 행)
+  expected:
+    - 4개 장소 적재, 헤더/마커/칩 일치
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-styles.live.spec.ts#TRIP-013
+  notes: lodging은 Map feature가 드물어 외부(kakao/naver) 행을 고른다 — ADR-054 auto feature-request 경로.
+
+- id: TRIP-014
+  title: 바다 강릉 1박2일 — 경포해변·안목해변 카페(cafe)·정동진·횟집(food)
+  priority: P2
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:park, kakao, naver, geo]
+  steps:
+    - 1일차 경포해변, '안목해변 카페'(외부), 2일차 정동진, '강릉 횟집'(외부)
+  expected:
+    - 4개 장소 적재, 헤더/마커/칩 일치
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-styles.live.spec.ts#TRIP-014
+
+- id: TRIP-015
+  title: 바다 제주 2박3일 — 성산일출봉·한라산(hiking)·협재해수욕장
+  priority: P2
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 성산일출봉, 한라산 features
+  data_sources: [map:heritage, map:hiking-trail, map:park, geo]
+  steps:
+    - 1일차 성산일출봉, 2일차 한라산, 3일차 협재해수욕장
+  expected:
+    - 3개 장소, 헤더 '3일 · 3개 장소', 마커 3개
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-styles.live.spec.ts#TRIP-015
+
+- id: TRIP-016
+  title: 산 설악산 1박2일 — 설악산국립공원(park)·신흥사(heritage)·울산바위(trail)·펜션(lodging)
+  priority: P2
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 설악산 park/trail features
+  data_sources: [map:park, map:heritage, map:hiking-trail, kakao, naver, geo]
+  steps:
+    - 1일차 설악산국립공원·신흥사, 2일차 울산바위, '속초 펜션'(외부)
+  expected:
+    - 4개 장소, 헤더/마커/칩 일치
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-styles.live.spec.ts#TRIP-016
+
+- id: TRIP-017
+  title: 산 지리산 1박2일 — 화엄사·지리산국립공원·천왕봉
+  priority: P3
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:heritage, map:park, map:hiking-trail, geo]
+  steps:
+    - 1일차 화엄사·지리산국립공원, 2일차 지리산 천왕봉
+  expected:
+    - 3개 장소, 헤더/마커/칩 일치
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-styles.live.spec.ts#TRIP-017
+
+- id: TRIP-018
+  title: 역사 경주 1박2일 — 불국사·석굴암·첨성대·국립경주박물관
+  priority: P1
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 경주 불국사 feature
+  data_sources: [map:heritage, map:museum, geo]
+  steps:
+    - 1일차 불국사·석굴암, 2일차 첨성대·국립경주박물관
+  expected:
+    - 4개 장소, 헤더/마커/칩 일치
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-styles.live.spec.ts#TRIP-018
+
+- id: TRIP-019
+  title: 역사 안동 1박2일 — 안동하회마을·병산서원·도산서원
+  priority: P2
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을, 도산서원 features
+  data_sources: [map:heritage, geo]
+  steps:
+    - 1일차 안동하회마을·병산서원, 2일차 도산서원
+  expected:
+    - 3개 장소, 헤더/마커/칩 일치
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-styles.live.spec.ts#TRIP-019
+
+- id: TRIP-020
+  title: 섬 울릉도 2박3일 — 독도박물관·나리분지·저동항
+  priority: P3
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:museum, map:park, map:transport, geo]
+  steps:
+    - 1일차 독도박물관, 2일차 나리분지, 3일차 저동항
+  expected:
+    - 3개 장소, 헤더 '3일 · 3개 장소'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-styles.live.spec.ts#TRIP-020
+  notes: 울릉도는 Map 커버리지가 얇을 수 있어 외부 행으로 fallback 가능 — 이름만 단언.
+
+# ───────────────────────────── day operations ─────────────────────────────
+- id: TRIP-021
+  title: 빈 일자 삭제 후 같은 번호로 재생성 — '1일차 추가'가 구멍을 메운다
+  priority: P1
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 3박4일 생성 → 1일차 선택 → '1일차 삭제'(POI 없음 → 확인 없이 즉시)
+    - '1일차 추가' 클릭
+  expected:
+    - 삭제 후 1일차 탭 없음, 추가 버튼 활성 '1일차 추가'
+    - 추가 후 1일차 탭·시작일 날짜 복원, 추가 버튼 다시 비활성, 헤더 '4일 · 0개 장소'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-days.live.spec.ts#TRIP-021
+
+- id: TRIP-022
+  title: 장소가 있는 일자 삭제 — 확인 다이얼로그(취소/확인) 후 일자와 POI 함께 제거
+  priority: P1
+  tags: [desktop, mutating, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 불국사, 첨성대 features
+  data_sources: [map:heritage, geo]
+  steps:
+    - 1박2일 생성 → 2일차에 불국사·첨성대 추가 → '2일차 삭제'
+    - 다이얼로그 '취소' → 다시 '2일차 삭제' → '일자와 POI 삭제'
+  expected:
+    - 다이얼로그 '2일차를 삭제할까요?' + 'POI 2곳'
+    - 취소 시 유지; 확인 시 2일차 사라짐, 헤더 '1일 · 0개 장소', 마커 0개
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-days.live.spec.ts#TRIP-022
+  notes: ADR-055 F2 — 409 DAY_HAS_POIS → force 재요청.
+
+- id: TRIP-023
+  title: 일자 숨기기/표시 — 지도 통계와 마커가 보이는 일자만 반영, 마지막 일자는 숨길 수 없음
+  priority: P2
+  tags: [desktop, mutating, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을, 도산서원 features
+  data_sources: [map:heritage, geo]
+  steps:
+    - 1박2일, 1일차 안동하회마을·2일차 도산서원 → '2일차 표시' 체크 해제 → 다시 체크
+  expected:
+    - 해제: 칩 '1일 표시'·'장소 1곳', 마커 1개(data-day-index=1), 목록에 '숨김', '1일차 표시' 체크박스 비활성
+    - 재체크: '2일 표시', 마커 2개
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-days.live.spec.ts#TRIP-023
+
+- id: TRIP-024
+  title: 일자 이름·색 변경 — 탭 이름이 바뀌고 색 선택이 저장되며 새로고침 후 유지
+  priority: P2
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 1박2일 → 2일차 '2일차 설정' → 이름 '바다 보는 날', 색 P-03 → 저장 → 새로고침 → 설정 재오픈
+  expected:
+    - 변경 전 저장 버튼 비활성(unchanged)
+    - 탭 '바다 보는 날', '2일차' 탭 없음, 컨트롤 aria-label은 '2일차 설정' 유지
+    - 재오픈 시 이름·색(aria-pressed) 유지
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-days.live.spec.ts#TRIP-024
+
+- id: TRIP-025
+  title: 일자 날짜를 여행 기간 밖으로 — 모달 안 필드 오류, 저장 안 됨
+  priority: P2
+  tags: [desktop, mobile, mutating, a11y]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 1박2일 → '1일차 설정' → 날짜 D+20 → 저장
+  expected:
+    - 다이얼로그 유지, '여행 기간 밖의 날짜입니다. 기간을 먼저 늘려주세요.', 날짜 input aria-invalid=true
+    - 취소 후 원래 날짜 유지
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-days.live.spec.ts#TRIP-025
+
+- id: TRIP-026
+  title: 일자 날짜 중복 — '이미 1일차에서 쓰는 날짜입니다.' 오류
+  priority: P3
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 1박2일 → '2일차 설정' → 날짜를 시작일로 → 저장
+  expected:
+    - 모달 안 오류 '이미 1일차에서 쓰는 날짜입니다.'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-days.live.spec.ts#TRIP-026
+
+- id: TRIP-027
+  title: 가운데 일자 삭제 — 'N일차 추가' 라벨이 가장 낮은 빈 번호를 가리킨다
+  priority: P2
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 2박3일 → 2일차 삭제 → '2일차 추가' 클릭
+  expected:
+    - 삭제 후 라벨 '2일차 추가'(활성), 3일차 유지
+    - 추가 후 D+13 날짜 복원, 버튼 비활성 '여행 기간은 최대 3일입니다.'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-days.live.spec.ts#TRIP-027
+
+- id: TRIP-028
+  title: 날짜 없는 여행 — 일자를 1·2·3 순서로 계속 추가, 상한 안내 없음
+  priority: P3
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 제목만으로 생성 → '1일차 추가' ×3
+  expected:
+    - 라벨 '4일차 추가' 활성, '최대' 안내 없음, 헤더 '3일 · 0개 장소'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-days.live.spec.ts#TRIP-028
+
+# ───────────────────────────── place operations ─────────────────────────────
+- id: TRIP-029
+  title: 한 일자에 장소 8개 추가 — 순번 1..8, 헤더 8개, 비활성 일자 미리보기 '외 4곳'
+  priority: P2
+  tags: [desktop, mutating, search, poi, perf]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 경복궁·창덕궁·국립중앙박물관·남산공원·서울역·덕수궁·서울숲·국립민속박물관
+  data_sources: [map:heritage, map:museum, map:park, map:transport, geo]
+  steps:
+    - 1박2일 서울 → 1일차에 8곳 순서대로 추가 → 2일차 선택(1일차 접힘)
+  expected:
+    - 1일차 행 8개, 추가 순서 유지, 탭 '8곳', 헤더 '2일 · 8개 장소', 마커 8개
+    - 접힌 1일차 미리보기 '외 4곳'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-places.live.spec.ts#TRIP-029
+
+- id: TRIP-030
+  title: 드래그로 순서 변경 — 3번째를 1번째로, 새로고침 후에도 유지
+  priority: P1
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 불국사·석굴암·첨성대 features
+  data_sources: [map:heritage, geo]
+  steps:
+    - 당일 경주 → 1일차 불국사·석굴암·첨성대 → 3번째 행을 1번째 위로 드래그 → 새로고침
+  expected:
+    - POST /pois/reorder 200, 순서 [첨성대, 불국사, 석굴암], 새로고침 후 동일
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-places.live.spec.ts#TRIP-030
+  notes: HTML5 DnD — 터치 프로젝트(hasTouch)에서는 skip, 모바일 수동은 TRIP-051.
+
+- id: TRIP-031
+  title: 장소 삭제 — 행·헤더·마커가 함께 줄고 순번이 재계산된다
+  priority: P1
+  tags: [desktop, mobile, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을, 도산서원
+  data_sources: [map:heritage, geo]
+  steps:
+    - 당일 → 1일차 2곳 추가 → 1번째 '장소 삭제'
+  expected:
+    - 행 1개(남은 장소가 1번), 헤더 '1일 · 1개 장소', 마커 1개
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-places.live.spec.ts#TRIP-031
+
+- id: TRIP-032
+  title: 장소별 메모 — 편집기에서 저장하면 행에 표시되고 새로고침 후 유지
+  priority: P1
+  tags: [desktop, mobile, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 영월 고씨굴 feature
+  data_sources: [map:heritage, geo]
+  steps:
+    - 당일 영월 → 고씨굴 추가 → '마커 편집' → 메모 입력 → 저장 → 새로고침
+  expected:
+    - 행에 메모 텍스트, 새로고침 후 유지
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-places.live.spec.ts#TRIP-032
+
+- id: TRIP-033
+  title: 카카오 결과 추가 — 안내 문구와 외부 소스 행 표시
+  priority: P3
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - env: 카카오 place search enabled on prod
+  data_sources: [kakao, geo]
+  steps:
+    - 당일 부산 → '해운대 횟집' 검색 → '카카오' 배지 행 선택
+  expected:
+    - status '카카오 장소를 추가했어요. 상세 정보는 준비되는 대로 표시됩니다.'
+    - 행에 선택한 이름
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-places.live.spec.ts#TRIP-033
+  notes: 서버가 feature-request를 best-effort auto-fire — 그 큐는 admin 영역에서 정리(여기서는 생성 안 함).
+
+- id: TRIP-034
+  title: 여행 복사(복사) — '<제목> copy' 새 초안, 일자·장소·메모가 그대로
+  priority: P1
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 불국사, 첨성대
+  data_sources: [map:heritage, geo]
+  steps:
+    - 1박2일 → 1일차 불국사(+메모), 2일차 첨성대 → '복사'
+  expected:
+    - 새 URL /trips/{copyId}, 제목 '<원본> copy', 배지 '초안', 헤더 '2일 · 2개 장소', 메모 복제
+    - 원본은 변함 없음, 목록에 두 카드
+  cleanup:
+    - afterEach deleteTrip(copyId), deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-places.live.spec.ts#TRIP-034
+  notes: 복사 제목 접미사는 영문 'copy'(apps/api/app/services/trip.py copy_trip).
+
+- id: TRIP-035
+  title: 여행 이름 변경 — 헤더와 목록 카드에 반영, 지역도 함께
+  priority: P1
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 당일 생성 → '편집' → 제목·지역 변경 → 저장 → 목록
+  expected:
+    - 상세 h1·지역 갱신, 목록 카드 제목·지역 갱신
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-places.live.spec.ts#TRIP-035
+
+- id: TRIP-036
+  title: 제목만 비우면 저장 버튼이 비활성 — 빈 제목으로 PATCH 불가
+  priority: P3
+  tags: [desktop, mobile]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - '편집' → 제목을 공백으로
+  expected:
+    - 저장 버튼 disabled
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-places.live.spec.ts#TRIP-036
+
+# ───────────────────────────── route optimize ─────────────────────────────
+- id: TRIP-037
+  title: 동선 최적화 미리보기 — 거리·순서 변경 수를 보여주고 닫으면 순서가 바뀌지 않는다
+  priority: P1
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 불국사·경주역·석굴암·첨성대·국립경주박물관
+  data_sources: [map:heritage, map:transport, map:museum, geo, transport:route]
+  steps:
+    - 당일 경주, 1일차에 지그재그 순서로 5곳 → '동선 최적화' → '닫기' → 새로고침
+  expected:
+    - POST /days/1/optimize persist=false
+    - 미리보기에 거리('123m'|'1.2km'), '순서 변경 N곳', '기존 … → 최적 …' 또는 '최단 경로 추정 거리'
+    - 닫은 뒤·새로고침 뒤 순서 불변
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-optimize.live.spec.ts#TRIP-037
+
+- id: TRIP-038
+  title: 동선 최적화 적용 — persist=true 저장, 순서 변경, 두 번째 미리보기는 0곳(적용 비활성)
+  priority: P1
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:heritage, map:transport, map:museum, geo, transport:route]
+  steps:
+    - TRIP-037과 같은 seed → '동선 최적화' → '적용' → 새로고침 → 다시 '동선 최적화'
+  expected:
+    - persist=true 요청 200, 미리보기 닫힘, 순서가 바뀌되 집합 동일, 새로고침 후 유지
+    - 재미리보기 '순서 변경 0곳', '적용' 비활성
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-optimize.live.spec.ts#TRIP-038
+  notes: 라이브 라우팅이 seed 순서를 이미 최적으로 판단하면 skip(0곳).
+
+- id: TRIP-039
+  title: 동선 최적화는 일자 단위 — 장소 2개 미만 일자엔 버튼 없음, 선택한 일자에만 적용
+  priority: P2
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:heritage, geo, transport:route]
+  steps:
+    - 1박2일: 1일차 2곳, 2일차 1곳 → 2일차 선택 → 1일차 선택 → 최적화
+  expected:
+    - 2일차: trip-day-optimize 없음; 1일차: 1개, 요청 경로 /days/1/optimize
+    - 2일차 순서 불변
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-optimize.live.spec.ts#TRIP-039
+
+- id: TRIP-040
+  title: 동선 최적화 미리보기 문구 관찰 — 거리 표기와 경고 라인 형태 기록
+  priority: P3
+  tags: [desktop, mutating, search]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:heritage, map:transport, map:park, geo, transport:route]
+  steps:
+    - 서울 3곳 → '동선 최적화' → 문구를 annotation으로 기록
+  expected:
+    - 거리 표기 존재(형태만 단언), 경고 라인은 있으면 '⚠' 아이콘과 함께
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-optimize.live.spec.ts#TRIP-040
+
+# ───────────────────────────── trip list ─────────────────────────────
+- id: TRIP-041
+  title: 목록 정렬 — 시작일 오름차순, 같은 날짜는 제목(한글 collator) 순, 날짜 없는 여행은 맨 뒤
+  priority: P2
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 섞인 순서로 4개 생성(D+60, 날짜없음, D+50 B, D+50 A) → '예정' 목록
+  expected:
+    - 카드 순서 [A(D+50), B(D+50), C(D+60), D(없음)]
+  cleanup:
+    - afterEach deleteTrip ×4
+  automation: scripted
+  spec: specs/trip/trip-list.live.spec.ts#TRIP-041
+  notes: compareTripsBySchedule(TripDashboard.tsx) — 같은 날짜는 Intl.Collator('ko-KR', numeric).
+
+- id: TRIP-042
+  title: 초안 배지 — 생성 직후 '초안', 상태를 예정으로 바꾸면 배지와 헤더 카운트가 바뀐다
+  priority: P2
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 생성 → 목록 '초안' 확인 → 상세 '편집' 상태 '예정' → 저장 → 목록
+  expected:
+    - 카드 배지 '예정', '초안' 없음
+    - 요약 줄 '초안 N' 전/후 값을 annotation으로 기록(단독 실행 시 N-1; 같은 계정에 동시 쓰는 다른 영역이 있으면 단언하지 않음)
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-list.live.spec.ts#TRIP-042
+
+- id: TRIP-043
+  title: 여행 삭제 — 확인 2단계, 목록에서 사라지고 상세 URL은 오류, 되돌리기 없음
+  priority: P1
+  tags: [desktop, mobile, mutating, search]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:heritage, geo]
+  steps:
+    - 생성 + 장소 1곳 → '삭제' → '삭제 확인' → 목록 두 버킷 확인 → /trips/{id} 직접 접근
+  expected:
+    - /trips로 이동, 양쪽 버킷에 카드 없음, 되돌리기 버튼 없음, 상세 접근 시 trip-detail-error
+  cleanup:
+    - 케이스 자체가 삭제; afterEach 재삭제 제외
+  automation: scripted
+  spec: specs/trip/trip-list.live.spec.ts#TRIP-043
+  notes: soft_delete(status=archived, deleted_at) — UI에 undo 없음(제품 확인 질문).
+
+- id: TRIP-044
+  title: 버킷 전환 — 예정/지난 여행 필터가 aria-pressed로 바뀌고 카드 집합이 분리된다
+  priority: P2
+  tags: [desktop, mobile, mutating, a11y]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 미래(D+5~6)·과거(D-6~-5) 생성 → 필터 전환
+  expected:
+    - 기본 '예정' pressed, 미래만; '지난 여행' pressed 시 과거만
+  cleanup:
+    - afterEach deleteTrip ×2
+  automation: scripted
+  spec: specs/trip/trip-list.live.spec.ts#TRIP-044
+
+- id: TRIP-045
+  title: 대시보드 지도 — 카드의 '지도 장소 N개'와 지도 칩이 상세 장소 수와 일치
+  priority: P3
+  tags: [desktop, mutating, search]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:heritage, geo]
+  steps:
+    - 생성 + 2곳 → /trips
+  expected:
+    - 카드 '지도 장소 2개', 지도 칩 'N개 여행'·'N개 장소'(로딩 문구 아님)
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-list.live.spec.ts#TRIP-045
+  notes: 대시보드 지도는 데스크톱 전용(모바일 skip).
+
+# ───────────────────────────── session ─────────────────────────────
+- id: TRIP-046
+  title: 10분 넘는 편집 세션 — 토큰 갱신 후에도 로그인 유지, 변경 저장 성공
+  priority: P2
+  tags: [desktop, mutating, auth, perf]
+  preconditions:
+    - account: test@test.com (user)
+    - env: prod access token 10분(pinvi_access_token_minutes=10), refresh 7일
+  data_sources: [map:park, geo]
+  steps:
+    - 생성 + 장소 1곳 → 11분간 매분 일자 탭 전환 → 메모 저장 + 일자 이름 변경 → 새로고침
+  expected:
+    - /login 리다이렉트 없음, 두 변경 모두 저장·유지
+  cleanup:
+    - finally deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-session.live.spec.ts#TRIP-046
+  notes: 3분 예산 초과(의도) — 별도 프로젝트/샤드로 분리 필요. PINVI_E2E_SESSION_MINUTES로 조정.
+
+# ───────────────────────────── mobile variants ─────────────────────────────
+- id: TRIP-047
+  title: 모바일 생성 — '관리 열기'로 폼을 열어 1박2일 저장, 카드 확인
+  priority: P1
+  tags: [mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 390x844 /trips → '관리 열기' → 폼 입력 → '초안 저장'
+  expected:
+    - 전체 여행 지도 숨김, 성공 문구, 카드에 날짜
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-mobile.live.spec.ts#TRIP-047
+
+- id: TRIP-048
+  title: 모바일 상세 — 패널 열기, 드로어에서 일자 추가, 장소 추가/삭제, 헤더 'N일 · M곳'
+  priority: P1
+  tags: [mobile, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 성산일출봉
+  data_sources: [map:heritage, geo]
+  steps:
+    - 날짜 없는 여행 → '패널 열기' → '1일차 추가'(trip-add-day-drawer) → 성산일출봉 추가 → 패널 닫기 → 지도 확인 → 삭제
+  expected:
+    - 데스크톱 trip-add-layer 없음, 헤더 '1일 · 1곳' → '1일 · 0곳', 마커 1개
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-mobile.live.spec.ts#TRIP-048
+
+- id: TRIP-049
+  title: 모바일 장소 있는 일자 삭제 — 확인 다이얼로그, 삭제 후 일자 추가 재활성
+  priority: P2
+  tags: [mobile, mutating, search]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:heritage, geo]
+  steps:
+    - 당일 + 불국사 → '1일차 삭제' → 확인
+  expected:
+    - '1일차를 삭제할까요?', 삭제 후 '1일차 추가' 활성, 헤더 '0일 · 0곳'
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-mobile.live.spec.ts#TRIP-049
+
+- id: TRIP-050
+  title: 모바일 복사·삭제 — 드로어 액션으로 복사본 생성 후 삭제
+  priority: P2
+  tags: [mobile, mutating, search]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:heritage, geo]
+  steps:
+    - 당일 + 안동하회마을 → 패널 '복사' → 복사본에서 '삭제' → '삭제 확인'
+  expected:
+    - 복사본 제목 '<원본> copy', 장소 1개; 삭제 후 목록에 원본만
+  cleanup:
+    - afterEach deleteTrip(원본)
+  automation: scripted
+  spec: specs/trip/trip-mobile.live.spec.ts#TRIP-050
+
+- id: TRIP-051
+  title: 모바일 순서 변경 — 드래그 핸들은 노출되지만 터치 DnD는 수동 확인
+  priority: P3
+  tags: [mobile, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:heritage, geo]
+  steps:
+    - 당일 + 2곳 → 행의 '끌어서 순서 변경' 핸들 확인 (수동: 길게 눌러 끌기)
+  expected:
+    - 스크립트: 핸들·draggable=true 존재. 수동: 터치 드래그로 순서가 바뀌는지 (HTML5 DnD는 모바일 Safari/Chrome에서 기본 미지원 가능)
+  cleanup:
+    - afterEach deleteTrip(id)
+  automation: scripted
+  spec: specs/trip/trip-mobile.live.spec.ts#TRIP-051
+  notes: 터치 DnD 결과는 manual 확인 항목(스크립트는 노출만 단언).
+
+# ───────────────────────────── manual / blocked ─────────────────────────────
+- id: TRIP-052
+  title: 축제(festival) 장소 추가 — 개최 기간 중인 축제를 검색해 일자에 담기
+  priority: P3
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 실행 시점에 개최 중/예정인 Map festival feature(예: 진주남강유등축제, 보령머드축제)
+  data_sources: [map:festival, geo]
+  steps:
+    - 축제 이름 검색 → '장소' 배지 행 추가 → 행/마커 확인
+  expected:
+    - 추가된 행의 마커 category가 festival 계열
+  cleanup:
+    - 여행 삭제
+  automation: manual
+  notes: 축제 feature는 기간 종료 후 retire/suppress될 수 있어 안정적 쿼리를 고정할 수 없다 — 실행 시 운영자가 당시 축제명을 고른다.
+
+- id: TRIP-053
+  title: 장소를 다른 일자로 이동
+  priority: P2
+  tags: [desktop, mobile, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:heritage]
+  steps:
+    - 1일차 장소를 2일차로 옮긴다
+  expected:
+    - 2일차에 나타나고 1일차에서 사라짐
+  cleanup:
+    - 여행 삭제
+  automation: blocked
+  notes: 웹 UI에 일자 간 이동 기능이 없다 — TripPoiList D&D는 같은 일자 내 reorder만, PoiUpdate 스키마에 day_index 없음(packages/schemas/src/poi.ts). 제품 결정 필요. 현재 우회는 삭제 후 재추가(TRIP-031 + 검색).
+
+- id: TRIP-054
+  title: 일자별 메모(note) 입력
+  priority: P3
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 일자 설정에서 메모 입력
+  expected:
+    - 일자 헤더에 메모 표시
+  cleanup:
+    - 여행 삭제
+  automation: blocked
+  notes: TripDay.note는 API/DB에 있으나(copy_trip이 복제) 웹 일자 설정 다이얼로그는 이름·날짜·색만 노출(TripDayControls.tsx). 장소별 메모는 TRIP-032로 커버.
+
+- id: TRIP-055
+  title: 동선 최적화 시작/끝 고정 여부 — 첫 장소(숙소)가 출발점으로 유지되는가
+  priority: P3
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:heritage, kakao, transport:route]
+  steps:
+    - 1일차 첫 행에 숙소, 이후 4곳 → 미리보기 → 적용
+  expected:
+    - 관찰·기록: 첫/마지막 행이 고정되는지(two_opt 전략의 open/closed tour), 거리 감소율
+  cleanup:
+    - 여행 삭제
+  automation: manual
+  notes: UI에 시작/종료 고정 옵션이 없다(TripDayOptimize.tsx는 strategy two_opt만 전송). 서버 동작 관찰 후 기대값을 확정하면 scripted로 승격.
+
+- id: TRIP-056
+  title: 빈 상태 — 여행이 없는 계정(user2)에서 '아직 여행이 없습니다.' + '새 여행 만들기' CTA가 폼에 포커스
+  priority: P3
+  tags: [desktop, mobile, a11y, auth]
+  preconditions:
+    - account: test2@test.com (user2, PINVI_E2E_USER2_EMAIL/PASSWORD) — 여행 0건 기대
+  data_sources: []
+  steps:
+    - user2 로그인 → deleteAllE2eTrips → /trips → (비-[e2e] 여행이 있으면 skip)
+    - '예정' 빈 상태 → '새 여행 만들기' 클릭 → '지난 여행' 전환
+  expected:
+    - '아직 여행이 없습니다.' + '제목만 있으면 시작할 수 있어요…', 클릭 시 폼 표시·제목 input 포커스
+    - '지난 여행': '지난 여행이 없습니다.' + '종료된 여행이 생기면 여기에 모입니다.', CTA 없음
+  cleanup:
+    - 생성물 없음(폼은 열기만)
+  automation: scripted
+  spec: specs/trip/trip-user2.live.spec.ts#TRIP-056
+  notes: 2026-11-03 coordinator — user2 제공으로 unblock. 다른 영역이 user2로 여행을 만들면 skip된다(비-prefix 삭제 금지).
+
+- id: TRIP-057
+  title: 두 번째 사용자 격리 — user1의 비공개 여행은 user2 목록에 없고 URL 직접 접근도 거부
+  priority: P2
+  tags: [desktop, mutating, auth]
+  preconditions:
+    - account: test@test.com (user) + test2@test.com (user2)
+  data_sources: []
+  steps:
+    - user1 컨텍스트에서 '[e2e] 격리' 당일 여행 생성(비공개)
+    - user2 컨텍스트: /trips 두 버킷 확인 → /trips/{id} 직접 접근 → user1에서 재확인
+  expected:
+    - user2 목록에 카드 없음, 상세는 trip-detail-error(로그인 리다이렉트 아님), 일자 목록 미렌더
+    - user1에서는 제목 그대로
+  cleanup:
+    - finally deleteTrip(id) as user1
+  automation: scripted
+  spec: specs/trip/trip-user2.live.spec.ts#TRIP-057
+  notes: 동행 초대/공유 링크는 다른 영역 — 여기서는 비공개 기본값의 격리만 본다.

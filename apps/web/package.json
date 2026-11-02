@@ -16,6 +16,9 @@
     "test:e2e:admin-live:list": "playwright test -c playwright.admin-live.config.ts --list",
     "test:e2e:live-mutating": "playwright test -c playwright.live-mutating.config.ts",
     "test:e2e:live-mutating:list": "playwright test -c playwright.live-mutating.config.ts --list",
+    "test:e2e:live-catalog": "playwright test -c playwright.live-catalog.config.ts",
+    "test:e2e:live-catalog:list": "playwright test -c playwright.live-catalog.config.ts --list",
+    "test:e2e:live-catalog:index": "node e2e-live/catalog/build-index.mjs --check",
     "test:e2e:map": "playwright test map-shell.e2e.ts",
     "test:watch": "vitest"
   },
