@@ -363,7 +363,25 @@ async def test_unexpected_extra_field_is_tolerated() -> None:
     client = _client(handler)
     values = await client.latest("loc-1")
     assert values[0].metric_key == "TMP"
-    assert not hasattr(values[0], "unexpected_new_field")
+    await client.aclose()
+
+
+async def test_additive_field_is_warned_once_per_key_set(caplog: pytest.LogCaptureFixture) -> None:
+    """더해진 키가 실은 선택 필드의 개명이면 값이 조용히 빈다 — 운영 로그에 한 번은 보여야 한다."""
+    kor_travel_weather_module._WARNED_ADDITIVE.clear()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        extended = dict(_WEATHER_VALUE)
+        extended["renamed_value_field"] = 1.0
+        return httpx.Response(200, json=_envelope([extended]))
+
+    client = _client(handler)
+    with caplog.at_level("DEBUG", logger=kor_travel_weather_module.__name__):
+        await client.latest("loc-1")
+        await client.latest("loc-1")
+    warnings = [r for r in caplog.records if r.levelname == "WARNING" and "additive" in r.message]
+    assert len(warnings) == 1
+    assert "renamed_value_field" in warnings[0].message
     await client.aclose()
 
 

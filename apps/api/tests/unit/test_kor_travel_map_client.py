@@ -275,6 +275,50 @@ async def test_get_features_chunks_and_merges() -> None:
             None,
         ),
         (
+            {
+                "items": [
+                    {
+                        "state": "retired",
+                        "feature_id": "f_1",
+                        "row_revision": 1,
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "missing",
+                        "feature_id": "f_1",
+                        "feature_uuid": "f_1",
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            },
+            None,
+        ),
+        (
+            {"items": [{"state": "found", "feature_id": "f_1", "row_revision": 1}]},
+            None,
+        ),
+        (
+            {
+                "items": [
+                    {
+                        "state": "suppressed",
+                        "feature_id": "f_1",
+                        "feature_uuid": "f_1",
+                        "row_revision": 1,
+                        "trip_card": _trip_card("f_1"),
+                    }
+                ]
+            },
+            None,
+        ),
+        (
             {"items": [{"state": "unchanged", "feature_id": "f_1", "row_revision": 2}]},
             {"f_1": 1},
         ),
@@ -314,6 +358,10 @@ async def test_get_features_chunks_and_merges() -> None:
         "future-state",
         "incomplete-trip-card",
         "mismatched-trip-card-id",
+        "retired-with-trip-card",
+        "missing-with-trip-card-despite-additive-key",
+        "found-without-trip-card",
+        "suppressed-with-trip-card-despite-additive-key",
         "wrong-unchanged-validator",
         "row-revision-outside-bigint",
         "ignored-matching-validator",
@@ -348,6 +396,7 @@ async def test_get_features_tolerates_additive_upstream_fields() -> None:
             200,
             json={
                 "data": {
+                    "next_hint": "ignored",
                     "items": [
                         {
                             "state": "found",
@@ -375,7 +424,17 @@ async def test_get_features_tolerates_additive_upstream_fields() -> None:
     assert isinstance(found, FoundFeatureBatchItem)
     assert found.row_revision == 2
     assert found.trip_card.name == "f_found 이름"
-    assert not hasattr(found.trip_card, "future_field")
+    # 저장되는 것은 snapshot이다 — 더해진 키가 끼어들 수 없다.
+    assert set(found.trip_card.as_snapshot()) == {
+        "feature_id",
+        "kind",
+        "name",
+        "category",
+        "coord",
+        "address",
+        "marker_icon",
+        "marker_color",
+    }
     assert isinstance(data["f_missing"], MissingFeatureBatchItem)
     assert isinstance(data["f_retired"], RetiredFeatureBatchItem)
     await client.aclose()

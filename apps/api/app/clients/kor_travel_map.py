@@ -212,18 +212,30 @@ _TRIP_CARD_FIELDS = frozenset(
 # batch item의 **알려진** 키 어휘. 상태별로 있으면 안 되는 키(missing의 row_revision, found가 아닌
 # 항목의 trip_card)는 여전히 거부한다 — 그건 더해진 필드가 아니라 의미가 어긋난 응답이다.
 _BATCH_ITEM_FIELDS = frozenset({"state", "feature_id", "row_revision", "trip_card"})
+_BATCH_DATA_FIELDS = frozenset({"items"})
+
+
+# 같은 (위치, 키 집합)은 프로세스당 한 번만 warning으로 남긴다 — 더해진 키가 실은 **개명**이라
+# 선택 필드가 조용히 비는 경우를 운영 로그에서 알아차릴 수 있게(debug는 prod에서 보이지 않는다).
+_WARNED_ADDITIVE: set[tuple[str, frozenset[str]]] = set()
 
 
 def _note_additive_fields(raw: Mapping[str, Any], known: frozenset[str], *, what: str) -> None:
-    """내부 소비자는 정확한 셰입을 핀하지 않는다 — 모르는(더해진) 키는 무시하고 debug로만 남긴다.
+    """내부 소비자는 정확한 셰입을 핀하지 않는다 — 모르는(더해진) 키는 무시하고 로그로만 남긴다.
 
     2026-11-02 prod e2e: Map이 batch item에 `feature_uuid`를 더하자 정확-집합 검사가 batch 전체를
-    거부해 모든 trip POI가 `unverified`가 됐다. 필수 키와 타입 검사는 그대로 둔다. 더해진 키는
-    decode 결과에 실리지 않으므로(알려진 필드만 복사) snapshot으로 흘러들지 않는다.
+    거부해 모든 trip POI가 `unverified`가 됐다. 필수 키와 타입·상태별 의미 검사는 그대로 둔다. 더해진
+    키는 decode 결과에 실리지 않으므로(알려진 필드만 복사) snapshot으로 흘러들지 않는다.
     """
-    extra = set(raw) - known
-    if extra:
+    extra = frozenset(set(raw) - known)
+    if not extra:
+        return
+    key = (what, extra)
+    if key in _WARNED_ADDITIVE:
         logger.debug("kor_travel_map.%s additive fields ignored: %s", what, sorted(extra))
+        return
+    _WARNED_ADDITIVE.add(key)
+    logger.warning("kor_travel_map.%s additive fields ignored: %s", what, sorted(extra))
 
 
 def _decode_feature_trip_card(raw: object, feature_id: str) -> FeatureTripCard:
@@ -555,8 +567,9 @@ class KorTravelMapClient:
                 raise KorTravelMapContractError("feature batch endpoint가 404를 반환했습니다.")
             data = self._data(response)
             raw_items = data.get("items")
-            if set(data) != {"items"} or not isinstance(raw_items, list):
+            if not isinstance(raw_items, list):
                 raise KorTravelMapContractError("feature batch data 셰입이 올바르지 않습니다.")
+            _note_additive_fields(data, _BATCH_DATA_FIELDS, what="batch_data")
             chunk_items = [_decode_feature_batch_item(item) for item in raw_items]
             if [item.feature_id for item in chunk_items] != chunk:
                 raise KorTravelMapContractError(
