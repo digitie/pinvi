@@ -46,7 +46,7 @@ router = APIRouter(tags=["search"])
 _MY_POI_LIMIT = 10
 # 자동완성의 주소 소스(kor-travel-geo `/v2/search`) 예산. 평소 0.3~1초다. 짧은 검색어("하회")에서 geo가
 # DB statement timeout(504 E0504, ~5초)을 내면 재시도해도 같으므로 1회만, 짧게 끊고 `addresses`를
-# degrade로 둔다 — 예전에는 5초 × 3회 재시도가 feature 결과까지 16초 붙잡았다(2026-11-02 prod e2e).
+# degrade로 둔다 — 예전에는 5초씩 3회 재시도가 feature 결과까지 16초 붙잡았다(2026-11-02 prod e2e).
 _ADDRESS_SEARCH_TIMEOUT_SECONDS = 3.0
 
 
@@ -169,7 +169,7 @@ async def unified_search(
                 kind="address",
                 size=limit,
                 max_attempts=1,
-                timeout=_ADDRESS_SEARCH_TIMEOUT_SECONDS,
+                attempt_timeout_seconds=_ADDRESS_SEARCH_TIMEOUT_SECONDS,
             )
         except KorTravelGeoError:
             return None

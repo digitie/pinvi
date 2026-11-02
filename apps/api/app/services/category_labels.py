@@ -118,7 +118,7 @@ async def get_category_labels(client: _CategoriesClient) -> CategoryLabels:
     try:
         data = await client.categories()
     # 표시 전용 보강이다 — 카탈로그를 못 받아도 검색·상세 응답은 깨지지 않아야 한다.
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("category_labels.fetch_failed: %s", exc)
         labels, ttl = EMPTY_CATEGORY_LABELS, _FAILURE_TTL_SECONDS
     else:

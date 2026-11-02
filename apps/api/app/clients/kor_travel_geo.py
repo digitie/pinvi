@@ -67,16 +67,18 @@ class KorTravelGeoClient:
         payload: Mapping[str, Any],
         *,
         max_attempts: int | None = None,
-        timeout: float | None = None,
+        attempt_timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도 후 최상위 dict 반환.
 
-        `max_attempts`/`timeout`은 호출 단위 덮어쓰기다(기본은 client 설정).
+        `max_attempts`/`attempt_timeout_seconds`는 호출 단위 덮어쓰기다(기본은 client 설정).
         """
         last: KorTravelGeoUnavailable | None = None
         body = {k: v for k, v in payload.items() if v is not None}
         attempts = self._max_attempts if max_attempts is None else max(1, max_attempts)
-        request_timeout: Any = httpx.USE_CLIENT_DEFAULT if timeout is None else timeout
+        request_timeout: Any = (
+            httpx.USE_CLIENT_DEFAULT if attempt_timeout_seconds is None else attempt_timeout_seconds
+        )
         for attempt in range(attempts):
             try:
                 resp = await self._http.post(
@@ -155,18 +157,18 @@ class KorTravelGeoClient:
         page: int | None = None,
         size: int | None = None,
         max_attempts: int | None = None,
-        timeout: float | None = None,
+        attempt_timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         """주소/도로명/행정구역/장소 검색(자동완성). data = {status, total, candidates[]}.
 
-        자동완성 호출부는 `max_attempts=1`과 짧은 `timeout`을 넘긴다 — 짧은 검색어에서 geo가
+        자동완성 호출부는 `max_attempts=1`과 짧은 `attempt_timeout_seconds`를 넘긴다 — 짧은 검색어에서 geo가
         DB statement timeout(504 E0504)을 내면 그건 재시도해도 같은 결과다.
         """
         return await self._post(
             "/v2/search",
             {"query": query, "type": kind, "sig_cd": sig_cd, "page": page, "size": size},
             max_attempts=max_attempts,
-            timeout=timeout,
+            attempt_timeout_seconds=attempt_timeout_seconds,
         )
 
     async def regions_within_radius(

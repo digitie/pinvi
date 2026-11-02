@@ -502,7 +502,7 @@ async def test_unified_search_asks_geo_once_with_short_budget(
 ) -> None:
     """짧은 검색어에서 geo가 504(DB statement timeout)를 내면 재시도해도 같다 — 1회·짧은 예산.
 
-    2026-11-02 prod e2e: "하회"·"고씨" 검색이 5초 × 3회 재시도로 16초 걸렸고 feature 결과까지
+    2026-11-02 prod e2e: "하회"·"고씨" 검색이 5초씩 3회 재시도로 16초 걸렸고 feature 결과까지
     붙잡혔다.
     """
     user_id, _ = verified_user
@@ -514,7 +514,7 @@ async def test_unified_search_asks_geo_once_with_short_budget(
         search_calls = [kwargs for name, kwargs in geo.calls if name == "search"]
         assert len(search_calls) == 1
         assert search_calls[0]["max_attempts"] == 1
-        assert 0 < search_calls[0]["timeout"] <= 3.0
+        assert 0 < search_calls[0]["attempt_timeout_seconds"] <= 3.0
     finally:
         _clear_search_clients()
 
