@@ -124,7 +124,9 @@ describe('api-client cookie 세션 자동 갱신', () => {
     const onUnauthorized = vi.fn();
     const client = new ApiClient({ baseUrl: nextBase(), fetcher: server.fetcher, onUnauthorized });
 
-    await expect(client.requestNoContent('/trips/t1', { method: 'DELETE' })).resolves.toBeUndefined();
+    await expect(
+      client.requestNoContent('/trips/t1', { method: 'DELETE' }),
+    ).resolves.toBeUndefined();
     expect(server.refreshCalls()).toBe(1);
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
