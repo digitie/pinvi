@@ -35,7 +35,14 @@ export const geoApi = (client: ApiClient) => ({
    * `docs/api/search.md`(ADR-054). `lat`/`lon`은 "내 주변 검색"(위치정보 제3자 제공, §9)일 때만.
    */
   searchPlaces: (
-    params: { q: string; limit?: number; lat?: number; lon?: number },
+    params: {
+      q: string;
+      limit?: number;
+      lat?: number;
+      lon?: number;
+      /** 지역 편향 `lng_min,lat_min,lng_max,lat_max` — 범위 안을 먼저, 밖은 뒤에(필터 아님). */
+      bbox?: string | null;
+    },
     opts?: { signal?: AbortSignal },
   ) => {
     const qs = new URLSearchParams();
@@ -43,6 +50,7 @@ export const geoApi = (client: ApiClient) => ({
     if (params.limit != null) qs.set('limit', String(params.limit));
     if (params.lat != null) qs.set('lat', String(params.lat));
     if (params.lon != null) qs.set('lon', String(params.lon));
+    if (params.bbox) qs.set('bbox', params.bbox);
     return client.request(`/search?${qs.toString()}`, {
       method: 'GET',
       schema: PlaceSearchResponseSchema,

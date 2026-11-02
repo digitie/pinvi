@@ -124,6 +124,43 @@ def feature_item_to_result(
     )
 
 
+def region_biased_items(
+    items: list[Any],
+    *,
+    bbox: tuple[float, float, float, float] | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """지역 편향 정렬 — 전국 검색 결과 중 bbox 안의 장소를 앞으로(최대 `limit`의 절반), 나머지는 원래 순서.
+
+    bbox는 **순서만** 바꾼다. 2026-11-02 소유자 결정("하회마을"에서 서울 식당 셋이 안동 마을보다 먼저
+    나왔다). 지역 안 몫을 절반으로 묶는 이유: Map 이름 검색은 느슨한 trigram이라 지역 안의 비슷한
+    이름(예: 서울에서 "부산역" → "부산식당"…)이 목록을 다 차지하면 지역 밖의 정확한 장소가 사라지고,
+    내부 결과가 많아 Kakao/Naver 보강도 생략된다(#615 리뷰).
+    """
+    dicts = [item for item in items if isinstance(item, dict)]
+    if bbox is None:
+        return dicts[:limit]
+    lng_min, lat_min, lng_max, lat_max = bbox
+
+    def inside(item: dict[str, Any]) -> bool:
+        lon, lat = _float(item.get("lon")), _float(item.get("lat"))
+        return (
+            lon is not None
+            and lat is not None
+            and lng_min <= lon <= lng_max
+            and lat_min <= lat <= lat_max
+        )
+
+    # 절반(내림) — limit 1이면 편향하지 않는다(유일한 자리를 지역 안 퍼지 매칭에 내주지 않게).
+    regional_cap = limit // 2
+    if regional_cap == 0:
+        return dicts[:limit]
+    regional = [item for item in dicts if inside(item)][:regional_cap]
+    picked = {id(item) for item in regional}
+    rest = [item for item in dicts if id(item) not in picked]
+    return [*regional, *rest][:limit]
+
+
 # geo v2 `match_kind` 중 도로명 주소 후보. 나머지(parcel=지번, region 등)는 `address`에 둔다.
 _ROAD_MATCH_KINDS = frozenset({"road"})
 

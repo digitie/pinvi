@@ -156,7 +156,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
       )}
 
       {selectedDay && (
-        <TripDayHeader day={selectedDay} className="mb-3 rounded-sm bg-surface-soft p-3" />
+        <TripDayHeader day={selectedDay} className="mb-3 rounded-sm bg-surface-soft p-3" readOnly />
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">

@@ -13,6 +13,7 @@ import type {
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
+import { viewportSearchBias } from '@/lib/searchBias';
 import { providerLabel } from '@/lib/weatherProviderLabels';
 import {
   DEFAULT_MAP_CENTER,
@@ -219,6 +220,11 @@ export function FeatureMapView({
   initialSuggestCoord = null,
 }: FeatureMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
+  // 장소 검색 지역 편향 — 탐색 지도는 지금 화면 범위(2026-11-02 결정).
+  const getSearchBias = useCallback(
+    () => (mapRef.current ? viewportSearchBias(mapRef.current.getBounds()) : null),
+    [],
+  );
   const latestRequest = useRef(0);
   const inBoundsAbort = useRef<AbortController | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -740,7 +746,7 @@ export function FeatureMapView({
         <div className="relative min-h-0 flex-1">
           <div className="pointer-events-none absolute inset-0 z-10">
             <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
-              <MapSearchBox onSelect={handleSearchSelect} />
+              <MapSearchBox onSelect={handleSearchSelect} getBias={getSearchBias} />
               {/* 상태는 상시 표가 아니라 **일이 생겼을 때만** 뜬다(DESIGN.md 상태 UI). */}
               {error ? (
                 <p

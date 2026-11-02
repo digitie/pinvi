@@ -616,3 +616,78 @@ async def test_unified_search_slow_geo_does_not_hold_feature_results(
         assert "features" not in data["degraded_sources"]
     finally:
         _clear_search_clients()
+
+
+async def test_unified_search_bbox_biases_order_without_filtering(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    """bbox는 필터가 아니라 순서 편향이다 — 전국 검색 한 번(넉넉한 후보)에서 범위 안을 앞으로 당긴다."""
+
+    class _BiasMap(_FakeKorTravelMapClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[dict[str, Any]] = []
+
+        async def search_features(self, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append(kwargs)
+            return {
+                "items": [
+                    {"feature_id": "seoul", "name": "하회마을", "lon": 126.97, "lat": 37.54},
+                    {"feature_id": "andong", "name": "안동하회마을", "lon": 128.5, "lat": 36.5},
+                ]
+            }
+
+    user_id, _ = verified_user
+    fake_map = _BiasMap()
+    _override_search_clients(fake_map, _FakeKorTravelGeoClient())
+    try:
+        resp = await client.get(
+            "/search?q=하회마을&limit=8&bbox=128.2,36.3,129.1,37.4", cookies=auth_cookies(user_id)
+        )
+        assert resp.status_code == 200, resp.text
+        features = [
+            r["feature_id"] for r in resp.json()["data"]["results"] if r["source"] == "feature"
+        ]
+        assert features == ["andong", "seoul"]
+        # bbox 검색을 따로 보내지 않는다 — 전국 검색 한 번, 후보만 넉넉히.
+        assert len(fake_map.calls) == 1
+        assert "min_lon" not in fake_map.calls[0]
+        assert fake_map.calls[0]["page_size"] == 40
+    finally:
+        _clear_search_clients()
+
+
+async def test_unified_search_bbox_is_validated_and_ignored_when_outside_korea(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    class _RecordingMap(_FakeKorTravelMapClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[dict[str, Any]] = []
+
+        async def search_features(self, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append(kwargs)
+            return await super().search_features(**kwargs)
+
+    user_id, _ = verified_user
+    fake_map = _RecordingMap()
+    _override_search_clients(fake_map, _FakeKorTravelGeoClient())
+    try:
+        bad = await client.get("/search?q=하회&bbox=1,2,3", cookies=auth_cookies(user_id))
+        assert bad.status_code == 400
+        nan = await client.get("/search?q=하회&bbox=nan,36,129,37", cookies=auth_cookies(user_id))
+        assert nan.status_code == 400
+        # 한국과 겹치지 않는 범위(뒤바뀐 위경도 등)는 편향하지 않는다 — 평범한 검색.
+        outside = await client.get(
+            "/search?q=하회&limit=8&bbox=135,44,136,45", cookies=auth_cookies(user_id)
+        )
+        assert outside.status_code == 200, outside.text
+        assert fake_map.calls[-1]["page_size"] == 8
+        # 한국 밖으로 넘친 화면은 범위 안으로 좁혀 편향한다.
+        wide = await client.get(
+            "/search?q=하회&limit=8&bbox=120,30,135,45", cookies=auth_cookies(user_id)
+        )
+        assert wide.status_code == 200, wide.text
+        assert fake_map.calls[-1]["page_size"] == 40
+    finally:
+        _clear_search_clients()

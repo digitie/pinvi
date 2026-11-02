@@ -42,6 +42,7 @@ import type {
   TripViewPoi,
 } from '@pinvi/schemas';
 import { apiClient, redirectToLogin } from '@/lib/api';
+import { pickSearchBias, tripSearchBias } from '@/lib/searchBias';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { appendRank, paletteHex, reorderMoves, tripDaysToMapPoints } from '@pinvi/domain';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
@@ -580,6 +581,16 @@ export function TripDetail({ tripId }: TripDetailProps) {
   }
 
   const allMapPoints = useMemo(() => (view ? tripDaysToMapPoints(view.days) : []), [view]);
+  // 장소 검색 지역 편향 — 이 여행의 장소 범위가 먼저, 장소가 없으면 지금 지도 화면(2026-11-02 결정).
+  const tripBias = useMemo(() => tripSearchBias(allMapPoints), [allMapPoints]);
+  const viewportBiasRef = useRef<string | null>(null);
+  const handleViewportBboxChange = useCallback((bbox: string) => {
+    viewportBiasRef.current = bbox;
+  }, []);
+  const getSearchBias = useCallback(
+    () => pickSearchBias(tripBias, viewportBiasRef.current),
+    [tripBias],
+  );
   const mapPoints = useMemo(() => {
     if (visibleDayIndexes.size === 0) return allMapPoints;
     return allMapPoints.filter((point) => visibleDayIndexes.has(point.dayIndex));
@@ -1750,7 +1761,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                   title={`${day.day_index}일차 파일`}
                                   compact
                                 />
-                                <MapSearchBox onSelect={handleAddPlace} />
+                                <MapSearchBox onSelect={handleAddPlace} getBias={getSearchBias} />
                                 <TripDayOptimize
                                   tripId={tripId}
                                   dayIndex={day.day_index}
@@ -1921,7 +1932,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 data-testid="trip-map-place-search"
               >
                 {selectedDay ? (
-                  <MapSearchBox onSelect={handleAddPlace} />
+                  <MapSearchBox onSelect={handleAddPlace} getBias={getSearchBias} />
                 ) : (
                   <p className="px-2 py-1 text-sm text-muted">선택된 일자가 없습니다.</p>
                 )}
@@ -1938,6 +1949,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
             showFeatures
             hiddenFeatureIds={plannedFeatureIds}
             transportLayers
+            onViewportBboxChange={handleViewportBboxChange}
             canAddFeature={selectedDay != null && !busy}
             onSelectPoi={handleSelectPoi}
             onMarkerContextMenu={handleMarkerContextMenu}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import type { PoiRiseSetStatus } from '@pinvi/schemas';
 import { TripDayHeader, type TripDayHeaderProps } from '@/components/trips/TripDayHeader';
 
 function makeDay(over: Partial<TripDayHeaderProps['day']> = {}): TripDayHeaderProps['day'] {
@@ -119,5 +120,52 @@ describe('TripDayHeader', () => {
     );
     expect(screen.queryByTestId('trip-day-header-out-of-range')).not.toBeInTheDocument();
     expect(screen.queryByTestId('trip-day-header-holiday')).not.toBeInTheDocument();
+  });
+
+  it.each<[PoiRiseSetStatus, string]>([
+    ['pending_coord', '좌표가 있는 장소를 추가하면 일출·일몰을 표시합니다'],
+    ['pending_date', '날짜를 정하면 일출·일몰을 표시합니다'],
+    ['pending_fetch', '일출·일몰 준비 중'],
+  ])('pending 상태 %s는 무엇을 기다리는지 알린다(2026-11-02 prod e2e)', (status, message) => {
+    render(
+      <TripDayHeader
+        day={makeDay({
+          rise_set: {
+            status,
+            locdate: '2026-06-10',
+            sunrise_at: null,
+            sunset_at: null,
+            moonrise_at: null,
+            moonset_at: null,
+            fetched_at: null,
+            updated_at: '2026-06-10T00:00:00Z',
+          },
+        })}
+      />,
+    );
+    expect(screen.getByTestId('trip-day-rise-set-pending')).toHaveTextContent(message);
+  });
+
+  it('공유(읽기 전용) 화면은 편집 지시 없이 중립 문구를 쓴다', () => {
+    render(
+      <TripDayHeader
+        readOnly
+        day={makeDay({
+          rise_set: {
+            status: 'pending_coord',
+            locdate: '2026-06-10',
+            sunrise_at: null,
+            sunset_at: null,
+            moonrise_at: null,
+            moonset_at: null,
+            fetched_at: null,
+            updated_at: '2026-06-10T00:00:00Z',
+          },
+        })}
+      />,
+    );
+    expect(screen.getByTestId('trip-day-rise-set-pending')).toHaveTextContent(
+      '일출·일몰 정보 없음',
+    );
   });
 });

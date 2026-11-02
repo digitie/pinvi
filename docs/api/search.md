@@ -19,6 +19,7 @@ GET /search?q=<검색어>&limit=<n>&lat=<위도>&lon=<경도>
 | `q`           | string(2–120) | 필수   | 검색어(최소 2자). 클라이언트는 디바운스·in-flight 취소 유지                     |
 | `limit`       | int(1–50)     | 아니오 | 소스별 상한(기본 10). Naver는 자체 상한 5로 clamp                               |
 | `lat` / `lon` | float         | 아니오 | **"내 주변 검색"일 때만**. 함께 와야 하며 좌표를 **Kakao에만** 전달(§위치 감사) |
+| `bbox`        | string        | 아니오 | 지역 **편향** `lng_min,lat_min,lng_max,lat_max` — 여행 장소 범위(웹은 여백 0.25°) 또는 지금 지도 화면(웹은 소수 2자리). 범위 안 feature를 목록 절반까지 앞으로(필터 아님). 한국 범위로 좁히고 겹치지 않으면 무시, 형식 오류는 400. Kakao/Naver에는 보내지 않는다. 탐색 지도 화면은 동의 후 기기 위치로 자동 센터링될 수 있으나 `/features/in-bounds`와 같은 수준의 화면 범위다 |
 
 인증 필요(로그인 쿠키). 좌표가 오면 위치정보 제3자 제공으로 감사된다(아래).
 
@@ -55,6 +56,11 @@ GET /search?q=<검색어>&limit=<n>&lat=<위도>&lon=<경도>
 ## 동작
 
 - **정렬**: internal(feature → address → my_poi) → **kakao** → **naver**. 부분 degrade에도 안정적.
+- **지역 편향(`bbox`)**: `bbox`가 오면 전국 feature 검색을 후보 40개로 한 번 받아 범위 안의 장소를 **목록 절반까지**
+  앞으로 당기고 나머지는 원래 순서로 둔다(`limit`까지). bbox 검색을 따로 보내지 않는다 — Map 이름 검색은 bbox를
+  이름 매칭 뒤에 걸러 비용이 같고 재시도 예산·호출 로그가 두 배가 된다. 절반 상한은 느슨한 trigram 매칭이 지역 안의
+  비슷한 이름으로 목록을 채워 지역 밖의 정확한 장소(와 Kakao/Naver 보강)를 밀어내지 않게 한다. 한국과 겹치지 않는
+  범위는 무시한다(2026-11-02 결정 — "하회마을"에서 서울 식당 셋이 안동 마을보다 먼저 나왔다).
 - **feature·address 동시 조회**: 두 소스는 독립 HTTP라 동시에 보낸다. address(kor-travel-geo
   `/v2/search`)는 **1회·3초**만 기다린다 — 짧은 검색어에서 geo가 504(DB statement timeout)를 내면
   재시도해도 같으므로 `addresses`를 degrade로 둔다(2026-11-02 prod e2e: "하회"가 5초×3회로 16초).

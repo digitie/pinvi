@@ -23,6 +23,7 @@ from app.clients.kakao_local import KakaoLocalClientDep, KakaoLocalError
 from app.clients.kor_travel_geo import KorTravelGeoClientDep, KorTravelGeoError
 from app.clients.kor_travel_map import KorTravelMapError, KorTravelMapHttpClientDep
 from app.clients.naver_local import NaverLocalClientDep, NaverLocalError
+from app.core.bbox import parse_bbox_numbers
 from app.core.config import settings
 from app.core.consent_deps import assert_location_consent
 from app.core.deps import CurrentUserId, DbSession
@@ -30,6 +31,7 @@ from app.middleware.location_audit import declare_location_audit
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.schemas.envelope import Envelope
+from app.schemas.feature import BBox
 from app.schemas.search import PlaceSearchResponse, PlaceSearchResult
 from app.services.admin_pois import extract_feature_coord
 from app.services.category_labels import get_category_labels
@@ -39,6 +41,7 @@ from app.services.place_search import (
     kakao_document_to_result,
     my_poi_to_result,
     naver_item_to_result,
+    region_biased_items,
 )
 
 router = APIRouter(tags=["search"])
@@ -105,6 +108,32 @@ async def _search_my_pois(db: DbSession, *, user_id: uuid.UUID, q: str) -> list[
     return out
 
 
+# 편향이 있을 때 전국 검색에서 받는 후보 수 — 지역 안 장소가 상위 `limit`에 없더라도 끌어올 수 있게.
+_BIAS_CANDIDATES = 40
+_KOREA_LNG = (124.0, 132.0)
+_KOREA_LAT = (33.0, 43.0)
+
+
+def _parse_bias_bbox(raw: str | None) -> BBox | None:
+    """지역 편향 bbox. 형식이 틀리면 400, 한국 범위 밖 값은 범위 안으로 좁힌다(편향일 뿐이다)."""
+    if raw is None or not raw.strip():
+        return None
+    parsed = parse_bbox_numbers(raw)
+    lng_min, lat_min, lng_max, lat_max = parsed
+    lng_lo, lng_hi = sorted((lng_min, lng_max))
+    lat_lo, lat_hi = sorted((lat_min, lat_max))
+    clamped = BBox(
+        lng_min=min(max(lng_lo, _KOREA_LNG[0]), _KOREA_LNG[1]),
+        lat_min=min(max(lat_lo, _KOREA_LAT[0]), _KOREA_LAT[1]),
+        lng_max=min(max(lng_hi, _KOREA_LNG[0]), _KOREA_LNG[1]),
+        lat_max=min(max(lat_hi, _KOREA_LAT[0]), _KOREA_LAT[1]),
+    )
+    # 한국과 겹치지 않아 선/점으로 줄어든 범위(뒤바뀐 위경도 등)는 편향하지 않는다.
+    if clamped.lng_min >= clamped.lng_max or clamped.lat_min >= clamped.lat_max:
+        return None
+    return clamped
+
+
 _AUDIT_PRECISION = Decimal("0.000001")
 
 
@@ -126,8 +155,21 @@ async def unified_search(
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
     lat: Annotated[float | None, Query(ge=-90, le=90)] = None,
     lon: Annotated[float | None, Query(ge=-180, le=180)] = None,
+    bbox: Annotated[
+        str | None,
+        Query(
+            max_length=100,
+            description=(
+                "지역 편향 `lng_min,lat_min,lng_max,lat_max` — 여행 장소 범위 또는 지금 지도 화면(웹은 "
+                "소수 2자리로 거칠게 보낸다). 이 범위 안의 feature를 목록 절반까지 앞으로 당기고 밖의 결과도 "
+                "남긴다(필터 아님). 외부 provider(Kakao/Naver)에는 보내지 않는다. 탐색 지도 화면은 동의 후 "
+                "기기 위치로 자동 센터링될 수 있으나 `/features/in-bounds`와 같은 수준의 화면 범위다."
+            ),
+        ),
+    ] = None,
 ) -> Envelope[PlaceSearchResponse]:
     user_id = uuid.UUID(current_user_id)
+    bias = _parse_bias_bbox(bbox)
     degraded: list[str] = []
     # "내 주변 검색": lat+lon이 함께 오면 좌표를 Kakao에만 전달한다. 위치 감사(§9)는 좌표가 실제로
     # Kakao에 제3자 제공된 경우에만 기록해야 하므로, near-me라도 우선 no-disclosure((None,None))로 두어
@@ -149,18 +191,23 @@ async def unified_search(
     # feature(Map)와 address(geo)는 서로 독립인 HTTP 호출이라 동시에 보낸다 — 느린 소스 하나가 다른
     # 소스의 결과를 붙잡지 않는다. 표시 순서는 그대로 feature → address다.
     async def _feature_results() -> list[PlaceSearchResult] | None:
+        # 편향이 있으면 전국 검색을 한 번 넉넉히 받아(`_BIAS_CANDIDATES`) 지역 안을 앞으로 당긴다 —
+        # bbox 검색을 따로 보내지 않는다(Map 이름 검색은 bbox를 이름 매칭 뒤에 걸러 비용이 같고,
+        # 재시도 예산·호출 로그도 두 배가 된다 — #615 리뷰).
+        page_size = max(limit, _BIAS_CANDIDATES) if bias is not None else limit
         try:
             feature_data, labels = await asyncio.gather(
-                kor_travel_map.search_features(q=q, page_size=limit),
+                kor_travel_map.search_features(q=q, page_size=page_size),
                 get_category_labels(kor_travel_map),
             )
         except KorTravelMapError:
             return None
-        return [
-            r
-            for item in feature_data.get("items") or []
-            if isinstance(item, dict) and (r := feature_item_to_result(item, labels)) is not None
-        ]
+        items = region_biased_items(
+            list(feature_data.get("items") or []),
+            bbox=bias.as_tuple() if bias is not None else None,
+            limit=limit,
+        )
+        return [r for item in items if (r := feature_item_to_result(item, labels)) is not None]
 
     async def _address_results() -> list[PlaceSearchResult] | None:
         try:
