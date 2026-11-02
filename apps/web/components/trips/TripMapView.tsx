@@ -282,10 +282,7 @@ export function TripMapView({
         const centerX = container.left + container.width / 2;
         const top =
           panel && panel.left < centerX + TRIP_MAP_MARKER_SIZE / 2
-            ? Math.max(
-                padding.top,
-                fitPaddingForOverlay(container, panel, TRIP_MAP_PIN_HEIGHT).top,
-              )
+            ? Math.max(padding.top, fitPaddingForOverlay(container, panel, TRIP_MAP_PIN_HEIGHT).top)
             : padding.top;
         map.flyTo({
           center: [only.lon, only.lat],

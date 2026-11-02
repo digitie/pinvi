@@ -109,7 +109,12 @@ function fakeMap(northAnchor: { x: number; y: number }) {
     fitBounds: vi.fn(),
     flyTo: vi.fn(),
     project: vi.fn(([, lat]: [number, number]) => (lat > 37 ? northAnchor : { x: 72, y: 600 })),
-    getBounds: () => ({ getWest: () => 128, getSouth: () => 36, getEast: () => 129, getNorth: () => 38 }),
+    getBounds: () => ({
+      getWest: () => 128,
+      getSouth: () => 36,
+      getEast: () => 129,
+      getNorth: () => 38,
+    }),
     getZoom: () => 9,
     on: () => {},
     off: () => {},
@@ -119,9 +124,7 @@ function fakeMap(northAnchor: { x: number; y: number }) {
 const overlay = <form data-map-fit-anchor="" data-testid="fit-anchor" />;
 
 beforeEach(() => {
-  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
-    this: Element,
-  ) {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     return RECTS[this.getAttribute('data-testid') ?? ''] ?? box(0, 0, 0, 0);
   });
 });
