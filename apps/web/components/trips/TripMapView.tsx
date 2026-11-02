@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type TouchEvent,
 } from 'react';
 import {
@@ -129,6 +130,15 @@ export interface TripMapViewProps {
    * (401이 로그인 화면 이동을 부른다). 기본 꺼짐.
    */
   transportLayers?: boolean;
+  /**
+   * 지도 왼쪽 위에 얹는 호출부 오버레이(예: `TripDetail`의 장소 검색). 주면 교통 정보 컨트롤을
+   * **같은 세로 스택의 아래**에 둔다 — 둘을 따로 `absolute left/top`에 두면 서로 덮는다
+   * (2026-11-02 prod e2e: 교통 정보 패널이 검색창을 가려 데스크톱·모바일 모두 입력란 왼쪽을
+   * 누를 수 없었다). 검색 결과 목록이 펼쳐지면 교통 컨트롤이 그만큼 아래로 밀린다.
+   */
+  overlayTopLeft?: ReactNode;
+  /** `overlayTopLeft` 스택의 위치·폭 class(호출부 레이아웃이 정한다). */
+  overlayTopLeftClassName?: string;
 }
 
 export function TripMapView({
@@ -146,6 +156,8 @@ export function TripMapView({
   chrome = 'framed',
   showNavigationControls = true,
   transportLayers = false,
+  overlayTopLeft,
+  overlayTopLeftClassName = 'pointer-events-none absolute left-2 right-2 top-2 z-10',
 }: TripMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const featureAbortRef = useRef<AbortController | null>(null);
@@ -394,6 +406,16 @@ export function TripMapView({
     [coordFromClientPoint, onCreatePoiAtCoordinate, openCoordinatePoiDialog],
   );
 
+  const transportControls = (
+    <TransportLayerControls
+      state={transport}
+      onOpenDetail={(target) => {
+        setSelectedFeature(null);
+        transport.openDetail(target);
+      }}
+    />
+  );
+
   return (
     <div className={className} data-testid="trip-map">
       <div
@@ -571,18 +593,19 @@ export function TripMapView({
             </Popup>
           )}
         </VWorldMap>
-        {transport.visible && (
-          <div className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]">
-            <div className="pointer-events-auto">
-              <TransportLayerControls
-                state={transport}
-                onOpenDetail={(target) => {
-                  setSelectedFeature(null);
-                  transport.openDetail(target);
-                }}
-              />
-            </div>
+        {overlayTopLeft != null ? (
+          <div className={overlayTopLeftClassName} data-testid="trip-map-overlay-stack">
+            <div className="pointer-events-auto">{overlayTopLeft}</div>
+            {transport.visible && (
+              <div className="pointer-events-auto mt-2 w-64 max-w-[70%]">{transportControls}</div>
+            )}
           </div>
+        ) : (
+          transport.visible && (
+            <div className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]">
+              <div className="pointer-events-auto">{transportControls}</div>
+            </div>
+          )
         )}
         <TransportMarkerLegend points={transport.points} />
         <div className="sr-only" aria-hidden="true" data-testid="trip-map-marker-legend">

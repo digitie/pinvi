@@ -7,3 +7,5 @@ out
 build
 *.log
 .turbo
+# prebuild/predev가 복사하는 maplibre worker(생성물, scripts/copy-maplibre-worker.mjs)
+/public/maplibre/
