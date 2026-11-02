@@ -26,6 +26,7 @@ describe('로그인 제출 버튼', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     act(() => root?.unmount());
     container?.remove();
     root = null;

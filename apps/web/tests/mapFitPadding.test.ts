@@ -109,14 +109,21 @@ describe('fitPaddingForOverlay', () => {
     });
     expect(fitPanelRect(document.createElement('div'))).toBeNull();
     expect(fitPanelRect(null)).toBeNull();
+
+    // 스택은 max-height + 스크롤 — 보이는 부분(스택 아래 끝)까지만 센다
+    stack.getBoundingClientRect = domBox(80, 180);
+    expect(fitPanelRect(stack)?.bottom).toBe(260);
   });
 
   it('핀 상자(앵커 위로 높이, 좌우로 폭/2)가 패널과 겹치는지', () => {
     // 모바일 재현(리뷰 #619): 패널 x 8~264, y 152~288. 가장 북쪽 핀 앵커가 (72, 207).
     const panel = { left: 8, right: 264, top: 152, bottom: 288, height: 136 };
     expect(pinBoxIntersects(72, 207, 27, PIN_HEIGHT, panel)).toBe(true);
-    // 패널 오른쪽 바깥
+    // 패널 오른쪽 바깥(반폭 경계 포함), 패널 위쪽 바깥
     expect(pinBoxIntersects(300, 207, 27, PIN_HEIGHT, panel)).toBe(false);
+    expect(pinBoxIntersects(264 + 13.5, 207, 27, PIN_HEIGHT, panel)).toBe(false);
+    expect(pinBoxIntersects(264 + 13, 207, 27, PIN_HEIGHT, panel)).toBe(true);
+    expect(pinBoxIntersects(72, 150, 27, PIN_HEIGHT, panel)).toBe(false);
     // 핀 머리까지 패널 아래
     expect(pinBoxIntersects(72, 288 + PIN_HEIGHT + 1, 27, PIN_HEIGHT, panel)).toBe(false);
   });
