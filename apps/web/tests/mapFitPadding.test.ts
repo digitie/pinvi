@@ -100,7 +100,13 @@ describe('fitPaddingForOverlay', () => {
     panel.getBoundingClientRect = domBox(152, 356);
     incidents.getBoundingClientRect = domBox(290, 218);
 
-    expect(fitPanelRect(stack)).toEqual({ left: 0, right: 300, top: 152, bottom: 290, height: 138 });
+    expect(fitPanelRect(stack)).toEqual({
+      left: 0,
+      right: 300,
+      top: 152,
+      bottom: 290,
+      height: 138,
+    });
     expect(fitPanelRect(document.createElement('div'))).toBeNull();
     expect(fitPanelRect(null)).toBeNull();
   });

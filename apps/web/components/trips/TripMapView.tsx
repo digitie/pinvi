@@ -266,11 +266,7 @@ export function TripMapView({
       // 지도 컨테이너다.
       const container = map.getContainer().getBoundingClientRect();
       const stack = overlayStackRef.current;
-      const padding = fitPaddingForOverlay(
-        container,
-        fitOverlayRect(stack),
-        TRIP_MAP_PIN_HEIGHT,
-      );
+      const padding = fitPaddingForOverlay(container, fitOverlayRect(stack), TRIP_MAP_PIN_HEIGHT);
       const only = points[0];
       if (points.length === 1 && only) {
         // 핀 하나는 가운데에 두되, 위·아래 여백 차이의 절반만큼 내려 검색 줄과 겹치지 않게.

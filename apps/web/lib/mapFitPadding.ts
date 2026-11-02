@@ -49,7 +49,9 @@ export function fitPanelRect(stack: Element | null): BoxRect | null {
   const rect = panel.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return null;
   const transient = panel.querySelector('[data-map-fit-transient]');
-  const bottom = transient ? Math.min(rect.bottom, transient.getBoundingClientRect().top) : rect.bottom;
+  const bottom = transient
+    ? Math.min(rect.bottom, transient.getBoundingClientRect().top)
+    : rect.bottom;
   return { left: rect.left, right: rect.right, top: rect.top, bottom, height: bottom - rect.top };
 }
 
@@ -89,7 +91,9 @@ export function fitPaddingForOverlay(
     left: MAP_FIT_PADDING,
   };
   if (!surface || surface.height <= 0 || !overlay || overlay.height <= 0) return padding;
-  const clearance = Math.round(overlay.bottom - surface.top + Math.max(0, markerHeight) + OVERLAY_GAP);
+  const clearance = Math.round(
+    overlay.bottom - surface.top + Math.max(0, markerHeight) + OVERLAY_GAP,
+  );
   const cap = Math.round(surface.height * MAX_TOP_SHARE);
   padding.top = Math.max(MAP_FIT_PADDING, Math.min(clearance, cap));
   return padding;

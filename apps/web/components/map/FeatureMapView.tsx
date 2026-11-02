@@ -952,7 +952,9 @@ export function FeatureMapView({
                 <Popup lngLat={selectedWeatherMarker.lngLat} maxWidth="220px" closeButton={false}>
                   <div className="space-y-1">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-semibold text-ink">{selectedWeatherMarker.title}</p>
+                      <p className="text-sm font-semibold text-ink">
+                        {selectedWeatherMarker.title}
+                      </p>
                       <button
                         type="button"
                         onClick={() => setSelectedWeatherMarker(null)}
