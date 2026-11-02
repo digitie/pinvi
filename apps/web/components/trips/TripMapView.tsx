@@ -44,6 +44,9 @@ import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
 const DEFAULT_CENTER: [number, number] = [127.5, 36.5];
 const DEFAULT_ZOOM = 7;
 const TRIP_MAP_MARKER_SIZE = 27;
+// PinMarker는 너비 size, 높이 size×1.5 물방울을 아래 꼭짓점(anchor bottom)에 건다.
+// 선택된 핀은 1.18배(≈48px)로 커지지만 맞춤 여백의 간격(OVERLAY_GAP) 안에 든다.
+const TRIP_MAP_PIN_HEIGHT = Math.ceil(TRIP_MAP_MARKER_SIZE * 1.5);
 const FEATURE_MARKER_SIZE = 22;
 const FEATURE_DEBOUNCE_MS = 250;
 const MAKI_ICON_BASE_URL = 'https://unpkg.com/@mapbox/maki@8.0.0/icons';
@@ -259,9 +262,11 @@ export function TripMapView({
         return;
       }
       // 위쪽 여백은 지도 위 오버레이(장소 검색·교통 정보) 아래로 — 북쪽 핀이 그 밑에 숨지 않게.
+      // 여백은 핀 앵커(아래 꼭짓점) 자리라 핀 머리 높이도 더한다.
       const padding = fitPaddingForOverlay(
         surfaceRef.current?.getBoundingClientRect() ?? null,
         overlayStackRef.current?.getBoundingClientRect() ?? null,
+        TRIP_MAP_PIN_HEIGHT,
       );
       map.fitBounds(
         [
