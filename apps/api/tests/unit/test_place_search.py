@@ -215,7 +215,12 @@ def test_region_bias_moves_in_region_items_forward_keeping_the_rest() -> None:
         _item("no-coord", float("nan"), 0.0),
     ]
     ordered = region_biased_items(items, bbox=_ANDONG_BBOX, limit=8)
-    assert [item["feature_id"] for item in ordered] == ["andong-1", "seoul-1", "seoul-2", "no-coord"]
+    assert [item["feature_id"] for item in ordered] == [
+        "andong-1",
+        "seoul-1",
+        "seoul-2",
+        "no-coord",
+    ]
 
 
 def test_region_bias_caps_in_region_share_so_out_of_region_exact_match_survives() -> None:

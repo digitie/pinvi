@@ -68,13 +68,7 @@ export function TripDayHeader({
   );
 }
 
-function TripDayRiseSet({
-  day,
-  readOnly,
-}: {
-  day: TripDayHeaderProps['day'];
-  readOnly: boolean;
-}) {
+function TripDayRiseSet({ day, readOnly }: { day: TripDayHeaderProps['day']; readOnly: boolean }) {
   const rs = day.rise_set;
   const reference = day.rise_set_reference;
   const sunrise = formatKstTime(rs?.sunrise_at);

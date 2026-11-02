@@ -14,7 +14,9 @@ describe('장소 검색 지역 편향', () => {
   it('좌표가 없으면 null이고, 한국 범위 밖으로 넘친 여백은 범위 안으로 좁힌다', () => {
     expect(tripSearchBias([])).toBeNull();
     expect(tripSearchBias([{ lon: Number.NaN, lat: 37 }])).toBeNull();
-    expect(tripSearchBias([{ lon: 124.1, lat: 33.1 }])).toMatch(/^124\.00,33\.00,124\.3\d,33\.3\d$/);
+    expect(tripSearchBias([{ lon: 124.1, lat: 33.1 }])).toMatch(
+      /^124\.00,33\.00,124\.3\d,33\.3\d$/,
+    );
   });
 
   it('여행 맥락이 먼저, 없으면 지도 화면', () => {

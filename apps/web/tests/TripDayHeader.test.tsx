@@ -164,6 +164,8 @@ describe('TripDayHeader', () => {
         })}
       />,
     );
-    expect(screen.getByTestId('trip-day-rise-set-pending')).toHaveTextContent('일출·일몰 정보 없음');
+    expect(screen.getByTestId('trip-day-rise-set-pending')).toHaveTextContent(
+      '일출·일몰 정보 없음',
+    );
   });
 });

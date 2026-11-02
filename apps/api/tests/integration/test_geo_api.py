@@ -645,7 +645,9 @@ async def test_unified_search_bbox_biases_order_without_filtering(
             "/search?q=하회마을&limit=8&bbox=128.2,36.3,129.1,37.4", cookies=auth_cookies(user_id)
         )
         assert resp.status_code == 200, resp.text
-        features = [r["feature_id"] for r in resp.json()["data"]["results"] if r["source"] == "feature"]
+        features = [
+            r["feature_id"] for r in resp.json()["data"]["results"] if r["source"] == "feature"
+        ]
         assert features == ["andong", "seoul"]
         # bbox 검색을 따로 보내지 않는다 — 전국 검색 한 번, 후보만 넉넉히.
         assert len(fake_map.calls) == 1
