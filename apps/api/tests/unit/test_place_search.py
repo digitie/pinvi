@@ -7,6 +7,7 @@ from app.services.place_search import (
     address_candidate_to_result,
     feature_item_to_result,
     kakao_document_to_result,
+    merge_region_biased_items,
     my_poi_to_result,
     naver_item_to_result,
     normalize_link,
@@ -195,3 +196,24 @@ def test_my_poi_mapping() -> None:
     assert result.poi_id == "11111111-1111-1111-1111-111111111111"
     assert result.trip_title == "부산 여행"
     assert result.coord is not None
+
+
+def test_region_bias_puts_in_region_items_first_then_everywhere_without_duplicates() -> None:
+    """2026-11-02: "하회마을" 전국 검색은 서울 식당이 먼저였다 — 여행 지역 안의 결과를 앞으로."""
+    everywhere = [
+        {"feature_id": "seoul-1", "name": "하회마을"},
+        {"feature_id": "seoul-2", "name": "하회마을"},
+        {"feature_id": "andong-1", "name": "안동하회마을"},
+    ]
+    regional = [{"feature_id": "andong-1", "name": "안동하회마을"}, {"feature_id": "andong-2"}]
+    merged = merge_region_biased_items(regional, everywhere, limit=8)
+    assert [item["feature_id"] for item in merged] == ["andong-1", "andong-2", "seoul-1", "seoul-2"]
+
+
+def test_region_bias_respects_limit_and_skips_non_dicts() -> None:
+    merged = merge_region_biased_items(
+        [{"feature_id": "a"}, "junk", {"feature_id": "b"}],
+        [{"feature_id": "c"}, {"feature_id": "d"}],
+        limit=3,
+    )
+    assert [item["feature_id"] for item in merged] == ["a", "b", "c"]

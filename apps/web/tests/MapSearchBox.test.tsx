@@ -39,6 +39,24 @@ beforeEach(() => {
 });
 
 describe('MapSearchBox', () => {
+  it('getBias가 주는 지역 bbox를 검색 시점에 함께 보낸다(2026-11-02 결정)', async () => {
+    searchPlaces.mockResolvedValue({ results: [], degraded_sources: [] });
+    let bias: string | null = '128.2,36.3,129.1,37.4';
+    render(<MapSearchBox onSelect={vi.fn()} getBias={() => bias} />);
+    fireEvent.change(screen.getByLabelText('장소·주소 검색'), { target: { value: '하회마을' } });
+    await vi.waitFor(() => expect(searchPlaces).toHaveBeenCalledTimes(1));
+    expect(searchPlaces.mock.calls[0]![0]).toEqual({
+      q: '하회마을',
+      limit: 8,
+      bbox: '128.2,36.3,129.1,37.4',
+    });
+
+    bias = null;
+    fireEvent.change(screen.getByLabelText('장소·주소 검색'), { target: { value: '도산서원' } });
+    await vi.waitFor(() => expect(searchPlaces).toHaveBeenCalledTimes(2));
+    expect(searchPlaces.mock.calls[1]![0]).toEqual({ q: '도산서원', limit: 8, bbox: null });
+  });
+
   it('feature 결과의 둘째 줄은 카테고리 코드가 아니라 이름이다(2026-11-02 prod e2e)', async () => {
     searchPlaces.mockResolvedValue({
       results: [
@@ -111,7 +129,7 @@ describe('MapSearchBox', () => {
     expect(backLink).toHaveAttribute('target', '_blank');
     expect(backLink).toHaveAttribute('rel', 'noopener noreferrer');
     expect(searchPlaces).toHaveBeenCalledWith(
-      { q: '광안리', limit: 8 },
+      { q: '광안리', limit: 8, bbox: null },
       expect.objectContaining({ signal: expect.anything() }),
     );
   });
