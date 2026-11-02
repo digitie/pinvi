@@ -76,6 +76,24 @@ describe('api-client AbortSignal 전파 (kor-travel-concierge #111 패턴)', () 
     await expect(pending).resolves.toBe('aborted');
   });
 
+  // 2026-11-02 prod 점검: 마커를 바꿔 고를 때마다 상세·날씨 요청이 취소 없이 쌓였다(날씨 ~31s).
+  it('feature 상세(get)와 날씨(weather)도 AbortSignal을 전달한다', async () => {
+    for (const call of [
+      (api: ReturnType<typeof featureApi>, signal: AbortSignal) => api.get('f-1', { signal }),
+      (api: ReturnType<typeof featureApi>, signal: AbortSignal) =>
+        api.weather('f-1', {}, { signal }),
+    ]) {
+      const { client, received } = hangingClient();
+      const controller = new AbortController();
+      const pending = call(featureApi(client), controller.signal).catch(() => 'aborted');
+
+      await Promise.resolve();
+      controller.abort();
+      expect(received()?.signal?.aborted).toBe(true);
+      await expect(pending).resolves.toBe('aborted');
+    }
+  });
+
   it('signal을 주지 않아도 요청 예산 signal은 실린다(응답 없는 요청 방지)', async () => {
     const { client, received } = recordingClient();
     await ignoreSchema(() => geoApi(client).searchPlaces({ q: 'busan' }));
