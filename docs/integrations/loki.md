@@ -103,7 +103,8 @@ structlog.configure(
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=False),  # KST aware
-        structlog.processors.dict_tracebacks,
+        # 프레임 지역 변수는 찍지 않는다(§3.1)
+        structlog.processors.ExceptionRenderer(ExceptionDictTransformer(show_locals=False)),
         structlog.processors.JSONRenderer(),
     ],
     wrapper_class=structlog.stdlib.BoundLogger,
@@ -156,11 +157,15 @@ prod 점검에서 httpx의 INFO 줄(`HTTP Request: POST http://…/v2/geocode?ke
 - `app.core.redaction.SecretRedactingFilter`를 root·uvicorn handler와 `httpx`·`uvicorn.access` 로거에 단다. 가리는 대상:
   - query 비밀값: `key`, `serviceKey`, `apiKey`, `token`, `access_token`, `X-Amz-Signature` 등. 키 집합은 `SENSITIVE_QUERY_KEYS`가 정한다.
     - 이름이 정확히 일치할 때만 가린다. `sido_code`는 가리지 않는다.
-    - 이름 앞은 query 구분자, 문자열 처음, 공백, 따옴표 중 하나다.
+    - 비밀 이름만 찾는다. 비밀이 아닌 쌍의 값이 뒤에 오는 비밀 쌍을 삼키지 않게 하려는 것이다(예: `redirect_uri=…?token=…`).
+    - 이름 앞에는 이름 문자가 오면 안 된다. JSON으로 렌더된 줄에서는 `\n`·`\t` escape 뒤도 이름의 시작으로 본다.
+    - 따옴표로 감싼 값(`api_key='…'`, `token=\"…\"`)과 `%3D`로 인코딩된 `=`도 가린다.
+    - 남는 한계: 값 앞에 `\uXXXX` escape가 오면 가리지 못한다. 비 ASCII 비밀값이 이런 경우다.
   - Telegram token: `/bot<id>:<token>/`, 그리고 접두가 없는 `<id>:<35자>` 꼴.
   - path 자격 증명: `/trips/{id}/shared/{token}`, `/storage/{uploads,downloads}/{token}`.
   - OAuth callback의 `code`·`state`. callback path에서만 가린다.
-  - JSON escape(`\`)는 값에 포함하지 않는다. 그래야 가린 뒤에도 로그 줄이 JSON으로 남는다.
+  - URL userinfo의 password(`scheme://user:***@host`).
+  - JSON escape(`\`)와 닫는 괄호·쉼표는 값에 넣지 않는다. 그래야 가린 뒤에도 로그 줄이 JSON으로 남는다.
 - uvicorn access 줄은 args 튜플 모양을 유지한 채 원소만 바꾼다. `AccessFormatter`가 그 튜플을 풀어 쓰기 때문이다.
 - 필터는 예외를 밖으로 내지 않는다. logging은 filter 예외를 잡아 주지 않으므로, 가리기에 실패하면 메시지를 고정 문구로 바꾼다.
 - structlog 예외 렌더러는 프레임 지역 변수를 찍지 않는다(`show_locals=False`). 지역 변수 repr에는 URL 모양이 아닌 비밀값이 들어갈 수 있고, 필터가 그것을 가리지 못한다. 예: `api_key`, DB 접속 인자의 password.

@@ -42,32 +42,40 @@ SENSITIVE_QUERY_KEYS = frozenset(
 )
 REDACTED = "***"
 
-# 값·토큰이 끝나는 문자: query 구분자, 공백, 따옴표, 꺾쇠, fragment, 그리고 JSON escape(`\`).
-_VALUE_END = "&;\\s\"'<>#\\\\"
+# 값·토큰이 끝나는 문자: query 구분자, 공백, 따옴표, 꺾쇠, fragment, JSON escape(`\`), 닫는 괄호·쉼표.
+_VALUE_END = "&;\s\"'<>#\\,)\]}"
 _TELEGRAM_BOT_PATH_RE = re.compile(r"/bot(\d+):[A-Za-z0-9_-]+")
-# `/bot` 접두 없이 나타나는 Telegram bot token(`<bot id>:<35자>`). `clients/telegram.py`의
-# `mask_token`과 같은 모양이되 숫자 자리수를 좁혀 시각(`13:26`) 같은 것과 겹치지 않게 한다.
-_TELEGRAM_TOKEN_RE = re.compile(r"\b(\d{6,12}):[A-Za-z0-9_-]{30,}")
+# `/bot/` 경로 밖에 나타나는 Telegram bot token(`<bot id>:<35자>`, 콜론이 `%3A`로 인코딩된 것 포함).
+# `clients/telegram.py`의 `mask_token`과 같은 모양이되 숫자 자리수를 좁혀 시각(`13:26`)과 겹치지 않게 한다.
+_TELEGRAM_TOKEN_RE = re.compile(r"(?<!\d)(?P<id>\d{6,12})(?P<sep>:|%3[Aa])[A-Za-z0-9_-]{30,}")
 # path에 실린 PinVi 자체 자격 증명: 여행 공유 링크, 서명된 업로드·다운로드 토큰(uvicorn access 줄).
 _PATH_TOKEN_RE = re.compile(
-    r"(?P<prefix>/trips/[^/?\s\"'<>#\\]+/shared/|/storage/(?:uploads|downloads)/)"
+    r"(?P<prefix>/trips/[^/?\s\"'<>#\]+/shared/|/storage/(?:uploads|downloads)/)"
     rf"(?P<token>[^/?{_VALUE_END}]+)"
 )
 # OAuth callback의 `code`·`state`(callback path에서만 — `code=`는 다른 곳에서 지역 코드 등이다).
 _OAUTH_CALLBACK_RE = re.compile(
-    rf"(?P<path>/oauth/[^/?{_VALUE_END}]+/callback\?)(?P<query>[^\s\"'<>#\\]*)"
+    rf"(?P<path>/oauth/[^/?{_VALUE_END}]+/callback/?\?)(?P<query>[^\s\"'<>#\]*)"
 )
 _OAUTH_PARAM_RE = re.compile(rf"(?P<lead>^|&)(?P<name>code|state)=[^{_VALUE_END}]*")
-# 자유 텍스트 속 `이름=값`. 이름 앞은 문자열 처음·query 구분자·공백·따옴표·괄호·쉼표.
+# URL userinfo의 password(`scheme://user:password@host`).
+_USERINFO_RE = re.compile(r"(?P<prefix>://[^/@\s:\"']+):[^/@\s\"']+@")
+# 비밀 **이름만** 맞춘다 — 비밀이 아닌 `이름=값`의 값(`redirect_uri=…?token=…`)이 뒤의 비밀 쌍을
+# 삼키지 않게. 이름 앞은 이름 문자가 아니어야 한다(`monkey=`·`sig_cd=` 제외). JSON으로 렌더된 줄에서는
+# 줄바꿈·탭이 `\n`·`\t`로 남으므로 그 escape 뒤도 이름의 시작으로 본다. 값은 따옴표(escape 포함)로
+# 감싸여 있을 수 있고(`api_key='…'`, `token=\"…\"`), `=`가 `%3D`로 인코딩됐을 수 있다.
+_SENSITIVE_NAMES = "|".join(
+    sorted((re.escape(name) for name in SENSITIVE_QUERY_KEYS), key=len, reverse=True)
+)
 _QUERY_SECRET_RE = re.compile(
-    rf"(?P<lead>^|[?&;\s\"'(,])(?P<name>[A-Za-z0-9_-]+)=(?P<value>[^{_VALUE_END}]+)",
+    rf"(?:(?<![A-Za-z0-9_])|(?<=\[nrt]))(?P<name>{_SENSITIVE_NAMES})"
+    rf"(?P<eq>(?:=|%3[Dd])\?[\"']?)(?P<value>[^{_VALUE_END}]+)",
+    re.IGNORECASE,
 )
 
 
 def _replace_query_secret(match: re.Match[str]) -> str:
-    if match.group("name").lower() not in SENSITIVE_QUERY_KEYS:
-        return match.group(0)
-    return f"{match.group('lead')}{match.group('name')}={REDACTED}"
+    return f"{match.group('name')}{match.group('eq')}{REDACTED}"
 
 
 def _replace_oauth_callback(match: re.Match[str]) -> str:
@@ -75,44 +83,42 @@ def _replace_oauth_callback(match: re.Match[str]) -> str:
     return f"{match.group('path')}{query}"
 
 
-def _redact_path_tokens(text: str) -> str:
-    text = _TELEGRAM_BOT_PATH_RE.sub(rf"/bot\1:{REDACTED}", text)
-    return _PATH_TOKEN_RE.sub(rf"\g<prefix>{REDACTED}", text)
-
-
 def redact_secrets(text: str) -> str:
-    """자유 텍스트(로그 줄·예외 메시지)에서 query 비밀값, path 토큰, Telegram token을 가린다."""
+    """자유 텍스트(로그 줄·예외 메시지·URL)에서 비밀값을 가린다.
 
-    if "=" not in text and "/" not in text and ":" not in text:
+    가리는 것: 비밀 이름의 query·kwargs 값, path 토큰(Telegram `/bot…/`, 공유 링크, 저장소 토큰),
+    `/bot/` 밖 Telegram token, OAuth callback의 code·state, URL userinfo password.
+    """
+
+    if not any(marker in text for marker in ("=", "/", ":", "%")):
         return text
-    text = _redact_path_tokens(text)
-    text = _TELEGRAM_TOKEN_RE.sub(rf"\1:{REDACTED}", text)
+    text = _TELEGRAM_BOT_PATH_RE.sub(rf"/bot\1:{REDACTED}", text)
+    text = _PATH_TOKEN_RE.sub(rf"\g<prefix>{REDACTED}", text)
+    text = _TELEGRAM_TOKEN_RE.sub(rf"\g<id>\g<sep>{REDACTED}", text)
     text = _OAUTH_CALLBACK_RE.sub(_replace_oauth_callback, text)
+    text = _USERINFO_RE.sub(rf"\g<prefix>:{REDACTED}@", text)
     return _QUERY_SECRET_RE.sub(_replace_query_secret, text)
 
 
 def sanitize_url(url: object) -> str:
-    """URL 하나를 구조적으로 가린다(api_call_log endpoint 기록용).
+    """URL 하나를 가린다(api_call_log endpoint 기록용) — stdout 로그와 같은 규칙, 같은 모양.
 
-    가릴 것이 없으면 입력을 그대로 돌려준다 — 다시 인코딩하면 `,`·공백·값 없는 `?flag`가 바뀐다.
+    문자열 규칙(`redact_secrets`)으로 가리고 나머지 인코딩은 그대로 둔다. 문자열 규칙이 못 보는
+    인코딩된 이름(`%6Bey=…`)이 남아 있을 때만 query를 구조적으로 다시 쓴다.
     """
 
-    raw = str(url)
-    parts = urlsplit(raw)
-    path = _redact_path_tokens(parts.path)
-    query_pairs = parse_qsl(parts.query, keep_blank_values=True)
-    if path == parts.path and not any(
-        key.lower() in SENSITIVE_QUERY_KEYS for key, _value in query_pairs
+    text = redact_secrets(str(url))
+    parts = urlsplit(text)
+    pairs = parse_qsl(parts.query, keep_blank_values=True)
+    if not any(
+        key.lower() in SENSITIVE_QUERY_KEYS and value != REDACTED for key, value in pairs
     ):
-        return raw
+        return text
     query = urlencode(
-        [
-            (key, REDACTED if key.lower() in SENSITIVE_QUERY_KEYS else value)
-            for key, value in query_pairs
-        ],
+        [(key, REDACTED if key.lower() in SENSITIVE_QUERY_KEYS else value) for key, value in pairs],
         doseq=True,
     )
-    return urlunsplit((parts.scheme, parts.netloc, path, query, parts.fragment))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
 
 
 def _redact_arg(value: object) -> object:
@@ -134,7 +140,11 @@ class SecretRedactingFilter(logging.Filter):
     아닌 원소도 문자열로 바꿔 검사한다(가릴 것이 있을 때만 교체).
 
     filter는 logging이 예외를 잡아 주지 않는 자리다(`Filterer.filter`) — 여기서 난 예외는
-    로그를 남긴 앱 코드로 샌다. 그래서 실패하면 메시지를 고정 문구로 바꾸고 통과시킨다.
+    로그를 남긴 앱 코드로 샌다. 그래서 실패하면 **fail-closed**로 통과시킨다:
+    - 메시지 단계 실패: msg를 고정 문구로, args를 None으로. uvicorn access 레코드라면
+      AccessFormatter가 튜플을 풀지 못해 그 한 줄은 logging 오류로 바뀐다(비밀은 새지 않는다).
+    - 예외 단계 실패: exc_info를 지우고 exc_text를 고정 문구로. 로거 단위 filter라면 뒤의 모든
+      handler가 traceback 없이 받는다.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
