@@ -725,6 +725,47 @@ def _hanging_handler(read_waits: list[float]) -> Callable[[httpx.Request], Any]:
     return handler
 
 
+async def test_read_timeout_is_not_retried() -> None:
+    """2026-11-02 prod 점검: 연결은 됐는데 응답이 늦은 호출을 재시도하면 단건 날씨 카드가 read
+    10 s x 3회 + backoff ≈ 31 s를 붙잡았다(브라우저 연결 슬롯을 점유). 같은 피호출자는 다시 보내도
+    같은 만큼 느리다 — read timeout은 1회로 끝낸다."""
+    read_waits: list[float] = []
+    http = httpx.AsyncClient(
+        base_url="http://kor-travel-weather.test",
+        transport=httpx.MockTransport(_hanging_handler(read_waits)),
+        timeout=httpx.Timeout(0.05, connect=0.05),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0.0)
+    with pytest.raises(KorTravelWeatherUnavailable):
+        await client.latest("loc-1")
+    assert len(read_waits) == 1
+    await client.aclose()
+
+
+async def test_connect_failure_and_5xx_are_still_retried() -> None:
+    attempts = {"connect": 0, "5xx": 0}
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        attempts["connect"] += 1
+        raise httpx.ConnectError("refused", request=request)
+
+    client = _client(refuse, max_attempts=3)
+    with pytest.raises(KorTravelWeatherUnavailable):
+        await client.latest("loc-1")
+    assert attempts["connect"] == 3
+    await client.aclose()
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        attempts["5xx"] += 1
+        return httpx.Response(502, json={"code": "UPSTREAM"})
+
+    client = _client(upstream, max_attempts=3)
+    with pytest.raises(KorTravelWeatherUnavailable):
+        await client.latest("loc-1")
+    assert attempts["5xx"] == 3
+    await client.aclose()
+
+
 async def test_call_deadline_caps_attempt_timeout_and_counts_as_failure() -> None:
     """호출자 deadline 안에서는 attempt timeout이 남은 시간으로 깎여 **실패로 끝난다**.
 
