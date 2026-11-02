@@ -75,6 +75,22 @@ peer dependency(`maplibre-gl`, `@maplibre/maplibre-react-native` 등)의 요구 
 typecheck`로 breaking change(예: named/default export 전환)를 잡는다. 지도는 시각적
 핵심 기능이므로 로컬 게이트 통과 후 **N150 e2e(`test:e2e:map` 포함)까지 통과한 뒤 머지**한다.
 
+**web tarball만 갱신할 때**(core 불변)는 lockfile 전체를 다시 만들지 않고
+`node_modules/vworld-map-web`의 `integrity`만 새 tarball의
+`sha512-<base64(sha512(tgz))>`로 바꾼 뒤 `npm ci`로 EINTEGRITY 없이 통과하는지 확인한다
+(전체 재생성은 무관한 의존성까지 움직인다).
+
+갱신 이력:
+
+- 2026-11-02 — `vworld-map-web`만 upstream `main` `fb75475`로 갱신(core 불변). 포함:
+  #29 첫 묶음 마커 누락 수정(`ClusterLayer`가 일회성 `load`를 다시 기다리다 첫 마커를 놓쳤다 —
+  prod trip 지도에서 사용자가 지도를 한 번 움직이기 전까지 POI 핀이 0개였다), #28 VWorld 제공영역
+  밖 타일 XML 응답을 정상 fallback으로 처리, #27 클릭 가능한 마커의 키보드 포커스·Enter/Space.
+  같은 PR에서 maplibre worker 정적 서빙(`scripts/copy-maplibre-worker.mjs` + `setWorkerUrl`)도
+  고쳤다 — webpack 빌드가 maplibre 6의 worker URL을 `file://`로 굳혀 콘솔에 "Worker failed to
+  load"가 남았다(지금은 raster+HTML 마커만 써서 화면 영향은 없지만 GeoJSON/벡터 source는 그
+  상태에서 그려지지 않는다).
+
 ## 2. 정책 (Kakao 대비 변경점)
 
 | 항목             | Kakao Maps SDK (이전)                     | `vworld-map-web` (v2)                                                                                                  |
