@@ -132,7 +132,7 @@ def test_redact_secrets_review_620_round5() -> None:
             '{"event": "sent \\"Authorization: Bearer ***\\" upstream"}'
         ),
         # 큰따옴표 값 안의 작은따옴표, 값 안의 escape된 백슬래시
-        f"api_key=\"ab'cd{SECRET}\"": 'api_key="***"',
+        f'api_key="ab\'cd{SECRET}"': 'api_key="***"',
         f"password='ab\\\\cd{SECRET}'": "password='***'",
         # 이중 인코딩된 중첩 URL
         f"?next=https%253A%252F%252Fx%252Fcb%253Ftoken%253D{SECRET}": (
