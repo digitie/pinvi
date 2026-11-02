@@ -79,8 +79,9 @@ test.describe('weather · trip days', () => {
     await searchAndAddPlace(page, 1, '소수서원', (t) => t.includes('소수서원'));
     const view = await reloadTripView(page, id);
     const day1 = dayOf(view, 1);
-    const fid = day1.pois[0]?.feature_id!;
-    const res = day1.weather_by_feature_id[fid];
+    const fid = day1.pois[0]?.feature_id;
+    expect(fid, '1일차 첫 장소는 feature_id 가 있어야 한다').toBeTruthy();
+    const res = day1.weather_by_feature_id[fid!];
     expect(res?.state, 'D+4 는 중기예보 범위 — found').toBe('found');
 
     const article = await openDay(page, 1);

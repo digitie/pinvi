@@ -11,7 +11,6 @@ import {
   deleteAllPoisInDay,
   e2eName,
   gotoTrip,
-  isMobileProject,
   longPressMap,
   manualDialog,
   mapStats,
@@ -54,7 +53,7 @@ test.afterEach(async ({ page }) => {
 });
 
 test.describe('POI create (desktop)', () => {
-  test.skip(() => isMobileProject(), 'desktop-only cases');
+  test.skip(({ isMobile }) => isMobile, 'desktop-only cases');
 
   test('POI-001 지도 우클릭 → 주소 자동 조회 → 생성 → 일정/지도 반영', async ({ page }) => {
     const id = await freshTrip(page, 'POI 수동');
@@ -200,7 +199,7 @@ test.describe('POI create (desktop)', () => {
 });
 
 test.describe('POI create (mobile)', () => {
-  test.skip(() => !isMobileProject(), 'mobile project only (390x844, hasTouch)');
+  test.skip(({ isMobile }) => !isMobile, 'mobile project only (390x844, hasTouch)');
 
   test('POI-002 롱프레스로 POI 생성', async ({ page }) => {
     const id = await freshTrip(page, 'POI 롱프레스');

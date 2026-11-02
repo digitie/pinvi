@@ -8,7 +8,6 @@ import {
   createShareLink,
   expectSharedReadOnly,
   gotoTrip,
-  isMobileProject,
   openSharedInFreshContext,
   openTripTab,
   uniqueTitle,

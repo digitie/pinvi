@@ -7,12 +7,12 @@
  * Each step is independent; a failure is logged (without values) and the others still run.
  * The seed trip (`[e2e-seed] …`) never matches the `[e2e]` prefix and is kept.
  */
-import { chromium, type FullConfig } from '@playwright/test';
+import { chromium } from '@playwright/test';
 import { apiBaseURL, deleteAllE2eTrips, e2ePrefix, loginAsUser } from './helpers/live';
 import { sweepE2eFiles } from './helpers/poi';
 import { TARGETS_PATH, sweepE2eTargets } from './helpers/notify';
 
-export default async function globalTeardown(_config: FullConfig): Promise<void> {
+export default async function globalTeardown(): Promise<void> {
   const baseURL = process.env.PLAYWRIGHT_BASE_URL;
   if (!baseURL || !process.env.PINVI_E2E_USER_EMAIL || !process.env.PINVI_E2E_USER_PASSWORD) return;
 

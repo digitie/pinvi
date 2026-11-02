@@ -23,7 +23,6 @@ import {
   detailPanel,
   e2eTitle,
   gotoTrip,
-  isMobile,
   isoDate,
   koDate,
   mapMarkers,

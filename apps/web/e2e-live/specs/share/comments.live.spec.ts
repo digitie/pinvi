@@ -10,7 +10,6 @@ import {
   companionSection,
   gotoTrip,
   inviteCompanion,
-  isMobileProject,
   openTripTab,
   postComment,
   uniqueTitle,

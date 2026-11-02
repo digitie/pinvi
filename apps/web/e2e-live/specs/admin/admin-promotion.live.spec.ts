@@ -12,7 +12,6 @@ import { shot } from '../../helpers/live';
 import {
   E2E,
   createE2eSuggestion,
-  isMobileProject,
   maskedEmail,
   newAdminActor,
   newUserActor,

@@ -144,7 +144,9 @@ test.describe('CORE map — explore map (/map)', () => {
     let tileOk = 0;
     let tileBad = 0;
     page.on('response', (r) => {
-      if (/api\.vworld\.kr\/req\/wmts/.test(r.url())) r.status() === 200 ? tileOk++ : tileBad++;
+      if (!/api\.vworld\.kr\/req\/wmts/.test(r.url())) return;
+      if (r.status() === 200) tileOk += 1;
+      else tileBad += 1;
     });
     const tileErrors: string[] = [];
     await page.exposeFunction('__coreTileError', (u: string) => tileErrors.push(u));

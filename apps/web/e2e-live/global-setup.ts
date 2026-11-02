@@ -8,7 +8,7 @@
  *     the KASI fill needs ~20 min after creation, so a freshly created seed makes those two cases
  *     skip/tolerate on the first run — see the runbook).
  */
-import { chromium, type FullConfig } from '@playwright/test';
+import { chromium } from '@playwright/test';
 import {
   createTrip,
   deleteAllE2eTrips,
@@ -30,7 +30,7 @@ const SEED_PLACES: ReadonlyArray<{ query: string; pick: string }> = [
   { query: '울릉도', pick: '울릉' },
 ];
 
-export default async function globalSetup(_config: FullConfig): Promise<void> {
+export default async function globalSetup(): Promise<void> {
   const missing = REQUIRED.filter((name) => !process.env[name]);
   if (missing.length > 0) {
     throw new Error(

@@ -10,7 +10,6 @@ import {
   createShareLink,
   gotoTrip,
   inviteCompanion,
-  isMobileProject,
   openTripTab,
   requireEnv,
   shareSection,

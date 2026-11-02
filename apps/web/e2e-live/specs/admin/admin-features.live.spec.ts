@@ -4,7 +4,7 @@
 // Labels: lib/admin/status-label.ts (active 활성 · retired 종료 · published 공개 · suppressed 비공개 · valid 유효 · quarantined 격리)
 import { expect, test } from '@playwright/test';
 import { loginAsAdmin, shot } from '../../helpers/live';
-import { isMobileProject, waitForGet } from '../../helpers/admin';
+import { waitForGet } from '../../helpers/admin';
 
 const PLACE = '안동하회마을'; // Map category family: heritage
 

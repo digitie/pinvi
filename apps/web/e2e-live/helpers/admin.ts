@@ -1,7 +1,7 @@
 // Shared, area-local helpers for the ADM specs. Everything that other areas may
 // also want is listed in README "helpers needed" so the integrator can lift it
 // into ../helpers/live.
-import { expect, type Browser, type BrowserContext, type Page, type Response } from '@playwright/test';
+import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { apiBaseURL, isMobileProject, loginAs, loginAsAdmin, loginAsUser, requireEnv, waitForGet } from './live';
 
 export { isMobileProject, requireEnv, waitForGet };

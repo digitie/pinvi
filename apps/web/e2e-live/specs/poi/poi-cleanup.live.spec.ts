@@ -4,9 +4,9 @@
  */
 import { expect, test } from '@playwright/test';
 import { deleteAllE2eTrips, e2ePrefix, loginAsUser } from '../../helpers/live';
-import { isMobileProject, snap, sweepE2eFiles } from '../../helpers/poi';
+import { snap, sweepE2eFiles } from '../../helpers/poi';
 
-test.skip(() => isMobileProject(), 'sweep runs once, on the desktop project');
+test.skip(({ isMobile }) => isMobile, 'sweep runs once, on the desktop project');
 
 test('POI-027 정리 스윕 — [e2e] 파일·여행 잔여 0', async ({ page }) => {
   await loginAsUser(page);

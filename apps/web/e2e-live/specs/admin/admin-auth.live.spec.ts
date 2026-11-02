@@ -7,7 +7,7 @@
 // Ordinary-user identity: PINVI_E2E_USER2_* (test2@test.com) when provisioned, else PINVI_E2E_USER_*.
 import { expect, test } from '@playwright/test';
 import { shot } from '../../helpers/live';
-import { ADMIN_LOGIN, captureApiOrigin, isMobileProject, loginAsOrdinaryUser, newAdminActor, ordinaryUserCreds, requireEnv } from '../../helpers/admin';
+import { ADMIN_LOGIN, captureApiOrigin, loginAsOrdinaryUser, newAdminActor, ordinaryUserCreds, requireEnv } from '../../helpers/admin';
 
 test.describe('ADM auth', () => {
   test('ADM-001 admin login lands on /admin with sidebar identity', async ({ page }) => {

@@ -5,7 +5,7 @@
 // CAUTION: picking a Kakao/Naver result auto-fires a feature suggestion (services/feature_request.py) that cannot be [e2e]-prefixed.
 import { expect, test } from '@playwright/test';
 import { createTrip, deleteAllE2eTrips, deleteTrip, searchAndAddPlace, shot } from '../../helpers/live';
-import { E2E, isMobileProject, maskedEmail, newAdminActor, newUserActor, requireEnv, runTag, waitForGet, type Actor } from '../../helpers/admin';
+import { E2E, maskedEmail, newAdminActor, newUserActor, requireEnv, runTag, waitForGet, type Actor } from '../../helpers/admin';
 
 const PLACE = '안동하회마을'; // heritage
 const notExternal = (rowText: string) => !/kakao|naver|카카오|네이버/i.test(rowText);

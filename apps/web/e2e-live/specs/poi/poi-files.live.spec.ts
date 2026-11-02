@@ -14,7 +14,6 @@ import {
   e2eFileName,
   e2eName,
   gotoTrip,
-  isMobileProject,
   JPEG_BYTES,
   lastOpenedUrl,
   openFilesTab,
@@ -58,7 +57,7 @@ test.afterEach(async ({ page }) => {
 });
 
 test.describe('attachments (desktop)', () => {
-  test.skip(() => isMobileProject(), 'desktop-only cases');
+  test.skip(({ isMobile }) => isMobile, 'desktop-only cases');
 
   test('POI-020 여행 첨부 — 이미지 업로드·목록·다운로드·삭제', async ({ page }) => {
     await stubWindowOpen(page);
@@ -232,7 +231,7 @@ test.describe('attachments (desktop)', () => {
 });
 
 test.describe('attachments (mobile)', () => {
-  test.skip(() => !isMobileProject(), 'mobile project only (390x844)');
+  test.skip(({ isMobile }) => !isMobile, 'mobile project only (390x844)');
 
   test('POI-026 패널 열기 → 파일 탭 → 업로드·삭제', async ({ page }) => {
     await freshTrip(page, 'POI 모바일파일');

@@ -17,7 +17,6 @@ import {
   expectSharedError,
   expectSharedReadOnly,
   gotoTrip,
-  isMobileProject,
   openSharedInFreshContext,
   openTripTab,
   shareSection,

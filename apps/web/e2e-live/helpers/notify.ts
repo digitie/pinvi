@@ -166,7 +166,7 @@ export interface AdminApiCallRow {
  * Admin-side delivery evidence: `app.api_call_log` rows for provider=telegram.
  * The admin page (`/admin/api-calls`) applies filters only on submit; we capture
  * the JSON of the request it makes rather than parsing the rendered table.
- * The bot token is masked in `endpoint` by the API (`/bot<id>:***/sendMessage`).
+ * The bot token is masked in `endpoint` by the API (`/bot<id>:*** /sendMessage`).
  */
 export async function adminTelegramCalls(page: Page): Promise<AdminApiCallRow[]> {
   await page.goto('/admin/api-calls');

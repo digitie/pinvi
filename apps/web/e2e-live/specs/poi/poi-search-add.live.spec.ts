@@ -11,7 +11,6 @@ import {
   deleteAllPoisInDay,
   e2eName,
   gotoTrip,
-  isMobileProject,
   manualDialog,
   mapSearchContainer,
   mapSearchInput,
@@ -43,7 +42,7 @@ async function freshTrip(page: Page, label: string, days = 1): Promise<string> {
   return trip.id;
 }
 
-test.skip(() => isMobileProject(), 'desktop-only cases');
+test.skip(({ isMobile }) => isMobile, 'desktop-only cases');
 
 test.afterEach(async ({ page }) => {
   if (!tripId) return;

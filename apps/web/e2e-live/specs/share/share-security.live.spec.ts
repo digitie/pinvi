@@ -7,7 +7,6 @@ import {
   apiBaseFromPage,
   createShareLink,
   gotoTrip,
-  isMobileProject,
   openSharedInFreshContext,
   openTripTab,
   redact,

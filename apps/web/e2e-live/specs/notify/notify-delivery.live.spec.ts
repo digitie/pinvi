@@ -4,7 +4,7 @@
  *
  * Delivery evidence WITHOUT reading any chat:
  *   1. target row status on /settings/telegram ('정상' = last_send_status ok, or 'failed:<code>')
- *   2. admin /admin/api-calls provider=telegram → `…/bot<id>:***/sendMessage` HTTP 200 row
+ *   2. admin /admin/api-calls provider=telegram → `…/bot<id>:*** /sendMessage` HTTP 200 row
  *      whose occurred_at ≥ trip creation time (apps/api/app/middleware/api_call_logging.py)
  *   3. admin /admin/etl Telegram outbox card category `trip_created` present (shape only)
  * Message BODY assertions need a chat reader → NTF-013 (blocked, see README).
