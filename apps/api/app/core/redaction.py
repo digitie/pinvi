@@ -54,7 +54,9 @@ _PATH_TOKEN_RE = re.compile(
     rf"(?P<token>[^/?{_VALUE_END}]+)"
 )
 # OAuth callback의 `code`·`state`(callback path에서만 — `code=`는 다른 곳에서 지역 코드 등이다).
-_OAUTH_CALLBACK_RE = re.compile(rf"(?P<path>/oauth/[^/?{_VALUE_END}]+/callback\?)(?P<query>[^\s\"'<>#\\]*)")
+_OAUTH_CALLBACK_RE = re.compile(
+    rf"(?P<path>/oauth/[^/?{_VALUE_END}]+/callback\?)(?P<query>[^\s\"'<>#\\]*)"
+)
 _OAUTH_PARAM_RE = re.compile(rf"(?P<lead>^|&)(?P<name>code|state)=[^{_VALUE_END}]*")
 # 자유 텍스트 속 `이름=값`. 이름 앞은 문자열 처음·query 구분자·공백·따옴표·괄호·쉼표.
 _QUERY_SECRET_RE = re.compile(

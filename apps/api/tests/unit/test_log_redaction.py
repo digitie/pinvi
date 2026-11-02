@@ -59,7 +59,9 @@ def test_redact_secrets_path_tokens() -> None:
 
 
 def test_redact_secrets_oauth_callback_code_and_state() -> None:
-    line = '"GET /api/v1/auth/oauth/google/callback?code=4/0Ab-xyz&state=st_123&scope=email HTTP/1.1"'
+    line = (
+        '"GET /api/v1/auth/oauth/google/callback?code=4/0Ab-xyz&state=st_123&scope=email HTTP/1.1"'
+    )
     assert redact_secrets(line) == (
         '"GET /api/v1/auth/oauth/google/callback?code=***&state=***&scope=email HTTP/1.1"'
     )
