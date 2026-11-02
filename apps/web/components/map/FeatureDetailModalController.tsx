@@ -39,7 +39,7 @@ export function FeatureDetailModalController({
 
   const title = card?.name || fallbackTitle || '장소';
   const subtitle = card
-    ? [card.category, card.address_line].filter(Boolean).join(' · ') || undefined
+    ? [card.category_label, card.address_line].filter(Boolean).join(' · ') || undefined
     : undefined;
 
   return (

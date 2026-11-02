@@ -9,7 +9,8 @@ function placeCard(over: Partial<Extract<FeatureDetailCard, { kind: 'place' }>> 
     feature_id: 'place:1',
     name: '스타벅스 광안리',
     coord: { lon: 129.12, lat: 35.15 },
-    category: '카페',
+    category: '02020100',
+    category_label: '카페',
     address_line: '부산 광안로 1',
     marker_color: 'P-07',
     marker_icon: 'cafe',
@@ -31,6 +32,16 @@ describe('FeatureDetailCardBody', () => {
     expect(screen.getByTestId('feature-detail-card-body-phone')).toHaveTextContent('051-000-0000');
     expect(screen.getByTestId('feature-detail-card-body-hours')).toHaveTextContent('09:00-22:00');
     expect(screen.getByTestId('feature-detail-card-body-category')).toHaveTextContent('카페');
+    // 코드(`category`)는 화면에 보이지 않는다(2026-11-02 prod e2e — 상세 부제가 `01070300`이었다).
+    expect(screen.queryByText('02020100')).not.toBeInTheDocument();
+  });
+
+  it('category_label이 없으면 카테고리 줄을 숨긴다(코드를 대신 보이지 않는다)', () => {
+    render(
+      <FeatureDetailCardBody card={placeCard({ category: '01070300', category_label: null })} />,
+    );
+    expect(screen.queryByTestId('feature-detail-card-body-category')).not.toBeInTheDocument();
+    expect(screen.queryByText('01070300')).not.toBeInTheDocument();
   });
 
   it('place 카드는 enrichment 미요청 시 "더 보기" 버튼을 보인다', () => {
@@ -98,6 +109,7 @@ describe('FeatureDetailCardBody', () => {
       name: 'OO주유소',
       coord: null,
       category: null,
+      category_label: null,
       address_line: null,
       marker_color: 'P-02',
       marker_icon: 'fuel',

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  FeatureDetailCardSchema,
-  FeatureDetailSchema,
-  FeatureSummarySchema,
-} from '@pinvi/schemas';
+import { FeatureDetailCardSchema, FeatureDetailSchema, FeatureSummarySchema } from '@pinvi/schemas';
 
 /**
  * T-VN-42 — 공개 `status` 제거 회귀 게이트(프런트 미러).
@@ -41,6 +37,7 @@ describe('feature 공개 계약 — status 제거', () => {
         'name',
         'coord',
         'category',
+        'category_label',
         'marker_color',
         'marker_icon',
         'distance_m',

@@ -12,6 +12,7 @@ from app.schemas.feature import (
     PlaceDetailCard,
     PriceDetailCard,
 )
+from app.services.category_labels import build_category_labels
 from app.services.feature_detail import (
     address_line,
     best_match_enrichment,
@@ -191,3 +192,129 @@ def test_best_match_enrichment_matched_and_unmatched() -> None:
     )
     assert no_match.matched is False
     assert no_match.phone is None
+
+
+# ── 2026-11-02 prod e2e: Map place detail 실응답 키(`phones[]`·`facility_info`·`legal`) ──────────
+
+
+def _map_place_dto(**over: Any) -> dict[str, Any]:
+    """Map `/v1/features/{id}` 실응답 형태(영월 고씨굴 주차장·안동하회마을에서 발췌)."""
+    base: dict[str, Any] = {
+        "feature_id": "01a163b0-b587-7d4f-a8f5-489dee7e5699",
+        "kind": "place",
+        "name": "고씨굴",
+        "category": "06010000",
+        "lon": 128.5352623,
+        "lat": 37.13117779,
+        "address": {
+            "road": None,
+            "admin": "김삿갓면",
+            "legal": "강원특별자치도 영월군 김삿갓면 진별리 506-1",
+            "zipcode": "26245",
+            "bjd_code": "5175032521",
+            "sido_name": "강원특별자치도",
+            "sigungu_name": "영월군",
+        },
+        "detail": {
+            "phones": ["033-370-2486"],
+            "place_kind": "parking",
+            "facility_info": {"prkcmprt": 75},
+            "business_hours": None,
+        },
+        "urls": {"homepage": None, "sns1": None},
+        "marker_icon": "parking",
+        "marker_color": "P-13",
+    }
+    base.update(over)
+    return base
+
+
+def test_place_card_reads_map_phones_list() -> None:
+    card = build_detail_card(_map_place_dto())
+    assert isinstance(card, PlaceDetailCard)
+    assert card.phone == "033-370-2486"
+
+
+def test_place_card_falls_back_to_facility_info_tel_and_url() -> None:
+    card = build_detail_card(
+        _map_place_dto(
+            detail={
+                "phones": [],
+                "facility_info": {
+                    "tel": "054-853-0109",
+                    "url": "http://www.hahoe.or.kr/coding/main.asp",
+                },
+            }
+        )
+    )
+    assert isinstance(card, PlaceDetailCard)
+    assert card.phone == "054-853-0109"
+    assert card.homepage_url == "http://www.hahoe.or.kr/coding/main.asp"
+
+
+def test_homepage_rejects_non_http_values() -> None:
+    card = build_detail_card(
+        _map_place_dto(
+            urls={"homepage": "javascript:alert(1)"}, detail={"facility_info": {"url": "ftp://x"}}
+        )
+    )
+    assert card.homepage_url is None
+
+
+def test_address_line_uses_legal_when_road_is_missing() -> None:
+    # 예전에는 dict의 첫 문자열 값(admin="김삿갓면")만 보였다.
+    card = build_detail_card(_map_place_dto())
+    assert card.address_line == "강원특별자치도 영월군 김삿갓면 진별리 506-1"
+
+
+def test_address_line_composes_region_when_road_and_legal_are_missing() -> None:
+    assert (
+        address_line(
+            {
+                "road": None,
+                "admin": "풍천면",
+                "legal": None,
+                "zipcode": "36760",
+                "bjd_code": "4717034033",
+                "sido_name": "경상북도",
+                "sigungu_name": "안동시",
+            }
+        )
+        == "경상북도 안동시 풍천면"
+    )
+
+
+def test_address_line_never_shows_codes() -> None:
+    assert address_line({"zipcode": "36760", "bjd_code": "4717034033"}) is None
+
+
+def test_detail_card_carries_category_label_not_code() -> None:
+    labels = build_category_labels(
+        [{"code": "06010000", "label": "교통 > 주차장", "path": ["교통", "주차장"]}]
+    )
+    card = build_detail_card(_map_place_dto(), labels)
+    assert card.category == "06010000"
+    assert card.category_label == "주차장"
+
+
+def test_address_line_does_not_repeat_region_already_in_admin() -> None:
+    # KHOA 해수욕장 등은 역지오코딩이 없을 때 admin에 시도·시군구 전체 이름을 둔다.
+    assert (
+        address_line(
+            {
+                "road": None,
+                "legal": None,
+                "admin": "부산광역시 해운대구",
+                "sido_name": "부산광역시",
+                "sigungu_name": "해운대구",
+            }
+        )
+        == "부산광역시 해운대구"
+    )
+
+
+def test_homepage_skips_invalid_key_and_uses_next_http_url() -> None:
+    card = build_detail_card(
+        _map_place_dto(urls={"homepage": "javascript:alert(1)", "website": "https://ok.example"})
+    )
+    assert card.homepage_url == "https://ok.example"

@@ -90,9 +90,9 @@ export function FeatureDetailCardBody({
 }: FeatureDetailCardBodyProps) {
   return (
     <div className="space-y-3" data-testid={testId} data-kind={card.kind}>
-      {card.category && (
+      {card.category_label && (
         <p className="text-xs font-medium text-muted" data-testid={`${testId}-category`}>
-          {card.category}
+          {card.category_label}
         </p>
       )}
       {card.address_line && (

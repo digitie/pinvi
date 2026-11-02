@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.services.category_labels import build_category_labels
 from app.services.place_search import (
     address_candidate_to_result,
     feature_item_to_result,
@@ -103,14 +104,78 @@ def test_feature_item_mapping() -> None:
     assert result.coord is not None
 
 
-def test_address_candidate_mapping_prefers_road_address_name() -> None:
-    result = address_candidate_to_result(
-        {"address": "테헤란로 지번", "road_address": "테헤란로 152", "lon": 127.0, "lat": 37.5}
-    )
+def _geo_v2_candidate(**over: object) -> dict[str, object]:
+    """kor-travel-geo v2 `/v2/search` 후보 실응답 형태(2026-11-02 prod 발췌)."""
+    base: dict[str, object] = {
+        "confidence": 0.5,
+        "match_kind": "road",
+        "address": {
+            "full": "경상북도 안동시 도산서원길 154",
+            "legal_dong_code": "4717042021",
+            "admin_dong_code": "4717042000",
+            "road_name": "도산서원길",
+        },
+        "point": {"lon": 128.840297, "lat": 36.728037},
+        "region": {
+            "sig_cd": "47170",
+            "sido": "경상북도",
+            "sigungu": "안동시",
+            "legal_dong": "토계리",
+        },
+        "source": "local",
+        "metadata": {"score": 0.5},
+    }
+    base.update(over)
+    return base
+
+
+def test_address_candidate_maps_geo_v2_nested_road_candidate() -> None:
+    """예전 매퍼는 평면 `road_address`/`lon`을 읽어 v2 후보를 전부 버렸다(통합 검색 주소 0건)."""
+    result = address_candidate_to_result(_geo_v2_candidate())
     assert result is not None
     assert result.source == "address"
-    assert result.name == "테헤란로 152"
+    assert result.name == "경상북도 안동시 도산서원길 154"
+    assert result.road_address == "경상북도 안동시 도산서원길 154"
+    assert result.address is None
     assert result.coord is not None
+    assert (result.coord.lon, result.coord.lat) == (128.840297, 36.728037)
+
+
+def test_address_candidate_parcel_match_fills_jibun_address() -> None:
+    result = address_candidate_to_result(
+        _geo_v2_candidate(
+            match_kind="parcel",
+            address={"full": "경상북도 안동시 도산면 토계리 679-2"},
+        )
+    )
+    assert result is not None
+    assert result.address == "경상북도 안동시 도산면 토계리 679-2"
+    assert result.road_address is None
+
+
+def test_address_candidate_without_full_address_is_dropped() -> None:
+    # 국가지점번호(sppn) 후보 등은 address가 없을 수 있다 — 이름을 만들 수 없다.
+    assert address_candidate_to_result(_geo_v2_candidate(match_kind="sppn", address=None)) is None
+    assert address_candidate_to_result(_geo_v2_candidate(address={"full": "  "})) is None
+
+
+def test_feature_result_keeps_code_and_adds_human_category_label() -> None:
+    labels = build_category_labels(
+        [{"code": "06010000", "label": "교통 > 주차장", "path": ["교통", "주차장"]}]
+    )
+    result = feature_item_to_result(
+        {"feature_id": "f1", "name": "도산서원", "category": "06010000", "lon": 128.8, "lat": 36.7},
+        labels,
+    )
+    assert result is not None
+    assert result.category == "06010000"
+    assert result.category_label == "주차장"
+
+
+def test_feature_result_unknown_code_has_no_label() -> None:
+    result = feature_item_to_result({"feature_id": "f1", "name": "x", "category": "06010000"})
+    assert result is not None
+    assert result.category_label is None
 
 
 def test_my_poi_mapping() -> None:

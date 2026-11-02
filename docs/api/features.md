@@ -60,7 +60,8 @@ Cookie: pinvi_access=...
         "kind": "place",
         "name": "광안리 해수욕장",
         "coord": { "lon": 129.118, "lat": 35.155 }, // null 가능
-        "category": "해수욕장",
+        "category": "01060100", // Map 카테고리 코드(필터·마커 계약)
+        "category_label": "해수욕장", // 표시용 이름(코드의 잎 단계, 모르면 null) — 화면은 이것만
         "marker_color": "P-07",
         "marker_icon": "swimming",
       },
@@ -101,6 +102,7 @@ GET /features/f_2611000000_p_abc123...
     "name": "...", // 표시명 (kor_travel_map `name`)
     "coord": { "lon": 129.0, "lat": 35.0 }, // null 가능
     "category": "01070100",
+    "category_label": "사적·기념물", // in-bounds·nearby·상세·detail-card 공통(모르면 null)
     "address": {
       /* 구조화 주소 객체 (kor_travel_map 원본) */
     },

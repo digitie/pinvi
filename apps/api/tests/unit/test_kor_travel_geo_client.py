@@ -153,3 +153,29 @@ async def test_transport_error_raises_unavailable() -> None:
     with pytest.raises(KorTravelGeoUnavailable):
         await client.reverse(lon=129.0, lat=35.0)
     await client.aclose()
+
+
+async def test_search_attempt_override_sends_once_on_504() -> None:
+    """자동완성은 geo 504(DB statement timeout)를 재시도하지 않는다 — 기본 client 설정은 그대로."""
+    attempts = {"n": 0}
+    seen_timeouts: list[object] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        seen_timeouts.append(request.extensions.get("timeout"))
+        return httpx.Response(504, json={"error": {"code": "E0504"}})
+
+    client = _client(handler, max_attempts=3)
+    with pytest.raises(KorTravelGeoUnavailable):
+        await client.search(
+            query="하회", kind="address", max_attempts=1, attempt_timeout_seconds=3.0
+        )
+    assert attempts["n"] == 1
+    assert isinstance(seen_timeouts[0], dict)
+    assert seen_timeouts[0]["read"] == 3.0
+
+    attempts["n"] = 0
+    with pytest.raises(KorTravelGeoUnavailable):
+        await client.search(query="하회", kind="address")
+    assert attempts["n"] == 3
+    await client.aclose()

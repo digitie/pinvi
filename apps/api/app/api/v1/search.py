@@ -11,6 +11,7 @@ K(`pinvi_place_search_internal_threshold`) 미만일 때만 Kakao/Naver Local(�
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from decimal import Decimal
 from typing import Annotated, Any
@@ -31,6 +32,7 @@ from app.models.trip import Trip
 from app.schemas.envelope import Envelope
 from app.schemas.search import PlaceSearchResponse, PlaceSearchResult
 from app.services.admin_pois import extract_feature_coord
+from app.services.category_labels import get_category_labels
 from app.services.place_search import (
     address_candidate_to_result,
     feature_item_to_result,
@@ -42,6 +44,10 @@ from app.services.place_search import (
 router = APIRouter(tags=["search"])
 
 _MY_POI_LIMIT = 10
+# 자동완성의 주소 소스(kor-travel-geo `/v2/search`) 예산. 평소 0.3~1초다. 짧은 검색어("하회")에서 geo가
+# DB statement timeout(504 E0504, ~5초)을 내면 재시도해도 같으므로 1회만, 짧게 끊고 `addresses`를
+# degrade로 둔다 — 예전에는 5초씩 3회 재시도가 feature 결과까지 16초 붙잡았다(2026-11-02 prod e2e).
+_ADDRESS_SEARCH_TIMEOUT_SECONDS = 3.0
 
 
 def _escape_like(value: str) -> str:
@@ -140,27 +146,59 @@ async def unified_search(
     results: list[PlaceSearchResult] = []
 
     # ── 내부 소스: feature → address → my_poi ──────────────────────────────
-    try:
-        feature_data = await kor_travel_map.search_features(q=q, page_size=limit)
-        for item in feature_data.get("items") or []:
-            if isinstance(item, dict) and (r := feature_item_to_result(item)) is not None:
-                results.append(r)
-    except KorTravelMapError:
+    # feature(Map)와 address(geo)는 서로 독립인 HTTP 호출이라 동시에 보낸다 — 느린 소스 하나가 다른
+    # 소스의 결과를 붙잡지 않는다. 표시 순서는 그대로 feature → address다.
+    async def _feature_results() -> list[PlaceSearchResult] | None:
+        try:
+            feature_data, labels = await asyncio.gather(
+                kor_travel_map.search_features(q=q, page_size=limit),
+                get_category_labels(kor_travel_map),
+            )
+        except KorTravelMapError:
+            return None
+        return [
+            r
+            for item in feature_data.get("items") or []
+            if isinstance(item, dict) and (r := feature_item_to_result(item, labels)) is not None
+        ]
+
+    async def _address_results() -> list[PlaceSearchResult] | None:
+        try:
+            # httpx timeout은 단계(connect·read…)별 상한이라 합계가 넘칠 수 있다 — 전체를 한 번 더 묶는다.
+            async with asyncio.timeout(_ADDRESS_SEARCH_TIMEOUT_SECONDS):
+                address_data = await kor_travel_geo.search(
+                    query=q,
+                    kind="address",
+                    size=limit,
+                    max_attempts=1,
+                    attempt_timeout_seconds=_ADDRESS_SEARCH_TIMEOUT_SECONDS,
+                )
+        except (KorTravelGeoError, TimeoutError):
+            return None
+        return [
+            r
+            for cand in address_data.get("candidates") or []
+            if isinstance(cand, dict) and (r := address_candidate_to_result(cand)) is not None
+        ]
+
+    feature_results, address_results = await asyncio.gather(_feature_results(), _address_results())
+    if feature_results is None:
         degraded.append("features")
-
-    try:
-        address_data = await kor_travel_geo.search(query=q, kind="address", size=limit)
-        for cand in address_data.get("candidates") or []:
-            if isinstance(cand, dict) and (r := address_candidate_to_result(cand)) is not None:
-                results.append(r)
-    except KorTravelGeoError:
+    else:
+        results.extend(feature_results)
+    if address_results is None:
         degraded.append("addresses")
+    else:
+        results.extend(address_results)
 
-    for poi in await _search_my_pois(db, user_id=user_id, q=q):
-        results.append(my_poi_to_result(poi))
+    my_pois = [my_poi_to_result(poi) for poi in await _search_my_pois(db, user_id=user_id, q=q)]
+    results.extend(my_pois)
 
-    # ── internal-first short-circuit: 내부 결과 ≥ K면 provider 미호출(§10) ──
-    if len(results) < settings.pinvi_place_search_internal_threshold:
+    # ── internal-first short-circuit: 내부 **장소** 결과 ≥ K면 provider 미호출(§10) ──
+    # 주소 후보는 세지 않는다 — "하회…길"처럼 도로명만 여러 개 맞는 검색어가 장소 0건인데도
+    # Kakao/Naver 보강을 막지 않게(주소 결과는 예전엔 매퍼 버그로 늘 0건이라 K에 들어간 적이 없다).
+    internal_place_count = len(feature_results or []) + len(my_pois)
+    if internal_place_count < settings.pinvi_place_search_internal_threshold:
         if kakao_local is not None:
             try:
                 if lat is not None and lon is not None:

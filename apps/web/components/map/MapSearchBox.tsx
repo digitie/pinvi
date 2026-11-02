@@ -27,6 +27,16 @@ const SOURCE_META: Record<Source, { label: string; badgeClass: string; icon: 'pi
     naver: { label: '네이버 검색', badgeClass: 'bg-marker-p-05/15 text-ink', icon: 'pin' },
   };
 
+/**
+ * 결과 둘째 줄의 분류 이름. feature의 `category`는 Map 코드(`02010100`)라 사람에게 보이지 않고
+ * 서버가 채운 `category_label`(잎 이름)만 쓴다. 외부(kakao/naver) 결과의 `category`는 provider가
+ * 준 이름이라 그대로 쓴다(2026-11-02 prod e2e — 검색 결과가 숫자 코드만 보였다).
+ */
+export function searchResultCategory(result: PlaceSearchResult): string | null {
+  if (result.category_label) return result.category_label;
+  return result.source === 'feature' ? null : (result.category ?? null);
+}
+
 function resultKey(r: PlaceSearchResult, index: number): string {
   return `${r.source}-${r.feature_id ?? r.poi_id ?? r.external_id ?? index}`;
 }
@@ -129,7 +139,8 @@ export function MapSearchBox({ onSelect, className }: MapSearchBoxProps) {
         <ul className="mt-1 max-h-64 overflow-auto rounded-sm border border-hairline bg-canvas shadow-card">
           {results.map((result, index) => {
             const meta = SOURCE_META[result.source];
-            const secondary = result.road_address ?? result.address ?? result.category ?? null;
+            const secondary =
+              result.road_address ?? result.address ?? searchResultCategory(result) ?? null;
             const isExternal = result.source === 'kakao' || result.source === 'naver';
             // §5.2(HARD): kakao/naver 행은 가시적 attribution 배지 + provider_url back-link 필수.
             // 앵커를 pick 버튼 안에 중첩하면 invalid HTML이므로 형제 요소로 둔다.

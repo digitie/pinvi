@@ -23,6 +23,7 @@ from app.schemas.feature import (
     PriceDetailCard,
     PriceItem,
 )
+from app.services.category_labels import EMPTY_CATEGORY_LABELS, CategoryLabels
 from app.services.place_search import kakao_document_to_result, naver_item_to_result
 
 # name 유사도/거리 임계 — 둘 다 만족해야 confident match(오귀속 방지, ADR-056).
@@ -58,17 +59,78 @@ def _pick(source: Any, *keys: str) -> str | None:
 
 
 def address_line(address: Any) -> str | None:
-    """kor_travel_map 구조화 주소 dict → 한 줄 표시 문자열(방어적 키 추출)."""
+    """kor_travel_map 구조화 주소 dict → 한 줄 표시 문자열(방어적 키 추출).
+
+    Map 주소는 `{road, legal, admin, sido_name, sigungu_name, zipcode, *_code ...}`다. 도로명이 없는
+    feature(국가유산 등)는 `legal`(법정동 주소)을, 그것도 없으면 `시도 시군구 읍면동`을 만든다.
+    예전에는 dict의 첫 문자열 값(`admin` = "김삿갓면")으로 떨어져 상세 카드 주소가 읍면 이름뿐이었다
+    (2026-11-02 prod e2e).
+    """
     if not isinstance(address, dict):
         return None
-    picked = _pick(address, "road", "full", "jibun", "name")
+    picked = _pick(address, "road", "full", "legal", "jibun", "name")
     if picked:
         return picked
-    for value in address.values():
+    admin = _clean(address.get("admin"))
+    parts: list[str] = []
+    for region in (_clean(address.get("sido_name")), _clean(address.get("sigungu_name"))):
+        # 일부 provider(KHOA 해수욕장 등)는 `admin`에 이미 "부산광역시 해운대구" 같은 전체 이름을 둔다.
+        if region and not (admin and region in admin):
+            parts.append(region)
+    if admin:
+        parts.append(admin)
+    composed = " ".join(parts)
+    if composed:
+        return composed
+    for key, value in address.items():
+        # 코드·우편번호 값은 사람이 읽는 주소가 아니다.
+        if key.endswith(("_code", "_no")) or key == "zipcode":
+            continue
         cleaned = _clean(value)
         if cleaned:
             return cleaned
     return None
+
+
+def _phone(detail: Any) -> str | None:
+    """Map place detail의 전화 — `phones[]`(정본) → `facility_info.tel` → 예전 평면 키."""
+    if not isinstance(detail, dict):
+        return None
+    phones = detail.get("phones")
+    if isinstance(phones, list):
+        for phone in phones:
+            cleaned = _clean(phone)
+            if cleaned:
+                return cleaned
+    facility = detail.get("facility_info")
+    return _pick(facility, "tel", "phone") or _pick(detail, "phone", "tel", "telephone")
+
+
+def _http_url(value: str | None) -> str | None:
+    if value and value.lower().startswith(("http://", "https://")):
+        return value
+    return None
+
+
+def _first_http(source: Any, *keys: str) -> str | None:
+    if not isinstance(source, dict):
+        return None
+    for key in keys:
+        url = _http_url(_clean(source.get(key)))
+        if url:
+            return url
+    return None
+
+
+def _homepage(urls: Any, detail: Any) -> str | None:
+    """`urls`(정본) → place detail `facility_info.url`(반려동반여행 등 출처가 주는 홈페이지).
+
+    http(s)가 아닌 값은 키마다 건너뛴다 — 앞 키의 잘못된 값이 뒤 키의 정상 URL을 가리지 않게.
+    """
+    facility = detail.get("facility_info") if isinstance(detail, dict) else None
+    return _first_http(urls, "homepage", "website", "url", "home") or _first_http(
+        facility, "url", "homepage"
+    )
 
 
 def _coord(dto: dict[str, Any]) -> Coord | None:
@@ -99,7 +161,9 @@ def _price_items(detail: Any) -> list[PriceItem]:
     return items
 
 
-def build_detail_card(dto: dict[str, Any]) -> FeatureDetailCard:
+def build_detail_card(
+    dto: dict[str, Any], labels: CategoryLabels = EMPTY_CATEGORY_LABELS
+) -> FeatureDetailCard:
     """원본 feature dto → kind별 detail-card(일반 사용자 노출 필드만).
 
     `status`는 채우지 않는다 — Map 3축 feature state cutover(`1f2bdc3a feat(api): complete
@@ -114,16 +178,17 @@ def build_detail_card(dto: dict[str, Any]) -> FeatureDetailCard:
         "name": dto.get("name") or dto.get("title") or "",
         "coord": _coord(dto),
         "category": _clean(dto.get("category")),
+        "category_label": labels.label(_clean(dto.get("category"))),
         "address_line": address_line(dto.get("address")),
         "marker_color": dto.get("marker_color") or "P-13",
         "marker_icon": dto.get("marker_icon") or "marker",
-        "homepage_url": _pick(urls, "homepage", "website", "url", "home"),
+        "homepage_url": _homepage(urls, detail),
     }
 
     if kind == "place":
         return PlaceDetailCard(
             **common,
-            phone=_pick(detail, "phone", "tel", "telephone"),
+            phone=_phone(detail),
             business_hours=_pick(detail, "business_hours", "hours", "open_hours", "opening_hours"),
         )
     if kind == "event":

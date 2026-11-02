@@ -46,7 +46,9 @@ export const PlaceSearchResultSchema = z.object({
   external_id: z.string().nullable().default(null),
   address: z.string().nullable().default(null),
   road_address: z.string().nullable().default(null),
+  // Map 카테고리 코드(필터·마커 계약). 화면 표시는 `category_label`만 쓴다.
   category: z.string().nullable().default(null),
+  category_label: z.string().nullable().default(null),
   marker_color: z.string().nullable().default(null),
   marker_icon: z.string().nullable().default(null),
   provider_url: z.string().nullable().default(null),

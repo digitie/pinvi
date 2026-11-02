@@ -61,13 +61,29 @@ class KorTravelGeoClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def _post(self, path: str, payload: Mapping[str, Any]) -> dict[str, Any]:
-        """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도 후 최상위 dict 반환."""
+    async def _post(
+        self,
+        path: str,
+        payload: Mapping[str, Any],
+        *,
+        max_attempts: int | None = None,
+        attempt_timeout_seconds: float | None = None,
+    ) -> dict[str, Any]:
+        """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도 후 최상위 dict 반환.
+
+        `max_attempts`/`attempt_timeout_seconds`는 호출 단위 덮어쓰기다(기본은 client 설정).
+        """
         last: KorTravelGeoUnavailable | None = None
         body = {k: v for k, v in payload.items() if v is not None}
-        for attempt in range(self._max_attempts):
+        attempts = self._max_attempts if max_attempts is None else max(1, max_attempts)
+        request_timeout: Any = (
+            httpx.USE_CLIENT_DEFAULT if attempt_timeout_seconds is None else attempt_timeout_seconds
+        )
+        for attempt in range(attempts):
             try:
-                resp = await self._http.post(path, params=self._auth_params(), json=body)
+                resp = await self._http.post(
+                    path, params=self._auth_params(), json=body, timeout=request_timeout
+                )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelGeoUnavailable(f"kor-travel-geo 요청 실패({path}): {exc!r}")
             else:
@@ -75,7 +91,7 @@ class KorTravelGeoClient:
                     last = KorTravelGeoUnavailable(f"kor-travel-geo {resp.status_code} ({path})")
                 else:
                     return self._unwrap(resp)
-            if attempt + 1 < self._max_attempts:
+            if attempt + 1 < attempts:
                 await asyncio.sleep(self._backoff_base_seconds * (2**attempt))
         logger.warning("kor_travel_geo.unavailable", extra={"path": path})
         raise last or KorTravelGeoUnavailable(f"kor-travel-geo 요청 실패({path})")
@@ -140,11 +156,19 @@ class KorTravelGeoClient:
         sig_cd: str | None = None,
         page: int | None = None,
         size: int | None = None,
+        max_attempts: int | None = None,
+        attempt_timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
-        """주소/도로명/행정구역/장소 검색(자동완성). data = {status, total, candidates[]}."""
+        """주소/도로명/행정구역/장소 검색(자동완성). data = {status, total, candidates[]}.
+
+        자동완성 호출부는 `max_attempts=1`과 짧은 `attempt_timeout_seconds`를 넘긴다 — 짧은 검색어에서 geo가
+        DB statement timeout(504 E0504)을 내면 그건 재시도해도 같은 결과다.
+        """
         return await self._post(
             "/v2/search",
             {"query": query, "type": kind, "sig_cd": sig_cd, "page": page, "size": size},
+            max_attempts=max_attempts,
+            attempt_timeout_seconds=attempt_timeout_seconds,
         )
 
     async def regions_within_radius(

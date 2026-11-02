@@ -49,6 +49,7 @@ import {
 import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
 import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
+import { addressLine } from '@/lib/featureAddress';
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { useTransportLayers, type TransportDetailTarget } from '@/lib/useTransportLayers';
@@ -189,24 +190,6 @@ export function toWeatherPoints(data: WeatherMarkersInBoundsResponse): WeatherMa
     condition: m.condition,
     provider: m.provider ?? null,
   }));
-}
-
-/** kor_travel_map 구조화 `address` 객체에서 표시용 한 줄을 뽑는다(키 미확정 → 방어적). */
-function addressLine(detail: FeatureDetail | null): string | null {
-  const addr = detail?.address;
-  if (!addr) return null;
-  const pick = (key: string): string | null =>
-    typeof addr[key] === 'string' && (addr[key] as string).length > 0
-      ? (addr[key] as string)
-      : null;
-  return (
-    pick('road') ??
-    pick('full') ??
-    pick('jibun') ??
-    pick('name') ??
-    Object.values(addr).find((v): v is string => typeof v === 'string' && v.length > 0) ??
-    null
-  );
 }
 
 /** 평탄 weather metric 중 기온(℃) metric 의 현재값을 찾는다(metric_key 미확정 → 방어적). */
@@ -926,7 +909,9 @@ export function FeatureMapView({
                       닫기
                     </button>
                   </div>
-                  {detail?.category && <p className="text-xs text-muted">{detail.category}</p>}
+                  {detail?.category_label && (
+                    <p className="text-xs text-muted">{detail.category_label}</p>
+                  )}
                   {detailAddress && <p className="text-xs text-body">{detailAddress}</p>}
                   {currentTemp != null && (
                     <p className="text-xs text-body">현재 기온 {currentTemp.toFixed(0)}°C</p>
