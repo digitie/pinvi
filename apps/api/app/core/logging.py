@@ -56,9 +56,9 @@ def redact_event_dict(
 
     for key in list(event_dict):
         value = event_dict[key]
-        if key.lower() in SENSITIVE_QUERY_KEYS and value is not None:
+        if _is_secret_key(key) and value is not None:
             event_dict[key] = REDACTED
-        elif isinstance(value, dict):
+        else:
             event_dict[key] = _redacted_copy(value, depth=1)
     return event_dict
 
@@ -67,18 +67,24 @@ def _is_secret_key(key: object) -> bool:
     return isinstance(key, str) and key.lower() in SENSITIVE_QUERY_KEYS
 
 
-def _redacted_copy(value: dict[Any, Any], *, depth: int) -> dict[Any, Any]:
-    """중첩 dict(`params={"serviceKey": …}`)를 **복사해** 가린다 — 호출자의 dict를 바꾸지 않는다(3단계까지)."""
+def _redacted_copy(value: Any, *, depth: int) -> Any:
+    """중첩 dict·list(`params={"serviceKey": …}`, `items=[{"token": …}]`)를 **복사해** 가린다 —
+    호출자의 객체를 바꾸지 않는다(3단계까지). 그 밖의 값은 그대로 돌려준다."""
 
-    redacted: dict[Any, Any] = {}
-    for key, item in value.items():
-        if _is_secret_key(key) and item is not None:
-            redacted[key] = REDACTED
-        elif isinstance(item, dict) and depth < 3:
-            redacted[key] = _redacted_copy(item, depth=depth + 1)
-        else:
-            redacted[key] = item
-    return redacted
+    if depth > 3:
+        return value
+    if isinstance(value, dict):
+        return {
+            key: REDACTED
+            if _is_secret_key(key) and item is not None
+            else _redacted_copy(item, depth=depth + 1)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redacted_copy(item, depth=depth + 1) for item in value]
+    if type(value) is tuple:
+        return tuple(_redacted_copy(item, depth=depth + 1) for item in value)
+    return value
 
 
 def configure_logging(level: str = "INFO") -> None:

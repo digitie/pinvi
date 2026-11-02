@@ -55,9 +55,13 @@ _TELEGRAM_TOKEN_RE = re.compile(
 # `Authorization: Bearer …`·`{'authorization': 'Basic …'}` 꼴 자격 증명.
 #: 스킴은 선택(`Bearer`·`Basic`·`Token`·PinVi가 보내는 `KakaoAK`), 구분은 공백·`%20`·`+`. 따옴표가 escape돼
 #: 있어도(JSON 안) 잡고, 값은 escape(`\`) 앞에서 끝나 JSON을 깨지 않는다.
+#: 값이 JSON 비문자열(`null`·`true`·숫자·`{`·`[`)이면 건드리지 않는다 — `"authorization": null`을
+#: 가리면 JSON 줄이 깨진다.
 _AUTH_HEADER_RE = re.compile(
     r"(?P<prefix>authorization\\?[\"']?\s*[:=]\s*\\?[\"']?"
-    r"(?:(?:bearer|basic|token|kakaoak)(?:\s+|%20|\+))?)[^\s\"',\\]+",
+    r"(?:(?:bearer|basic|token|kakaoak)(?:\s+|%20|\+))?)"
+    r"(?![{\[]|(?:null|true|false|-?\d[\d.eE+-]*)(?:[\s,}\]]|$))"
+    r"[^\s\"',\\]+",
     re.IGNORECASE,
 )
 # path에 실린 PinVi 자체 자격 증명: 여행 공유 링크, 서명된 업로드·다운로드 토큰(uvicorn access 줄).
