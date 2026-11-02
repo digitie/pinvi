@@ -656,6 +656,10 @@ class _CircuitBreaker:
         self._trial_in_flight = True
         return True
 
+    def is_open(self) -> bool:
+        """열린 채 open 시간이 아직 남았는가(읽기 전용 — half-open 시험 자리를 잡지 않는다)."""
+        return self._opened_at is not None and self._clock() - self._opened_at < self._open_seconds
+
     def record_success(self) -> None:
         self._consecutive_failures = 0
         self._opened_at = None
@@ -752,11 +756,14 @@ class KorTravelWeatherClient:
         # 짧은 예산에서 센 엔드포인트(단건 카드의 `/resolve`)는 **별도 회로**를 쓴다 — trip view와 공유하는
         # 회로를, 카드 예산으로는 '느리지만 살아 있음'과 '응답 없음'을 가를 수 없는 실패로 열지 않게.
         call_scope = _call_scope.get()
-        circuit_name = (
-            f"{endpoint}{_SHORT_BUDGET_CIRCUIT_SUFFIX}"
-            if call_scope is not None and endpoint in call_scope.count_short_timeouts_for
-            else endpoint
-        )
+        short_budget = call_scope is not None and endpoint in call_scope.count_short_timeouts_for
+        circuit_name = f"{endpoint}{_SHORT_BUDGET_CIRCUIT_SUFFIX}" if short_budget else endpoint
+        shared = self._circuits.get(endpoint)
+        if short_budget and shared is not None and shared.is_open():
+            # 긴 예산(trip view)이 이미 연 공유 회로를 존중한다 — 시험 자리는 잡지 않는다(카드 예산으로는
+            # 그 회로의 판정을 내릴 수 없다).
+            host.release(trial=host_trial)
+            raise KorTravelWeatherUnavailable("kor-travel-weather 회로 열림 — 호출하지 않음")
         circuit = self._circuit_for(circuit_name)
         try:
             trial = circuit.acquire()
@@ -777,7 +784,7 @@ class KorTravelWeatherClient:
             else:
                 if scope is not None:
                     scope.state.counted_endpoints.add(endpoint)
-                circuit.record_failure(endpoint=endpoint, trial=trial)
+                circuit.record_failure(endpoint=circuit_name, trial=trial)
             if not isinstance(exc, KorTravelWeatherConnectFailed) and host_trial:
                 # host 시험 호출이 연결은 됐다(read timeout·5xx) — host 회로를 닫는다. 슬롯만 돌려주면
                 # 연결은 되지만 오류를 내는 동안 host가 half-open에 머물러 호출이 하나씩 줄 선다.
