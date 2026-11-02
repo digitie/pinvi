@@ -170,11 +170,27 @@ describe('TripMapView 맞춤 배선', () => {
     expect(map.flyTo.mock.calls[0]?.[0].offset).toEqual([0, (288 + 48 + 24 - 64) / 2]);
   });
 
+  it('장소가 하나라도 패널이 가운데 열 밖이면(데스크톱) 검색 줄만 기준으로 한다', () => {
+    RECTS['fit-container'] = box(0, 0, 1000, 800);
+    try {
+      h.transportVisible = true;
+      const map = fakeMap({ x: 500, y: 400 });
+      h.map = map;
+      render(<TripMapView points={[POINTS[0]!]} transportLayers overlayTopLeft={overlay} />);
+
+      expect(map.flyTo.mock.calls[0]?.[0].offset).toEqual([0, (132 + 48 + 24 - 64) / 2]);
+    } finally {
+      RECTS['fit-container'] = box(0, 0, 390, 700);
+    }
+  });
+
   it('패널이 늦게 나타나면 다시 맞추고, 그 사이 사용자가 움직였으면 하지 않는다', () => {
     const map = fakeMap({ x: 72, y: 207 });
     h.map = map;
     const view = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
     expect(map.fitBounds).toHaveBeenCalledTimes(1);
+    // 맞춤 자신이 내는 moveend(originalEvent 없음)는 사용자 이동이 아니다
+    h.onMoveEnd?.({ target: map });
 
     h.transportVisible = true;
     view.rerender(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
