@@ -7,6 +7,7 @@
 
 - httpx·httpcore 로거는 WARNING부터만 낸다(요청마다 URL을 찍는 INFO·DEBUG 줄 차단).
 - 방어선 2: root·uvicorn handler와 httpx·uvicorn 로거에 `SecretRedactingFilter`를 단다.
+- structlog 예외 렌더러는 프레임 지역 변수를 찍지 않는다(`show_locals=False`).
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import sys
 from typing import cast
 
 import structlog
+from structlog.tracebacks import ExceptionDictTransformer
 
 from app.core.redaction import SecretRedactingFilter
 
@@ -48,7 +50,9 @@ def configure_logging(level: str = "INFO") -> None:
             structlog.contextvars.merge_contextvars,
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso", utc=False),
-            structlog.processors.dict_tracebacks,
+            # `dict_tracebacks`와 같되 프레임 지역 변수는 찍지 않는다 — 지역 변수 repr
+            # (`"api_key": "'…'"`, DB 접속 인자의 password)는 URL 모양이 아니라 필터가 못 가린다.
+            structlog.processors.ExceptionRenderer(ExceptionDictTransformer(show_locals=False)),
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
