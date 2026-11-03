@@ -593,13 +593,13 @@
   spec: specs/search/explore-map.live.spec.ts#SRCH-044
 
 - id: SRCH-045
-  title: 모바일 마커 탭 → 팝업 없이 상세 시트 바로 열림
+  title: 모바일 마커 탭 → 상세 시트가 바로 열린다(탭한 장소)
   priority: P2
   tags: [mobile, nearby, poi]
   preconditions: [account: test@test.com (user), env: VWorld key set, helper clickFeatureMarker]
   data_sources: [map:in-bounds]
   steps: [모바일 /map → 줌 인 → 마커 탭]
-  expected: [feature-detail-modal 표시, feature-map-detail-open 없음]
+  expected: [feature-detail-modal 이 바로 열리고 제목이 탭한 핀의 이름, 팝업 선택은 시트 아래에 남는다(handlePointClick 설계)]
   cleanup: [읽기 전용]
   automation: scripted
   spec: specs/search/explore-map.live.spec.ts#SRCH-045

@@ -741,6 +741,7 @@ async function featureLegendTitles(page: Page): Promise<Set<string>> {
 export async function clickableFeatureMarkers(page: Page, max = 5): Promise<Locator[]> {
   const all = featureMarkerButtons(page);
   const titles = [...(await featureLegendTitles(page))];
+  // returned locators are keyed by aria-label, not index: tapping one re-renders/re-orders the markers
   const indexes = await all.evaluateAll(
     (els, { limit, featureTitles }) => {
     const canvas = document.querySelector('.maplibregl-canvas')?.getBoundingClientRect();
@@ -757,11 +758,11 @@ export async function clickableFeatureMarkers(page: Page, max = 5): Promise<Loca
       const top = document.elementFromPoint(cx, cy);
       if (top && (top === el || el.contains(top))) out.push(i);
     });
-    return out;
+    return out.map((i) => (els[i]!.getAttribute('aria-label') ?? '').trim());
     },
     { limit: max, featureTitles: titles },
   );
-  return indexes.map((i) => all.nth(i));
+  return [...new Set(indexes)].filter(Boolean).map((label) => all.and(page.getByLabel(label, { exact: true })).first());
 }
 
 /** Masks a secret in text destined for logs/messages. */

@@ -125,7 +125,7 @@ Spec files: 54.
 | SRCH-042 | search | 탐색 지도 진입 시 in-bounds 조회, 드래그 이동 후 재조회 | P1 | desktop, mobile, nearby | scripted | `specs/search/explore-map.live.spec.ts#SRCH-042` |
 | SRCH-043 | search | 줌 아웃 → 클러스터, 줌 인 → 개별 feature 마커 | P2 | desktop, nearby | scripted | `specs/search/explore-map.live.spec.ts#SRCH-043` |
 | SRCH-044 | search | 마커 클릭 → 팝업 카드(이름·카테고리·주소·상세보기) | P1 | desktop, nearby, poi | scripted | `specs/search/explore-map.live.spec.ts#SRCH-044` |
-| SRCH-045 | search | 모바일 마커 탭 → 팝업 없이 상세 시트 바로 열림 | P2 | mobile, nearby, poi | scripted | `specs/search/explore-map.live.spec.ts#SRCH-045` |
+| SRCH-045 | search | 모바일 마커 탭 → 상세 시트가 바로 열린다(탭한 장소) | P2 | mobile, nearby, poi | scripted | `specs/search/explore-map.live.spec.ts#SRCH-045` |
 | SRCH-046 | search | 지도 높이가 컨테이너를 채운다(#619) — 데스크톱/모바일 | P2 | desktop, mobile | scripted | `specs/search/explore-map.live.spec.ts#SRCH-046` |
 | SRCH-047 | search | 빈 범위 — 바다로 이동 시 '이 범위에 표시할 장소가 없습니다' | P3 | desktop, nearby | manual |  |
 | SRCH-048 | search | 범위 안 이벤트/공지 마커 → 상세 카드 kind별 필드 | P2 | desktop, nearby, poi | scripted | `specs/search/explore-map.live.spec.ts#SRCH-048` |

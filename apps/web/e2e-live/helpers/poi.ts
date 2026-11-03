@@ -187,6 +187,7 @@ export async function submitManualDialog(
   const body = response.request().postDataJSON() as Record<string, unknown>;
   const json = (await response.json()) as { data: { attachment_id: string } };
   await expect(manualDialog(page)).toBeHidden();
+  await openPanelIfMobile(page); // the POI list lives in the (closed) mobile drawer
   await expect(poiRow(page, title).first()).toBeVisible();
   return { title, body, poiId: json.data.attachment_id };
 }

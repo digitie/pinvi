@@ -84,9 +84,12 @@ test.describe('SRCH explore map (/map)', () => {
     await ensureFeatureMarkers(page, 1, 6);
     const [pin] = await clickableFeatureMarkers(page, 1);
     test.skip(!pin, 'data: no tappable feature pin in the viewport');
+    const label = ((await pin!.getAttribute('aria-label')) ?? '').trim();
     await pin!.tap();
+    // mobile opens the detail sheet straight away (FeatureMapView.handlePointClick); the popup selection
+    // stays underneath by design, so assert the sheet is the tapped place rather than popup absence
     await expect(modal.root(page)).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('feature-map-detail-open')).toHaveCount(0);
+    await expect(modal.title(page)).toContainText(label.slice(0, 6), { timeout: 15_000 });
     await shot(page, 'SRCH-045', 'mobile-sheet');
   });
 
