@@ -30,8 +30,9 @@ test.describe.serial('ADM POI admin (mutating, self-cleaning)', () => {
 
   test.afterAll(async () => {
     try {
-      if (tripId) await deleteTrip(user.page, tripId);
-      await deleteAllE2eTrips(user.page);
+      // beforeAll skips on the mobile project before `user` exists
+      if (user && tripId) await deleteTrip(user.page, tripId);
+      if (user) await deleteAllE2eTrips(user.page);
     } finally {
       await user?.context.close();
       await admin?.context.close();

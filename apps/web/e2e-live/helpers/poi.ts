@@ -13,7 +13,7 @@
  *  - apps/web/app/(app)/files/page.tsx                my-file-list, file-delete-confirm, '다운로드', '삭제'
  */
 import { expect, type Locator, type Page } from '@playwright/test';
-import { e2ePrefix, isMobileProject, openPanel, shot, waitForMapIdle } from './live';
+import { closePanel, e2ePrefix, isMobileProject, openPanel, shot, waitForMapIdle } from './live';
 
 export { isMobileProject };
 
@@ -52,10 +52,7 @@ export async function openPanelIfMobile(page: Page): Promise<void> {
 
 export async function closePanelIfMobile(page: Page): Promise<void> {
   if (!isMobileProject()) return;
-  const panel = page.getByTestId('trip-detail-panel');
-  if (!(await panel.isVisible())) return;
-  await page.getByRole('button', { name: '패널 닫기' }).click();
-  await expect(panel).toBeHidden();
+  await closePanel(page);
 }
 
 /** Select day N in the plan panel (role=tab, aria-label `${n}일차`). */

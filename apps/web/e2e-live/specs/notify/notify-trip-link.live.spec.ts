@@ -7,7 +7,7 @@
  * API: apps/api/app/api/v1/trip_telegram_targets.py (≤3 per trip → 422 MAX_TARGETS_REACHED)
  */
 import { expect, test } from '@playwright/test';
-import { createTrip, deleteTrip, loginAsUser, shot } from '../../helpers/live';
+import { createTrip, deleteTrip, loginAsUser, openTripTab, shot } from '../../helpers/live';
 import {
   e2eLabel,
   isMobileProject,
@@ -24,7 +24,7 @@ const section = (page: import('@playwright/test').Page) => page.getByTestId('tri
 
 async function openShareTab(page: import('@playwright/test').Page, tripId: string) {
   await page.goto(`/trips/${tripId}`);
-  await page.getByRole('tab', { name: /공유/ }).click();
+  await openTripTab(page, '공유'); // opens the mobile drawer when needed
   await expect(section(page).getByRole('heading', { name: 'Telegram 알림 대상' })).toBeVisible();
   // Section finished loading (both list calls resolved).
   await expect(section(page).getByText('불러오는 중…')).toHaveCount(0);

@@ -5,10 +5,9 @@
  * (mobile header '패널 열기/닫기', aside#trip-detail-panel, day tabs), components/app/AppShell.tsx.
  */
 import { expect, test } from '@playwright/test';
-import { createTrip, deleteTrip, e2ePrefix, loginAsUser, searchAndAddPlace, shot } from '../../helpers/live';
+import { clickableFeatureMarkers, createTrip, deleteTrip, e2ePrefix, ensureFeatureMarkers, loginAsUser, searchAndAddPlace, shot } from '../../helpers/live';
 import {
   annotate,
-  featureMarkers,
   intersects,
   isMobileViewport,
   PLACES,
@@ -28,9 +27,11 @@ test.describe('CORE mobile', () => {
     await page.goto('/map');
     await waitForMapCanvas(page);
     await inBounds;
-    const pins = featureMarkers(page);
-    await expect(pins.first()).toBeVisible({ timeout: 15_000 });
-    await pins.first().tap();
+    // tap a real feature pin that is on screen and not under an overlay (not a cluster-of-one)
+    await ensureFeatureMarkers(page, 1);
+    const [pin] = await clickableFeatureMarkers(page, 1);
+    expect(pin, 'a tappable feature pin').toBeTruthy();
+    await pin!.tap();
     const modal = page.getByTestId('feature-detail-modal');
     await expect(modal).toBeVisible({ timeout: 15_000 });
     await expect(modal).toHaveAttribute('role', 'dialog');
@@ -94,23 +95,25 @@ test.describe('CORE mobile', () => {
       const panel = page.getByTestId('trip-detail-panel');
       await expect(panel).toBeVisible();
       await expect(page.getByRole('button', { name: '패널 닫기' }).first()).toHaveAttribute('aria-expanded', 'true');
-      // add day 2 via the drawer then switch tabs
-      await page.getByTestId('trip-add-day-drawer').tap();
-      const day2 = page.getByRole('tab', { name: '2일차' });
+      // the dated 2-day trip already has 2일차; add it through the drawer only when the slot is free
+      const addInDrawer = page.getByTestId('trip-add-day-drawer');
+      if (await addInDrawer.isEnabled()) await addInDrawer.tap();
+      const day2 = page.getByRole('tab', { name: '2일차', exact: true });
       await expect(day2).toBeVisible({ timeout: 15_000 });
       await day2.tap();
       await expect(day2).toHaveAttribute('aria-selected', 'true');
-      await expect(page.getByRole('tab', { name: '1일차' })).toHaveAttribute('aria-selected', 'false');
+      await expect(page.getByRole('tab', { name: '1일차', exact: true })).toHaveAttribute('aria-selected', 'false');
       // swipe gesture on the drawer should NOT break anything (no handler exists — documented gap)
       await page.touchscreen.tap(10, 400);
       await shot(page, 'CORE-020', 'day2');
-      await page.getByRole('button', { name: '패널 닫기' }).first().tap();
+      await page.locator('button[aria-controls="trip-detail-panel"][aria-expanded="true"]:visible').first().tap();
       await expect(panel).toBeHidden();
       annotate(testInfo, 'gap', 'TripDetail.tsx에 스와이프 제스처 핸들러 없음 — 버튼 경로만 검증');
     });
 
-    test('CORE-021 통계 칩이 남쪽 핀을 가린다(#623 known)', async ({ page }) => {
-      test.fail(true, '#623 — mobile trip-map-stats(bottom-16 left-3)가 남쪽 핀과 겹치는 알려진 결함');
+    test('CORE-021 통계 칩이 남쪽 핀을 가리지 않는다(#623)', async ({ page }) => {
+      // #623 (open) is position-dependent: it did not reproduce on the 2026-11-03 mobile run, so this is a
+      // plain assertion of the correct behaviour — a failure here means #623 reproduced.
       await page.goto(`/trips/${tripId}`);
       await waitForMapCanvas(page);
       const pins = tripPins(page);
@@ -124,7 +127,7 @@ test.describe('CORE mobile', () => {
         if (!southern || b.y > southern.y) southern = b;
       }
       await shot(page, 'CORE-021', 'stats-vs-pin');
-      expect(intersects(southern!, stats, 4), 'southern pin overlaps stats chips').toBe(false);
+      expect(intersects(southern!, stats, 4), 'southern pin overlaps stats chips (#623)').toBe(false);
     });
 
     test('CORE-022 오버레이 키보드 Tab 순서 — 검색창이 캔버스·마커보다 먼저', async ({ page }) => {

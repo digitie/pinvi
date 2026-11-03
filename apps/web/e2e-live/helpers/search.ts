@@ -356,6 +356,7 @@ export async function wheelZoom(page: Page, steps: number): Promise<Response | n
 
 /** Drag the map by (dx, dy) pixels. Returns the next in-bounds response (null if viewport cache served it). */
 export async function dragMap(page: Page, dx: number, dy: number): Promise<Response | null> {
+  if (isMobile(test.info())) return keyboardPan(page, dx, dy);
   const box = await explore.canvas(page).boundingBox();
   if (!box) throw new Error('map canvas has no bounding box');
   const sx = box.x + box.width / 2;
@@ -366,6 +367,26 @@ export async function dragMap(page: Page, dx: number, dy: number): Promise<Respo
   await page.mouse.move(sx + dx / 2, sy + dy / 2, { steps: 8 });
   await page.mouse.move(sx + dx, sy + dy, { steps: 8 });
   await page.mouse.up();
+  return next;
+}
+
+/**
+ * Touch projects: mouse drags do not pan maplibre under touch emulation, so pan with the keyboard
+ * handler (arrow keys, ~100 px per press) on the focused canvas instead.
+ */
+async function keyboardPan(page: Page, dx: number, dy: number): Promise<Response | null> {
+  const next = page.waitForResponse(isInBoundsResponse, { timeout: 30_000 }).catch(() => null);
+  const canvas = explore.canvas(page);
+  await canvas.focus();
+  const press = async (key: string, n: number) => {
+    for (let i = 0; i < n; i += 1) {
+      await page.keyboard.press(key);
+      await page.waitForTimeout(120);
+    }
+  };
+  // dragging content left (dx < 0) moves the view east → ArrowRight
+  await press(dx < 0 ? 'ArrowRight' : 'ArrowLeft', Math.max(1, Math.round(Math.abs(dx) / 100)));
+  await press(dy < 0 ? 'ArrowDown' : 'ArrowUp', Math.max(1, Math.round(Math.abs(dy) / 100)));
   return next;
 }
 

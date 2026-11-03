@@ -6,7 +6,7 @@
  * (hour12 default — see README open question), origin/main TripDayHeader.tsx pending messages.
  */
 import { expect, test } from '@playwright/test';
-import { createTrip, deleteTrip, e2ePrefix, loginAsUser, searchAndAddPlace, shot } from '../../helpers/live';
+import { createTrip, deleteTrip, e2ePrefix, loginAsUser, openPanel, searchAndAddPlace, shot } from '../../helpers/live';
 import { annotate, isMobileViewport, PLACES } from '../../helpers/core';
 
 const KO_DATE = /2026년 11월 5일/;
@@ -32,7 +32,7 @@ test.describe('CORE i18n/format', () => {
     await searchAndAddPlace(page, 1, PLACES.sosu);
     await searchAndAddPlace(page, 1, PLACES.dosan);
     if (isMobileViewport(page)) {
-      await page.getByRole('button', { name: '패널 열기' }).tap();
+      await openPanel(page); // searchAndAddPlace already left the drawer open
       await expect(page.getByTestId('trip-detail-panel')).toContainText('2026년 11월 5일 - 2026년 11월 8일');
     } else {
       await expect(page.getByTestId('trip-top-panel')).toContainText('2026년 11월 5일 - 2026년 11월 8일');

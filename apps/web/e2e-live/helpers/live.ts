@@ -475,6 +475,20 @@ export async function openPanel(page: Page): Promise<void> {
   await expect(panel).toBeVisible();
 }
 
+/**
+ * Closes the trip-detail panel on the mobile layout through the header toggle
+ * (`aria-controls="trip-detail-panel"`, aria-expanded=true). The drawer also has its own '패널 닫기'
+ * button, so a role/name lookup is ambiguous (strict-mode violation on prod, 2026-11-03).
+ */
+export async function closePanel(page: Page): Promise<void> {
+  const panel = detailPanel(page);
+  if (!(await panel.isVisible())) return;
+  const toggle = page.locator('button[aria-controls="trip-detail-panel"][aria-expanded="true"]:visible').first();
+  if ((await toggle.count()) === 0) return; // desktop: panel is permanently laid out, nothing to close
+  await toggle.click();
+  await expect(panel).toBeHidden();
+}
+
 export type TripTab = '일정' | '파일' | '공유' | '동행' | '댓글';
 
 /**

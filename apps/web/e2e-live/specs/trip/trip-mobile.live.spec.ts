@@ -12,6 +12,7 @@ import {
   searchAndAddPlace,
   shot,
   waitForMapIdle,
+  closePanel,
 } from '../../helpers/live';
 import {
   addDayButton,
@@ -93,8 +94,7 @@ test.describe('TRIP mobile', () => {
     await shot(page, 'TRIP-048', 'mobile-place-added');
 
     // close the drawer → map shows the marker
-    await detailPanel(page).getByRole('button', { name: '패널 닫기' }).click();
-    await expect(detailPanel(page)).toBeHidden();
+    await closePanel(page);
     await waitForMapIdle(page);
     await expect(mapMarkers(page)).toHaveCount(1);
     await expect(page.getByTestId('trip-map-stats')).toContainText('장소 1곳');

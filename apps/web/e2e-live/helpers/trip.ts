@@ -6,7 +6,7 @@
  * `../helpers/live` (integrator-supplied). This file only adds trip-detail specifics.
  */
 import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
-import { dayTab, detailPanel, e2eTitle, isMobile, isoDate, openPanel, poiRows, revealCreateForm, tripIdFromUrl } from './live';
+import { closePanel, dayTab, detailPanel, e2eTitle, isMobile, isoDate, openPanel, poiRows, revealCreateForm, tripIdFromUrl } from './live';
 
 export { dayTab, detailPanel, e2eTitle, isMobile, isoDate, openPanel, poiRows, revealCreateForm, tripIdFromUrl };
 
@@ -25,8 +25,7 @@ export function summaryPattern(days: number, pois: number): RegExp {
 
 export async function closePanelIfMobile(page: Page, testInfo: TestInfo): Promise<void> {
   if (!isMobile(testInfo)) return;
-  const closeBtn = detailPanel(page).getByRole('button', { name: '패널 닫기' });
-  if (await closeBtn.isVisible()) await closeBtn.click();
+  await closePanel(page);
 }
 
 /** Selects a day tab by its label ('1일차' or a renamed title) — the shared `selectDay` takes a number. */

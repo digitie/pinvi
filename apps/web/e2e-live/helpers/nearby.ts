@@ -210,9 +210,16 @@ export async function clickTransportMarker(page: Page, layer: Layer): Promise<st
       box.x + box.width <= canvasBox.x + canvasBox.width &&
       box.y + box.height <= canvasBox.y + canvasBox.height;
     if (!inside) continue;
-    // Overlays (search card, transport panel) can sit above a pin; dispatch the click on the marker
-    // element itself (maplibre markers listen on their own element).
-    await marker.dispatchEvent('click');
+    // skip pins covered by an overlay (search card, layer panel, mobile chrome) — a click there never
+    // reaches the marker
+    const onTop = await marker.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!top && (top === el || el.contains(top));
+    });
+    if (!onTop) continue;
+    // the pin is the topmost element at its centre — a real click (tap on touch projects is a click too)
+    await marker.click();
     try {
       await expect(detailDialog(page)).toBeVisible({ timeout: 12_000 });
       return title;

@@ -10,6 +10,7 @@ import {
   searchAndAddPlace,
   shot,
   waitForMapIdle,
+  openPanel,
 } from '../../helpers/live';
 import {
   addDay,
@@ -196,6 +197,7 @@ test('[TRIP-027] 가운데 일자 삭제 — "2일차 추가"로 라벨이 가�
   await selectDay(page, '2일차');
   await dayDeleteButton(page, 2).click();
   await expect(dayTab(page, '2일차')).toHaveCount(0);
+  await openPanel(page); // the mobile drawer can re-render closed after the delete
   await expect(dayTab(page, '3일차')).toBeVisible();
   await expect(addDayButton(page, testInfo)).toContainText('2일차 추가');
   await expect(addDayButton(page, testInfo)).toBeEnabled();

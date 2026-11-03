@@ -8,7 +8,7 @@
  *  - packages/schemas/src/trip.ts (TripViewDay/weather schema)
  */
 import { expect, test, type Locator, type Page, type Response } from '@playwright/test';
-import { apiBaseURL, deleteAllE2eTrips, deleteTrip, e2ePrefix, requireEnv, waitForRequest } from './live';
+import { apiBaseURL, openPanel, deleteAllE2eTrips, deleteTrip, e2ePrefix, requireEnv, waitForRequest } from './live';
 
 export const TEXT = {
   noData: '이 날짜의 날씨 정보가 없습니다.',
@@ -246,6 +246,7 @@ export function tempsInUiText(text: string): number[] {
 // ───────────────────────────── UI locators ─────────────────────────────
 /** Click the day tab and return the surrounding <article> (TripDetail day row; the active body renders inside it). */
 export async function openDay(page: Page, dayIndex: number): Promise<Locator> {
+  await openPanel(page); // mobile: day tabs live in the drawer
   const tab = page.getByRole('tab', { name: `${dayIndex}일차`, exact: true });
   await expect(tab).toBeVisible();
   await tab.click();

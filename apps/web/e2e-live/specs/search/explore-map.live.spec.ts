@@ -5,7 +5,7 @@
  * feature-map-detail-open), apps/web/app/(app)/map/page.tsx (heading '탐색 지도').
  */
 import { expect, test } from '@playwright/test';
-import { ensureFeatureMarkers, loginAsUser, shot } from '../../helpers/live';
+import { clickableFeatureMarkers, ensureFeatureMarkers, loginAsUser, shot } from '../../helpers/live';
 import {
   clickFeatureMarker,
   desktopOnly,
@@ -80,12 +80,11 @@ test.describe('SRCH explore map (/map)', () => {
   test('SRCH-045 모바일 마커 탭 → 상세 시트 바로', async ({ page }) => {
     mobileOnly();
     await gotoExplore(page);
-    await wheelZoom(page, -4);
-    await expect(explore.loading(page)).toBeHidden({ timeout: 30_000 });
-    const features = page.locator('[data-testid="feature-map-marker-style"][data-kind="feature"]');
-    test.skip((await features.count()) === 0, 'no individual feature markers in this viewport');
-    const title = (await features.first().innerText()).trim();
-    await clickFeatureMarker(page, title);
+    // touch emulation ignores mouse-wheel zoom; zoom with the keyboard until real feature pins render
+    await ensureFeatureMarkers(page, 1, 6);
+    const [pin] = await clickableFeatureMarkers(page, 1);
+    test.skip(!pin, 'data: no tappable feature pin in the viewport');
+    await pin!.tap();
     await expect(modal.root(page)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('feature-map-detail-open')).toHaveCount(0);
     await shot(page, 'SRCH-045', 'mobile-sheet');

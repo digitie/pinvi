@@ -81,7 +81,14 @@ test.describe('CORE resilience', () => {
 
   test('CORE-025 선택 변경 시 이전 상세 요청을 버린다 — stale 카드 없음', async ({ page }) => {
     await openExploreMap(page);
-    const clickable = await clickableFeatureMarkers(page, 2);
+    let clickable = await clickableFeatureMarkers(page, 2);
+    // overlays cover part of a phone screen — zoom in a little more until two pins are tappable
+    for (let i = 0; i < 3 && clickable.length < 2; i += 1) {
+      await page.locator('.maplibregl-canvas').first().focus();
+      await page.keyboard.press('=');
+      await page.waitForTimeout(800);
+      clickable = await clickableFeatureMarkers(page, 2);
+    }
     test.skip(clickable.length < 2, '보이는 영역에 클릭 가능한 feature 핀이 2개 미만');
     const pins = { nth: (k: number) => clickable[k]! };
     const a = (await pins.nth(0).getAttribute('aria-label')) ?? '';
