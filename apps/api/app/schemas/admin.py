@@ -1131,32 +1131,6 @@ class AdminFeaturePagedResponse(BaseModel):
     duration_ms: int | None = None
 
 
-class AdminFeatureChangeRequestRecord(BaseModel):
-    request_id: str
-    feature_id: str
-    action: str
-    status: str
-    review_mode: str
-    payload: dict[str, Any] = Field(default_factory=dict)
-    reason: str | None = None
-    requested_by: str | None = None
-    reviewed_by: str | None = None
-    reviewed_at: datetime | None = None
-    applied_at: datetime | None = None
-    created_at: datetime
-
-
-class AdminFeatureChangeRequestPagedResponse(BaseModel):
-    items: list[AdminFeatureChangeRequestRecord] = Field(default_factory=list)
-    review_mode: str | None = None
-    page_size: int
-
-
-class AdminFeatureChangeRequestActionRequest(BaseModel):
-    access_reason: str = Field(min_length=1, max_length=500)
-    kor_travel_map_reason: str | None = Field(default=None, max_length=500)
-
-
 class AdminFeatureDetailFeature(BaseModel):
     feature_id: str
     kind: str
@@ -1348,7 +1322,6 @@ class AdminFeatureDetail(BaseModel):
     overrides: list[AdminFeatureDetailOverride] = Field(default_factory=list)
     state_transitions: list[AdminFeatureDetailStateTransition] = Field(default_factory=list)
     versions: list[AdminFeatureDetailVersion] = Field(default_factory=list)
-    change_requests: list[AdminFeatureChangeRequestRecord] = Field(default_factory=list)
     files: list[AdminFeatureDetailFile] = Field(default_factory=list)
     curations: list[AdminFeatureDetailCuration] = Field(default_factory=list)
 

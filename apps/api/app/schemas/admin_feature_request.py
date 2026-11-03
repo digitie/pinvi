@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.feature import (
     Coord,
@@ -58,6 +58,8 @@ class AdminFeatureRequestApprove(BaseModel):
     사유, ``kor_travel_map_reason``은 correction/closure change request 사유(미지정 시 access_reason)다.
     """
 
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     access_reason: str = Field(min_length=1, max_length=500)
     category: str | None = Field(default=None, max_length=32)
     marker_color: str | None = Field(default=None, pattern=r"^P-(0[1-9]|1[0-6])$")
@@ -67,6 +69,8 @@ class AdminFeatureRequestApprove(BaseModel):
 
 
 class AdminFeatureRequestReject(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     access_reason: str = Field(min_length=1, max_length=500)
 
 
@@ -74,6 +78,7 @@ class AdminFeatureRequestResult(BaseModel):
     """승인/거절 후 갱신된 상태."""
 
     request_id: uuid.UUID
+    dry_run: bool = False
     status: FeatureRequestStatus
     kor_travel_map_ref: dict[str, Any] | None = None
     reviewed_by_admin_id: uuid.UUID | None = None

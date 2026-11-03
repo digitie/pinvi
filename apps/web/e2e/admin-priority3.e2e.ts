@@ -238,7 +238,6 @@ const featureDetail: AdminFeatureDetail = {
   // issues / overrides / files / state_transitions / curations). Pinvi는 두 키를 소비자
   // 호환용으로 남겨 두지만 값은 늘 비어 있으므로 fixture도 비운다.
   versions: [],
-  change_requests: [],
   files: [],
   curations: [
     {
@@ -516,4 +515,48 @@ test('CPO 위치 감사 로그가 마스킹 좌표와 날짜 필터를 표시한
     )
     .toBe(true);
   expect(requests.some((url) => url.includes('12701'))).toBe(false);
+});
+
+test('Feature 직접 링크는 종료된 대상도 검색하고 상세를 바로 연다', async ({ page }) => {
+  let listUrl: string | null = null;
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/features',
+    async (route) => {
+      listUrl = route.request().url();
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            items: [],
+            page_size: 50,
+            next_cursor: null,
+            duration_ms: 1,
+          },
+        }),
+      });
+    },
+  );
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/features/f_place_1',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            ...featureDetail,
+            feature: { ...featureDetail.feature, lifecycle_state: 'retired' },
+          },
+        }),
+      });
+    },
+  );
+  await page.goto('/admin/features?feature_id=f_place_1');
+  await expect(page.getByTestId('admin-features-search')).toHaveValue('f_place_1');
+  await expect(page.getByTestId('admin-features-lifecycle-filter')).toHaveValue('all');
+  await expect(page.getByTestId('admin-features-detail')).toContainText('해운대 카페');
+  await expect(page.getByTestId('admin-features-detail')).toContainText('종료');
+  await expect.poll(() => listUrl !== null).toBe(true);
+  const params = new URL(listUrl!).searchParams;
+  expect(params.get('q')).toBe('f_place_1');
+  expect(params.has('lifecycle_state')).toBe(false);
 });

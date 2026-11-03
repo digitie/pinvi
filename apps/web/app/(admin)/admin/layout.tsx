@@ -15,7 +15,6 @@ import {
   ChevronsRight,
   ClipboardCheck,
   GitCompare,
-  GitPullRequest,
   Gavel,
   HardDrive,
   KeyRound,
@@ -83,12 +82,6 @@ const NAV_GROUPS: {
     title: '지도 데이터',
     items: [
       { href: '/admin/features', label: 'Features', sprint: 4, icon: Search },
-      {
-        href: '/admin/features/change-requests',
-        label: '변경 요청',
-        sprint: 4,
-        icon: GitPullRequest,
-      },
       { href: '/admin/dedup-review', label: 'Dedup review', sprint: 5, icon: GitCompare },
       { href: '/admin/provider-sync', label: 'Provider sync', sprint: 5, icon: RefreshCw },
       { href: '/admin/integrity', label: '정합성', sprint: 5, icon: ShieldCheck },

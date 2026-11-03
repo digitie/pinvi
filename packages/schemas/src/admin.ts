@@ -1482,39 +1482,6 @@ export const AdminFeaturePagedResponseSchema = z.object({
 });
 export type AdminFeaturePagedResponse = z.infer<typeof AdminFeaturePagedResponseSchema>;
 
-export const AdminFeatureChangeRequestRecordSchema = z.object({
-  request_id: z.string(),
-  feature_id: z.string(),
-  action: z.string(),
-  status: z.string(),
-  review_mode: z.string(),
-  payload: AdminFeatureJsonObjectSchema.default({}),
-  reason: z.string().nullable().default(null),
-  requested_by: z.string().nullable().default(null),
-  reviewed_by: z.string().nullable().default(null),
-  reviewed_at: Iso8601Schema.nullable().default(null),
-  applied_at: Iso8601Schema.nullable().default(null),
-  created_at: Iso8601Schema,
-});
-export type AdminFeatureChangeRequestRecord = z.infer<typeof AdminFeatureChangeRequestRecordSchema>;
-
-export const AdminFeatureChangeRequestPagedResponseSchema = z.object({
-  items: z.array(AdminFeatureChangeRequestRecordSchema).default([]),
-  review_mode: z.string().nullable().default(null),
-  page_size: z.number().int(),
-});
-export type AdminFeatureChangeRequestPagedResponse = z.infer<
-  typeof AdminFeatureChangeRequestPagedResponseSchema
->;
-
-export const AdminFeatureChangeRequestActionRequestSchema = z.object({
-  access_reason: z.string().min(1).max(500),
-  kor_travel_map_reason: z.string().max(500).optional(),
-});
-export type AdminFeatureChangeRequestActionRequest = z.infer<
-  typeof AdminFeatureChangeRequestActionRequestSchema
->;
-
 export const AdminFeatureDetailFeatureSchema = z.object({
   feature_id: z.string(),
   kind: z.string(),
@@ -1712,7 +1679,6 @@ export const AdminFeatureDetailSchema = z.object({
   overrides: z.array(AdminFeatureDetailOverrideSchema).default([]),
   state_transitions: z.array(AdminFeatureDetailStateTransitionSchema).default([]),
   versions: z.array(AdminFeatureDetailVersionSchema).default([]),
-  change_requests: z.array(AdminFeatureChangeRequestRecordSchema).default([]),
   files: z.array(AdminFeatureDetailFileSchema).default([]),
   curations: z.array(AdminFeatureDetailCurationSchema).default([]),
 });
