@@ -118,7 +118,11 @@ test.describe('ADM dedup / integrity / debug (read-only)', () => {
       await page.getByTestId('admin-debug-request-id').fill(requestId);
       await page.getByTestId('admin-debug-request-submit').click();
       await expect(page.getByRole('heading', { name: 'Request timeline' })).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByTestId('admin-request-timeline-summary')).toBeVisible();
+      // A timeline exists only for requests the log pipeline captured; an arbitrary admin request id may
+      // have none — then the page must show an error box, never a crash.
+      const summary = page.getByTestId('admin-request-timeline-summary');
+      await expect(summary.or(appAlerts(page).first())).toBeVisible({ timeout: 15_000 });
+      test.info().annotations.push({ type: 'data', description: `request timeline: ${(await summary.count()) ? 'summary' : 'not captured (error box)'}` });
     } else {
       test.info().annotations.push({ type: 'data', description: 'no X-Request-Id header captured; timeline step skipped' });
     }

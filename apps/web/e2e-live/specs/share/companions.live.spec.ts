@@ -151,7 +151,7 @@ test.describe('SHR 동행 (desktop)', () => {
         () => false,
       );
       test.info().annotations.push({ type: 'viewer-companion-tab', description: viewerTabOpened ? 'opened' : 'not actionable' });
-      await expect(user2.page.getByTestId('companion-list').filter({ visible: true })).not.toContainText(user2Email());
+      await expect(user2.page.getByTestId('companion-list').filter({ hasText: user2Email() })).toHaveCount(0);
     } finally {
       await user2.context.close();
     }

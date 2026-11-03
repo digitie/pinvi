@@ -694,12 +694,14 @@ export function featureMarkerButtons(page: Page): Locator {
  * Explore map: zooms in (keyboard `=` on the canvas, ≤ `maxSteps`) until at least `min` individual
  * feature markers are rendered — the default Seoul viewport is often all clusters.
  */
-export async function ensureFeatureMarkers(page: Page, min = 1, maxSteps = 4): Promise<Locator> {
-  const markers = featureMarkerButtons(page);
+export async function ensureFeatureMarkers(page: Page, min = 1, maxSteps = 5): Promise<Locator> {
+  // Server clusters of one are labelled with the place name (not "N개 위치 묶음") but are still
+  // clusters — clicking one zooms. The explore legend is the ground truth: data-kind="feature".
+  const legend = page.locator('[data-testid="feature-map-marker-style"][data-kind="feature"]');
   for (let step = 0; step <= maxSteps; step += 1) {
     try {
-      await expect.poll(() => markers.count(), { timeout: 8_000 }).toBeGreaterThanOrEqual(min);
-      return markers;
+      await expect.poll(() => legend.count(), { timeout: 8_000 }).toBeGreaterThanOrEqual(min);
+      break;
     } catch {
       if (step === maxSteps) break;
       const canvas = page.locator('.maplibregl-canvas').first();
@@ -708,7 +710,12 @@ export async function ensureFeatureMarkers(page: Page, min = 1, maxSteps = 4): P
       await page.waitForTimeout(600);
     }
   }
-  return markers;
+  return featureMarkerButtons(page);
+}
+
+async function featureLegendTitles(page: Page): Promise<Set<string>> {
+  const legend = page.locator('[data-testid="feature-map-marker-style"][data-kind="feature"]');
+  return new Set((await legend.allTextContents()).map((t) => t.trim()).filter(Boolean));
 }
 
 /**
@@ -719,11 +726,16 @@ export async function ensureFeatureMarkers(page: Page, min = 1, maxSteps = 4): P
  */
 export async function clickableFeatureMarkers(page: Page, max = 5): Promise<Locator[]> {
   const all = featureMarkerButtons(page);
-  const indexes = await all.evaluateAll((els, limit) => {
+  const titles = [...(await featureLegendTitles(page))];
+  const indexes = await all.evaluateAll(
+    (els, { limit, featureTitles }) => {
     const canvas = document.querySelector('.maplibregl-canvas')?.getBoundingClientRect();
+    const allowed = new Set(featureTitles);
     const out: number[] = [];
     els.forEach((el, i) => {
       if (out.length >= limit || !canvas) return;
+      // only real features (legend data-kind="feature"), never clusters-of-one
+      if (allowed.size > 0 && !allowed.has((el.getAttribute('aria-label') ?? '').trim())) return;
       const r = el.getBoundingClientRect();
       const cx = r.left + r.width / 2;
       const cy = r.top + r.height / 2;
@@ -732,7 +744,9 @@ export async function clickableFeatureMarkers(page: Page, max = 5): Promise<Loca
       if (top && (top === el || el.contains(top))) out.push(i);
     });
     return out;
-  }, max);
+    },
+    { limit: max, featureTitles: titles },
+  );
   return indexes.map((i) => all.nth(i));
 }
 
