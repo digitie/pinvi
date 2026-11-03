@@ -5,7 +5,7 @@
  * lib/useFeatureDetailCard.ts (abort on featureId change), components/map/FeatureDetailModalController.tsx.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { clickableFeatureMarkers, ensureFeatureMarkers, loginAsUser, shot } from '../../helpers/live';
+import { clickableFeatureMarkers, dismissFeaturePopup, ensureFeatureMarkers, loginAsUser, shot } from '../../helpers/live';
 import { annotate, isMobileViewport, timed, waitForMapCanvas } from '../../helpers/core';
 
 async function openExploreMap(page: Page) {
@@ -103,6 +103,8 @@ test.describe('CORE resilience', () => {
       const modal = page.getByTestId('feature-detail-modal');
       await expect(modal).toBeVisible();
       await page.keyboard.press('Escape');
+      await expect(modal).toHaveCount(0);
+      await dismissFeaturePopup(page); // the selection popup stays over the map after the sheet closes
       await pins.nth(1).tap();
       await expect(page.getByTestId('feature-detail-modal-title')).toContainText(b.slice(0, 4), { timeout: 15_000 });
       await page.waitForTimeout(2500); // let any late A response land

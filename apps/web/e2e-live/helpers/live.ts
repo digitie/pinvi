@@ -765,6 +765,17 @@ export async function clickableFeatureMarkers(page: Page, max = 5): Promise<Loca
   return [...new Set(indexes)].filter(Boolean).map((label) => all.and(page.getByLabel(label, { exact: true })).first());
 }
 
+/**
+ * Mobile explore map: after the detail sheet closes, the selection popup (with '상세보기') stays
+ * open over the pin and covers its neighbours — dismiss it via its '닫기' button.
+ */
+export async function dismissFeaturePopup(page: Page): Promise<void> {
+  const popup = page.locator('.maplibregl-popup');
+  if ((await popup.count()) === 0) return;
+  await popup.getByRole('button', { name: '닫기' }).first().click();
+  await expect(popup).toHaveCount(0);
+}
+
 /** Masks a secret in text destined for logs/messages. */
 export function redact(text: string, secret: string): string {
   return secret ? text.split(secret).join('<token>') : text;

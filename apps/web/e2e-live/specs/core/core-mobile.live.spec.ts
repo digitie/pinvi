@@ -5,7 +5,7 @@
  * (mobile header '패널 열기/닫기', aside#trip-detail-panel, day tabs), components/app/AppShell.tsx.
  */
 import { expect, test } from '@playwright/test';
-import { clickableFeatureMarkers, createTrip, deleteTrip, e2ePrefix, ensureFeatureMarkers, loginAsUser, searchAndAddPlace, shot } from '../../helpers/live';
+import { clickableFeatureMarkers, createTrip, dismissFeaturePopup, deleteTrip, e2ePrefix, ensureFeatureMarkers, loginAsUser, searchAndAddPlace, shot } from '../../helpers/live';
 import {
   annotate,
   intersects,
@@ -55,6 +55,7 @@ test.describe('CORE mobile', () => {
     await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('clip');
     // 2) close button — the camera flies to the selected pin; wait for it to settle and re-pick a tappable pin
     const retap = async () => {
+      await dismissFeaturePopup(page); // selection popup stays after the sheet closes and covers pins
       await page.waitForTimeout(1500);
       const [p] = await clickableFeatureMarkers(page, 1);
       expect(p, 'a tappable feature pin').toBeTruthy();
