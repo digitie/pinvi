@@ -748,3 +748,149 @@ async def test_non_admin_new_admin_operations_remain_hidden(
         )
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
+
+
+async def test_auth_failure_after_uncertain_commit_never_clears_dispatch(
+    client: Any, session_factory: Any, auth_cookies: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+
+    from app.clients.kor_travel_map_admin import KorTravelMapAdminClient
+
+    admin_id = await _create_user(session_factory, email="admin@example.com", roles=["admin"])
+    req_id = await _create_suggestion(
+        session_factory,
+        requester_id=admin_id,
+        suggestion_type="correction",
+        target_feature_id="f_existing",
+    )
+    mutation_calls = 0
+
+    def transport(request: httpx.Request) -> httpx.Response:
+        nonlocal mutation_calls
+        if request.method == "GET":
+            return httpx.Response(200, headers={"ETag": '"7"'}, json={"data": {"row_revision": 7}})
+        mutation_calls += 1
+        if mutation_calls == 1:
+            raise httpx.ReadError("committed response lost", request=request)
+        return httpx.Response(403, json={"code": "FORBIDDEN"})
+
+    async with httpx.AsyncClient(
+        base_url="http://map.test", transport=httpx.MockTransport(transport)
+    ) as http:
+        actual = KorTravelMapAdminClient(http, max_attempts=1)
+        monkeypatch.setattr(
+            feature_request_router, "get_kor_travel_map_admin_client", lambda request: actual
+        )
+        for _ in range(2):
+            response = await client.post(
+                f"/admin/feature-requests/{req_id}/approve",
+                json={"access_reason": "확인", "name": "새 이름"},
+                cookies=auth_cookies(str(admin_id)),
+            )
+            assert response.status_code == 503, response.text
+        async with session_factory() as db:
+            row = await db.get(FeatureSuggestion, req_id)
+            assert row is not None and row.status == "pending"
+            assert row.kor_travel_map_ref["dispatch"]["expected_revision"] == '"7"'
+        reject = await client.post(
+            f"/admin/feature-requests/{req_id}/reject",
+            json={"access_reason": "거절"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+        assert reject.status_code == 409
+
+
+async def test_relock_cannot_send_or_clear_a_replaced_dispatch(
+    client: Any, session_factory: Any, auth_cookies: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import asyncio
+    from contextvars import ContextVar
+
+    from app.clients.kor_travel_map import KorTravelMapPreconditionFailed, KorTravelMapUnavailable
+
+    admin_id = await _create_user(session_factory, email="admin@example.com", roles=["admin"])
+    req_id = await _create_suggestion(
+        session_factory,
+        requester_id=admin_id,
+        suggestion_type="correction",
+        target_feature_id="f_existing",
+    )
+    a_waiting, c_waiting = asyncio.Event(), asyncio.Event()
+    release_a, release_c = asyncio.Event(), asyncio.Event()
+    original_load = feature_request_router._load_pending
+    counts: dict[str, int] = {}
+    race_label: ContextVar[str] = ContextVar("race_label", default="B")
+
+    async def controlled_load(db: Any, request_id: uuid.UUID) -> FeatureSuggestion:
+        name = race_label.get()
+        counts[name] = counts.get(name, 0) + 1
+        if counts[name] == 2 and name in {"stale-A", "fresh-C"}:
+            waiting, release = (
+                (a_waiting, release_a) if name == "stale-A" else (c_waiting, release_c)
+            )
+            waiting.set()
+            await asyncio.wait_for(release.wait(), timeout=10)
+        return await original_load(db, request_id)
+
+    monkeypatch.setattr(feature_request_router, "_load_pending", controlled_load)
+
+    class Racing(_FakeAdminClient):
+        revisions = 0
+
+        async def get_feature_revision_etag(self, feature_id: str) -> str:
+            self.revisions += 1
+            return '"7"' if self.revisions == 1 else '"8"'
+
+        async def patch_feature(
+            self,
+            feature_id: str,
+            payload: dict[str, Any],
+            *,
+            expected_revision: str,
+            idempotency_key: str,
+        ) -> dict[str, Any]:
+            await super().patch_feature(
+                feature_id,
+                payload,
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
+            )
+            if expected_revision == '"7"':
+                raise KorTravelMapPreconditionFailed("stale", code="PRECONDITION_FAILED")
+            raise KorTravelMapUnavailable("new command committed but response lost")
+
+    fake = Racing()
+    _override_admin_client(monkeypatch, fake)
+
+    async def approve(label: str = "B") -> Any:
+        race_label.set(label)
+        return await client.post(
+            f"/admin/feature-requests/{req_id}/approve",
+            json={"access_reason": "검수", "name": "새 이름"},
+            cookies=auth_cookies(str(admin_id)),
+        )
+
+    a = asyncio.create_task(approve("stale-A"), name="stale-A")
+    c: asyncio.Task[Any] | None = None
+    try:
+        await asyncio.wait_for(a_waiting.wait(), timeout=10)
+        b = await approve()
+        assert b.status_code == 412
+        c = asyncio.create_task(approve("fresh-C"), name="fresh-C")
+        await asyncio.wait_for(c_waiting.wait(), timeout=10)
+        release_a.set()
+        stale = await a
+        assert stale.status_code == 409
+        assert len(fake.outbound_calls) == 1
+        release_c.set()
+        fresh = await c
+        assert fresh.status_code == 503
+        async with session_factory() as db:
+            row = await db.get(FeatureSuggestion, req_id)
+            assert row is not None and row.status == "pending"
+            assert row.kor_travel_map_ref["dispatch"]["expected_revision"] == '"8"'
+    finally:
+        release_a.set()
+        release_c.set()
+        await asyncio.gather(a, *([c] if c else []), return_exceptions=True)

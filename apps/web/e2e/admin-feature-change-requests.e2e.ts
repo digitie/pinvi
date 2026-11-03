@@ -2,12 +2,15 @@ import { test, expect } from '@playwright/test';
 
 test('퇴역한 변경 요청 화면은 사용자 제안 큐로 이동한다', async ({ page }) => {
   const obsolete: string[] = [];
-  await page.route('**/admin/features/change-requests**', async (route) => {
-    if (route.request().resourceType() === 'fetch') {
-      obsolete.push(route.request().url());
-      await route.abort();
-    } else await route.continue();
-  });
+  await page.route(
+    (url) => url.port === '12801' && url.pathname.startsWith('/admin/features/change-requests'),
+    async (route) => {
+      if (route.request().resourceType() === 'fetch') {
+        obsolete.push(route.request().url());
+        await route.abort();
+      } else await route.continue();
+    },
+  );
   await page.route('**/auth/me', (route) =>
     route.fulfill({
       contentType: 'application/json',
@@ -15,20 +18,26 @@ test('퇴역한 변경 요청 화면은 사용자 제안 큐로 이동한다', a
         data: {
           user_id: '00000000-0000-4000-8000-000000000001',
           email: 'admin@example.com',
-          display_name: '관리자',
+          nickname: '관리자',
+          avatar_url: null,
+          email_verified_at: '2026-06-01T09:00:00+09:00',
+          has_password: true,
+          oauth_identities: [],
           roles: ['admin'],
           status: 'active',
         },
       }),
     }),
   );
-  await page.route('**/admin/feature-requests**', (route) =>
-    route.request().resourceType() === 'fetch'
-      ? route.fulfill({
-          contentType: 'application/json',
-          body: JSON.stringify({ data: { items: [], total: 0, page: 1, limit: 50 } }),
-        })
-      : route.continue(),
+  await page.route(
+    (url) => url.port === '12801' && url.pathname.startsWith('/admin/feature-requests'),
+    (route) =>
+      route.request().resourceType() === 'fetch'
+        ? route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({ data: { items: [], total: 0, page: 1, limit: 50 } }),
+          })
+        : route.continue(),
   );
   await page.goto('/admin/features/change-requests');
   await expect(page).toHaveURL(/\/admin\/feature-requests$/);

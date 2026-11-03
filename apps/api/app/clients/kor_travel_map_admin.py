@@ -431,6 +431,10 @@ class KorTravelMapAdminClient:
                 details=_cancellation_problem_details(resp),
                 retry_after_seconds=_retry_after(resp),
             )
+        if sc in {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN}:
+            raise KorTravelMapUnavailable(
+                "Map 관리자 인증을 확인할 수 없습니다.", code="MAP_ADMIN_AUTH_UNAVAILABLE"
+            )
         if sc == status.HTTP_412_PRECONDITION_FAILED:
             raise KorTravelMapPreconditionFailed(
                 f"kor-travel-map admin {sc}",

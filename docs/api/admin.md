@@ -1600,7 +1600,8 @@ DELETE /admin/feature-requests/{request_id}
 - 직접 명령은 입력·payload·strong ETag를 `kor_travel_map_ref.dispatch`에 먼저 저장하고 dispatch 감사를 기록한다.
   이후 같은 suggestion UUID를 `Idempotency-Key`로, 같은 ETag를 `If-Match`로 보낸다.
   응답 유실·불명확한 응답 뒤에는 내용을 바꾸지 않고 같은 명령을 재생한다.
-  확정 4xx 거부는 intent를 해제하며, 결과 미확정 명령은 거절·삭제할 수 없다.
+  인증 401/403·전송 실패는 기존 intent를 유지한다. 확정 입력·대상·revision 거부는 intent를 해제하며,
+  재잠금 후 dispatch 전체값이 달라졌다면 송신하지 않는다. 결과 미확정 명령은 거절·삭제할 수 없다.
 - `dry_run=true`는 pending 제안의 형식을 검증하고 `dry_run: true`와 현재 상태를 반환한다.
   Map client 생성·외부 호출·상태 변경·감사 쓰기를 하지 않는다. 실제 장소 존재나 Map registry 승인을 보장하지 않는다.
 - 거절은 Map 호출 없이 `rejected`와 감사를 기록한다. 모든 액션은 공백만 있는 사유를 거부한다.

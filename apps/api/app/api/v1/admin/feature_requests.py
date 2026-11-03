@@ -369,6 +369,7 @@ async def _direct_submission(
                 "expected_revision": expected_revision,
             }
         }
+        prepared_dispatch = suggestion.kor_travel_map_ref["dispatch"]
         await append_admin_audit(
             db,
             actor_user_id=admin.user_id,
@@ -393,7 +394,8 @@ async def _direct_submission(
         original_type = suggestion.suggestion_type
         suggestion = await _load_pending(db, suggestion.request_id)
         if (
-            suggestion.suggestion_type != original_type
+            (suggestion.kor_travel_map_ref or {}).get("dispatch") != prepared_dispatch
+            or suggestion.suggestion_type != original_type
             or suggestion.target_feature_id != target_feature_id
             or _direct_payload(suggestion, body) != payload
         ):

@@ -463,3 +463,10 @@ async def test_non_admin_features_route_is_hidden(
     user_id = await _create_user(session_factory, email="plain@example.com")
     resp = await client.get("/admin/features", cookies=auth_cookies(str(user_id)))
     assert resp.status_code == 404
+
+
+async def test_retired_change_request_contract_is_not_exposed() -> None:
+    from app.main import app
+
+    paths = app.openapi()["paths"]
+    assert not any(path.startswith("/admin/features/change-requests") for path in paths)

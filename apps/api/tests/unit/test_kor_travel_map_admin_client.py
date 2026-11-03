@@ -1462,3 +1462,31 @@ async def test_patch_admin_issue_uses_admin_issue_path_and_body() -> None:
     }
     assert payload["data"]["issue"]["status"] == "resolved"
     await client.aclose()
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"request": {"status": "applied"}},
+        {"feature_id": "f_x", "row_revision": True, "command_id": 1, "applied_field_count": 1},
+        {"feature_id": "f_x", "row_revision": 2, "command_id": 0, "applied_field_count": 1},
+    ],
+)
+async def test_direct_patch_requires_current_typed_commit_receipt(data: dict[str, Any]) -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update({key: value for key, value in request.headers.items()})
+        return httpx.Response(200, json={"data": data, "meta": {}})
+
+    client = _client(handler)
+    with pytest.raises(KorTravelMapError, match="receipt"):
+        await client.patch_feature(
+            "f_x",
+            {"name": "수정", "reason": "확인"},
+            expected_revision='"7"',
+            idempotency_key="00000000-0000-4000-8000-000000000001",
+        )
+    assert seen["if-match"] == '"7"'
+    assert seen["idempotency-key"] == "00000000-0000-4000-8000-000000000001"
+    await client.aclose()

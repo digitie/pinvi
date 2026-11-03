@@ -269,7 +269,9 @@ test('거절은 확인 단계를 거친 뒤 사유만 전달한다', async ({ pa
   expect(rejectBody).toEqual({ access_reason: '중복 제보' });
 });
 
-test('검토 dialog를 breakpoint 변경 뒤 닫아도 보이는 검토 버튼으로 포커스를 되돌린다', async ({ page }) => {
+test('검토 dialog를 breakpoint 변경 뒤 닫아도 보이는 검토 버튼으로 포커스를 되돌린다', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 768, height: 820 });
   await page.goto('/admin/feature-requests');
   const desktopTrigger = page.getByTestId(`admin-fr-review-${requestId}`);
@@ -388,3 +390,151 @@ for (const width of [320, 375, 414, 768]) {
     await expectNoRootHorizontalScroll(page);
   });
 }
+
+test('형식 검증은 제안을 승인하거나 모달을 닫지 않는다', async ({ page }) => {
+  const calls: string[] = [];
+  await page.route(
+    (url) =>
+      url.port === '12801' && url.pathname === `/admin/feature-requests/${requestId}/approve`,
+    async (route) => {
+      const url = new URL(route.request().url());
+      calls.push(url.search);
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: { request_id: requestId, status: 'pending', dry_run: true },
+        }),
+      });
+    },
+  );
+  await page.goto('/admin/feature-requests');
+  await page.getByTestId(`admin-fr-review-${requestId}`).click();
+  await page.getByTestId('admin-fr-reason').fill('형식만 검증');
+  await page.getByTestId('admin-fr-dry-run').click();
+  await expect(page.getByTestId('admin-fr-dry-run-notice')).toContainText(
+    'Map 전송과 상태 변경은 수행하지 않았습니다',
+  );
+  await expect(page.getByTestId('admin-fr-review-dialog')).toBeVisible();
+  expect(calls).toEqual(['?dry_run=true']);
+});
+
+test('완료 제안 삭제는 사유·확인과 실패 후 재시도를 제공한다', async ({ page }) => {
+  let removed = false;
+  let attempts = 0;
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/feature-requests',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            items: removed ? [] : [{ ...summary, status: 'rejected' }],
+            total: removed ? 0 : 1,
+            page: 1,
+            limit: 50,
+          },
+        }),
+      });
+    },
+  );
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === `/admin/feature-requests/${requestId}`,
+    async (route) => {
+      expect(route.request().method()).toBe('DELETE');
+      expect(route.request().postDataJSON()).toEqual({ access_reason: '완료 이력 정리' });
+      attempts += 1;
+      if (attempts === 1) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: { code: 'TEMPORARY_FAILURE', message: '잠시 후 다시 정리하세요.' },
+          }),
+        });
+      } else {
+        removed = true;
+        await route.fulfill({ status: 204 });
+      }
+    },
+  );
+  await page.goto('/admin/feature-requests');
+  await page.getByTestId(`admin-fr-review-${requestId}`).click();
+  await page.getByTestId('admin-fr-delete').click();
+  await expect(page.getByTestId('admin-fr-reason')).toBeFocused();
+  await page.getByTestId('admin-fr-reason').fill('완료 이력 정리');
+  await page.getByTestId('admin-fr-delete').click();
+  await expect(page.getByRole('alertdialog').getByRole('button', { name: '취소' })).toBeFocused();
+  await page.getByTestId('admin-fr-delete-confirm').click();
+  await expect(page.getByTestId('admin-fr-panel-error')).toContainText('잠시 후 다시 정리하세요');
+  await expect(page.getByTestId('admin-fr-reason')).toHaveValue('완료 이력 정리');
+  await page.getByTestId('admin-fr-delete').click();
+  await page.getByTestId('admin-fr-delete-confirm').click();
+  await expect(page.getByTestId('admin-fr-review-dialog')).toHaveCount(0);
+  await expect(page.getByTestId(`admin-fr-row-${requestId}`)).toHaveCount(0);
+  expect(attempts).toBe(2);
+});
+
+test('결과 미확정 직접 명령은 원래 입력을 잠가 재생한다', async ({ page }) => {
+  const input = {
+    access_reason: '원래 검수 사유',
+    name: '확정할 이름',
+    kor_travel_map_reason: '원천 확인',
+  };
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/feature-requests',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            items: [
+              {
+                ...correctionSummary,
+                kor_travel_map_ref: {
+                  dispatch: {
+                    input,
+                    expected_revision: '"7"',
+                    type: 'correction',
+                    feature_id: correctionSummary.target_feature_id,
+                  },
+                },
+              },
+            ],
+            total: 1,
+            page: 1,
+            limit: 50,
+          },
+        }),
+      });
+    },
+  );
+  let submitted: unknown = null;
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      url.pathname === `/admin/feature-requests/${correctionRequestId}/approve`,
+    async (route) => {
+      submitted = route.request().postDataJSON();
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            request_id: correctionRequestId,
+            status: 'added',
+          },
+        }),
+      });
+    },
+  );
+  await page.goto('/admin/feature-requests');
+  await page.getByTestId(`admin-fr-review-${correctionRequestId}`).click();
+  await expect(page.getByTestId('admin-fr-name')).toHaveValue('확정할 이름');
+  await expect(page.getByTestId('admin-fr-name')).toBeDisabled();
+  await expect(page.getByTestId('admin-fr-reason')).toHaveValue('원래 검수 사유');
+  await expect(page.getByTestId('admin-fr-reason')).toHaveAttribute('readonly');
+  await expect(page.getByTestId('admin-fr-reject')).toBeDisabled();
+  await expect(page.getByTestId('admin-fr-approve')).toHaveText('기존 명령 재시도');
+  await page.getByTestId('admin-fr-approve').click();
+  await expect(page.getByTestId('admin-fr-review-dialog')).toHaveCount(0);
+  expect(submitted).toEqual(input);
+});
