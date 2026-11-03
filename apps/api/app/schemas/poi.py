@@ -38,6 +38,7 @@ class PoiCreate(BaseModel):
 
 
 class PoiUpdate(BaseModel):
+    day_index: int | None = Field(default=None, ge=1)
     sort_order: str | None = Field(default=None, min_length=1, max_length=80)
     feature_snapshot: dict[str, Any] | None = None
     custom_marker_color: str | None = Field(default=None, pattern=r"^P-(0[1-9]|1[0-6])$")
@@ -57,6 +58,7 @@ class PoiReorderMove(BaseModel):
 
 
 class PoiReorderRequest(BaseModel):
+    day_index: int = Field(ge=1)
     moves: list[PoiReorderMove] = Field(min_length=1, max_length=200)
 
 

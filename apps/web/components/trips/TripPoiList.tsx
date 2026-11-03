@@ -22,6 +22,8 @@ function formatTime(value: string | null): string | null {
 
 export interface TripPoiListProps {
   pois: TripViewPoi[];
+  dayIndex?: number;
+  dayOptions?: { day_index: number; title: string | null }[];
   selectedPoiId?: string | null;
   onSelectPoi?: (poiId: string) => void;
   tripId?: string;
@@ -44,6 +46,8 @@ export interface TripPoiListProps {
 
 export function TripPoiList({
   pois,
+  dayIndex,
+  dayOptions,
   selectedPoiId = null,
   onSelectPoi,
   tripId,
@@ -209,6 +213,8 @@ export function TripPoiList({
               {editing && onEditPoi && (
                 <PoiEditor
                   poi={poi}
+                  dayOptions={dayOptions}
+                  currentDayIndex={dayIndex}
                   saving={savingPoiId === poi.poi_id}
                   onSave={(patch) => {
                     const result = onEditPoi(poi, patch);

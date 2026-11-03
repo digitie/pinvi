@@ -15,6 +15,8 @@ const POI_INPUT = 'h-9 px-2 focus:border-primary';
 
 export interface PoiEditorProps {
   poi: TripViewPoi;
+  currentDayIndex?: number;
+  dayOptions?: { day_index: number; title: string | null }[];
   saving?: boolean;
   onSave: (patch: PoiUpdate) => void;
   onCancel: () => void;
@@ -24,7 +26,8 @@ function colorKeyOf(value: string | null): MarkerColorKey {
   return value != null && value in MARKER_PALETTE ? (value as MarkerColorKey) : 'P-13';
 }
 
-export function PoiEditor({ poi, saving = false, onSave, onCancel }: PoiEditorProps) {
+export function PoiEditor({ poi, currentDayIndex, dayOptions, saving = false, onSave, onCancel }: PoiEditorProps) {
+  const [dayIndex, setDayIndex] = useState(currentDayIndex);
   const [form, setForm] = useState<PoiDetailForm>({
     color: colorKeyOf(poi.marker_color),
     icon: poi.marker_icon ?? 'marker',
@@ -43,6 +46,16 @@ export function PoiEditor({ poi, saving = false, onSave, onCancel }: PoiEditorPr
       className="mt-2 space-y-3 rounded-sm border border-hairline bg-canvas p-3"
       data-testid="poi-editor"
     >
+      {dayOptions && dayOptions.length > 1 && (
+        <label className={POI_LABEL}>일자 이동
+          <select value={dayIndex} onChange={(event) => setDayIndex(Number(event.target.value))}
+            className="mt-1 min-h-11 w-full rounded-sm border border-hairline px-2">
+            {dayOptions.map((day) => <option key={day.day_index} value={day.day_index}>
+              {day.title ?? `${day.day_index}일차`}
+            </option>)}
+          </select>
+        </label>
+      )}
       <div>
         <p className="mb-1.5 text-xs font-semibold text-ink">마커 색</p>
         <div className="grid grid-cols-8 gap-1.5">
@@ -153,7 +166,7 @@ export function PoiEditor({ poi, saving = false, onSave, onCancel }: PoiEditorPr
         </button>
         <button
           type="button"
-          onClick={() => onSave(buildPoiDetailPatch(form))}
+          onClick={() => onSave({ ...buildPoiDetailPatch(form), ...(dayIndex != null && dayIndex !== currentDayIndex ? { day_index: dayIndex } : {}) })}
           disabled={saving}
           className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
         >

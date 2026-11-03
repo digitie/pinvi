@@ -506,6 +506,8 @@ async def delete_trip_day(
     Returns:
         함께 삭제된(FK CASCADE) 활성 POI 수.
     """
+    # POI 생성·이동과 같은 여행 잠금을 먼저 잡아 빈 일자 확인과 삭제를 직렬화한다.
+    await db.scalar(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
     day = await get_trip_day(db, trip_id=trip_id, day_index=day_index)
     if day.version != expected_version:
         raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")

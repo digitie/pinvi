@@ -6,8 +6,9 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.attachment import CuratedPlanAttachment
 from app.models.poi import TripDayPoi
@@ -111,11 +112,35 @@ def effective_attachment_quota(
     )
 
 
+def _active_attachment_parent() -> ColumnElement[bool]:
+    """파일 목록·다운로드·쿼터는 같은 활성 부모 규칙을 사용한다."""
+    active_trip = (
+        exists()
+        .where(Trip.trip_id == CuratedPlanAttachment.trip_id, Trip.deleted_at.is_(None))
+        .correlate(CuratedPlanAttachment)
+    )
+    active_poi = exists(
+        select(TripDayPoi.attachment_id)
+        .join(Trip, Trip.trip_id == TripDayPoi.trip_id)
+        .where(
+            TripDayPoi.attachment_id == CuratedPlanAttachment.trip_poi_id,
+            TripDayPoi.deleted_at.is_(None),
+            Trip.deleted_at.is_(None),
+        )
+    )
+    active_poi = active_poi.correlate(CuratedPlanAttachment)
+    return and_(
+        or_(CuratedPlanAttachment.trip_id.is_(None), active_trip),
+        or_(CuratedPlanAttachment.trip_poi_id.is_(None), active_poi),
+    )
+
+
 async def attachment_bytes_for_trip(db: AsyncSession, *, trip_id: uuid.UUID) -> int:
     poi_ids = select(TripDayPoi.attachment_id).where(TripDayPoi.trip_id == trip_id)
     total = await db.scalar(
         select(func.coalesce(func.sum(CuratedPlanAttachment.byte_size), 0)).where(
             CuratedPlanAttachment.deleted_at.is_(None),
+            _active_attachment_parent(),
             or_(
                 CuratedPlanAttachment.trip_id == trip_id,
                 CuratedPlanAttachment.trip_poi_id.in_(poi_ids),
@@ -129,6 +154,7 @@ async def attachment_bytes_for_user(db: AsyncSession, *, user_id: uuid.UUID) -> 
     total = await db.scalar(
         select(func.coalesce(func.sum(CuratedPlanAttachment.byte_size), 0)).where(
             CuratedPlanAttachment.deleted_at.is_(None),
+            _active_attachment_parent(),
             CuratedPlanAttachment.uploaded_by_user_id == user_id,
         )
     )
@@ -210,7 +236,11 @@ async def list_user_file_library(
             select(TripDayPoi.attachment_id).where(TripDayPoi.trip_id.in_(owner_trip_ids))
         ),
     ]
-    where = [CuratedPlanAttachment.deleted_at.is_(None), or_(*accessible_filters)]
+    where = [
+        CuratedPlanAttachment.deleted_at.is_(None),
+        _active_attachment_parent(),
+        or_(*accessible_filters),
+    ]
     total = int(
         await db.scalar(select(func.count(CuratedPlanAttachment.attachment_id)).where(*where)) or 0
     )
@@ -242,6 +272,7 @@ async def get_user_library_attachment(
         select(CuratedPlanAttachment).where(
             CuratedPlanAttachment.attachment_id == attachment_id,
             CuratedPlanAttachment.deleted_at.is_(None),
+            _active_attachment_parent(),
             or_(
                 CuratedPlanAttachment.uploaded_by_user_id == user_id,
                 CuratedPlanAttachment.trip_id.in_(owner_trip_ids),
