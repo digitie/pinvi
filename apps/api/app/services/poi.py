@@ -18,6 +18,7 @@ from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.services.kasi import build_initial_poi_rise_set
+from app.services.trip import TripNotFoundError, validate_trip_day_payload
 
 _REGION_CODE_RE = re.compile(r"^[0-9]{2,10}$")
 _REGION_CODE_KEYS = (
@@ -53,6 +54,12 @@ async def ensure_trip_day(db: AsyncSession, *, trip_id: uuid.UUID, day_index: in
         select(TripDay).where(TripDay.trip_id == trip_id, TripDay.day_index == day_index)
     )
     if day is None:
+        trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id))
+        if trip is None:
+            raise TripNotFoundError("여행을 찾을 수 없습니다.")
+        await validate_trip_day_payload(
+            db, trip=trip, day_index=day_index, date_value=None, exclude_day_index=day_index
+        )
         # ADR-055: date는 override-only. auto-create는 NULL로 두고 effective_date를 파생한다.
         day = TripDay(trip_id=trip_id, day_index=day_index)
         db.add(day)

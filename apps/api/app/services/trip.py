@@ -27,7 +27,13 @@ from app.services import lexorank
 from app.services.email_service import enqueue_trip_invite_email
 from app.services.hash_chain import sha256_hex
 from app.services.rustfs_storage import InvalidStorageRefError, validate_attachment_storage_ref
-from app.services.storage_policy import AttachmentQuotaError, assert_attachment_quota
+from app.services.storage_policy import (
+    AttachmentQuotaError,
+    assert_attachment_quota,
+    attachment_bytes_for_user,
+    effective_attachment_quota,
+    get_storage_settings,
+)
 
 
 class TripError(Exception):
@@ -227,10 +233,14 @@ async def list_trips_for_owner(
     sort: TripListSort = "-updated_at",
     limit: int = 20,
     cursor: TripListCursor | None = None,
+    trashed: bool = False,
 ) -> tuple[list[Trip], bool]:
     cursor = cursor or TripListCursor()
     today = datetime.now(UTC).date()
-    filters = [Trip.owner_user_id == user_id, Trip.deleted_at.is_(None)]
+    filters = [
+        Trip.owner_user_id == user_id,
+        Trip.deleted_at.is_not(None) if trashed else Trip.deleted_at.is_(None),
+    ]
     if bucket == "future":
         filters.append(or_(Trip.end_date.is_(None), Trip.end_date >= today))
     elif bucket == "past":
@@ -310,6 +320,64 @@ async def update_trip(
             setattr(trip, key, value)
     trip.version += 1
     await db.commit()
+    await db.refresh(trip)
+    return trip
+
+
+async def restore_trip(db: AsyncSession, *, trip_id: uuid.UUID, owner_user_id: uuid.UUID) -> Trip:
+    trip = await db.scalar(
+        select(Trip)
+        .where(
+            Trip.trip_id == trip_id,
+            Trip.owner_user_id == owner_user_id,
+            Trip.deleted_at.is_not(None),
+        )
+        .with_for_update()
+    )
+    if trip is None:
+        raise TripNotFoundError("휴지통에서 여행을 찾을 수 없습니다.")
+    poi_ids = select(TripDayPoi.attachment_id).where(
+        TripDayPoi.trip_id == trip_id, TripDayPoi.deleted_at.is_(None)
+    )
+    uploader_ids = select(CuratedPlanAttachment.uploaded_by_user_id).where(
+        CuratedPlanAttachment.deleted_at.is_(None),
+        or_(
+            CuratedPlanAttachment.trip_id == trip_id, CuratedPlanAttachment.trip_poi_id.in_(poi_ids)
+        ),
+    )
+    # 모든 업로더를 같은 순서로 잠가 서로 다른 여행의 동시 복원도 직렬화한다.
+    uploaders = list(
+        await db.scalars(
+            select(User)
+            .where(or_(User.user_id == owner_user_id, User.user_id.in_(uploader_ids)))
+            .order_by(User.user_id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        )
+    )
+    user = next((u for u in uploaders if u.user_id == owner_user_id), None)
+    if user is None:
+        raise TripNotFoundError("사용자를 찾을 수 없습니다.")
+    trip.deleted_at = None
+    trip.status = "draft"
+    trip.version += 1
+    try:
+        await db.flush()
+        await assert_attachment_quota(db, user=user, trip_id=trip_id, byte_size=0)
+        settings_row = await get_storage_settings(db)
+        for uploader in uploaders:
+            if uploader.user_id == owner_user_id:
+                continue
+            quota = effective_attachment_quota(settings_row, uploader)
+            used = await attachment_bytes_for_user(db, user_id=uploader.user_id)
+            if used > quota.user_quota_bytes:
+                raise AttachmentQuotaError(
+                    "첨부 업로더의 저장 공간 한도를 초과하여 복원할 수 없습니다."
+                )
+        await db.commit()
+    except AttachmentQuotaError as exc:
+        await db.rollback()
+        raise TripAttachmentQuotaError(str(exc)) from exc
     await db.refresh(trip)
     return trip
 
@@ -426,25 +494,30 @@ async def validate_trip_day_payload(
     date_value: date | None,
     exclude_day_index: int | None = None,
 ) -> None:
+    await db.refresh(trip, with_for_update=True)
+    if trip.deleted_at is not None:
+        raise TripNotFoundError("여행을 찾을 수 없습니다.")
     limit = trip_day_limit(trip.start_date, trip.end_date)
     if limit is not None and day_index > limit:
         raise TripDayValidationError(f"여행 기간은 최대 {limit}일입니다.")
-
-    if date_value is None:
-        # ADR-055: date는 override-only. 비우면 effective_date가 start_date+day_index로 파생되므로
-        # 여행 기간이 있어도 명시 날짜를 요구하지 않는다.
+    effective_date = date_value or default_trip_day_date(trip.start_date, day_index)
+    if effective_date is None:
         return
-    if trip.start_date is not None and date_value < trip.start_date:
+    if trip.start_date is not None and effective_date < trip.start_date:
         raise TripDayValidationError("일자 날짜는 여행 시작일 이후여야 합니다.")
-    if trip.end_date is not None and date_value > trip.end_date:
+    if trip.end_date is not None and effective_date > trip.end_date:
         raise TripDayValidationError("일자 날짜는 여행 종료일 이전이어야 합니다.")
 
-    filters = [TripDay.trip_id == trip.trip_id, TripDay.date == date_value]
-    if exclude_day_index is not None:
-        filters.append(TripDay.day_index != exclude_day_index)
-    existing = await db.scalar(select(TripDay.day_index).where(*filters).limit(1))
-    if existing is not None:
-        raise TripDayConflictError("이미 같은 날짜 일자가 있습니다.")
+    days = await db.scalars(select(TripDay).where(TripDay.trip_id == trip.trip_id))
+    for day in days:
+        if day.day_index == exclude_day_index:
+            continue
+        other_date = day.date or default_trip_day_date(trip.start_date, day.day_index)
+        if other_date == effective_date:
+            message = f"이미 {day.day_index}일차에서 쓰는 날짜입니다."
+            if exclude_day_index is not None:
+                raise TripDayValidationError(message)
+            raise TripDayConflictError(message)
 
 
 async def next_available_trip_day_index(db: AsyncSession, *, trip: Trip) -> int:
@@ -481,9 +554,22 @@ async def update_trip_day(
     expected_version: int,
     patch: dict[str, Any],
 ) -> TripDay:
+    trip = await db.scalar(
+        select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)).with_for_update()
+    )
+    if trip is None:
+        raise TripNotFoundError("여행을 찾을 수 없습니다.")
     day = await get_trip_day(db, trip_id=trip_id, day_index=day_index)
     if day.version != expected_version:
         raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
+    if "date" in patch:
+        await validate_trip_day_payload(
+            db,
+            trip=trip,
+            day_index=day_index,
+            date_value=patch["date"],
+            exclude_day_index=day_index,
+        )
     for key, value in patch.items():
         setattr(day, key, value)
     day.version += 1

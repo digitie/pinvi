@@ -185,7 +185,7 @@ function plannedDateForDay(view: TripView, dayIndex: number): string | null {
 
 function dayUsingDate(view: TripView, date: string, excludeDayIndex: number): number | null {
   return (
-    view.days.find((day) => day.day_index !== excludeDayIndex && day.date === date)?.day_index ??
+    view.days.find((day) => day.day_index !== excludeDayIndex && (day.effective_date ?? day.date) === date)?.day_index ??
     null
   );
 }
@@ -238,16 +238,15 @@ function dayDateUpdateValidation(
   if (nextDate && !validDateValue(nextDate)) {
     return '일자 날짜를 확인해주세요.';
   }
-  if (!nextDate) {
-    return startDate && endDate ? '여행 기간이 있는 경우 일자 날짜가 필요합니다.' : null;
-  }
-  if (startDate && nextDate < startDate) {
+  const effectiveDate = nextDate ?? plannedDateForDay(view, dayIndex);
+  if (!effectiveDate) return null;
+  if (startDate && effectiveDate < startDate) {
     return '여행 기간 밖의 날짜입니다. 기간을 먼저 늘려주세요.';
   }
-  if (endDate && nextDate > endDate) {
+  if (endDate && effectiveDate > endDate) {
     return '여행 기간 밖의 날짜입니다. 기간을 먼저 늘려주세요.';
   }
-  const duplicateDayIndex = dayUsingDate(view, nextDate, dayIndex);
+  const duplicateDayIndex = dayUsingDate(view, effectiveDate, dayIndex);
   if (duplicateDayIndex != null) {
     return `이미 ${duplicateDayIndex}일차에서 쓰는 날짜입니다.`;
   }
@@ -970,7 +969,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
   // 저장하면 안 된다 — 409가 안 나고 남의 변경을 조용히 덮는다(lost update, 5차 리뷰 P1).
   const handleUpdateDay = async (
     dayIndex: number,
-    next: { title: string; date: string | null; marker_color: string | null },
+    next: { title: string; note: string | null; date: string | null; marker_color: string | null },
     expectedVersion?: number,
   ): Promise<DayUpdateResult> => {
     if (!view) return { ok: false, message: '여행 정보를 불러오지 못했습니다.' };
@@ -989,6 +988,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
     const patch: TripDayUpdate = {};
     const nextTitle = next.title || null;
     if (nextTitle !== day.title) patch.title = nextTitle;
+    if (next.note !== (day.note ?? null)) patch.note = next.note;
     if (dateChanged) patch.date = next.date;
     // ADR-055 F6: 일자 색 override(팔레트 키 또는 null=기본색).
     if (next.marker_color !== (day.marker_color ?? null)) patch.marker_color = next.marker_color;

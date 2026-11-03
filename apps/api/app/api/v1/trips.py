@@ -107,6 +107,7 @@ from app.services.trip import (
     next_available_trip_day_index,
     optimize_trip_day,
     remove_companion,
+    restore_trip,
     revoke_share_link,
     update_attachment,
     update_trip,
@@ -279,6 +280,7 @@ async def list_trips(
     current_user_id: CurrentUserId,
     db: DbSession,
     bucket: Annotated[TripBucket, Query()] = "future",
+    trashed: bool = False,
     q: Annotated[str | None, Query(min_length=2, max_length=120)] = None,
     status_filter: Annotated[TripStatus | None, Query(alias="status")] = None,
     visibility_filter: Annotated[TripVisibility | None, Query(alias="visibility")] = None,
@@ -309,6 +311,7 @@ async def list_trips(
         sort=sort,
         limit=limit,
         cursor=trip_cursor,
+        trashed=trashed,
     )
     next_cursor: str | None = None
     if has_more and trips:
@@ -528,6 +531,21 @@ async def update_trip_endpoint(
     return Envelope.of(_to_response(trip))
 
 
+@router.post("/{trip_id}/restore", response_model=Envelope[TripResponse])
+async def restore_trip_endpoint(
+    trip_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripResponse]:
+    try:
+        trip = await restore_trip(db, trip_id=trip_id, owner_user_id=uuid.UUID(current_user_id))
+    except TripNotFoundError as exc:
+        _raise_trip_http(exc)
+    except TripAttachmentQuotaError as exc:
+        _raise_attachment_quota(exc)
+    return Envelope.of(_to_response(trip))
+
+
 @router.delete("/{trip_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_trip_endpoint(
     trip_id: uuid.UUID,
@@ -678,16 +696,8 @@ async def update_trip_day_endpoint(
 ) -> Envelope[TripDayResponse]:
     actor_id = uuid.UUID(current_user_id)
     try:
-        trip = await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
+        await get_trip_for_user_write(db, trip_id=trip_id, user_id=actor_id)
         patch = body.model_dump(exclude_unset=True)
-        if "date" in patch:
-            await validate_trip_day_payload(
-                db,
-                trip=trip,
-                day_index=day_index,
-                date_value=patch["date"],
-                exclude_day_index=day_index,
-            )
         day = await update_trip_day(
             db,
             trip_id=trip_id,

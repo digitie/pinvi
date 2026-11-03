@@ -168,6 +168,17 @@ async def assert_attachment_quota(
     trip_id: uuid.UUID,
     byte_size: int,
 ) -> EffectiveAttachmentQuota:
+    # 업로드와 복원이 같은 순서(여행 → 사용자)로 잠가 총량 검사와 반영을 직렬화한다.
+    await db.scalar(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
+    locked_user = await db.scalar(
+        select(User)
+        .where(User.user_id == user.user_id)
+        .with_for_update(key_share=True)
+        .execution_options(populate_existing=True)
+    )
+    if locked_user is None:
+        raise AttachmentQuotaError("첨부 사용자를 찾을 수 없습니다.")
+    user = locked_user
     settings_row = await get_storage_settings(db)
     quota = effective_attachment_quota(settings_row, user)
     if byte_size > quota.max_upload_bytes:

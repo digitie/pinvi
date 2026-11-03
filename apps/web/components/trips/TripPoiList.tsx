@@ -8,16 +8,13 @@ import type {
   TripWeatherCard,
   TripWeatherResolution,
 } from '@pinvi/schemas';
-import { arrayMove, featureResolutionNotice, paletteHex } from '@pinvi/domain';
+import { arrayMove, featureResolutionNotice, formatKstTime, paletteHex } from '@pinvi/domain';
 import { PoiEditor } from '@/components/trips/PoiEditor';
 import { TripAttachments } from '@/components/trips/TripAttachments';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 
 function formatTime(value: string | null): string | null {
-  if (!value) return null;
-  return new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(
-    new Date(value),
-  );
+  return value ? formatKstTime(value) : null;
 }
 
 export interface TripPoiListProps {

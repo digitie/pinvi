@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { LogoutButton } from '@/components/app/LogoutButton';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 
@@ -40,6 +41,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
         })}
       </nav>
       {children}
+      <LogoutButton />
     </div>
   );
 }

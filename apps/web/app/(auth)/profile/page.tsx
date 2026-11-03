@@ -15,6 +15,7 @@ import {
   putToPresigned,
 } from '@pinvi/domain';
 import { buttonClassName } from '@/components/ui/Button';
+import { LogoutButton } from '@/components/app/LogoutButton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 const apiClient = new ApiClient({
@@ -482,6 +483,7 @@ export default function ProfilePage() {
         returnFocusRef={confirmTriggerRef}
         testId="profile-destructive-confirm"
       />
+      <LogoutButton />
     </div>
   );
 }

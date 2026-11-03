@@ -33,7 +33,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             ))}
           </ul>
         </aside>
-        <main id="main" className="md:col-span-6 md:col-start-7">
+        <main id="main" tabIndex={-1} className="md:col-span-6 md:col-start-7">
           <div className="mx-auto w-full max-w-sm">{children}</div>
         </main>
       </div>

@@ -14,7 +14,7 @@ export interface TripDayHeaderProps {
     | 'holidays'
     | 'rise_set'
     | 'rise_set_reference'
-  >;
+  > & { note?: string | null };
   className?: string;
   /**
    * false면 날짜/공휴일/기간-벗어남 요약 행을 숨기고 일출/일몰만 표시한다.
@@ -63,6 +63,7 @@ export function TripDayHeader({
           ))}
         </div>
       )}
+      {day.note && <p className="mt-2 whitespace-pre-wrap break-words text-sm text-body" data-testid="trip-day-note">{day.note}</p>}
       <TripDayRiseSet day={day} readOnly={readOnly} />
     </div>
   );

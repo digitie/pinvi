@@ -293,6 +293,7 @@ export type TripWeatherResolution = z.infer<typeof TripWeatherResolutionSchema>;
 export const TripViewDaySchema = z
   .object({
     day_index: z.number().int(),
+    note: z.string().nullable().default(null),
     date: z.string().date().nullable(),
     // date는 override-only, effective_date는 파생(override 또는 start_date+day_index) — ADR-055.
     effective_date: z.string().date().nullable().default(null),
