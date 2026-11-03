@@ -885,6 +885,7 @@ test('삭제로 비어 있는 가장 빠른 일자를 다시 생성한다', asyn
     ...BASE_MARKER_DAY,
     day_index: dayIndex,
     date,
+    effective_date: date,
     title: `${dayIndex}일차`,
     pois: [],
   });
