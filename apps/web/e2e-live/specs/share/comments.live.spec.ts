@@ -4,7 +4,7 @@
  * 일자/장소 대상 댓글 UI도 없다(SHR-022 blocked).
  */
 import { expect, test } from '@playwright/test';
-import { createTrip, deleteTrip, loginAsUser, shot } from '../../helpers/live';
+import { createTrip, deleteTrip, loginAsUser, shot, isMobileProject } from '../../helpers/live';
 import {
   commentSection,
   companionSection,
@@ -56,7 +56,7 @@ test.describe('SHR 댓글', () => {
   });
 
   test('SHR-020 댓글 입력 검증 — 공백만이면 비활성, 최대 2000자', async ({ page }) => {
-    test.skip(({ isMobile }) => isMobile, '데스크톱 전용(긴 입력)');
+    test.skip(isMobileProject(), '데스크톱 전용(긴 입력)');
     const title = uniqueTitle('020');
     const { id } = await createTrip(page, { title, start: '2026-11-20', end: '2026-11-20' });
     created.push(id);
@@ -78,7 +78,7 @@ test.describe('SHR 댓글', () => {
   });
 
   test('SHR-024 동행(test2)이 쓴 댓글은 소유자의 댓글 탭 재진입 시 보인다', async ({ page, browser }) => {
-    test.skip(({ isMobile }) => isMobile, '데스크톱 전용(두 신원)');
+    test.skip(isMobileProject(), '데스크톱 전용(두 신원)');
     const title = uniqueTitle('024');
     const { id } = await createTrip(page, { title, start: '2026-11-20', end: '2026-11-20' });
     created.push(id);
@@ -118,7 +118,7 @@ test.describe('SHR 댓글', () => {
     page,
     browser,
   }) => {
-    test.skip(({ isMobile }) => isMobile, '데스크톱 전용(두 신원)');
+    test.skip(isMobileProject(), '데스크톱 전용(두 신원)');
     const title = uniqueTitle('033');
     const { id } = await createTrip(page, { title, start: '2026-11-20', end: '2026-11-20' });
     created.push(id);

@@ -3,7 +3,7 @@
 // Selectors: admin/features/page.tsx, admin/features/[feature_id]/FeatureDetailSubpage.tsx, admin/features/change-requests/page.tsx
 // Labels: lib/admin/status-label.ts (active 활성 · retired 종료 · published 공개 · suppressed 비공개 · valid 유효 · quarantined 격리)
 import { expect, test } from '@playwright/test';
-import { loginAsAdmin, shot } from '../../helpers/live';
+import { loginAsAdmin, shot, isMobileProject } from '../../helpers/live';
 import { waitForGet } from '../../helpers/admin';
 
 const PLACE = '안동하회마을'; // Map category family: heritage
@@ -12,7 +12,7 @@ test.describe.serial('ADM features', () => {
   let featureId = '';
 
   test.beforeEach(async ({ page }) => {
-    test.skip(({ isMobile }) => isMobile, 'desktop only');
+    test.skip(isMobileProject(), 'desktop only');
     await loginAsAdmin(page);
   });
 

@@ -6,12 +6,12 @@
 // Contract: apps/api/app/core/rbac.py (non-admin => 404 RESOURCE_NOT_FOUND), apps/api/app/api/v1/auth.py (/auth/refresh)
 // Ordinary-user identity: PINVI_E2E_USER2_* (test2@test.com) when provisioned, else PINVI_E2E_USER_*.
 import { expect, test } from '@playwright/test';
-import { shot } from '../../helpers/live';
+import { shot, isMobileProject } from '../../helpers/live';
 import { ADMIN_LOGIN, captureApiOrigin, loginAsOrdinaryUser, newAdminActor, ordinaryUserCreds, requireEnv } from '../../helpers/admin';
 
 test.describe('ADM auth', () => {
   test('ADM-001 admin login lands on /admin with sidebar identity', async ({ page }) => {
-    test.skip(({ isMobile }) => isMobile, 'desktop only');
+    test.skip(isMobileProject(), 'desktop only');
     const email = requireEnv('PINVI_E2E_ADMIN_EMAIL');
     const password = requireEnv('PINVI_E2E_ADMIN_PASSWORD');
 
@@ -33,7 +33,7 @@ test.describe('ADM auth', () => {
   });
 
   test('ADM-002 ordinary-user credentials on /admin/login are refused and the session is dropped', async ({ page }) => {
-    test.skip(({ isMobile }) => isMobile, 'desktop only');
+    test.skip(isMobileProject(), 'desktop only');
     const creds = ordinaryUserCreds();
     test.info().annotations.push({ type: 'identity', description: creds.label });
     // The login page never calls /auth/me, so capture the API origin from the login/logout calls themselves.
@@ -73,7 +73,7 @@ test.describe('ADM auth', () => {
   });
 
   test('ADM-004 ordinary-user session calling admin API gets 404 RESOURCE_NOT_FOUND (not 403)', async ({ page }) => {
-    test.skip(({ isMobile }) => isMobile, 'desktop only');
+    test.skip(isMobileProject(), 'desktop only');
     // Owner decision 2026-11-03 (#632 closed, no change): admin routes hide their existence from
     // non-admin sessions — 404 RESOURCE_NOT_FOUND is the contract (rbac.py SPEC V8 M-4).
     const apiOrigin = captureApiOrigin(page);
@@ -103,7 +103,7 @@ test.describe('ADM auth', () => {
   });
 
   test('ADM-006 admin session refresh keeps admin pages working', async ({ browser }) => {
-    test.skip(({ isMobile }) => isMobile, 'desktop only');
+    test.skip(isMobileProject(), 'desktop only');
     const admin = await newAdminActor(browser);
     try {
       const origin = await admin.apiOrigin();

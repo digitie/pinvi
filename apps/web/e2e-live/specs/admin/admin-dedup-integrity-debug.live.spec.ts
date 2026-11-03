@@ -2,12 +2,12 @@
 // Verdict / issue-action submits are never clicked (Map merge and issue resolve are not reversible).
 // Selectors: admin/dedup-review/page.tsx, admin/integrity/page.tsx, admin/debug/logs/page.tsx, admin/api-calls/page.tsx
 import { expect, test } from '@playwright/test';
-import { loginAsAdmin, shot } from '../../helpers/live';
+import { loginAsAdmin, shot, isMobileProject } from '../../helpers/live';
 import { waitForGet } from '../../helpers/admin';
 
 test.describe('ADM dedup / integrity / debug (read-only)', () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(({ isMobile }) => isMobile, 'desktop only');
+    test.skip(isMobileProject(), 'desktop only');
     await loginAsAdmin(page);
   });
 

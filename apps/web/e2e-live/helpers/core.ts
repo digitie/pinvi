@@ -7,7 +7,7 @@
  * (second identity: PINVI_E2E_USER2_EMAIL / PINVI_E2E_USER2_PASSWORD). Nothing is logged.
  */
 import { expect, type BrowserContext, type ConsoleMessage, type Page, type TestInfo } from '@playwright/test';
-import { apiBaseURL, loginAsUser2, requireEnv } from './live';
+import { apiBaseURL, forgetSessions, loginAsUser2, requireEnv } from './live';
 
 export { loginAsUser2, requireEnv };
 
@@ -29,6 +29,7 @@ export async function discoverApiBase(page: Page, run: () => Promise<void>): Pro
 
 /** POST /auth/logout with the session cookies (there is no logout control in the user UI — see README). */
 export async function logoutViaApi(page: Page, apiBase: string): Promise<number> {
+  forgetSessions(); // the shared session cache must not hand this revoked session to the next test
   return page.evaluate(async (api) => {
     const res = await fetch(`${api}/auth/logout`, { method: 'POST', credentials: 'include' });
     return res.status;

@@ -73,7 +73,7 @@ test.describe('ADM read-only pages', () => {
   });
 
   test('ADM-040 sidebar collapse persists and skip link is first in tab order', async ({ page }) => {
-    test.skip(({ isMobile }) => isMobile, 'toggle is lg-only');
+    test.skip(isMobileProject(), 'toggle is lg-only');
     await page.goto('/admin/users');
     const sidebar = page.getByTestId('admin-sidebar');
     const toggle = page.getByTestId('admin-sidebar-toggle');

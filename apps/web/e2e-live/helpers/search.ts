@@ -13,13 +13,16 @@ export function isMobileProject(testInfo: TestInfo): boolean {
   return isMobile(testInfo);
 }
 
-/** Cases not tagged `mobile` skip under the mobile project (SPEC rule: only mobile-tagged cases run there). */
+/**
+ * Cases not tagged `mobile` skip under the mobile project (SPEC rule: only mobile-tagged cases run there).
+ * Called inside test bodies, so the boolean form of `test.skip` (the callback form is describe-only).
+ */
 export function desktopOnly(): void {
-  test.skip(({ isMobile: mobile }) => mobile, 'desktop-only case (not tagged mobile)');
+  test.skip(isMobile(test.info()), 'desktop-only case (not tagged mobile)');
 }
 
 export function mobileOnly(): void {
-  test.skip(({ isMobile: mobile }) => !mobile, 'mobile-only case');
+  test.skip(!isMobile(test.info()), 'mobile-only case');
 }
 
 // ──────────────────────────────── search API shapes ────────────────────────────────

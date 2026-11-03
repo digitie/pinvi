@@ -8,7 +8,7 @@
 // Full approve (ADM-031) is BLOCKED — see catalog.yaml / README.
 // Selectors: admin/feature-requests/page.tsx, components/map/FeatureRequestDialog.tsx
 import { expect, test } from '@playwright/test';
-import { shot } from '../../helpers/live';
+import { shot, isMobileProject } from '../../helpers/live';
 import {
   E2E,
   createE2eSuggestion,
@@ -36,7 +36,7 @@ test.describe.serial('ADM promotion review (desktop)', () => {
   let outOfRangeId = ''; // ADM-033 → rejected in ADM-033 cleanup
 
   test.beforeAll(async ({ browser }) => {
-    test.skip(({ isMobile }) => isMobile, 'desktop only');
+    test.skip(isMobileProject(), 'desktop only');
     test.skip(gated(), 'set PINVI_E2E_ALLOW_RESIDUAL_SUGGESTIONS=1 to accept residual rejected [e2e] suggestion rows');
     user = await newUserActor(browser);
     admin = await newAdminActor(browser);
@@ -172,7 +172,7 @@ test.describe.serial('ADM promotion review (desktop)', () => {
 
 test.describe('ADM-036 promotion review on mobile', () => {
   test('ADM-036 mobile card → review dialog → close restores focus; then cleanup reject', async ({ browser }) => {
-    test.skip(({ isMobile }) => !isMobile, 'mobile project only');
+    test.skip(!isMobileProject(), 'mobile project only');
     test.skip(gated(), 'set PINVI_E2E_ALLOW_RESIDUAL_SUGGESTIONS=1 to accept residual rejected [e2e] suggestion rows');
     const tag = runTag();
     const viewport = { width: 390, height: 844 };

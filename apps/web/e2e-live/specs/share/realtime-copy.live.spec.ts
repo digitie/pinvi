@@ -59,7 +59,7 @@ test.describe('SHR 실시간·복사', () => {
   test('SHR-031 여행 복사 — "<제목> copy" 초안 생성, 일자·장소 복제 (heritage: 경주 불국사)', async ({
     page,
   }) => {
-    test.skip(({ isMobile }) => isMobile, '데스크톱 전용');
+    test.skip(isMobileProject(), '데스크톱 전용');
     const title = uniqueTitle('031');
     const { id } = await createTrip(page, { title, start: '2026-11-20', end: '2026-11-21' });
     created.push(id);

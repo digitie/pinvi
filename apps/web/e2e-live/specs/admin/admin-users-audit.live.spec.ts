@@ -1,12 +1,12 @@
 // ADM-009..014 — users (read-only, fixed accounts never changed), RBAC, audit log, location audit.
 // Selectors: admin/users/page.tsx, admin/users/[user_id]/page.tsx, admin/rbac/page.tsx, admin/audit/page.tsx, admin/audit/location/page.tsx
 import { expect, test } from '@playwright/test';
-import { loginAsAdmin, shot } from '../../helpers/live';
+import { loginAsAdmin, shot, isMobileProject } from '../../helpers/live';
 import { maskedEmail, requireEnv, waitForGet } from '../../helpers/admin';
 
 test.describe('ADM users / audit (read-only)', () => {
   test.beforeEach(async ({ page }) => {
-    test.skip(({ isMobile }) => isMobile, 'desktop only');
+    test.skip(isMobileProject(), 'desktop only');
     await loginAsAdmin(page);
   });
 

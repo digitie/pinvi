@@ -4,7 +4,7 @@
 // admin/trips/page.tsx (admin-trips-row-<trip_id>)
 // CAUTION: picking a Kakao/Naver result auto-fires a feature suggestion (services/feature_request.py) that cannot be [e2e]-prefixed.
 import { expect, test } from '@playwright/test';
-import { createTrip, deleteAllE2eTrips, deleteTrip, searchAndAddPlace, shot } from '../../helpers/live';
+import { createTrip, deleteAllE2eTrips, deleteTrip, searchAndAddPlace, shot, isMobileProject } from '../../helpers/live';
 import { E2E, maskedEmail, newAdminActor, newUserActor, requireEnv, runTag, waitForGet, type Actor } from '../../helpers/admin';
 
 const PLACE = '안동하회마을'; // heritage
@@ -17,7 +17,7 @@ test.describe.serial('ADM POI admin (mutating, self-cleaning)', () => {
   let title = '';
 
   test.beforeAll(async ({ browser }) => {
-    test.skip(({ isMobile }) => isMobile, 'desktop only');
+    test.skip(isMobileProject(), 'desktop only');
     user = await newUserActor(browser);
     admin = await newAdminActor(browser);
     title = `${E2E} ADM-028 ${runTag()}`;

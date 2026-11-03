@@ -22,6 +22,7 @@ import {
   test,
   type Browser,
   type BrowserContext,
+  type Cookie,
   type Locator,
   type Page,
   type Response,
@@ -124,21 +125,82 @@ export async function apiBaseURL(page: Page): Promise<string> {
 
 /* ------------------------------------------------------------------ login */
 
+/*
+ * Session reuse. Prod limits the auth endpoints to 5 requests/min (`pinvi_rate_limit_auth_per_minute`),
+ * so logging in through the form before every test 429s after a handful of cases. The suite runs with
+ * `workers: 1`, so one worker process holds an in-memory cookie jar per identity: the first login goes
+ * through the UI, later `loginAs*` calls seed the new context with those cookies and confirm the app
+ * accepts them (the app itself refreshes an expired access cookie). If the session was revoked (logout,
+ * refused admin login, rotated refresh token) the check fails and we fall back to the form.
+ * Cookies live only in this process's memory — never on disk, never in a report.
+ */
+const sessionCache = new Map<string, Cookie[]>();
+
+/** Drops cached sessions (all, or one identity) — call after a test logs a session out. */
+export function forgetSessions(email?: string): void {
+  if (email) sessionCache.delete(email);
+  else sessionCache.clear();
+}
+
+async function rememberSession(page: Page, key: string): Promise<void> {
+  sessionCache.set(key, await page.context().cookies());
+}
+
+async function reuseSession(page: Page, key: string, landing: string, ready: Locator): Promise<boolean> {
+  const cookies = sessionCache.get(key);
+  if (!cookies) return false;
+  await page.context().addCookies(cookies);
+  await page.goto(landing);
+  try {
+    await expect(ready).toBeVisible({ timeout: 20_000 });
+  } catch {
+    sessionCache.delete(key);
+    return false;
+  }
+  if (/\/login(?:[/?#]|$)/.test(new URL(page.url()).pathname)) {
+    sessionCache.delete(key);
+    return false;
+  }
+  await rememberSession(page, key);
+  return true;
+}
+
+/**
+ * Clicks `submit` and resolves with the `POST /auth/login` response; on 429 waits for `Retry-After`
+ * (default 61 s) and submits again — up to 3 attempts. The form keeps its values across a 429.
+ */
+async function submitLogin(page: Page, submit: Locator): Promise<Response | null> {
+  for (let attempt = 1; ; attempt += 1) {
+    const loginRes = page
+      .waitForResponse((r) => r.request().method() === 'POST' && /\/auth\/login(\?|$)/.test(r.url()), {
+        timeout: 30_000,
+      })
+      .catch(() => null);
+    await expect(submit).toBeEnabled({ timeout: 20_000 });
+    await submit.click();
+    const res = await loginRes;
+    if (!res || res.status() !== 429 || attempt >= 3) return res;
+    const retryAfter = Number(res.headers()['retry-after'] ?? '');
+    const waitMs = Math.min(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 + 1000 : 61_000, 70_000);
+    try {
+      test.info().annotations.push({ type: 'rate-limit', description: `POST /auth/login 429 — retry in ${waitMs} ms` });
+    } catch {
+      // outside a test (global setup/teardown)
+    }
+    await page.waitForTimeout(waitMs);
+  }
+}
+
 async function loginWithUserForm(page: Page, email: string, password: string): Promise<void> {
   trackApiBase(page);
+  if (await reuseSession(page, email, '/trips', page.getByRole('heading', { name: '여행', exact: true }))) return;
   await page.goto('/login');
   const submit = page.getByTestId('login-submit');
   // origin/main: the submit button is rendered disabled in server HTML and enabled after hydration.
   await expect(submit).toBeEnabled({ timeout: 20_000 });
   await page.getByTestId('login-email').fill(email);
   await page.getByTestId('login-password').fill(password);
-  const loginRes = page
-    .waitForResponse((r) => r.request().method() === 'POST' && /\/auth\/login(\?|$)/.test(r.url()), {
-      timeout: 30_000,
-    })
-    .catch(() => null);
-  await submit.click();
-  const res = await loginRes;
+  const res = await submitLogin(page, submit);
   if (res && !knownApiBase) {
     const url = new URL(res.url());
     knownApiBase = `${url.origin}${url.pathname.replace(/\/auth\/login$/, '')}`;
@@ -147,6 +209,7 @@ async function loginWithUserForm(page: Page, email: string, password: string): P
     throw new Error(`로그인 실패: POST /auth/login → HTTP ${res.status()} (계정/비밀번호/이메일 인증 상태 확인)`);
   }
   await expect(page).toHaveURL(/\/trips(?:[?#].*)?$/, { timeout: 30_000 });
+  await rememberSession(page, email);
 }
 
 /** Generic user login (second identity, ad-hoc contexts). Credentials are passed in, never logged. */
@@ -178,6 +241,8 @@ export async function loginAsAdmin(page: Page): Promise<void> {
   const email = requireEnv('PINVI_E2E_ADMIN_EMAIL');
   const password = requireEnv('PINVI_E2E_ADMIN_PASSWORD');
   trackApiBase(page);
+  const key = `admin:${email}`;
+  if (await reuseSession(page, key, '/admin', page.getByTestId('admin-sidebar'))) return;
   await page.goto('/admin/login');
   const root = page.getByTestId('admin-login');
   await expect(root).toBeVisible({ timeout: 20_000 });
@@ -185,9 +250,13 @@ export async function loginAsAdmin(page: Page): Promise<void> {
   await expect(submit).toBeEnabled({ timeout: 20_000 });
   await root.locator('[data-slot=login-username]').fill(email);
   await root.locator('[data-slot=login-password]').fill(password);
-  await submit.click();
+  const res = await submitLogin(page, submit);
+  if (res && res.status() >= 400) {
+    throw new Error(`관리자 로그인 실패: POST /auth/login → HTTP ${res.status()}`);
+  }
   await page.waitForURL((url) => /\/admin(?!\/login)/.test(url.pathname), { timeout: 30_000 });
   await expect(root.locator('[data-slot=login-error]')).toHaveCount(0);
+  await rememberSession(page, key);
 }
 
 /** Logged-in second-user context (companion / isolation cases). Caller closes the context. */
