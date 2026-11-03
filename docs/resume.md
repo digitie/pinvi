@@ -1,3 +1,10 @@
+## 2026-11-04 — 행사 정본 실제 연결 UI 검증 완료
+
+- 관련 단위·HTTP API 41개를 WSL 테스트 DB에서 통과했다. CI에서 빠뜨린 포맷 적용 3개 파일을 보완하고 Python AST 동일성을 확인했다.
+- Map 정본 15b75fe와 Pinvi 제품 80593b4의 정상 lifespan·실제 HTTP·별도 DB·Chromium으로 11항목을 통과했다. 배경 raster 타일만 고정했으며 제품 API mock·dependency override는 없다.
+- 호텔/카페/마트/캠핑장/주차장 라벨, 행사 상세 모달 기간·장소, 격리 행 공개 검색 제외, 브라우저의 Pinvi API 경유를 확인했다. 안전한 결과는 `docs/reviews/pinvi-1439-event-local-live.json`에 보존한다. 생성한 서버·컨테이너는 모두 종료했다.
+- 두 독립 전문 리뷰어는 제품 80593b4에서 P0/P1/P2 없음을 확인했다. Map 전체 PG·CI 후 병합과 소비자 revision provenance 갱신·최종 exact HEAD 리뷰/CI를 이어간다. 운영 배포·검증은 하지 않는다.
+
 ## 2026-11-04 — 행사 정본 상세 필드 회귀
 
 - Map 정본 `starts_on/ends_on/venue_name`을 구 alias보다 먼저 선택한다. 기존 상세 카드 shape·색상·빈 값 처리와 구 snapshot fallback은 유지한다.

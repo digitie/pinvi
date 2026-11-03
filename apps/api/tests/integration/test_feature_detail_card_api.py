@@ -172,21 +172,35 @@ async def test_detail_card_404_when_missing(
 
 
 async def test_detail_card_projects_canonical_map_event_period_and_venue(
-    client: Any, verified_user: tuple[str, str], auth_cookies: Any,
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
 ) -> None:
     user_id, _ = verified_user
-    _override(map_extra={
-        "kind": "event", "name": "국가유산 행사", "category": "01090000",
-        "detail": {"starts_on": "2026-11-01", "ends_on": "2026-11-03", "venue_name": "종묘",
-                   "start_date": "2025-11-01", "end_date": "2025-11-03", "venue": "구 장소"},
-    })
+    _override(
+        map_extra={
+            "kind": "event",
+            "name": "국가유산 행사",
+            "category": "01090000",
+            "detail": {
+                "starts_on": "2026-11-01",
+                "ends_on": "2026-11-03",
+                "venue_name": "종묘",
+                "start_date": "2025-11-01",
+                "end_date": "2025-11-03",
+                "venue": "구 장소",
+            },
+        }
+    )
     try:
         response = await client.get("/features/event:1/detail-card", cookies=auth_cookies(user_id))
         assert response.status_code == 200, response.text
         data = response.json()["data"]
         assert data["kind"] == "event"
         assert (data["start_date"], data["end_date"], data["venue"]) == (
-            "2026-11-01", "2026-11-03", "종묘",
+            "2026-11-01",
+            "2026-11-03",
+            "종묘",
         )
         assert data["marker_color"] == "P-07"
         assert "detail" not in data

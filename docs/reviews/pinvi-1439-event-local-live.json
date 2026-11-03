@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "fixtureOnly": true,
+  "production_validation": false,
+  "tileFixtureOnly": true,
+  "httpProductMocks": false,
+  "browser": "156.0.8078.4",
+  "checks": [
+    "실제 Pinvi 로그인과 세션",
+    "실제 Map 정본 기간·장소→Pinvi 상세 카드 HTTP",
+    "WSL호텔분류643 원천 업종·실제 카탈로그 라벨 UI",
+    "WSL카페분류643 원천 업종·실제 카탈로그 라벨 UI",
+    "WSL마트분류643 원천 업종·실제 카탈로그 라벨 UI",
+    "WSL캠핑분류643 원천 업종·실제 카탈로그 라벨 UI",
+    "WSL주차분류643 원천 업종·실제 카탈로그 라벨 UI",
+    "실제 WebGL 지도 검색 선택→상세 모달 기간·장소",
+    "필수 정보 누락 행사의 공개 검색 제외",
+    "브라우저는 Pinvi API 경유",
+    "배경 타일만 고정한 실제 MapLibre 렌더러"
+  ],
+  "map_source_revision": "15b75fe73b4318fb79b6905e9b1126a4f6a2929b",
+  "pinvi_product_revision": "80593b4eb685b0ffcb3df9b63125cab3bc4ce8b2",
+  "actual_serving": "Map/Pinvi normal app lifespans and HTTP; separate test databases",
+  "seed_note": "synthetic provider fixtures normalized by actual public converters"
+}
