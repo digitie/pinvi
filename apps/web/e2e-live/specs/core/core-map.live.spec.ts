@@ -18,7 +18,6 @@ import {
 } from '../../helpers/live';
 import {
   annotate,
-  featureMarkers,
   intersects,
   isMobileViewport,
   PLACES,
