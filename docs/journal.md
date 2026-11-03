@@ -1,5 +1,14 @@
 ## 2026-11-04 (codex) — #643 관리자 읽기 연결 (#648/#651)
 
+## 2026-11-04 — #642·Map #1440 실제 날씨 연결 검증
+
+- WSL에서 전체 backend 2,728개 통과·12개 조건부 생략, Ruff·481파일 포맷·엄격 mypy 256파일, 전체 workspace typecheck와 web 280개를 통과했다. 초기 web fixture 키의 인덱스 타입 오류를 실제 실패 후 한정된 키 타입으로 수정했다.
+- 실제 Map·Pinvi 앱 생명주기와 인증, 일회용 PostGIS·Valkey·Chromium으로 8항목을 검증했다. weather export는 fixture 적재이며 서비스 HTTP mock·dependency override는 사용하지 않았다.
+- 과거 날짜만 있는 여행의 5일 전 요약 4개, 여행/익명 공유의 카드 범위 경고, fresh 현재기온+원천 지연 예보의 Feature API, 정상 새 세대에서 경고 해제와 과거 값 보존을 확인했다. 구버전 source 캐시에는 빈 위치만 넣고 시작했다. 안전한 제품 객체 지문과 범위는 docs/reviews/pinvi-642-weather-local-live.json에 기록했다.
+- 두 독립 리뷰어는 제품 HEAD 0791355에 추가 P0/P1/P2가 없다고 판정했다. 원격 CI의 web build/e2e/Docker 실패도 같은 테스트 키 타입 오류임을 대조했다. 전체 backend 실행 중에는 HEAD를 유지했고 종료 후 이 보완을 커밋한다.
+- Map 기반 PR의 최종 CI/병합 후 실제 merge revision과 서비스 provenance·pair pin을 대조하고, 최종 SHA 리뷰·CI 뒤 소비자를 병합한다. 테스트 서버와 소유 fixture 컨테이너는 종료했다. 운영 접속·배포·검증은 하지 않았다.
+
+
 ## 2026-11-04 — #642·Map #1440 날씨 품질 묶음 소비자 착수
 
 - Geo PR #622의 WSL·CI·두 독립 리뷰와 병합으로 #650을 완료했다. 다음 날씨 묶음에서 Map 초안 #1446은 가까운 빈 요약 후보가 유효한 과거 요약을 가리는 경로를 보완하며 검증 중이다.

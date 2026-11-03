@@ -13,7 +13,7 @@ function foundWeather(): TripWeatherResolution {
   };
 }
 
-function weatherCards(): Record<string, TripWeatherCard> {
+function weatherCards(): Record<typeof CARD_KEY, TripWeatherCard> {
   return {
     [CARD_KEY]: {
       asof: '2026-07-30T00:00:00+09:00',
