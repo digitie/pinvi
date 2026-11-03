@@ -4,7 +4,7 @@ export function safeLoginReturnTo(value: string | null): string {
   try {
     const base = 'https://pinvi.example.com';
     const url = new URL(value, base);
-    if (url.origin !== base || /^\/(?:admin|login|register)(?:\/|$)/.test(url.pathname)) return '/trips';
+    if (url.origin !== base || url.pathname.startsWith('//') || /^\/(?:admin|login|register)(?:\/|$)/.test(url.pathname)) return '/trips';
     return url.pathname + url.search + url.hash;
   } catch { return '/trips'; }
 }

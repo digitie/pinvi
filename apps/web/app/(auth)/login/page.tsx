@@ -193,7 +193,7 @@ export default function LoginPage() {
     const label = OAUTH_PROVIDER_LABELS[provider];
     try {
       const result = await authApi(apiClient).startOAuth(provider, {
-        return_to: '/trips',
+        return_to: safeLoginReturnTo(new URLSearchParams(window.location.search).get('next')),
         mode: 'login',
       });
       window.location.assign(result.authorize_url);

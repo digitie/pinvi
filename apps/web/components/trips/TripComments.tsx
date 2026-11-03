@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, MessageSquare, Send, Trash2 } from 'lucide-react';
 import { ApiClient, ApiError, authApi, tripApi } from '@pinvi/api-client';
 import type { TripCommentResponse } from '@pinvi/schemas';
@@ -29,16 +29,20 @@ export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken 
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  const loadRevision = useRef(0);
   const reload = useCallback(async () => {
+    const revision = ++loadRevision.current;
     try {
-      setComments(await (sharedToken
+      const result = await (sharedToken
         ? tripApi(apiClient).listSharedComments(tripId, sharedToken)
-        : tripApi(apiClient).listComments(tripId)));
+        : tripApi(apiClient).listComments(tripId));
+      if (revision !== loadRevision.current) return;
+      setComments(result);
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '댓글을 불러오지 못했습니다.');
+      if (revision === loadRevision.current) setError(err instanceof ApiError ? err.message : '댓글을 불러오지 못했습니다.');
     } finally {
-      setLoading(false);
+      if (revision === loadRevision.current) setLoading(false);
     }
   }, [tripId, sharedToken]);
 
@@ -59,9 +63,11 @@ export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken 
 
   useEffect(() => {
     void (async () => { await reload(); })();
-    if (!sharedToken) return;
-    const timer = setInterval(() => { void reload(); }, 30_000);
-    return () => clearInterval(timer);
+    const timer = sharedToken ? setInterval(() => { void reload(); }, 30_000) : null;
+    return () => {
+      ++loadRevision.current;
+      if (timer) clearInterval(timer);
+    };
   }, [reload, refreshKey, sharedToken]);
 
   const post = async () => {

@@ -100,7 +100,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
           <ButtonLink href="/" variant="primary">
             홈으로
           </ButtonLink>
-          <ButtonLink href="/login" variant="secondary">
+          <ButtonLink href={`/login?next=${encodeURIComponent(`/shared/${tripId}/${token}`)}`} variant="secondary">
             로그인
           </ButtonLink>
         </div>

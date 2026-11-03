@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { TripComments } from '@/components/trips/TripComments';
 
 const api = vi.hoisted(() => ({
@@ -33,6 +33,19 @@ describe('댓글 권한과 갱신', () => {
     rerender(<TripComments tripId="t1" refreshKey={1} />);
     expect(await screen.findByText('새 의견')).toBeInTheDocument();
     expect(api.me).toHaveBeenCalledTimes(1);
+  });
+  it('늦게 끝난 이전 조회는 최신 댓글을 덮어쓰지 않는다', async () => {
+    let resolveOld!: (value: typeof comment[]) => void;
+    let resolveNew!: (value: typeof comment[]) => void;
+    api.listComments.mockReturnValueOnce(new Promise((resolve) => { resolveOld = resolve; }));
+    api.listComments.mockReturnValueOnce(new Promise((resolve) => { resolveNew = resolve; }));
+    const { rerender } = render(<TripComments tripId="t1" refreshKey={0} />);
+    rerender(<TripComments tripId="t1" refreshKey={1} />);
+    await act(async () => { resolveNew([{ ...comment, body: '최신 의견' }]); });
+    expect(await screen.findByText('최신 의견')).toBeInTheDocument();
+    await act(async () => { resolveOld([comment]); });
+    expect(screen.getByText('최신 의견')).toBeInTheDocument();
+    expect(screen.queryByText('첫 의견')).not.toBeInTheDocument();
   });
   it('공유 댓글은 토큰 범위 API로 읽고 작성한다', async () => {
     render(<TripComments tripId="t1" sharedToken="share-token" />);

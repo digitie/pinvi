@@ -15,7 +15,7 @@ export default function SharedTripPage() {
       <PublicMasthead
         actions={
           <>
-            <ButtonLink href="/login" variant="ghost">
+            <ButtonLink href={`/login?next=${encodeURIComponent(`/shared/${params.tripId}/${params.token}`)}`} variant="ghost">
               로그인
             </ButtonLink>
             <ButtonLink href="/signup" variant="secondary">
