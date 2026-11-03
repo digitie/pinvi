@@ -642,3 +642,9 @@ TripViewDay.note는 nullable이며 소유자·공유 뷰 모두 제공한다.
 PATCH 일자의 date는 override 전용이다. null이면 시작일에서 파생한 날짜를 쓰고, 다른 일자의 override 또는 파생 날짜와 중복되면 422 VALIDATION_ERROR다.
 버전 충돌은 날짜 검증에 앞서 409를 반환한다. 날짜 검사와 수정은 동일한 여행 잠금 안에서 실행한다.
 POI 생성으로 없는 일자를 자동 생성할 때도 같은 날짜·여행 기간 규칙을 적용한다.
+
+### 날씨 카드의 오래된 정보 표시
+
+Map 경로는 선택된 부분의 freshness.stale가 true이거나 source_status가 stale이면 내부 사실에 경고 근거를 보존한다. provider 중복 제거와 여행 날짜 선택 이후 남은 사실 중 하나라도 해당하면 카드의 is_stale가 true다. 위치 roster의 신선도와 위치 해석 캐시의 stale는 카드에 섞지 않으며, 대상 날짜가 과거라는 이유만으로 경고하지 않는다.
+
+이 bool은 카드 전체에 업데이트가 지연된 자료가 포함됨을 뜻한다. 특정 현재기온 한 값이 오래됐다는 뜻은 아니다. 직접 weather 경로와 freshness 메타 부재에서 false는 최신 검증을 뜻하지 않으며, 근거 없는 수집 SLA를 새로 정하지 않는다.

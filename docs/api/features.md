@@ -412,3 +412,9 @@ Cookie: pinvi_access=...
 - [x] `apps/api/app/middleware/location_audit.py` — `nearby` 좌표 query 적재
 - [x] 통합 테스트 `tests/integration/test_features_api.py` + 매핑 단위 테스트
       `tests/unit/test_feature_mapping.py`
+
+### 날씨 카드의 오래된 정보 표시
+
+Map 경로는 선택된 부분의 freshness.stale가 true이거나 source_status가 stale이면 내부 사실에 경고 근거를 보존한다. provider 중복 제거와 여행 날짜 선택 이후 남은 사실 중 하나라도 해당하면 카드의 is_stale가 true다. 위치 roster의 신선도와 위치 해석 캐시의 stale는 카드에 섞지 않으며, 대상 날짜가 과거라는 이유만으로 경고하지 않는다.
+
+이 bool은 카드 전체에 업데이트가 지연된 자료가 포함됨을 뜻한다. 특정 현재기온 한 값이 오래됐다는 뜻은 아니다. 직접 weather 경로와 freshness 메타 부재에서 false는 최신 검증을 뜻하지 않으며, 근거 없는 수집 SLA를 새로 정하지 않는다.

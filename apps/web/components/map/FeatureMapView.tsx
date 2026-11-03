@@ -922,6 +922,15 @@ export function FeatureMapView({
                       <p className="text-xs text-muted">{detail.category_label}</p>
                     )}
                     {detailAddress && <p className="text-xs text-body">{detailAddress}</p>}
+                    {weather?.is_stale && (
+                      <p
+                        className="text-xs text-muted"
+                        title="일부 날씨 정보의 업데이트가 지연되었습니다."
+                        role="status"
+                      >
+                        오래된 정보 포함
+                      </p>
+                    )}
                     {currentTemp != null && (
                       <p className="text-xs text-body">현재 기온 {currentTemp.toFixed(0)}°C</p>
                     )}

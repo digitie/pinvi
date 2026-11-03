@@ -71,6 +71,9 @@ STALE_RETRY: Final = timedelta(minutes=15)
 #: trip view가 해석(네트워크)을 동시에 몇 개까지 돌리는지.
 RESOLVE_CONCURRENCY: Final = 4
 
+MAP_SELECTION_VERSION: Final = 2
+"""Map의 유효 daily 후보 선택을 반영한 source 집합 버전."""
+
 #: 해석이 source를 고르는 부분 — 카드·trip이 읽는 부분과 같다(Map 기본값에 기대지 않고 명시).
 RESOLVER_SECTIONS: Final[tuple[WeatherSection, ...]] = ("current", "forecasts", "daily_summaries")
 RESOLVER_FORECAST_STYLES: Final[tuple[WeatherForecastStyle, ...]] = (
@@ -116,6 +119,9 @@ def cache_hit(
 ) -> WeatherLocationFound | None:
     """Map 경로 캐시 적중 판정(모듈 docstring의 재해석 규칙)."""
     if row is None or not written_by_map(row) or row.lat != lat or row.lon != lon:
+        return None
+    point = row.measurement_point or {}
+    if point.get("selection_version") != MAP_SELECTION_VERSION:
         return None
     age = now - row.resolved_at
     if age > CACHE_TTL or (row.stale and age >= STALE_RETRY):
@@ -203,7 +209,10 @@ async def _persist(
         location_id=resolved.location_id,
         ids=resolved.source_location_ids,
         distance_km=resolved.distance_km,
-        measurement_point={"resolved_via": MAP_RESOLVED_VIA},
+        measurement_point={
+            "resolved_via": MAP_RESOLVED_VIA,
+            "selection_version": MAP_SELECTION_VERSION,
+        },
         stale=resolved.stale,
         now=now,
     )

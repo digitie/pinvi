@@ -349,7 +349,7 @@ async def build_feature_weather_card(
         feature_id=feature_id,
         asof=asof,
         latest_at=latest_known,
-        is_stale=False,
+        is_stale=any(value.source_stale for value in deduped),
         source_styles=source_styles,
         metrics=metrics,
     )

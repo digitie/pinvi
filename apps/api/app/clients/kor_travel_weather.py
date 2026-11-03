@@ -306,6 +306,8 @@ class WeatherValueOut:
     valid_until: datetime | None = None
     observed_at: datetime | None = None
     known_at: datetime | None = None
+    # 내부 공통 fact 속성이다. 직접 API wire 필드/수집 SLA를 새로 가정하지 않는다.
+    source_stale: bool = False
 
 
 @dataclass(frozen=True)

@@ -31,7 +31,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta
 from datetime import date as _Date
 from typing import Any, Final, Literal
@@ -172,6 +172,7 @@ class _MapModel(BaseModel):
 class MapWeatherFreshness(_MapModel):
     dataset: str
     stale: bool
+    source_status: Literal["ok", "stale"] | None = None
     loaded_at: AwareDatetime
     source_collected_at: AwareDatetime | None
     checked_at: AwareDatetime | None
@@ -363,6 +364,7 @@ class MapWeatherValue:
     target_at: datetime
     known_at: datetime | None
     collected_at: datetime
+    source_stale: bool = False
     value_number: float | None = None
     value_text: str | None = None
     unit: str | None = None
@@ -542,6 +544,15 @@ def _section_location(bundle: MapWeatherBundle, source: MapWeatherSource | None)
     return source.location_id if source is not None else bundle.location.location_id
 
 
+def _with_source_freshness(
+    values: Sequence[MapWeatherValue], freshness: MapWeatherFreshness | None
+) -> list[MapWeatherValue]:
+    # Pinvi 정책: 수집 SLA 초과 또는 원천의 지연된 성공 집합 재사용을 모두 경고한다.
+    # 메타 부재는 최신 확인을 뜻하지 않으며, 위치 roster/해석 캐시 상태는 섞지 않는다.
+    stale = freshness is not None and (freshness.stale or freshness.source_status == "stale")
+    return [replace(value, source_stale=stale) for value in values]
+
+
 def bundle_values(
     bundle: MapWeatherBundle,
     *,
@@ -551,19 +562,28 @@ def bundle_values(
     """묶음의 `ok` 부분을 행으로 편다(`not_loaded`·`unavailable`·`no_data` 부분은 행이 없다)."""
     out: list[MapWeatherValue] = []
     if bundle.current is not None and bundle.current.status == "ok":
-        out += observation_values(
-            _section_location(bundle, bundle.current.source), bundle.current.observations
+        out += _with_source_freshness(
+            observation_values(
+                _section_location(bundle, bundle.current.source), bundle.current.observations
+            ),
+            bundle.current.freshness,
         )
     for style, section in bundle.forecasts.by_style():
         if section.status == "ok":
-            out += forecast_values(_section_location(bundle, section.source), style, section.groups)
+            out += _with_source_freshness(
+                forecast_values(_section_location(bundle, section.source), style, section.groups),
+                section.freshness,
+            )
     daily = bundle.daily_summaries
     if daily_dates and daily is not None and daily.status == "ok":
-        out += daily_values(
-            _section_location(bundle, daily.source),
-            daily,
-            dates=daily_dates,
-            complete_only=daily_complete_only,
+        out += _with_source_freshness(
+            daily_values(
+                _section_location(bundle, daily.source),
+                daily,
+                dates=daily_dates,
+                complete_only=daily_complete_only,
+            ),
+            daily.freshness,
         )
     return out
 

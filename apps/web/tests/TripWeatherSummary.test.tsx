@@ -171,3 +171,13 @@ describe('TripWeatherSummary', () => {
     expect(summary).not.toHaveTextContent('예보');
   });
 });
+
+it('오래된 정보는 기온 한 값이 아닌 날씨 카드 전체 경고로 표시한다', () => {
+  const cards = weatherCards();
+  cards[CARD_KEY].is_stale = true;
+  render(
+    <TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />,
+  );
+  expect(screen.getByText('오래된 정보 포함')).toBeVisible();
+  expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('24℃');
+});
