@@ -235,6 +235,41 @@ CORE-021(#623 모바일 stats 칩 fit padding), CORE-024(#622 팝업 상세·날
 | #641 | enhancement | 여행 내보내기(인쇄/PDF/ICS) | SHR-032 |
 | #642 | enhancement | Map 날씨 카드 stale 배지 | WX-024 |
 | #643 | umbrella | live e2e 카탈로그 발견 사항 모음 | 전부 |
+| #648 | bug | `/admin/features` 한국어 `q` 검색 503 FEATURE_SERVICE_UNAVAILABLE | ADM-015/016, WX-018 (`test.fail`) |
+| #649 | bug | 일자 날짜 중복이 저장됨(`dayUsingDate` 가 effective_date 미비교) | TRIP-026 (`test.fail`) |
+| #650 | bug | 전체 도로명 주소(시·도 약칭) 검색에 주소 행 0건 | SRCH-004 (`test.fail`) |
+| kor-travel-map#1438 | bug | feature 카테고리 오분류(숙박·카페·마트·캠핑장·주차장) | SRCH-019/020/022, NEAR-030 (`test.fail`) |
+| kor-travel-map#1439 | bug | event 기간·장소 누락, 축제 category·중복 | SRCH-027 (`test.fail`) |
+| kor-travel-map#1440 | bug | 과거 날짜 날씨 daily_summaries 미제공 | WX-004 (`test.fail`) |
+
+#624 는 prod 재확인 결과 이제 **500 INTERNAL_ERROR** — TRIP-011 은 422 + 날짜 안내를 기대값으로 두고
+`test.fail(#624)`.
+
+## 8.1 1차 prod 실행 분류 (2026-11-03, run `20261103-063010`, desktop 291건)
+
+결과 159 pass / 70 fail / 62 skip. 실패 분류:
+
+| 분류 | 건수 | 처리 |
+| --- | ---: | --- |
+| (a) 테스트·helper 버그 | 36 | 수정(route announcer `role=alert`, admin `<select>` testid, `poiTitle` 순번 배지, `createTrip` 뒤 미이동, 세션 캐시의 회전된 refresh token, 지도 클러스터, 공유 링크 응답 대기 등) |
+| (b) 제품 버그 | 11 | 이슈 6건 + #624 재확인(위 표), `test.fail` |
+| (c) 데이터·가정 오류 | 9 | 스펙 수정(서울 화면 편향 #615, 카카오 행 조건, 공항 feature 없음, 형식 문구 순서, perf 예산) |
+| (d) rate limit 429 | 14 | 9건은 trace 로 확인, 5건(SHR-002/007/016/029, WX-014)은 trace 를 끄는 공유 스펙이라 추정 — 이제 helper 가 공유·초대 응답 상태를 기록한다 |
+| (e) expected-fail 불일치 | 0 | — |
+
+**429 수치(1103d)**: helper 가 기다려 회복한 429 10건(`DELETE /trips/{id}` 8, `POST /trips` 2, 총 대기
+176 s). 앱 자체 요청의 429 는 실패한 테스트 trace 에서 28건 — `GET /trips/{id}` 10,
+`GET /features/in-bounds` 6, `GET /weather/markers-in-bounds` 4, `DELETE /trips/{id}` 3,
+`POST /trips/{id}/pois` 2, `GET /trips/{id}/days/1/attachments` 1, `GET /transport/status` 1,
+`GET /search` 1. trace 를 끄는 공유 스펙(SHR-002/007/016, WX-014)도 같은 구간에서 helper 429 대기를
+기록했다. 한도는 authenticated 60/분·auth 5/분(`apps/api/app/core/config.py`) — 한 사용자로 1 worker
+를 연속 실행하면 지도 화면(in-bounds·weather markers·transport 동시 조회)과 trip 상세 재조회가 분당
+60을 넘는다.
+
+skip 62건: 직렬 describe 의 선행 실패에 따른 연쇄 skip 27(선행 실패 수정으로 해소), 모바일 전용
+케이스가 desktop 에서 skip 19, Telegram chat env 미설정 10(NTF-004~012·016·024), 시드 조회 helper 버그 2
+(WX-011/012, 수정), feature 로드 대기 부족 1(POI-016, 수정), axe 미설치 1(CORE-029), 미가입 sink 메일
+env 1(SHR-027), 데이터/타이밍 2(SRCH-048 이벤트 없음, POI-032 마커 위치).
 
 `@axe-core/playwright` 는 devDependency 로 추가하지 않았다 — lockfile 을 n150 에서 npm 12.0.1 로
 갱신해 무결성 검사(`scripts/check-lockfile-integrity.mjs`)까지 깨끗할 때만 넣기로 했고, 이번
