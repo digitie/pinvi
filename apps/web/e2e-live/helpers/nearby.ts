@@ -200,6 +200,9 @@ export async function clickTransportMarker(page: Page, layer: Layer): Promise<st
   expect(titles.length, `legend has ${layer} markers`).toBeGreaterThan(0);
   const canvasBox = await mapCanvas(page).boundingBox();
   expect(canvasBox).not.toBeNull();
+  // Pass 1: real click on a pin that is the topmost element. Pass 2 (country zoom: airport pins can sit
+  // under feature clusters): dispatch the click on the marker element itself.
+  for (const pass of ['topmost', 'dispatch'] as const)
   for (const title of titles) {
     const marker = page.locator('.maplibregl-marker').and(page.getByLabel(title, { exact: true })).first();
     if ((await marker.count()) === 0) continue;
@@ -217,9 +220,10 @@ export async function clickTransportMarker(page: Page, layer: Layer): Promise<st
       const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return !!top && (top === el || el.contains(top));
     });
-    if (!onTop) continue;
+    if (pass === 'topmost' && !onTop) continue;
     // the pin is the topmost element at its centre — a real click (tap on touch projects is a click too)
-    await marker.click();
+    if (pass === 'topmost') await marker.click();
+    else await marker.dispatchEvent('click');
     try {
       await expect(detailDialog(page)).toBeVisible({ timeout: 12_000 });
       return title;

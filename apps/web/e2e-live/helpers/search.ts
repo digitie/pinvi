@@ -323,7 +323,16 @@ export function isInBoundsResponse(res: Response): boolean {
 
 export async function readInBounds(res: Response): Promise<{ bbox: string | null; items: InBoundsItem[]; clusters: number }> {
   const url = new URL(res.url());
-  const json = (await res.json()) as { data?: { items?: InBoundsItem[]; clusters?: unknown[] } };
+  type Body = { data?: { items?: InBoundsItem[]; clusters?: unknown[] } };
+  let json: Body;
+  try {
+    json = (await res.json()) as Body;
+  } catch {
+    // body discarded (the page re-rendered/navigated after this response) — the request is a plain GET
+    // with the page's cookies, so read the same URL again
+    const page = res.frame().page();
+    json = (await (await page.context().request.get(res.url())).json()) as Body;
+  }
   return { bbox: url.searchParams.get('bbox'), items: json.data?.items ?? [], clusters: json.data?.clusters?.length ?? 0 };
 }
 
