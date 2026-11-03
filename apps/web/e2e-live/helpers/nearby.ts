@@ -202,7 +202,10 @@ export async function clickTransportMarker(page: Page, layer: Layer): Promise<st
   expect(canvasBox).not.toBeNull();
   // Pass 1: real click on a pin that is the topmost element. Pass 2 (country zoom: airport pins can sit
   // under feature clusters): dispatch the click on the marker element itself.
-  for (const pass of ['topmost', 'dispatch'] as const)
+  // Touch projects: a real tap on a pin can land on a same-named feature marker — dispatch first there.
+  const isTouch = await page.evaluate(() => navigator.maxTouchPoints > 0);
+  const passes = isTouch ? (['dispatch', 'topmost'] as const) : (['topmost', 'dispatch'] as const);
+  for (const pass of passes)
   for (const title of titles) {
     const marker = page.locator('.maplibregl-marker').and(page.getByLabel(title, { exact: true })).first();
     if ((await marker.count()) === 0) continue;
