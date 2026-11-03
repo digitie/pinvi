@@ -208,7 +208,7 @@ function MapReferencePanel({ request }: { request: AdminFeatureRequestSummary })
         </div>
         {featureId && reviewMode !== 'feature_request_queue' ? (
           <ButtonLink
-            href={`/admin/features?q=${encodeURIComponent(featureId!)}`}
+            href={`/admin/features?feature_id=${encodeURIComponent(featureId!)}`}
             variant="secondary"
             size="sm"
           >
@@ -398,8 +398,11 @@ function ReviewDialog({
       setRejectConfirmOpen(false);
       if (
         !isNewPlace &&
-        error instanceof ApiError &&
-        (error.status >= 500 || error.code === 'MAP_COMMAND_PENDING')
+        (!(error instanceof ApiError) ||
+          error.status === 0 ||
+          (error.status >= 200 && error.status < 300) ||
+          error.status >= 500 ||
+          error.code === 'MAP_COMMAND_PENDING')
       ) {
         setCommandPending(true);
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });

@@ -538,3 +538,106 @@ test('결과 미확정 직접 명령은 원래 입력을 잠가 재생한다', a
   await expect(page.getByTestId('admin-fr-review-dialog')).toHaveCount(0);
   expect(submitted).toEqual(input);
 });
+
+for (const failure of ['timeout', 'bad-response'] as const) {
+  test(`직접 명령 ${failure} 뒤에도 입력 잠금·재조회·재열기를 유지한다`, async ({ page }) => {
+    if (failure === 'timeout') await page.clock.install();
+    let listRequests = 0;
+    let uncertain = false;
+    let finishPending: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => {
+      finishPending = resolve;
+    });
+    const input = { access_reason: '원래 검수', name: '원래 수정 이름' };
+    await page.route(
+      (url) => url.port === '12801' && url.pathname === '/admin/feature-requests',
+      async (route) => {
+        listRequests += 1;
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            data: {
+              items: [
+                {
+                  ...correctionSummary,
+                  kor_travel_map_ref: uncertain ? { dispatch: { input } } : null,
+                },
+              ],
+              total: 1,
+              page: 1,
+              limit: 50,
+            },
+          }),
+        });
+      },
+    );
+    await page.route(
+      (url) =>
+        url.port === '12801' &&
+        url.pathname === `/admin/feature-requests/${correctionRequestId}/approve`,
+      async (route) => {
+        uncertain = true;
+        if (failure === 'timeout') await pending;
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: { invalid: true } }),
+        });
+      },
+    );
+    try {
+      await page.goto('/admin/feature-requests');
+      await page.getByTestId(`admin-fr-review-${correctionRequestId}`).click();
+      await page.getByTestId('admin-fr-name').fill(input.name);
+      await page.getByTestId('admin-fr-reason').fill(input.access_reason);
+      const before = listRequests;
+      await page.getByTestId('admin-fr-approve').click();
+      if (failure === 'timeout') {
+        await expect.poll(() => uncertain).toBe(true);
+        await page.clock.fastForward(31_000);
+      }
+      await expect(page.getByTestId('admin-fr-panel-error')).toBeVisible();
+      await expect(page.getByTestId('admin-fr-name')).toBeDisabled();
+      await expect(page.getByTestId('admin-fr-reason')).toHaveAttribute('readonly');
+      await expect(page.getByTestId('admin-fr-reject')).toBeDisabled();
+      await expect.poll(() => listRequests).toBeGreaterThan(before);
+      await page.getByTestId('admin-fr-review-dialog-close').click();
+      await page.getByTestId(`admin-fr-review-${correctionRequestId}`).click();
+      await expect(page.getByTestId('admin-fr-name')).toHaveValue(input.name);
+      await expect(page.getByTestId('admin-fr-name')).toBeDisabled();
+      await expect(page.getByTestId('admin-fr-reason')).toHaveValue(input.access_reason);
+    } finally {
+      finishPending?.();
+    }
+  });
+}
+
+test('직접 처리 제안은 해당 Feature 상세 선택 링크를 제공한다', async ({ page }) => {
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/feature-requests',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            items: [
+              {
+                ...correctionSummary,
+                status: 'added',
+                kor_travel_map_ref: { feature_id: 'f_place_1', review_mode: 'direct' },
+              },
+            ],
+            total: 1,
+            page: 1,
+            limit: 50,
+          },
+        }),
+      });
+    },
+  );
+  await page.goto('/admin/feature-requests');
+  await page.getByTestId(`admin-fr-review-${correctionRequestId}`).click();
+  await expect(page.getByRole('link', { name: 'Feature 수정·감사 보기' })).toHaveAttribute(
+    'href',
+    '/admin/features?feature_id=f_place_1',
+  );
+});
