@@ -12,7 +12,6 @@ import { expect, test } from '@playwright/test';
 import { loginAsUser, shot, waitForRequest } from '../../helpers/live';
 import {
   DEFAULT_EXPLORE_ZOOM,
-  DETAIL_RE,
   FRESHNESS_RE,
   HISTORY_RE,
   LAYER_PATH,
