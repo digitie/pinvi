@@ -105,7 +105,7 @@ export async function newUserActor(browser: Browser, viewport?: { width: number;
 export async function searchAdminFeatures(page: Page): Promise<void> {
   let last = 0;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const listed = waitForGet(page, //admin/features?.*q=/);
+    const listed = waitForGet(page, /\/admin\/features\?.*q=/);
     await page.getByTestId('admin-features-search-submit').click();
     last = (await listed).status();
     if (last < 500) return;
