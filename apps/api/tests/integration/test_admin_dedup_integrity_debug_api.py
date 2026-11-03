@@ -289,7 +289,7 @@ async def test_admin_dedup_verdict_proxies_decision_and_writes_audit(
         "decision": "merged",
         "decision_reason": "동일 장소 확인",
         "master_feature_id": "f_a",
-        "reviewed_by": "pinvi-admin",
+        "idempotency_key": fake.decision_args[1]["idempotency_key"],
     }
 
     async with session_factory() as db:
@@ -302,6 +302,7 @@ async def test_admin_dedup_verdict_proxies_decision_and_writes_audit(
     assert audit.resource_id == "dedup-1"
     assert audit.access_reason == "중복 후보 병합"
     assert audit.after_state == {
+        "command_id": fake.decision_args[1]["idempotency_key"],
         "decision": "merged",
         "changed": True,
         "master_feature_id": "f_a",
@@ -1167,3 +1168,62 @@ async def test_non_admin_dedup_route_is_hidden(
     user_id = await _create_user(session_factory, email="plain-dedup@example.com")
     resp = await client.get("/admin/dedup-review", cookies=auth_cookies(str(user_id)))
     assert resp.status_code == 404
+
+
+async def test_dedup_read_failure_returns_503_without_empty_success(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    operator_id = await _create_user(
+        session_factory, email="dedup-read-fail@example.com", roles=["user", "operator"]
+    )
+
+    class UnavailableClient(_FakeOpsClient):
+        async def list_dedup_reviews(self, **kwargs: Any) -> dict[str, Any]:
+            raise KorTravelMapUnavailable("Map 관리자 인증을 확인할 수 없습니다.")
+
+    _override(UnavailableClient())
+    try:
+        response = await client.get("/admin/dedup-review", cookies=auth_cookies(str(operator_id)))
+    finally:
+        _clear()
+    assert response.status_code == 503, response.text
+    assert response.json()["error"]["code"] == "FEATURE_SERVICE_UNAVAILABLE"
+    assert "data" not in response.json()
+
+
+async def test_dedup_verdict_key_is_bound_to_actor_target_and_input(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    admin_ids = [
+        await _create_user(session_factory, email=f"dedup-replay-{i}@example.com", roles=["admin"])
+        for i in range(2)
+    ]
+    fake = _FakeOpsClient()
+    body = {"decision": "rejected", "access_reason": "동일 검토"}
+    keys: list[str] = []
+    _override(fake)
+    try:
+        for actor, review_id, payload in [
+            (admin_ids[0], "dedup-1", body),
+            (admin_ids[0], "dedup-1", body),
+            (admin_ids[0], "dedup-1", {**body, "access_reason": "다른 검토"}),
+            (admin_ids[0], "dedup-2", body),
+            (admin_ids[1], "dedup-1", body),
+        ]:
+            response = await client.post(
+                f"/admin/dedup-review/{review_id}/verdict",
+                json=payload,
+                cookies=auth_cookies(str(actor)),
+            )
+            assert response.status_code == 200, response.text
+            assert fake.decision_args is not None
+            keys.append(fake.decision_args[1]["idempotency_key"])
+    finally:
+        _clear()
+    assert keys[0] == keys[1]
+    assert len(set(keys)) == 4
+    assert all(uuid.UUID(key).version == 5 for key in keys)

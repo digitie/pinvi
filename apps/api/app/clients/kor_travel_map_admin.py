@@ -52,6 +52,7 @@ OpsScope = Literal["ops:read", "ops:cancel"]
 
 _OPS_OBSERVABILITY_READ_PATHS = frozenset(
     {
+        "/v1/ops/dedup-reviews",
         "/v1/ops/consistency/issues",
         "/v1/ops/consistency/reports",
         "/v1/ops/system-logs",
@@ -520,15 +521,18 @@ class KorTravelMapAdminClient:
     ) -> dict[str, Any]:
         """GET /v1/service/admin-features — admin feature 목록 envelope 반환.
 
+        이름·주소·ID 검색은 `search_scope=feature`로 원천 JSON 검색을 제외한다.
         query 이름은 Map `GET /v1/admin/features`가 실제로 선언한 것만 보낸다:
-        `[q, kind, category, lifecycle_state, publication_state, quality_state,
+        `[q, search_scope, kind, category, lifecycle_state, publication_state, quality_state,
         provider_dataset_id, has_coord, has_issue, issue_type, updated_from,
         updated_to, include_ended, page_size, cursor, sort, order]`.
         FastAPI는 모르는 query를 조용히 버리므로, 여기서 legacy 이름
         (`status`/`provider`/`dataset_key`)을 보내면 필터가 걸린 척하면서 전량이
         돌아온다 — 그래서 3축 cutover(`1f2bdc3a`) 이름으로 갈아탄다.
         """
-        params: dict[str, Any] = {}
+        params: dict[str, Any] = {
+            "search_scope": "feature",
+        }
         if q:
             params["q"] = q
         self._put_sequence_params(params, "kind", kinds)
@@ -774,7 +778,7 @@ class KorTravelMapAdminClient:
         page_size: int = 50,
         cursor: str | None = None,
     ) -> dict[str, Any]:
-        """GET /v1/admin/dedup-reviews — dedup review queue 목록 envelope 반환."""
+        """GET /v1/ops/dedup-reviews — 읽기 전용 principal로 후보 목록 조회."""
         params: dict[str, Any] = {"page_size": page_size}
         self._put_sequence_params(params, "status", statuses)
         self._put_sequence_params(params, "provider", providers)
@@ -789,27 +793,32 @@ class KorTravelMapAdminClient:
             params["q"] = q
         if cursor:
             params["cursor"] = cursor
-        return self._payload(await self._send("GET", "/v1/admin/dedup-reviews", params=params))
+        return self._payload(
+            await self._send_ops_observability_read("/v1/ops/dedup-reviews", params=params)
+        )
 
     async def decide_dedup_review(
         self,
         review_id: str,
         *,
         decision: str,
+        idempotency_key: str,
         decision_reason: str | None = None,
         master_feature_id: str | None = None,
-        reviewed_by: str | None = None,
     ) -> dict[str, Any]:
-        """PATCH /v1/admin/dedup-reviews/{review_id} — dedup verdict data 반환."""
+        """PATCH /v1/admin/features/dedup-reviews/{review_id} — dedup verdict data 반환."""
         body: dict[str, Any] = {"decision": decision}
         if decision_reason is not None:
             body["decision_reason"] = decision_reason
         if master_feature_id is not None:
             body["master_feature_id"] = master_feature_id
-        if reviewed_by is not None:
-            body["reviewed_by"] = reviewed_by
         return self._data(
-            await self._send("PATCH", f"/v1/admin/dedup-reviews/{review_id}", json=body)
+            await self._send(
+                "PATCH",
+                f"/v1/admin/features/dedup-reviews/{review_id}",
+                json=body,
+                headers={"Idempotency-Key": idempotency_key},
+            )
         )
 
     async def list_integrity_issues(

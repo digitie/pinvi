@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "checks": [
+    "실제 로그인 UI와 Pinvi 세션 인증",
+    "한국어 관리자 Feature 실제 Map HTTP/DB 검색",
+    "원천 내용 전용 검색어는 명시한 Feature 범위에서 제외",
+    "실제 상류 인증 실패를 503·오류 UI로 표시",
+    "인증 설정 복구 후 실제 재시도·후보 표시",
+    "판정 UI→Pinvi 감사→Map 현재 관리자 명령 실제 반영",
+    "완료된 판정의 동일 입력 재전송을 Map 명령 키로 재생",
+    "전체 상태의 처리 완료 후보와 pending 빈 큐를 실제로 구분",
+    "상류 자격은 서버에만 유지·읽기와 판정 realm 분리"
+  ],
+  "fixtureOnly": true,
+  "mapRevision": "b8f88c518aaeea76bcd6a0b31734838a775183f4",
+  "pinviRevision": "372394610464eb8f2685fc84cb311e2912925e58",
+  "browser": "156.0.8078.4",
+  "scope": "wsl_isolated_fixture",
+  "production_validation": false,
+  "authentication": "실제 로그인·서비스 자격·Map API runtime role; 인증 우회 없음",
+  "cleanup": "별도 테스트 DB 컨테이너·API·웹 서버 및 임시 자격 파일 정리 확인"
+}

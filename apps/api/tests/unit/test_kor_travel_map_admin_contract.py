@@ -23,6 +23,7 @@ _SNAPSHOT_SHA256 = SNAPSHOT_SHA256
 
 _ADMIN_FEATURE_QUERY_PARAMETERS = {
     "q",
+    "search_scope",
     "kind",
     "category",
     "lifecycle_state",
@@ -65,7 +66,7 @@ def _query_names(operation: dict[str, Any]) -> set[str]:
 
 
 def test_admin_snapshot_is_byte_pinned_to_a_reviewed_map_revision() -> None:
-    assert _UPSTREAM_COMMIT == "8555b1f6c65253907fac502b0254492b56b4bb9a"
+    assert _UPSTREAM_COMMIT == "b8f88c518aaeea76bcd6a0b31734838a775183f4"
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
 
 
@@ -396,3 +397,20 @@ def test_scoped_feature_detail_reuses_exact_admin_dto_and_reference_path() -> No
     assert _schema(service, "AdminFeatureDetailResponse") == _schema(
         full, "AdminFeatureDetailResponse"
     )
+
+
+def test_scoped_feature_search_has_explicit_feature_only_scope() -> None:
+    operation = _spec()["paths"]["/v1/service/admin-features"]["get"]
+    scope = next(p for p in operation["parameters"] if p["name"] == "search_scope")
+    assert scope["in"] == "query"
+    assert scope["schema"]["enum"] == ["all", "feature"]
+    assert scope["schema"]["default"] == "all"
+
+
+def test_dedup_verdict_requires_uuid_command_key_in_admin_realm() -> None:
+    operation = _spec()["paths"]["/v1/admin/features/dedup-reviews/{review_id}"]["patch"]
+    assert operation["security"] == [{"AdminBFF": []}]
+    key = next(p for p in operation["parameters"] if p["name"] == "Idempotency-Key")
+    assert key["in"] == "header"
+    assert key["required"] is True
+    assert key["schema"]["format"] == "uuid"
