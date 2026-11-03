@@ -54,12 +54,12 @@ test.describe('CORE mobile', () => {
     await expect(modal).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('clip');
     // 2) close button
-    await pins.first().tap();
+    await pin!.tap();
     await expect(modal).toBeVisible();
     await page.getByTestId('feature-detail-modal-close').tap();
     await expect(modal).toHaveCount(0);
     // 3) backdrop
-    await pins.first().tap();
+    await pin!.tap();
     await expect(modal).toBeVisible();
     await page.getByTestId('feature-detail-modal-backdrop').click({ position: { x: 10, y: 10 } });
     await expect(modal).toHaveCount(0);

@@ -10,7 +10,6 @@ import {
   searchAndAddPlace,
   shot,
   waitForMapIdle,
-  openPanel,
 } from '../../helpers/live';
 import {
   addDay,
