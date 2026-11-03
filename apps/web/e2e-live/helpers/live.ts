@@ -208,6 +208,16 @@ export async function withRateLimitRetry<T extends { status(): number; headers()
 }
 
 /**
+ * A mutation whose first answer is 401 is refreshed and replayed by the app's API client (#612
+ * single-flight refresh). Returns the replayed response when one follows within 15 s, else the 401.
+ */
+async function settleAfterRefresh(page: Page, first: Response, matches: (r: Response) => boolean): Promise<Response> {
+  if (first.status() !== 401) return first;
+  const replay = await page.waitForResponse((r) => r !== first && matches(r), { timeout: 15_000 }).catch(() => null);
+  return replay ?? first;
+}
+
+/**
  * Clicks `submit` and resolves with the `POST /auth/login` response; on 429 waits for `Retry-After`
  * (default 61 s) and submits again — up to 3 attempts. The form keeps its values across a 429.
  */
@@ -634,7 +644,7 @@ export async function createShareLink(
   for (let attempt = 1; ; attempt += 1) {
     const created = page.waitForResponse(isCreate, { timeout: 30_000 });
     await section.getByRole('button', { name: '링크 만들기' }).click();
-    const res = await created;
+    const res = await settleAfterRefresh(page, await created, isCreate);
     if (res.status() === 429 && attempt < 3) {
       await backOff(res, 'POST share-tokens');
       continue;
