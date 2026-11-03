@@ -143,21 +143,18 @@ def _typed_cancellation_detail_for_code(code: str) -> dict[str, object]:
     return details
 
 
-def _change_response(*, action: str = "update", state: str = "pending") -> dict[str, Any]:
-    return {
-        "data": {
-            "request": {
-                "feature_id": "f_x",
-                "request_id": "req-1",
-                "action": action,
-                "status": state,
-                "review_mode": "require_review",
-                "payload": {},
-                "created_at": "2026-06-11T00:00:00+09:00",
-            }
-        },
-        "meta": {},
-    }
+def _change_response(*, action: str = "update") -> dict[str, Any]:
+    data: dict[str, Any] = {"feature_id": "f_x", "row_revision": 10}
+    if action == "update":
+        data.update(command_id=11, applied_field_count=1)
+    else:
+        data.update(
+            lifecycle_state="retired",
+            publication_state="published",
+            quality_state="valid",
+            audit_transition_id=12,
+        )
+    return {"data": data, "meta": {}}
 
 
 async def test_admin_proxy_headers_are_sent_when_configured() -> None:
@@ -336,7 +333,6 @@ def test_manual_feature_create_runtime_inventory_remains_closed() -> None:
     assert "AdminFeatureCreateBFF" not in runtime_source
     assert "X-Kor-Travel-Map-Admin-Feature-Create-Token" not in runtime_source
     assert "_ADMIN_FEATURE_CREATE_TOKEN_HEADER" not in runtime_source
-    assert "Idempotency-Key" not in runtime_source
     assert (
         re.search(
             r"_send\(\s*['\"]POST['\"]\s*,\s*['\"]/v1/admin/features['\"]",
@@ -409,12 +405,14 @@ async def test_patch_feature_targets_feature_id() -> None:
         return httpx.Response(200, json=_change_response(action="update"))
 
     client = _client(handler)
-    record = await client.patch_feature("f_abc", {"name": "수정", "reason": "correction"})
-    assert seen == [
-        ("GET", "/v1/admin/features/f_abc/revision", None),
-        ("PATCH", "/v1/admin/features/f_abc", '"7"'),
-    ]
-    assert record["action"] == "update"
+    record = await client.patch_feature(
+        "f_abc",
+        {"name": "수정", "reason": "correction"},
+        expected_revision='"7"',
+        idempotency_key="00000000-0000-4000-8000-000000000001",
+    )
+    assert seen == [("PATCH", "/v1/admin/features/f_abc", '"7"')]
+    assert record["command_id"] == 11
     await client.aclose()
 
 
@@ -435,12 +433,18 @@ async def test_delete_feature_sends_reason_and_operator_body() -> None:
         return httpx.Response(200, json=_change_response(action="delete"))
 
     client = _client(handler)
-    record = await client.delete_feature("f_abc", reason="영구 폐업", operator="tm-admin")
+    record = await client.delete_feature(
+        "f_abc",
+        reason="영구 폐업",
+        operator="tm-admin",
+        expected_revision='"9"',
+        idempotency_key="00000000-0000-4000-8000-000000000001",
+    )
     assert seen["method"] == "DELETE"
     assert seen["path"] == "/v1/admin/features/f_abc"
     assert seen["body"] == {"reason": "영구 폐업", "operator": "tm-admin"}
     assert seen["if_match"] == '"9"'
-    assert record["action"] == "delete"
+    assert record["lifecycle_state"] == "retired"
     await client.aclose()
 
 
@@ -453,90 +457,14 @@ async def test_patch_feature_rejects_revision_response_without_canonical_etag() 
         )
     )
     with pytest.raises(KorTravelMapError, match="canonical ETag"):
-        await client.patch_feature("f_abc", {"reason": "correction"})
-    await client.aclose()
-
-
-async def test_approve_change_request_hits_action_subresource() -> None:
-    seen: dict[str, Any] = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen["path"] = request.url.path
-        seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json=_change_response(state="applied"))
-
-    client = _client(handler)
-    record = await client.approve_change_request("req-9", operator="tm-admin", reason="ok")
-    assert seen["path"] == "/v1/admin/features/change-requests/req-9/approve"
-    assert seen["body"] == {"operator": "tm-admin", "reason": "ok"}
-    assert record["status"] == "applied"
-    await client.aclose()
-
-
-async def test_list_change_requests_forwards_filters() -> None:
-    seen: dict[str, Any] = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen["path"] = request.url.path
-        seen["query"] = list(request.url.params.multi_items())
-        return httpx.Response(
-            200,
-            json={
-                "data": {
-                    "items": [
-                        {
-                            "feature_id": "f_x",
-                            "request_id": "req-1",
-                            "action": "add",
-                            "status": "pending",
-                            "review_mode": "require_review",
-                            "payload": {},
-                            "created_at": "2026-06-11T00:00:00+09:00",
-                        }
-                    ],
-                    "review_mode": "require_review",
-                },
-                "meta": {},
-            },
-        )
-
-    client = _client(handler)
-    data = await client.list_change_requests(
-        statuses=["pending", "applied"],
-        actions=["add"],
-        q="해운대",
-        page_size=25,
-    )
-    assert seen["path"] == "/v1/admin/features/change-requests"
-    assert ("status", "pending") in seen["query"]
-    assert ("status", "applied") in seen["query"]
-    assert ("action", "add") in seen["query"]
-    assert ("q", "해운대") in seen["query"]
-    assert ("page_size", "25") in seen["query"]
-    assert data["items"][0]["request_id"] == "req-1"
-    await client.aclose()
-
-
-async def test_reject_change_request_hits_action_subresource() -> None:
-    seen: dict[str, Any] = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen["path"] = request.url.path
-        seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json=_change_response(action="update", state="rejected"))
-
-    client = _client(handler)
-    record = await client.reject_change_request("req-10", operator="tm-admin", reason="dup")
-    assert seen["path"] == "/v1/admin/features/change-requests/req-10/reject"
-    assert seen["body"] == {"operator": "tm-admin", "reason": "dup"}
-    assert record["status"] == "rejected"
+        await client.get_feature_revision_etag("f_abc")
     await client.aclose()
 
 
 async def test_409_non_lock_busy_maps_to_conflict() -> None:
     client = _client(lambda r: httpx.Response(409, json={"code": "INVALID_STATE", "status": 409}))
     with pytest.raises(KorTravelMapConflict) as exc_info:
-        await client.approve_change_request("req-1", operator="tm-admin", reason="ok")
+        await client.get_feature_detail("f_abc")
     assert exc_info.value.code == "INVALID_STATE"
     await client.aclose()
 
@@ -550,7 +478,7 @@ async def test_409_lock_busy_keeps_conflict_code_and_retry_after() -> None:
         )
     )
     with pytest.raises(KorTravelMapConflict) as exc_info:
-        await client.approve_change_request("req-1", operator="tm-admin", reason="ok")
+        await client.get_feature_detail("f_abc")
     assert exc_info.value.code == "LOCK_BUSY"
     assert exc_info.value.retry_after_seconds == 11
     await client.aclose()
@@ -564,7 +492,7 @@ async def test_412_maps_to_precondition_failed() -> None:
         )
     )
     with pytest.raises(KorTravelMapPreconditionFailed) as exc_info:
-        await client.approve_change_request("req-1", operator="tm-admin", reason="ok")
+        await client.get_feature_detail("f_abc")
     assert exc_info.value.code == "PRECONDITION_FAILED"
     await client.aclose()
 
@@ -574,7 +502,7 @@ async def test_404_maps_to_feature_not_found() -> None:
         lambda r: httpx.Response(404, json={"code": "FEATURE_NOT_FOUND", "status": 404})
     )
     with pytest.raises(KorTravelMapFeatureNotFound):
-        await client.patch_feature("f_x", {"reason": "x"})
+        await client.get_feature_detail("f_x")
     await client.aclose()
 
 

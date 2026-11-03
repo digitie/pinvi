@@ -187,6 +187,7 @@ function MapReferencePanel({ request }: { request: AdminFeatureRequestSummary })
 
   const upstreamRequestId = typeof mapRef.request_id === 'string' ? mapRef.request_id : null;
   const reviewMode = typeof mapRef.review_mode === 'string' ? mapRef.review_mode : null;
+  const featureId = typeof mapRef.feature_id === 'string' ? mapRef.feature_id : null;
   const primaryEntries = MAP_REF_FIELDS.filter((key) => mapRef[key] != null).map(
     (key) => [key, mapRef[key]] as const,
   );
@@ -205,13 +206,13 @@ function MapReferencePanel({ request }: { request: AdminFeatureRequestSummary })
             Feature 제안과 Map 검토 큐를 잇는 추적 값입니다.
           </p>
         </div>
-        {upstreamRequestId && reviewMode !== 'feature_request_queue' ? (
+        {featureId && reviewMode !== 'feature_request_queue' ? (
           <ButtonLink
-            href={`/admin/features/change-requests?q=${encodeURIComponent(upstreamRequestId)}`}
+            href={`/admin/features?q=${encodeURIComponent(featureId!)}`}
             variant="secondary"
             size="sm"
           >
-            변경 요청 큐 보기
+            Feature 수정·감사 보기
           </ButtonLink>
         ) : null}
       </div>
@@ -332,7 +333,23 @@ function ReviewDialog({
   onDone: (message: string) => void;
   returnFocusRef: RefObject<HTMLElement | null>;
 }) {
+  const queryClient = useQueryClient();
   const isPending = request.status === 'pending';
+  const canDelete = ['rejected', 'added', 'duplicate'].includes(request.status);
+  const dispatch = request.kor_travel_map_ref?.dispatch;
+  const savedInput =
+    dispatch &&
+    typeof dispatch === 'object' &&
+    'input' in dispatch &&
+    dispatch.input &&
+    typeof dispatch.input === 'object'
+      ? (dispatch.input as Record<string, unknown>)
+      : {};
+  const savedText = (key: string) =>
+    typeof savedInput[key] === 'string' ? (savedInput[key] as string) : '';
+  const [commandPending, setCommandPending] = useState(Boolean(dispatch));
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [dryRunNotice, setDryRunNotice] = useState<string | null>(null);
   const isNewPlace = request.type === 'new_place';
   const isCorrection = request.type === 'correction';
   const formId = `admin-fr-review-form-${request.request_id}`;
@@ -340,11 +357,11 @@ function ReviewDialog({
   const rejectButtonRef = useRef<HTMLButtonElement | null>(null);
   // 파괴적 확인의 기본 포커스는 '계속 검토'(안전한 쪽)다 — 전환 전 ConfirmDialog와 같은 계약.
   const rejectCancelRef = useRef<HTMLButtonElement | null>(null);
-  const [accessReason, setAccessReason] = useState('');
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState('');
-  const [markerColor, setMarkerColor] = useState('');
-  const [markerIcon, setMarkerIcon] = useState('');
+  const [accessReason, setAccessReason] = useState(() => savedText('access_reason'));
+  const [name, setName] = useState(() => savedText('name'));
+  const [category, setCategory] = useState(() => savedText('category'));
+  const [markerColor, setMarkerColor] = useState(() => savedText('marker_color'));
+  const [markerIcon, setMarkerIcon] = useState(() => savedText('marker_icon'));
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -355,21 +372,22 @@ function ReviewDialog({
     panelErrorRef.current?.focus({ preventScroll: true });
   }, [err]);
 
+  const approvalBody = () => ({
+    access_reason: accessReason.trim(),
+    ...(typeof savedInput.kor_travel_map_reason === 'string'
+      ? { kor_travel_map_reason: savedInput.kor_travel_map_reason }
+      : {}),
+    ...(isCorrection
+      ? {
+          name: name.trim() || undefined,
+          category: category.trim() || undefined,
+          marker_color: markerColor.trim() || undefined,
+          marker_icon: markerIcon.trim() || undefined,
+        }
+      : {}),
+  });
   const approveMutation = useMutation({
-    mutationFn: () => {
-      const approval = {
-        access_reason: accessReason.trim(),
-        ...(isCorrection
-          ? {
-              name: name.trim() || undefined,
-              category: category.trim() || undefined,
-              marker_color: markerColor.trim() || undefined,
-              marker_icon: markerIcon.trim() || undefined,
-            }
-          : {}),
-      };
-      return adminApi(apiClient).approveFeatureRequest(request.request_id, approval);
-    },
+    mutationFn: () => adminApi(apiClient).approveFeatureRequest(request.request_id, approvalBody()),
     onSuccess: () =>
       onDone(
         isNewPlace
@@ -378,6 +396,14 @@ function ReviewDialog({
       ),
     onError: (error) => {
       setRejectConfirmOpen(false);
+      if (
+        !isNewPlace &&
+        error instanceof ApiError &&
+        (error.status >= 500 || error.code === 'MAP_COMMAND_PENDING')
+      ) {
+        setCommandPending(true);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
+      }
       setErr(error instanceof ApiError ? error.message : '승인에 실패했습니다.');
     },
   });
@@ -394,7 +420,41 @@ function ReviewDialog({
     },
   });
 
-  const busy = approveMutation.isPending || rejectMutation.isPending;
+  const dryRunMutation = useMutation({
+    mutationFn: () =>
+      adminApi(apiClient).approveFeatureRequest(request.request_id, approvalBody(), {
+        dryRun: true,
+      }),
+    onSuccess: (result) => {
+      setErr(null);
+      setDryRunNotice(
+        result.dry_run
+          ? '제안 형식 검증을 통과했습니다. Map 전송과 상태 변경은 수행하지 않았습니다.'
+          : null,
+      );
+    },
+    onError: (error) => {
+      setDryRunNotice(null);
+      setErr(error instanceof ApiError ? error.message : '검증에 실패했습니다.');
+    },
+  });
+  const deleteMutation = useMutation({
+    mutationFn: () =>
+      adminApi(apiClient).deleteFeatureRequest(request.request_id, {
+        access_reason: accessReason.trim(),
+      }),
+    onSuccess: () =>
+      onDone('처리 완료된 제안을 삭제했습니다. 감사 기록과 Map·여행 데이터는 보존됩니다.'),
+    onError: (error) => {
+      setDeleteConfirmOpen(false);
+      setErr(error instanceof ApiError ? error.message : '삭제에 실패했습니다.');
+    },
+  });
+  const busy =
+    approveMutation.isPending ||
+    rejectMutation.isPending ||
+    dryRunMutation.isPending ||
+    deleteMutation.isPending;
 
   const validateReason = () => {
     if (!accessReason.trim()) {
@@ -423,6 +483,7 @@ function ReviewDialog({
   };
 
   const openRejectConfirm = () => {
+    if (commandPending) return;
     if (!validateReason()) return;
     setErr(null);
     setRejectConfirmOpen(true);
@@ -452,9 +513,27 @@ function ReviewDialog({
   ];
 
   const footer = !isPending ? (
-    <Button type="button" variant="secondary" onClick={onClose}>
-      닫기
-    </Button>
+    <>
+      {canDelete && (
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={busy}
+          data-testid="admin-fr-delete"
+          onClick={() => {
+            if (validateReason()) {
+              setErr(null);
+              setDeleteConfirmOpen(true);
+            }
+          }}
+        >
+          제안 삭제
+        </Button>
+      )}
+      <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
+        닫기
+      </Button>
+    </>
   ) : (
     <>
       <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
@@ -465,7 +544,7 @@ function ReviewDialog({
         type="button"
         variant="secondary"
         onClick={openRejectConfirm}
-        disabled={approveMutation.isPending}
+        disabled={busy || commandPending}
         loading={rejectMutation.isPending}
         state={err ? 'error' : 'idle'}
         data-testid="admin-fr-reject"
@@ -473,14 +552,29 @@ function ReviewDialog({
         거절
       </Button>
       <Button
+        type="button"
+        variant="secondary"
+        disabled={busy}
+        loading={dryRunMutation.isPending}
+        data-testid="admin-fr-dry-run"
+        onClick={() => {
+          if (validateReason()) {
+            setErr(null);
+            dryRunMutation.mutate();
+          }
+        }}
+      >
+        형식 검증
+      </Button>
+      <Button
         type="submit"
         form={formId}
         loading={approveMutation.isPending}
-        disabled={rejectMutation.isPending}
+        disabled={busy}
         state={err ? 'error' : 'idle'}
         data-testid="admin-fr-approve"
       >
-        승인
+        {commandPending ? '기존 명령 재시도' : '승인'}
       </Button>
     </>
   );
@@ -533,11 +627,52 @@ function ReviewDialog({
           <MapReferencePanel request={request} />
 
           {!isPending ? (
-            <p className="rounded-sm bg-surface-soft p-3 text-sm text-muted">
-              이미 처리된 제안입니다.
-            </p>
+            <div className="space-y-3">
+              <p className="rounded-sm bg-surface-soft p-3 text-sm text-muted">
+                {request.status === 'approved'
+                  ? 'Map 검토 대기 중인 제안은 삭제할 수 없습니다.'
+                  : '처리 완료된 제안입니다. 삭제해도 감사 기록과 Map·여행 데이터는 보존됩니다.'}
+              </p>
+              {canDelete && (
+                <FormTextArea
+                  ref={reasonRef}
+                  id="admin-fr-delete-reason"
+                  label="삭제 사유 (감사 기록)"
+                  value={accessReason}
+                  rows={3}
+                  maxLength={500}
+                  onChange={(event) => {
+                    setAccessReason(event.target.value);
+                    setReasonError(null);
+                  }}
+                  error={reasonError ?? undefined}
+                  data-testid="admin-fr-reason"
+                />
+              )}
+              {err && (
+                <p
+                  role="alert"
+                  ref={panelErrorRef}
+                  tabIndex={-1}
+                  data-testid="admin-fr-panel-error"
+                >
+                  {err}
+                </p>
+              )}
+            </div>
           ) : (
             <form id={formId} onSubmit={approve} className="space-y-4">
+              {commandPending && (
+                <p role="status" className="rounded-sm bg-surface-soft p-3 text-sm">
+                  Map 처리 결과가 미확정입니다. 저장된 입력으로 재시도하여 결과를 확인하세요. 확인
+                  전에는 내용을 바꾸거나 거절할 수 없습니다.
+                </p>
+              )}
+              {dryRunNotice && (
+                <p role="status" data-testid="admin-fr-dry-run-notice">
+                  {dryRunNotice}
+                </p>
+              )}
               {isNewPlace && (
                 <p
                   className="rounded-sm border border-hairline bg-surface-soft p-3 text-sm text-body"
@@ -549,14 +684,20 @@ function ReviewDialog({
               )}
 
               {isCorrection && (
-                <fieldset className="space-y-3 rounded-sm border border-hairline p-3">
+                <fieldset
+                  disabled={busy || commandPending}
+                  className="space-y-3 rounded-sm border border-hairline p-3"
+                >
                   <legend className="px-1 text-sm font-semibold text-ink">수정 반영 필드</legend>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <FormField
                       id="admin-fr-name"
                       label="이름"
                       value={name}
-                      onChange={(event) => setName(event.target.value)}
+                      onChange={(event) => {
+                        setName(event.target.value);
+                        setDryRunNotice(null);
+                      }}
                       placeholder={request.name}
                       labelClassName={DIALOG_LABEL_CLASS}
                       data-testid="admin-fr-name"
@@ -565,7 +706,10 @@ function ReviewDialog({
                       id="admin-fr-category"
                       label="카테고리 코드"
                       value={category}
-                      onChange={(event) => setCategory(event.target.value)}
+                      onChange={(event) => {
+                        setCategory(event.target.value);
+                        setDryRunNotice(null);
+                      }}
                       placeholder="01070100"
                       labelClassName={DIALOG_LABEL_CLASS}
                       data-testid="admin-fr-category"
@@ -574,7 +718,10 @@ function ReviewDialog({
                       id="admin-fr-marker-color"
                       label="마커 색"
                       value={markerColor}
-                      onChange={(event) => setMarkerColor(event.target.value)}
+                      onChange={(event) => {
+                        setMarkerColor(event.target.value);
+                        setDryRunNotice(null);
+                      }}
                       placeholder="P-07"
                       labelClassName={DIALOG_LABEL_CLASS}
                       data-testid="admin-fr-marker-color"
@@ -583,7 +730,10 @@ function ReviewDialog({
                       id="admin-fr-marker-icon"
                       label="마커 아이콘"
                       value={markerIcon}
-                      onChange={(event) => setMarkerIcon(event.target.value)}
+                      onChange={(event) => {
+                        setMarkerIcon(event.target.value);
+                        setDryRunNotice(null);
+                      }}
                       placeholder="cafe"
                       labelClassName={DIALOG_LABEL_CLASS}
                       data-testid="admin-fr-marker-icon"
@@ -594,11 +744,14 @@ function ReviewDialog({
 
               <FormTextArea
                 ref={reasonRef}
+                readOnly={commandPending}
+                disabled={busy}
                 id="admin-fr-reason"
                 label="검토 사유 (감사 기록)"
                 value={accessReason}
                 onChange={(event) => {
                   setAccessReason(event.target.value);
+                  setDryRunNotice(null);
                   setRejectConfirmOpen(false);
                   if (reasonError) setReasonError(null);
                 }}
@@ -626,6 +779,39 @@ function ReviewDialog({
         </section>
         <DialogFooter>{footer}</DialogFooter>
       </DialogContent>
+      <AlertDialog
+        open={deleteConfirmOpen}
+        onOpenChange={(open) => {
+          if (!deleteMutation.isPending) setDeleteConfirmOpen(open);
+        }}
+      >
+        <AlertDialogContent initialFocus={rejectCancelRef}>
+          <AlertDialogTitle>처리 완료 제안을 삭제할까요?</AlertDialogTitle>
+          <AlertDialogDescription>
+            이 제안 행은 되돌릴 수 없습니다. 감사 기록과 Map·여행 데이터는 보존됩니다.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <Button
+              ref={rejectCancelRef}
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => setDeleteConfirmOpen(false)}
+            >
+              취소
+            </Button>
+            <Button
+              type="button"
+              disabled={busy}
+              loading={deleteMutation.isPending}
+              data-testid="admin-fr-delete-confirm"
+              onClick={() => deleteMutation.mutate()}
+            >
+              삭제
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* 되돌릴 수 없는 거절 확정 — KTM 규약대로 AlertDialog(role=alertdialog). base-ui가
           alertdialog에서 scrim 클릭 닫기를 강제로 끄므로, 오조작으로 확인창이 사라지지 않는다.
           검토 Dialog 안에 중첩해 두어 base-ui가 두 모달의 스택 관계를 알게 한다. */}
@@ -903,9 +1089,6 @@ export default function AdminFeatureRequestsPage() {
             setSelected(null);
             setNotice(message);
             void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.admin.featureChangeRequestsAll(),
-            });
           }}
         />
       )}

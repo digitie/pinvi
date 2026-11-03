@@ -1,24 +1,8 @@
-"""kor-travel-map admin OpenAPI HTTP client — feature correction/closure relay (T-180).
+"""Map admin·ops HTTP client.
 
-Pinvi Admin이 1차 검토·승인한 사용자 feature 제안을 kor_travel_map `/v1/admin/features*`
-(PATCH/DELETE + change-requests approve/reject)로 전송하는 admin-path client다. 신규 feature 생성은
-canonical queue cutover 전까지 이 client에서 직접 호출하지 않는다.
-API base는 **:12701 `/v1/admin/*`** 이다. 사용자 토큰을 전달하지 않고
-설정된 admin service token(`X-Kor-Travel-Map-Service-Token`)과, 운영에서 kor_travel_map
-admin proxy gate가 켜진 경우 `X-Kor-Travel-Map-Admin-Proxy-Secret`/actor 헤더를 보낸다.
-`/v1/ops/datasets*`·`/v1/ops/pipeline*`와 consistency/log 관측 read는 별도 server
-principal token/scope만 보내며 frontend BFF 자격은 전송하지 않는다(T-ADM-C6c, T-VN-03).
-관리자 Feature 목록·상세 두 GET은 `/v1/service/admin-features*`와 별도 읽기 token만 사용한다.
-기존 admin 쓰기·revision·ops 자격과 상호 fallback하지 않는다.
-
-§7 합의 5건 **확정** (kor_travel_map T-217c, 2026-06-11):
-- admin 인증 = 인프라 계층(SSO/IP allowlist, ADR-005 모델). 코드 인증은 kor_travel_map 측
-  `admin_destructive_enabled` kill-switch뿐 — `X-Kor-Travel-Map-Service-Token`은 선택 pass-through.
-- review_mode = kor_travel_map `KOR_TRAVEL_MAP_ADMIN_FEATURE_CHANGE_REVIEW_MODE`(기본 require_review 2단 검토).
-- closure = soft `DELETE`(`user_deleted_*`, provider 재적재 부활 차단) / deactivate는 일시 비활성.
-- idempotency/출처 태깅은 호출부(T-179 `feature_requests.py`)에서 적용.
-
-계약: `docs/integrations/kor-travel-map-rest-api.md` §2.9 + kor_travel_map `openapi.json`.
+Feature 읽기는 별도 service read principal, 운영 관측은 ops principal을 사용한다.
+직접 수정·폐쇄는 admin proxy 인증·If-Match·Idempotency-Key와 현재 commit receipt를
+사용하며 폐기된 change-requests 큐는 호출하지 않는다. 신규 장소는 별도 service 큐가 소유한다.
 """
 
 from __future__ import annotations
@@ -33,6 +17,7 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from pydantic import BaseModel, Field, ValidationError
 
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
@@ -217,6 +202,22 @@ def _validated_typed_cancellation_details(
                 "typed Dagster failure must match retryable attempt evidence"
             )
     return canonical
+
+
+class FeatureOverrideReceipt(BaseModel):
+    feature_id: str = Field(min_length=1)
+    row_revision: int = Field(ge=1, strict=True)
+    command_id: int = Field(ge=1, strict=True)
+    applied_field_count: int = Field(ge=1, strict=True)
+
+
+class FeatureStateReceipt(BaseModel):
+    feature_id: str = Field(min_length=1)
+    lifecycle_state: Literal["active", "retired"]
+    publication_state: Literal["draft", "published", "suppressed"]
+    quality_state: Literal["valid", "quarantined"]
+    row_revision: int = Field(ge=1, strict=True)
+    audit_transition_id: int = Field(ge=1, strict=True)
 
 
 class KorTravelMapAdminClient:
@@ -564,7 +565,7 @@ class KorTravelMapAdminClient:
             )
         )
 
-    async def _feature_revision_etag(self, feature_id: str) -> str:
+    async def get_feature_revision_etag(self, feature_id: str) -> str:
         """stable revision GET의 canonical ETag를 mutation precondition으로 보존한다."""
         resp = await self._send("GET", f"/v1/admin/features/{feature_id}/revision")
         self._data(resp)
@@ -573,97 +574,52 @@ class KorTravelMapAdminClient:
             raise KorTravelMapError("admin feature revision 응답에 canonical ETag가 없습니다.")
         return entity_tag
 
-    def _change_record(self, resp: httpx.Response) -> dict[str, Any]:
-        """feature change 응답에서 `data.request`(AdminFeatureChangeRequestRecord) 추출.
-
-        record = {feature_id, request_id, action, status, review_mode, payload,
-        reason?, requested_by?, applied_at?, reviewed_at/by?, created_at}.
-        """
+    def _command_receipt(self, resp: httpx.Response, schema: type[BaseModel]) -> dict[str, Any]:
+        """직접 수정의 commit receipt만 수용하고 폐기된 요청 큐 shape는 거절한다."""
         data = self._data(resp)
-        record = data.get("request")
-        if not isinstance(record, dict):
-            raise KorTravelMapError("admin change 응답에 data.request 가 없습니다.")
-        return record
+        try:
+            return schema.model_validate(data).model_dump(mode="json")
+        except ValidationError as exc:
+            raise KorTravelMapError("Map 직접 수정 receipt 형식이 올바르지 않습니다.") from exc
 
-    # ── feature correction/closure (T-179 승인 시 호출) ───────────────────────
-
-    async def patch_feature(self, feature_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
-        """PATCH /v1/admin/features/{id} — 정보 수정(correction). `reason` 필수."""
-        entity_tag = await self._feature_revision_etag(feature_id)
-        return self._change_record(
+    async def patch_feature(
+        self,
+        feature_id: str,
+        payload: Mapping[str, Any],
+        *,
+        expected_revision: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._command_receipt(
             await self._send(
                 "PATCH",
-                f"/v1/admin/features/{feature_id}",
+                f"/v1/admin/features/{quote(feature_id, safe='')}",
                 json=dict(payload),
-                headers={"If-Match": entity_tag},
-            )
+                headers={"If-Match": expected_revision, "Idempotency-Key": idempotency_key},
+            ),
+            FeatureOverrideReceipt,
         )
 
     async def delete_feature(
-        self, feature_id: str, *, reason: str, operator: str | None = None
+        self,
+        feature_id: str,
+        *,
+        reason: str,
+        expected_revision: str,
+        idempotency_key: str,
+        operator: str | None = None,
     ) -> dict[str, Any]:
-        """DELETE /v1/admin/features/{id} — 폐업(closure, soft). 문서 기본값=DELETE(§7)."""
         body: dict[str, Any] = {"reason": reason}
         if operator is not None:
             body["operator"] = operator
-        entity_tag = await self._feature_revision_etag(feature_id)
-        return self._change_record(
+        return self._command_receipt(
             await self._send(
                 "DELETE",
-                f"/v1/admin/features/{feature_id}",
+                f"/v1/admin/features/{quote(feature_id, safe='')}",
                 json=body,
-                headers={"If-Match": entity_tag},
-            )
-        )
-
-    # ── change-requests 큐 (kor_travel_map 운영자 검수 추적) ───────────────────────
-
-    async def list_change_requests(
-        self,
-        *,
-        statuses: list[str] | None = None,
-        actions: list[str] | None = None,
-        q: str | None = None,
-        page_size: int | None = None,
-    ) -> dict[str, Any]:
-        """GET /v1/admin/features/change-requests — data = {items, review_mode}."""
-        params: dict[str, Any] = {}
-        self._put_sequence_params(params, "status", statuses)
-        self._put_sequence_params(params, "action", actions)
-        if q:
-            params["q"] = q
-        if page_size is not None:
-            params["page_size"] = page_size
-        return self._data(
-            await self._send("GET", "/v1/admin/features/change-requests", params=params)
-        )
-
-    async def approve_change_request(
-        self, request_id: str, *, operator: str | None = None, reason: str | None = None
-    ) -> dict[str, Any]:
-        body: dict[str, Any] = {}
-        if operator is not None:
-            body["operator"] = operator
-        if reason is not None:
-            body["reason"] = reason
-        return self._change_record(
-            await self._send(
-                "POST", f"/v1/admin/features/change-requests/{request_id}/approve", json=body
-            )
-        )
-
-    async def reject_change_request(
-        self, request_id: str, *, operator: str | None = None, reason: str | None = None
-    ) -> dict[str, Any]:
-        body: dict[str, Any] = {}
-        if operator is not None:
-            body["operator"] = operator
-        if reason is not None:
-            body["reason"] = reason
-        return self._change_record(
-            await self._send(
-                "POST", f"/v1/admin/features/change-requests/{request_id}/reject", json=body
-            )
+                headers={"If-Match": expected_revision, "Idempotency-Key": idempotency_key},
+            ),
+            FeatureStateReceipt,
         )
 
     # ── ops/provider ETL read proxy (kor_travel_map admin 운영 화면) ────────────────

@@ -77,22 +77,42 @@ async def _create_suggestion(
 class _FakeAdminClient:
     def __init__(self, state: str = "applied") -> None:
         self.outbound_calls: list[dict[str, Any]] = []
-        self._state = state
 
-    async def patch_feature(self, feature_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    async def get_feature_revision_etag(self, feature_id: str) -> str:
+        return '"7"'
+
+    async def patch_feature(
+        self,
+        feature_id: str,
+        payload: dict[str, Any],
+        *,
+        expected_revision: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
         self.outbound_calls.append(
-            {"method": "PATCH", "feature_id": feature_id, "payload": dict(payload)}
+            {
+                "method": "PATCH",
+                "feature_id": feature_id,
+                "payload": dict(payload),
+                "if_match": expected_revision,
+                "idempotency_key": idempotency_key,
+            }
         )
         return {
             "feature_id": feature_id,
-            "request_id": "krq-2",
-            "status": self._state,
-            "review_mode": "immediate",
-            "action": "update",
+            "row_revision": 8,
+            "command_id": 12,
+            "applied_field_count": 1,
         }
 
     async def delete_feature(
-        self, feature_id: str, *, reason: str, operator: str | None = None
+        self,
+        feature_id: str,
+        *,
+        reason: str,
+        expected_revision: str,
+        idempotency_key: str,
+        operator: str | None = None,
     ) -> dict[str, Any]:
         self.outbound_calls.append(
             {
@@ -100,14 +120,17 @@ class _FakeAdminClient:
                 "feature_id": feature_id,
                 "reason": reason,
                 "operator": operator,
+                "if_match": expected_revision,
+                "idempotency_key": idempotency_key,
             }
         )
         return {
             "feature_id": feature_id,
-            "request_id": "krq-3",
-            "status": self._state,
-            "review_mode": "immediate",
-            "action": "delete",
+            "row_revision": 8,
+            "audit_transition_id": 13,
+            "lifecycle_state": "retired",
+            "publication_state": "published",
+            "quality_state": "valid",
         }
 
 
@@ -555,3 +578,173 @@ async def test_non_admin_is_hidden(client: Any, session_factory: Any, auth_cooki
     user_id = await _create_user(session_factory, email="plain@example.com")  # role=user
     resp = await client.get("/admin/feature-requests", cookies=auth_cookies(str(user_id)))
     assert resp.status_code == 404
+
+
+async def test_dry_run_has_no_map_or_local_mutation(
+    client: Any, session_factory: Any, auth_cookies: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    admin_id = await _create_user(session_factory, email="admin@example.com", roles=["admin"])
+    req_id = await _create_suggestion(session_factory, requester_id=admin_id)
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("dry-run must not construct a Map client")
+
+    monkeypatch.setattr(feature_request_router, "get_feature_request_service_client", forbidden)
+    monkeypatch.setattr(feature_request_router, "get_kor_travel_map_admin_client", forbidden)
+    response = await client.post(
+        f"/admin/feature-requests/{req_id}/approve?dry_run=1",
+        json={"access_reason": "형식 검사"},
+        cookies=auth_cookies(str(admin_id)),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["dry_run"] is True
+    assert response.json()["data"]["status"] == "pending"
+    async with session_factory() as db:
+        row = await db.get(FeatureSuggestion, req_id)
+        assert row is not None and row.status == "pending"
+        assert row.kor_travel_map_ref is None and row.resolved_at is None
+        assert await db.scalar(select(func.count()).select_from(AdminAuditLog)) == 0
+
+
+@pytest.mark.parametrize("terminal_status", ["rejected", "added", "duplicate"])
+async def test_delete_completed_request_preserves_audit(
+    client: Any, session_factory: Any, auth_cookies: Any, terminal_status: str
+) -> None:
+    admin_id = await _create_user(session_factory, email="admin@example.com", roles=["admin"])
+    req_id = await _create_suggestion(session_factory, requester_id=admin_id)
+    async with session_factory() as db:
+        row = await db.get(FeatureSuggestion, req_id)
+        assert row is not None
+        row.status = terminal_status
+        row.kor_travel_map_ref = {"feature_id": "f_preserved", "command_id": 123}
+        await db.commit()
+    response = await client.request(
+        "DELETE",
+        f"/admin/feature-requests/{req_id}",
+        json={"access_reason": "처리 이력 정리"},
+        cookies=auth_cookies(str(admin_id)),
+    )
+    assert response.status_code == 204, response.text
+    async with session_factory() as db:
+        assert await db.get(FeatureSuggestion, req_id) is None
+        audit = await db.scalar(
+            select(AdminAuditLog).where(AdminAuditLog.action == "feature_request.delete")
+        )
+        assert audit is not None
+        assert audit.before_state["status"] == terminal_status
+        assert audit.before_state["kor_travel_map_ref"]["command_id"] == 123
+    again = await client.request(
+        "DELETE",
+        f"/admin/feature-requests/{req_id}",
+        json={"access_reason": "다시 정리"},
+        cookies=auth_cookies(str(admin_id)),
+    )
+    assert again.status_code == 404
+
+
+@pytest.mark.parametrize("request_status", ["pending", "approved"])
+async def test_delete_inflight_request_is_rejected(
+    client: Any, session_factory: Any, auth_cookies: Any, request_status: str
+) -> None:
+    admin_id = await _create_user(session_factory, email="admin@example.com", roles=["admin"])
+    req_id = await _create_suggestion(session_factory, requester_id=admin_id)
+    async with session_factory() as db:
+        row = await db.get(FeatureSuggestion, req_id)
+        assert row is not None
+        row.status = request_status
+        await db.commit()
+    response = await client.request(
+        "DELETE",
+        f"/admin/feature-requests/{req_id}",
+        json={"access_reason": "삭제 시도"},
+        cookies=auth_cookies(str(admin_id)),
+    )
+    assert response.status_code == 409
+
+
+async def test_uncertain_direct_command_replays_original_revision_and_key(
+    client: Any, session_factory: Any, auth_cookies: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.clients.kor_travel_map import KorTravelMapUnavailable
+
+    admin_id = await _create_user(session_factory, email="admin@example.com", roles=["admin"])
+    req_id = await _create_suggestion(
+        session_factory,
+        requester_id=admin_id,
+        suggestion_type="correction",
+        target_feature_id="f_existing",
+    )
+
+    class Uncertain(_FakeAdminClient):
+        revision_reads = 0
+
+        async def get_feature_revision_etag(self, feature_id: str) -> str:
+            self.revision_reads += 1
+            return '"7"' if self.revision_reads == 1 else '"8"'
+
+        async def patch_feature(
+            self,
+            feature_id: str,
+            payload: dict[str, Any],
+            *,
+            expected_revision: str,
+            idempotency_key: str,
+        ) -> dict[str, Any]:
+            result = await super().patch_feature(
+                feature_id,
+                payload,
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
+            )
+            if len(self.outbound_calls) == 1:
+                raise KorTravelMapUnavailable("response lost after commit")
+            return result
+
+    fake = Uncertain()
+    _override_admin_client(monkeypatch, fake)
+    body = {"access_reason": "현장 확인", "name": "새 이름"}
+    response = await client.post(
+        f"/admin/feature-requests/{req_id}/approve", json=body, cookies=auth_cookies(str(admin_id))
+    )
+    assert response.status_code == 503, response.text
+    async with session_factory() as db:
+        row = await db.get(FeatureSuggestion, req_id)
+        assert row is not None and row.status == "pending"
+        assert row.kor_travel_map_ref["dispatch"]["expected_revision"] == '"7"'
+    reject = await client.post(
+        f"/admin/feature-requests/{req_id}/reject",
+        json={"access_reason": "취소"},
+        cookies=auth_cookies(str(admin_id)),
+    )
+    assert reject.status_code == 409
+    changed = await client.post(
+        f"/admin/feature-requests/{req_id}/approve",
+        json={**body, "name": "다른 이름"},
+        cookies=auth_cookies(str(admin_id)),
+    )
+    assert changed.status_code == 409
+    retry = await client.post(
+        f"/admin/feature-requests/{req_id}/approve", json=body, cookies=auth_cookies(str(admin_id))
+    )
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["data"]["status"] == "added"
+    assert fake.revision_reads == 1
+    assert fake.outbound_calls[0] == fake.outbound_calls[1]
+    assert fake.outbound_calls[1]["if_match"] == '"7"'
+    assert fake.outbound_calls[1]["idempotency_key"] == str(req_id)
+
+
+async def test_non_admin_new_admin_operations_remain_hidden(
+    client: Any, session_factory: Any, auth_cookies: Any
+) -> None:
+    user_id = await _create_user(session_factory, email="plain@example.com")
+    req_id = await _create_suggestion(session_factory, requester_id=user_id)
+    for method, path in [
+        ("POST", f"/admin/feature-requests/{req_id}/approve?dry_run=1"),
+        ("DELETE", f"/admin/feature-requests/{req_id}"),
+    ]:
+        response = await client.request(
+            method, path, json={"access_reason": "권한 확인"}, cookies=auth_cookies(str(user_id))
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "RESOURCE_NOT_FOUND"

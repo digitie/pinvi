@@ -18,9 +18,6 @@ import {
   AdminEmailEntrySchema,
   AdminEtlSummarySchema,
   AdminFeatureDetailSchema,
-  AdminFeatureChangeRequestActionRequestSchema,
-  AdminFeatureChangeRequestPagedResponseSchema,
-  AdminFeatureChangeRequestRecordSchema,
   AdminFeatureOverridesResponseSchema,
   AdminFeaturePagedResponseSchema,
   AdminFeatureSourcesResponseSchema,
@@ -167,13 +164,6 @@ export interface AdminFeatureListParams {
   order?: z.infer<typeof AdminFeatureSortOrderSchema>;
 }
 
-export interface AdminFeatureChangeRequestListParams {
-  q?: string;
-  status?: string[];
-  action?: string[];
-  pageSize?: number;
-}
-
 export interface AdminProviderSyncListParams {
   key?: string;
 }
@@ -295,13 +285,7 @@ export type AdminDsrRejectBody = z.infer<typeof AdminDsrRejectRequestSchema>;
 
 export interface AdminContentReportListParams {
   status?:
-    | 'received'
-    | 'reviewing'
-    | 'hidden'
-    | 'taken_down'
-    | 'rejected'
-    | 'appealed'
-    | 'restored';
+    'received' | 'reviewing' | 'hidden' | 'taken_down' | 'rejected' | 'appealed' | 'restored';
   targetType?: 'trip' | 'comment' | 'attachment' | 'share_link';
   pageSize?: number;
 }
@@ -1060,40 +1044,6 @@ export const adminApi = (client: ApiClient) => ({
       schema: AdminFeatureWeatherValuesResponseSchema,
     }),
 
-  /** kor-travel-map admin change request 큐 proxy (T-210). */
-  listFeatureChangeRequests: (params: AdminFeatureChangeRequestListParams = {}) => {
-    const qs = new URLSearchParams();
-    if (params.q) qs.set('q', params.q);
-    appendValues(qs, 'status', params.status);
-    appendValues(qs, 'action', params.action);
-    if (params.pageSize) qs.set('page_size', String(params.pageSize));
-    const path = `/admin/features/change-requests${qs.toString() ? `?${qs.toString()}` : ''}`;
-    return client.request(path, {
-      method: 'GET',
-      schema: AdminFeatureChangeRequestPagedResponseSchema,
-    });
-  },
-
-  approveFeatureChangeRequest: (
-    requestId: string,
-    body: z.infer<typeof AdminFeatureChangeRequestActionRequestSchema>,
-  ) =>
-    client.request(`/admin/features/change-requests/${encodeURIComponent(requestId)}/approve`, {
-      method: 'POST',
-      body: JSON.stringify(AdminFeatureChangeRequestActionRequestSchema.parse(body)),
-      schema: AdminFeatureChangeRequestRecordSchema,
-    }),
-
-  rejectFeatureChangeRequest: (
-    requestId: string,
-    body: z.infer<typeof AdminFeatureChangeRequestActionRequestSchema>,
-  ) =>
-    client.request(`/admin/features/change-requests/${encodeURIComponent(requestId)}/reject`, {
-      method: 'POST',
-      body: JSON.stringify(AdminFeatureChangeRequestActionRequestSchema.parse(body)),
-      schema: AdminFeatureChangeRequestRecordSchema,
-    }),
-
   /** 사용자 feature 제안 검토 큐 (T-179). */
   listFeatureRequests: (params: { status?: string; page?: number; limit?: number } = {}) => {
     const qs = new URLSearchParams();
@@ -1110,12 +1060,16 @@ export const adminApi = (client: ApiClient) => ({
   approveFeatureRequest: (
     requestId: string,
     body: z.infer<typeof AdminFeatureRequestApproveSchema>,
+    options: { dryRun?: boolean } = {},
   ) =>
-    client.request(`/admin/feature-requests/${requestId}/approve`, {
-      method: 'POST',
-      body: JSON.stringify(AdminFeatureRequestApproveSchema.parse(body)),
-      schema: AdminFeatureRequestResultSchema,
-    }),
+    client.request(
+      `/admin/feature-requests/${requestId}/approve${options.dryRun ? '?dry_run=true' : ''}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(AdminFeatureRequestApproveSchema.parse(body)),
+        schema: AdminFeatureRequestResultSchema,
+      },
+    ),
 
   rejectFeatureRequest: (
     requestId: string,
@@ -1125,6 +1079,15 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(AdminFeatureRequestRejectSchema.parse(body)),
       schema: AdminFeatureRequestResultSchema,
+    }),
+
+  deleteFeatureRequest: (
+    requestId: string,
+    body: z.infer<typeof AdminFeatureRequestRejectSchema>,
+  ) =>
+    client.requestNoContent(`/admin/feature-requests/${encodeURIComponent(requestId)}`, {
+      method: 'DELETE',
+      body: JSON.stringify(AdminFeatureRequestRejectSchema.parse(body)),
     }),
 
   /** M05 Map Feature 참조 조정의 PinVi append-only local evidence. */

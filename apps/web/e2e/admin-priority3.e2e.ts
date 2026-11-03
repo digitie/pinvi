@@ -238,7 +238,6 @@ const featureDetail: AdminFeatureDetail = {
   // issues / overrides / files / state_transitions / curations). Pinvi는 두 키를 소비자
   // 호환용으로 남겨 두지만 값은 늘 비어 있으므로 fixture도 비운다.
   versions: [],
-  change_requests: [],
   files: [],
   curations: [
     {

@@ -482,48 +482,21 @@ tier1..4_code/name, is_active, sort_order, db_active|null, db_feature_count|null
     503에서는 local status/ref/audit를 바꾸지 않아 재시도한다.
   - `correction`/`closure` approve만 §2.9의 `PATCH`/`DELETE` feature change API를 호출한다.
 
-### 2.9 feature change API — `POST/PATCH/DELETE /admin/features` (kor_travel_map PR #317, K-15 해소)
+### 2.9 Feature 직접 수정·폐쇄
 
-**Pinvi Admin 도메인 전용**(`require_admin_destructive_enabled` + 서비스 토큰 —
-**API base는 :12701 `/v1/admin/*`**). Pinvi는 correction/closure 제안 승인 시에만 호출한다.
-`place`/`event`만 대상. **kor_travel_map ADR-051(2026-06-10)이 이 흐름을 전송 구간 정본으로
-공식 승인** — 별도 suggestions API는 만들지 않는다.
+신규 장소는 `POST /v1/service/feature-requests`만 사용한다. 직접 생성 producer는 열지 않는다.
+수정은 `PATCH /v1/admin/features/{id}`, 폐쇄는 `DELETE /v1/admin/features/{id}`를 호출한다.
 
-| 동작       | 호출                                                                   | body 핵심                                                                                                                                                                                                                                                         | 응답                         |
-| ---------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| 추가       | `POST /admin/features`                                                 | `AdminFeatureCreateRequest`: `kind*(place\|event)`, `name*`, `category*`, `coord{lon,lat}*`, `marker_icon*`, `marker_color*`, `reason*`; caller `feature_id`/`idempotency_key`/`operator`와 state/origin 필드는 body에 없음. UUID `Idempotency-Key`는 required header | `201 AdminManualFeatureCreateResponse` + `ETag`/`Location`/`X-Request-ID`/`Idempotency-Replayed` |
-| 수정       | `PATCH /admin/features/{feature_id}`                                   | `AdminFeaturePatchRequest`: 전 필드 optional + `reason*`                                                                                                                                                                                                          | 〃                           |
-| 삭제(soft) | `DELETE /admin/features/{feature_id}`                                  | `AdminFeatureDeleteRequest`: `reason*`, `operator?`                                                                                                                                                                                                               | 〃                           |
-| 비활성     | `POST /admin/features/{feature_id}/deactivate`                         | `AdminFeatureDeactivateRequest`                                                                                                                                                                                                                                   | —                            |
-| 검수 큐    | `GET /admin/features/change-requests`, `POST .../{id}/approve\|reject` | `AdminFeatureReviewActionRequest`(operator/reason)                                                                                                                                                                                                                | 〃                           |
-
-> **T-VN-M04 후보 경계(2026-08-20)**: Pinvi는 위 admin `POST /v1/admin/features` 생성 producer를
-> 호출하지 않는다. `new_place`는 service profile의 `POST /v1/service/feature-requests`만 사용하며,
-> `ServiceToken`·UUID `Idempotency-Key`·`FeatureRequestSubmitInput` 및 201 envelope를 contract gate로
-> 고정한다. correction/closure만 위 PATCH/DELETE를 유지한다.
->
-> **receipt 경계**: Map #1029 구현 merge(`57c9d99a`)와 Pinvi #458은 완료됐다. 다만 Map #1051
-> service 재vendor PR #465의 CI·적대 리뷰·격리 paired proof가 끝나기 전에는 completion receipt를
-> 만들거나 `complete`로 기록하지 않는다.
-
-- **낙관적 동시성(T-VN-13)**: 수정·삭제 전에
-  `GET /admin/features/{feature_id}/revision`을 호출해 raw strong `ETag`를 읽고, 그 값을
-  변형하지 않은 채 PATCH/DELETE의 단일 `If-Match` 헤더로 전달한다. 누락은 `428`, malformed는
-  `422`, 제출 뒤 provider/user write가 끼어든 stale revision은 `412 PRECONDITION_FAILED`다.
-  `412`를 자동 재시도하거나 마지막 write wins로 바꾸지 않고, 최신 feature를 다시 읽은 뒤 운영자가
-  변경을 재검토·재제출하게 한다. change-request approve는 제출 당시 kor_travel_map이 저장한
-  `base_row_revision`을 사용하므로 Pinvi가 별도 `If-Match`를 보내지 않는다.
-- **응답 `data.request`(AdminFeatureChangeRequestRecord)**: `feature_id, request_id, action,
-state, review_mode, payload, base_row_revision, applied_at, reviewed_at/by, created_at`. → Pinvi는
-  `feature_id`+`request_id`를 `feature_suggestions` row에 저장하고 state로 확정 추적.
-- **review_mode(kor_travel_map 설정 `KOR_TRAVEL_MAP_ADMIN_FEATURE_CHANGE_REVIEW_MODE`, 기본 `require_review`)**:
-  `require_review`=`ops.feature_change_requests`에 pending → kor_travel_map 운영자 approve 후 적용.
-  `immediate`=요청 transaction에서 즉시 version 1 적용. **Pinvi는 자기 Admin에서 이미 검수**
-  하므로 이중 검수가 되지 않도록 **review_mode 합의 필요(DEC-05 하위결정, §7)**.
-- **version 0(provider)/1(user) 분리 내구성**: provider 재적재가 user version-1 row를 덮거나
-  사용자 삭제 row를 되살리지 않는다(PR #317). → Pinvi가 추가한 장소·폐업 신고가 재적재로
-  사라지지 않음(closure/correction 신뢰).
-- **closure**: "영구 폐업" = `DELETE`(soft) 또는 `/{id}/deactivate` — kor_travel_map 권장 확정 필요(§7).
+- 관리자 proxy 자격·actor를 사용한다. 별도 service Feature 읽기 자격이나 public token 권한을 확장하지 않는다.
+- `GET /v1/admin/features/{id}/revision`의 strong ETag와 immutable 입력을 PinVi dispatch에 선저장한다.
+  suggestion UUID `Idempotency-Key`와 동일 `If-Match`로 재시도한다. Map fingerprint가 If-Match를 포함하므로
+  응답 유실 뒤 최신 revision으로 바꿔 재요청하지 않는다.
+- PATCH `data`: `feature_id, row_revision, command_id, applied_field_count`.
+- DELETE `data`: `feature_id, lifecycle_state, publication_state, quality_state, row_revision, audit_transition_id`.
+- 성공은 직접 commit receipt이며 PinVi는 `added`와 receipt를 보존한다.
+  `data.request`, change-requests list/approve/reject, require_review 모드는 폐기됐다.
+- 미확정 intent는 원래 입력으로 재생하고 거절·삭제하지 않는다. 확정 4xx는 새 검토를 허용한다.
+  API·dry-run·정리 정책은 [Admin API §9.6](../api/admin.md#96-사용자-feature-제안-검토-큐)를 따른다.
 
 ### 2.10 `GET /v1/providers/{provider}/last-sync`, `GET /health`, `GET /version`
 
@@ -587,7 +560,7 @@ POI를 만든다. 수동 POI는 보존한다. Map Python package import와 Map D
 4. **DEC-05 — K-15 해소(kor_travel_map PR #317)**: feature change API(`POST/PATCH/DELETE
 /v1/admin/features*`) 신설됨 → T-179 완료. **§7 합의 5건 ✅ 확정(kor_travel_map T-217c, 2026-06-11,
    kor_travel_map `decisions.md` ADR-051)** + Pinvi 반영 완료:
-   - **현재 override(T-VN-M04, 2026-08-20)**: 아래 direct create/idempotency 설명은 역사 기록이다.
+   - **현재 override(T-VN-M04, 2026-08-20)**: 아래 합의 다섯 항목은 역사 기록이다. 현행 직접 수정·폐쇄의 receipt·idempotency는 §2.9가 정본이다.
      `new_place`는 service request queue로 immutable UUID를 제출하고, correction/closure만 기존
      PATCH/DELETE 전송을 유지한다.
    1. **review_mode**: 기본 `require_review` 2단 검토(Pinvi 1차 + kor_travel_map 운영자 최종). →
@@ -640,7 +613,7 @@ idempotency_key)`로 결정적 feature_id, 재시도 동일.
   **§7 합의 5건 ✅ 확정(kor_travel_map T-217c, 2026-06-11) + Pinvi 반영 완료** — §7 참조.
 - **[admin client] ✅ T-180 — kor_travel_map admin HTTP client(API 12701 `/v1/admin/*`)** (완료 2026-06-11):
   `apps/api/app/clients/kor_travel_map_admin.py` — `KorTravelMapAdminClient` (patch/delete_feature →
-  `data.request` + change-requests list/approve/reject, 재시도·도메인 예외는 user client 재사용).
+  현행 직접 command receipt, 폐기된 큐 메서드는 #631에서 제거).
   direct `create_feature`는 T-VN-M01 선행 cutover에서 제거했다.
   base = :12701 `/v1/admin/*` (`pinvi_kor_travel_map_admin_base_url` 기본값도 12701),
   `X-Kor-Travel-Map-Service-Token`(`pinvi_kor_travel_map_admin_service_token`, 미설정 시 공용 토큰 fallback).

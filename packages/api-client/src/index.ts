@@ -52,7 +52,6 @@ export type {
   AdminDsrProcessBody,
   AdminDsrRejectBody,
   AdminDsrRequestListParams,
-  AdminFeatureChangeRequestListParams,
   AdminNoticeAttachmentCreateBody,
   AdminKorTravelMapCurationCollectionImportBody,
   AdminNoticePlanCreateBody,

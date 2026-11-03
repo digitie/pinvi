@@ -36,7 +36,6 @@ RBAC 상세는 [`docs/architecture/admin-rbac.md`](../architecture/admin-rbac.md
 | `GET /admin/trips` / `{trip_id}`                                  | trip 목록 / 상세                                     | 3      |
 | `GET/POST/DELETE /admin/trips/{trip_id}/operation*`               | trip/day 복사·이동·삭제와 영향도 조회                | 4      |
 | `GET /admin/features` / `{feature_id}`                            | kor-travel-map admin feature 검색 / 상세 (read-only) | 4      |
-| `GET/POST /admin/features/change-requests[/{id}/approve\|reject]` | kor-travel-map feature 변경 요청 큐 검수 / audit     | 4      |
 | `GET /admin/pois` / `{poi_id}`                                    | 여행 POI 검색 / 상세 (`feature_link_broken_at` 필터) | 3      |
 | `PATCH /admin/pois/{poi_id}/link-status`                          | POI feature 연결 상태 로컬 표시                      | 3      |
 | `GET/POST/DELETE /admin/pois/{poi_id}/operation*`                 | POI 복사·이동·삭제와 영향도 조회                     | 4      |
@@ -1411,89 +1410,11 @@ Pinvi는 detail subpage를 위해 `kor-travel-map` 데이터를 read-only로 투
 }
 ```
 
-### 8.4 `GET /admin/features/change-requests`
+### 8.4 폐기된 변경 요청 큐
 
-upstream: `kor-travel-map` `GET /v1/admin/features/change-requests`.
-
-권한: `admin` / `operator`
-
-Pinvi는 `ops.feature_change_requests` 또는 `feature.*` 테이블을 직접 조회하지 않는다. 이 endpoint는
-`kor-travel-map` Admin HTTP 계약을 proxy해 운영 검수 큐를 보여주며, Web은 Pinvi API만 호출한다.
-
-Query:
-
-| 이름        | 설명                                                             |
-| ----------- | ---------------------------------------------------------------- |
-| `status`    | 반복 가능. 최신 upstream 계약은 `pending`, `applied`, `rejected` |
-| `action`    | 반복 가능. `add`, `update`, `delete`                             |
-| `q`         | request id, feature id, reason 등 upstream 검색어                |
-| `page_size` | 1~500, 기본 100                                                  |
-
-응답 `data`:
-
-```jsonc
-{
-  "items": [
-    {
-      "request_id": "krq_...",
-      "feature_id": "f_place_...",
-      "action": "add",
-      "status": "pending",
-      "review_mode": "require_review",
-      "payload": { "name": "해운대 카페" },
-      "reason": "사용자 제안 승인",
-      "requested_by": "pinvi-admin",
-      "reviewed_by": null,
-      "reviewed_at": null,
-      "applied_at": null,
-      "created_at": "2026-06-12T00:00:00+09:00",
-    },
-  ],
-  "review_mode": "require_review",
-  "page_size": 100,
-}
-```
-
-### 8.5 `POST /admin/features/change-requests/{request_id}/approve`
-
-upstream: `kor-travel-map`
-`POST /v1/admin/features/change-requests/{request_id}/approve`.
-
-권한: `admin`
-
-요청:
-
-```jsonc
-{
-  "access_reason": "Pinvi 운영 검수 완료",
-  "kor_travel_map_reason": "원천 확인 완료",
-}
-```
-
-- `access_reason`은 Pinvi `admin_audit_log.action = "feature_change_request.approve"`에 남긴다.
-- upstream에는 `operator = "pinvi-admin"`과 `reason = kor_travel_map_reason || access_reason`을 전달한다.
-- upstream 성공 후에만 Pinvi audit을 commit한다.
-- 응답은 `AdminFeatureChangeRequestRecord` 단건이다.
-
-### 8.6 `POST /admin/features/change-requests/{request_id}/reject`
-
-upstream: `kor-travel-map`
-`POST /v1/admin/features/change-requests/{request_id}/reject`.
-
-권한: `admin`
-
-요청/응답과 audit 규칙은 approve와 같고, audit action은
-`feature_change_request.reject`다.
-
-오류 매핑:
-
-- upstream 404 → `404 RESOURCE_NOT_FOUND`
-- upstream 429 → `429 RATE_LIMITED` + `Retry-After` 전달
-- upstream 409 `LOCK_BUSY` → `409 LOCK_BUSY` + `Retry-After` 그대로 전달
-- upstream 409 상태 충돌 → `409 INVALID_STATE` 또는 upstream `code`
-- upstream 4xx → `422 VALIDATION_ERROR` 또는 upstream `code`
-- upstream timeout/5xx → `503 FEATURE_SERVICE_UNAVAILABLE`
-- upstream envelope drift → `502 FEATURE_SERVICE_BAD_GATEWAY`
+Map T-VN-36 이후 변경 요청 큐는 존재하지 않는다. PinVi의 해당 BFF 경로·client·메뉴도 제거했다(#631).
+기존 웹 북마크 `/admin/features/change-requests`는 `/admin/feature-requests`로 이동한다.
+Feature 상세의 overrides·state transitions와 감사 기록이 현행 근거다. 승인·거절할 별도 upstream 큐를 만들지 않는다.
 
 ## 9. POI 관리
 
@@ -1658,34 +1579,36 @@ POI 삭제:
 - POI는 `deleted_at` soft delete이며, POI 첨부/댓글도 soft delete한다.
 - RustFS object는 즉시 삭제하지 않는다.
 
-### 9.6 사용자 feature 제안 검토 큐 (T-179)
+### 9.6 사용자 Feature 제안 검토 큐
 
-사용자 제안(`app.feature_suggestions`, T-177)을 Admin이 검토해 승인/거절한다. 신규 장소는
-kor_travel_map service `POST /v1/service/feature-requests`(`:12701`)에 immutable 요청으로 제출하고,
-변경·폐쇄만 기존 `/v1/admin/features*` change API(전송 client = T-180)로 전달한다.
-`apps/api/app/api/v1/admin/feature_requests.py`.
-
-```
-GET    /admin/feature-requests?status=pending&page=&limit=     # admin/operator, 이메일 마스킹, FIFO
-POST   /admin/feature-requests/{request_id}/approve            # admin
-POST   /admin/feature-requests/{request_id}/reject             # admin
+```http
+GET    /admin/feature-requests?status=pending&page=1&limit=50
+POST   /admin/feature-requests/{request_id}/approve
+POST   /admin/feature-requests/{request_id}/approve?dry_run=true
+POST   /admin/feature-requests/{request_id}/reject
+DELETE /admin/feature-requests/{request_id}
 ```
 
-- **approve** (`access_reason` 필수 + audit): `suggestion_type`별 분기 —
-  - `new_place` → kor_travel_map `POST /v1/service/feature-requests`. 저장된 `kind`/`name`/`coord`/
-    `categories`/`note`만 보존해 보낸다. PinVi suggestion UUID는 body `request_id`와
-    `Idempotency-Key`에 함께 넣고, admin body에는 `category`/`marker_color`/`marker_icon` override를
-    넣지 않는다. Map `pending` receipt면 PinVi는 `approved`, verified `exact_conflict`면
-    `duplicate`로 전이한다.
-  - `correction` → `PATCH /v1/admin/features/{target_feature_id}` (override 일부).
-  - `closure` → `DELETE /v1/admin/features/{target_feature_id}` (soft).
-  - kor_travel_map 호출을 **먼저** 하고 성공 시에만 commit한다(실패 시 제안 `pending` 유지 → 재시도).
-    반환 `feature_id`/`request_id`/state를 `kor_travel_map_ref`에 저장한다. 변경·폐쇄는 `applied`면
-    `added`, 그 외(require_review 큐 적재)면 `approved`로 둔다. admin change API의 출처 태깅
-    `operator`는 고정 `pinvi-admin`이다(개인정보 미전달, D-11).
-- **reject**: kor_travel_map 호출 없이 `status = rejected` + audit.
-- service queue와 admin change API의 인증·idempotency·출처 경계는 각 vendored Map OpenAPI 계약으로
-  검증한다.
+목록은 admin/operator, 쓰기·검증·삭제는 admin 전용이다. 권한이 없는 사용자는 최종 소유자 결정(#632)대로
+`404 RESOURCE_NOT_FOUND`를 받으며 웹의 관리자 권한 안내는 유지한다.
+
+- 신규 장소는 저장된 payload를 Map `POST /v1/service/feature-requests`에 immutable UUID로 제출한다.
+  Map pending receipt는 PinVi `approved`(검토 대기), exact conflict는 `duplicate`다.
+- 수정·폐쇄는 현행 Map `PATCH/DELETE /v1/admin/features/{id}`의 직접 command receipt를 소비한다.
+  수정은 field override, 폐쇄는 retire이며 commit receipt를 받은 뒤 `added`로 확정한다.
+  큐의 `data.request`나 require_review 모드를 재구성하지 않는다.
+- 직접 명령은 입력·payload·strong ETag를 `kor_travel_map_ref.dispatch`에 먼저 저장하고 dispatch 감사를 기록한다.
+  이후 같은 suggestion UUID를 `Idempotency-Key`로, 같은 ETag를 `If-Match`로 보낸다.
+  응답 유실·불명확한 응답 뒤에는 내용을 바꾸지 않고 같은 명령을 재생한다.
+  확정 4xx 거부는 intent를 해제하며, 결과 미확정 명령은 거절·삭제할 수 없다.
+- `dry_run=true`는 pending 제안의 형식을 검증하고 `dry_run: true`와 현재 상태를 반환한다.
+  Map client 생성·외부 호출·상태 변경·감사 쓰기를 하지 않는다. 실제 장소 존재나 Map registry 승인을 보장하지 않는다.
+- 거절은 Map 호출 없이 `rejected`와 감사를 기록한다. 모든 액션은 공백만 있는 사유를 거부한다.
+- 삭제는 `access_reason` body를 받으며 `rejected/added/duplicate`만 `204`로 삭제한다.
+  일반 이름·외부 공급자 이름도 정리할 수 있다. pending·Map 검토 대기 approved는 `409`, 없는 제안은 `404`다.
+  Map Feature·요청·여행·POI와 append-only 감사 기록은 보존한다.
+- Map 자격·일시 장애는 503, 불명확한 직접 receipt는 502, revision stale은 412, command 충돌은 409다.
+  검증은 입력 형식 범위이며 실제 승인과 동일한 외부 부작용을 실행하지 않는다.
 
 ## 9. API 호출 로그
 

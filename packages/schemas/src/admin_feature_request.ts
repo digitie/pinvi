@@ -41,7 +41,7 @@ export type AdminFeatureRequestPagedResponse = z.infer<
 
 /** 승인 입력 — new_place는 저장된 요청 payload를 그대로 Map 큐에 제출한다. */
 export const AdminFeatureRequestApproveSchema = z.object({
-  access_reason: z.string().min(1).max(500),
+  access_reason: z.string().trim().min(1).max(500),
   category: z.string().max(32).optional(),
   marker_color: z
     .string()
@@ -54,11 +54,12 @@ export const AdminFeatureRequestApproveSchema = z.object({
 export type AdminFeatureRequestApprove = z.infer<typeof AdminFeatureRequestApproveSchema>;
 
 export const AdminFeatureRequestRejectSchema = z.object({
-  access_reason: z.string().min(1).max(500),
+  access_reason: z.string().trim().min(1).max(500),
 });
 export type AdminFeatureRequestReject = z.infer<typeof AdminFeatureRequestRejectSchema>;
 
 export const AdminFeatureRequestResultSchema = z.object({
+  dry_run: z.boolean().default(false),
   request_id: z.string().uuid(),
   status: FeatureRequestStatusSchema,
   kor_travel_map_ref: z.record(z.string(), z.unknown()).nullable().optional(),
