@@ -21,6 +21,7 @@ import {
   runTag,
   waitForGet,
   type Actor,
+  adminSelect,
 } from '../../helpers/admin';
 
 const HAHOE = { lon: 128.5188, lat: 36.5392 }; // 안동하회마을 (heritage) — inside Map range
@@ -125,7 +126,7 @@ test.describe.serial('ADM promotion review (desktop)', () => {
     await expect(page.getByTestId('admin-fr-notice')).toBeFocused();
 
     const rejected = waitForGet(page, /\/admin\/feature-requests\?.*status=rejected/);
-    await page.getByTestId('admin-fr-status-filter').locator('select').selectOption('rejected');
+    await adminSelect(page, 'admin-fr-status-filter').selectOption('rejected');
     await rejected;
     const row = page.getByTestId(`admin-fr-row-${pendingId}`);
     await expect(row).toBeVisible({ timeout: 30_000 });
@@ -158,7 +159,7 @@ test.describe.serial('ADM promotion review (desktop)', () => {
     const rejectedRow = page.locator('[data-testid^="admin-fr-row-"]').filter({ hasText: `${E2E} ADM-032 ${tag}` });
     await page.goto('/admin/feature-requests');
     const list = waitForGet(page, /\/admin\/feature-requests\?.*status=rejected/);
-    await page.getByTestId('admin-fr-status-filter').locator('select').selectOption('rejected');
+    await adminSelect(page, 'admin-fr-status-filter').selectOption('rejected');
     await list;
     await expect(rejectedRow.first()).toBeVisible({ timeout: 30_000 });
     await rejectedRow.first().getByRole('button', { name: /검토 열기/ }).click();

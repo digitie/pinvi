@@ -34,7 +34,7 @@ Spec files: 54.
 | TRIP-008 | trip | 잘못된 날짜 — 시작일만 입력하면 둘 다 입력하라는 오류 | P2 | desktop, mobile | scripted | `specs/trip/trip-create.live.spec.ts#TRIP-008` |
 | TRIP-009 | trip | 제목 없이 저장 — '여행 제목을 입력하세요.' 오류, 포커스 복귀 | P3 | desktop, mobile, a11y | scripted | `specs/trip/trip-create.live.spec.ts#TRIP-009` |
 | TRIP-010 | trip | 장소가 있는 상태에서 기간 축소/확장 — 기간 벗어남 배지와 일자 추가 상한 | P1 | desktop, mobile, mutating, search | scripted | `specs/trip/trip-create.live.spec.ts#TRIP-010` |
-| TRIP-011 | trip | 편집 다이얼로그에서 종료일 < 시작일 — 서버는 수용, 화면은 기간 수정 안내로 일자 추가 차단 | P3 | desktop, mobile, mutating | scripted | `specs/trip/trip-create.live.spec.ts#TRIP-011` |
+| TRIP-011 | trip | 편집 다이얼로그에서 종료일 < 시작일 — 422 로 거부, 다이얼로그에 날짜 오류 안내 | P3 | desktop, mobile, mutating | scripted | `specs/trip/trip-create.live.spec.ts#TRIP-011` |
 | TRIP-012 | trip | 도시 서울 1박2일 — 경복궁·국립중앙박물관·남산공원·서울역 적재 | P1 | desktop, mutating, search, poi | scripted | `specs/trip/trip-styles.live.spec.ts#TRIP-012` |
 | TRIP-013 | trip | 도시 부산 1박2일 — 부산역·해운대해수욕장·감천문화마을·호텔(lodging) | P2 | desktop, mutating, search, poi | scripted | `specs/trip/trip-styles.live.spec.ts#TRIP-013` |
 | TRIP-014 | trip | 바다 강릉 1박2일 — 경포해변·안목해변 카페(cafe)·정동진·횟집(food) | P2 | desktop, mutating, search, poi | scripted | `specs/trip/trip-styles.live.spec.ts#TRIP-014` |

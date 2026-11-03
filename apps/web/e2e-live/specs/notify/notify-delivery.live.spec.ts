@@ -14,7 +14,7 @@
  * default (else newest enabled) target and sends plain text.
  */
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { baseURL, createTrip, deleteTrip, loginAsAdmin, loginAsUser, shot } from '../../helpers/live';
+import { appAlerts, baseURL, createTrip, deleteTrip, loginAsAdmin, loginAsUser, shot } from '../../helpers/live';
 import {
   e2eLabel,
   isMobileProject,
@@ -96,7 +96,7 @@ test.describe('NTF delivery — trip_created 알림', () => {
     const sinceIso = new Date(Date.now() - 2_000).toISOString();
     ({ id: tripId } = await createTrip(page, { title: tripTitle('NTF-014'), start: isoDateFromToday(30), end: isoDateFromToday(31) }));
     await expect(page.getByText('초안 여행을 저장했습니다.')).toBeVisible();
-    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(appAlerts(page)).toHaveCount(0);
 
     const admin = await adminPage(browser);
     try {

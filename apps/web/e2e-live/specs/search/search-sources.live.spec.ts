@@ -56,11 +56,13 @@ test.describe('SRCH sources by category family (/map)', () => {
 
   test('SRCH-019 숙박·호텔', async ({ page }, ti) => {
     desktopOnly();
+    test.fail(true, 'kor-travel-map#1438: feature category misclassified (숙박·카페·마트·캠핑장·주차장 → 관광/문화시설)');
     await familyCase(page, ti, 'SRCH-019', '롯데호텔', /호텔|숙박|리조트/);
   });
 
   test('SRCH-020 숙박·캠핑장', async ({ page }, ti) => {
     desktopOnly();
+    test.fail(true, 'kor-travel-map#1438: feature category misclassified (숙박·카페·마트·캠핑장·주차장 → 관광/문화시설)');
     await familyCase(page, ti, 'SRCH-020', '오토캠핑장', /캠핑|글램핑|카라반/);
   });
 
@@ -71,6 +73,7 @@ test.describe('SRCH sources by category family (/map)', () => {
 
   test('SRCH-022 카페', async ({ page }, ti) => {
     desktopOnly();
+    test.fail(true, 'kor-travel-map#1438: feature category misclassified (숙박·카페·마트·캠핑장·주차장 → 관광/문화시설)');
     await familyCase(page, ti, 'SRCH-022', '카페', /카페|커피|디저트|베이커리/);
   });
 
@@ -79,14 +82,16 @@ test.describe('SRCH sources by category family (/map)', () => {
 
   test('SRCH-025 국가유산 소수서원', async ({ page }, ti) => {
     desktopOnly();
+    // /map biases toward the current (Seoul) viewport (#615, order-only): rows inside the bbox come
+    // first, so the exact match need not be row 1 — it must be present and open as a heritage card.
     const probe = await runSearch(page, '소수서원');
-    const first = featureRows(probe.rows)[0];
-    expect(first?.name).toContain('소수서원');
-    await familyCase(page, ti, 'SRCH-025', '소수서원', /국가유산|사적|기념물|전통사찰|관광|한옥/);
+    expect(featureRows(probe.rows).map((r) => r.name)).toContainEqual(expect.stringContaining('소수서원'));
+    await familyCase(page, ti, 'SRCH-025', '소수서원', /국가유산|사적|기념물|전통사찰|관광|한옥/, /소수서원$/);
   });
 
   test('SRCH-027 축제/행사 kind=event', async ({ page }, ti) => {
     desktopOnly();
+    test.fail(true, 'kor-travel-map#1439: event features have no period/venue');
     const card = await familyCase(page, ti, 'SRCH-027', '축제', /축제|행사|관광|공원|문화/);
     if (!card) return;
     const kind = await modal.body(page).getAttribute('data-kind');
@@ -107,7 +112,10 @@ test.describe('SRCH sources by category family (/map)', () => {
 
   test('SRCH-033 공항', async ({ page }, ti) => {
     desktopOnly();
-    await familyCase(page, ti, 'SRCH-033', '김포공항', /공항|교통/);
+    // Map search has no airport feature for 김포공항 (airports come from the transport layer, NEAR-*);
+    // only airport-named rows count — tenants like '롯데마트 김포공항점' are not airports.
+    const card = await familyCase(page, ti, 'SRCH-033', '김포공항', /공항|교통/, /공항$/);
+    test.skip(card == null, 'data absent: Map 검색에 공항 feature 없음(교통 레이어가 담당)');
   });
 
   test('SRCH-034 카카오/네이버 fallback + back-link', async ({ page }, ti) => {

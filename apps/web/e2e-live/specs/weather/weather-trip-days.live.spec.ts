@@ -117,6 +117,7 @@ test.describe('weather · trip days', () => {
   });
 
   test('WX-004 지난 날짜: Map 세 구간 요약(시간대별)', async ({ page }) => {
+    test.fail(WEATHER_VIA_MAP, 'kor-travel-map#1440: past-day daily_summaries missing (no_data)');
     const { id } = await createTrip(page, { title: wxTitle('WX-004'), start: D(-5), end: D(-4) });
     trips.track(id);
     await page.goto(`/trips/${id}`);
@@ -130,7 +131,8 @@ test.describe('weather · trip days', () => {
     const section = daySection(article);
     const kind = await expectWeatherConsistent(section, res, day1.weather_cards, day1.effective_date!);
     if (WEATHER_VIA_MAP) {
-      expect(kind, 'Map 경로는 지난 일자에 daily_summaries 를 준다(§9.2)').toBe('summary');
+      test.info().annotations.push({ type: 'issue', description: 'kor-travel-map#1440' });
+      expect(kind, 'Map 경로는 지난 일자에 daily_summaries 를 준다(§9.2) — kor-travel-map#1440').toBe('summary');
       await expect(section).toContainText(TEXT.group.daily);
       await expect(section).toContainText(/아침|점심|저녁/);
       await expect(section).toContainText(/°C/);

@@ -140,8 +140,13 @@ test.describe('NEAR trip map — four-place trip', () => {
     expect(q.bbox[2]).toBeGreaterThanOrEqual(REGION.lonMax);
     expect(q.bbox[1]).toBeLessThanOrEqual(REGION.latMin);
     expect(q.bbox[3]).toBeGreaterThanOrEqual(REGION.latMax);
-    // Seoul (126.978, 37.5665) is not what the trip map frames.
-    expect(q.bbox[0] > 126.978 || q.bbox[2] < 126.978 || q.bbox[1] > 37.5665 || q.bbox[3] < 37.5665).toBe(true);
+    // The fitted viewport is centred on the trip (영월~안동), not on the Seoul default camera — at the
+    // fit zoom a wide desktop viewport may still *contain* Seoul, so compare centres, not containment.
+    const cx = (q.bbox[0] + q.bbox[2]) / 2;
+    const cy = (q.bbox[1] + q.bbox[3]) / 2;
+    expect(Math.abs(cx - (REGION.lonMin + REGION.lonMax) / 2)).toBeLessThan(1);
+    expect(Math.abs(cy - (REGION.latMin + REGION.latMax) / 2)).toBeLessThan(1);
+    expect(Math.hypot(cx - 126.978, cy - 37.5665)).toBeGreaterThan(1);
     await expectLayerLineShape(page, 'highway_incident');
     const rest = await toggleExpectingRequest(page, 'rest_area', (x) => x.layers.includes('rest_area'));
     const restBody = (await markersBody(rest)).layers.find((l) => l.layer === 'rest_area')!;

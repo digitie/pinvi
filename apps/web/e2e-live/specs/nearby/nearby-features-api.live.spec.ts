@@ -22,6 +22,7 @@ test.describe('NEAR nearby feature families', () => {
   });
 
   test('NEAR-030 parking lots are searchable Map features named "… 주차장" with category 주차장', async ({ page }) => {
+    test.fail(true, 'kor-travel-map#1438: parking features labelled 관광 (e.g. 동작대교 주차장)');
     await page.goto('/map');
     await waitForControls(page);
     const search = page.getByTestId('map-search').first();

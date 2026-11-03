@@ -102,7 +102,13 @@ test.describe('SHR 보안 네거티브 (desktop)', () => {
     const link = await createShareLink(page);
     // 생성 직후 소유자 화면이 보내는 요청(reload 등)에 토큰이 섞이면 안 된다.
     await expect(page.getByTestId('share-link-list')).toContainText('활성');
-    const leaks = requestUrls.filter((u) => u.includes(link.token)).map((u) => redact(u, link.token));
+    // The owner's own '열기' link (<Link href=/shared/{id}/{token}>) is RSC-prefetched by Next.js on the web
+    // origin — that is the share URL itself, not a leak. Anything else carrying the token is.
+    const sharePagePath = `/shared/${id}/${link.token}`;
+    const leaks = requestUrls
+      .filter((u) => u.includes(link.token))
+      .filter((u) => !(new URL(u).origin === new URL(baseURL).origin && new URL(u).pathname === sharePagePath))
+      .map((u) => redact(u, link.token));
     expect(leaks).toEqual([]);
     // 응답 본문이 아닌 화면에는 1회성 배너에만 표시된다(목록에는 token 없음).
     await expect(page.getByTestId('share-link-list')).not.toContainText(link.token);

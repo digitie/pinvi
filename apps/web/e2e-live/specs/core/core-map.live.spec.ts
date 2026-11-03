@@ -10,6 +10,7 @@ import {
   createTrip,
   deleteTrip,
   e2ePrefix,
+  ensureFeatureMarkers,
   loginAsUser,
   searchAndAddPlace,
   shot,
@@ -36,6 +37,8 @@ async function openExploreMap(page: Page) {
   await page.goto('/map');
   await waitForMapCanvas(page);
   await inBounds;
+  // Default Seoul viewport can be all clusters — zoom in until an individual feature pin renders.
+  await ensureFeatureMarkers(page, 1);
 }
 
 /** Explore-map markers appear only after in-bounds; clusters may replace single pins at low zoom. */
@@ -112,7 +115,10 @@ test.describe('CORE map — explore map (/map)', () => {
     const afterIn = page.waitForRequest((r) => r.url().includes('/features/in-bounds'), { timeout: 20_000 });
     await zoomInBtn.click();
     const zIn = zoomOf((await afterIn).url());
-    const afterOut = page.waitForRequest((r) => r.url().includes('/features/in-bounds'), { timeout: 20_000 });
+    // Zooming back to the first viewport is a viewport-cache hit (no request) — go one level further out.
+    const afterOut = page.waitForRequest((r) => r.url().includes('/features/in-bounds') && zoomOf(r.url()) < zIn - 1, { timeout: 20_000 });
+    await page.locator('.maplibregl-ctrl-zoom-out').click();
+    await page.waitForTimeout(600);
     await page.locator('.maplibregl-ctrl-zoom-out').click();
     const zOut = zoomOf((await afterOut).url());
     expect(zIn).toBeGreaterThan(zOut);

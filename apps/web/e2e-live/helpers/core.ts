@@ -7,7 +7,7 @@
  * (second identity: PINVI_E2E_USER2_EMAIL / PINVI_E2E_USER2_PASSWORD). Nothing is logged.
  */
 import { expect, type BrowserContext, type ConsoleMessage, type Page, type TestInfo } from '@playwright/test';
-import { apiBaseURL, forgetSessions, loginAsUser2, requireEnv } from './live';
+import { apiBaseURL, featureMarkerButtons, forgetSessions, loginAsUser2, requireEnv } from './live';
 
 export { loginAsUser2, requireEnv };
 
@@ -71,9 +71,12 @@ export function recordConsole(page: Page): ConsoleRecorder {
   };
 }
 
-/** Explore-map feature markers (not clusters). Marker roots carry role=button + aria-label=title (vworld-map-web Marker.js). */
+/**
+ * Explore-map feature markers (not clusters). Marker roots carry role=button + aria-label=title
+ * (vworld-map-web Marker.js); clusters are labelled "N개 위치 묶음 펼치기" — see shared helper.
+ */
 export function featureMarkers(page: Page) {
-  return page.locator('.maplibregl-marker[role="button"]:not([data-is-cluster="true"])');
+  return featureMarkerButtons(page);
 }
 
 /** Trip-map POI pins (`PinMarker className="trip-map-marker"`). */

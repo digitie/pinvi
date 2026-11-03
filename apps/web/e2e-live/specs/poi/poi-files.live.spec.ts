@@ -144,7 +144,10 @@ test.describe('attachments (desktop)', () => {
       buffer: Buffer.from('not allowed'),
     });
     const alert = section.getByRole('alert');
-    await expect(alert).toHaveText('업로드 가능한 파일 형식은 GIF, JPG, MP4, PDF, PNG, WEBP입니다.');
+    // formatAllowedTypes() lists the allowlist in its own order — assert the set, not the order.
+    await expect(alert).toHaveText(/^업로드 가능한 파일 형식은 .+입니다.$/);
+    const listed = ((await alert.innerText()).match(/형식은 (.+)입니다/)?.[1] ?? '').split(',').map((s) => s.trim()).sort();
+    expect(listed).toEqual(['GIF', 'JPG', 'MP4', 'PDF', 'PNG', 'WEBP']);
     expect(presigns).toBe(0);
     await snap(page, 'POI-023', 'mime-rejected');
   });

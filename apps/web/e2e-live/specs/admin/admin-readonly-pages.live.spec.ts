@@ -2,7 +2,7 @@
 // Selectors re-verified on origin/main b1cef056: apps/web/app/(admin)/admin/page.tsx (admin-stat-*, admin-system-*),
 // admin/layout.tsx (NAV_GROUPS hrefs unchanged, admin-sidebar / admin-sidebar-toggle / admin-me, admin-nav-* via CommonDocumentLink).
 import { expect, test } from '@playwright/test';
-import { loginAsAdmin, shot } from '../../helpers/live';
+import { appAlerts, loginAsAdmin, shot } from '../../helpers/live';
 import { expectNoRootHorizontalScroll, expectNoRuntimeError, isMobileProject, waitForGet } from '../../helpers/admin';
 
 // NAV_GROUPS hrefs minus dev-only (seed/reset) and the iframe/backup pages PinVi already covers in its own live suite.
@@ -46,7 +46,7 @@ test.describe('ADM read-only pages', () => {
     await expect(users).not.toContainText('—', { timeout: 30_000 });
     await expect(users).toContainText(/\d/);
     await expect(page.locator('[data-testid^="admin-system-"]').first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(appAlerts(page)).toHaveCount(0);
     await shot(page, 'ADM-007', 'dashboard');
   });
 

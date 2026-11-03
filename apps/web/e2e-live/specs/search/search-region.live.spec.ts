@@ -37,6 +37,7 @@ test.describe('SRCH region bias + add from search (trip, mutating)', () => {
   async function tripWithHahoe(page: Page, id: string): Promise<string> {
     const trip = await createTrip(page, { title: `${e2ePrefix} ${id}`, start: START, end: END, region: '경북 안동시' });
     created.push(trip.id);
+    await page.goto(`/trips/${trip.id}`);
     await searchAndAddPlace(page, 1, '안동하회마을', (row) => row.includes('하회마을') && row.includes('장소'));
     await openDay1(page, trip.id);
     return trip.id;
@@ -95,6 +96,7 @@ test.describe('SRCH region bias + add from search (trip, mutating)', () => {
   test('SRCH-017 검색 결과를 일자에 추가', async ({ page }) => {
     const trip = await createTrip(page, { title: `${e2ePrefix} SRCH-017`, start: START, end: END });
     created.push(trip.id);
+    await page.goto(`/trips/${trip.id}`);
     const name = await searchAndAddPlace(page, 1, '소수서원', (row) => row.includes('소수서원') && row.includes('장소'));
     expect(name).toContain('소수서원');
     await page.goto(`/trips/${trip.id}`);
@@ -107,6 +109,7 @@ test.describe('SRCH region bias + add from search (trip, mutating)', () => {
     const title = `${e2ePrefix} SRCH-018`;
     const trip = await createTrip(page, { title, start: START, end: END });
     created.push(trip.id);
+    await page.goto(`/trips/${trip.id}`);
     await searchAndAddPlace(page, 1, '도산서원', (row) => row.includes('도산서원') && row.includes('장소'));
     await page.goto('/map');
     const out = await runSearch(page, '도산서원');

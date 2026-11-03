@@ -5,7 +5,7 @@
  * UI: apps/web/app/(admin)/admin/emails/page.tsx, admin/etl/page.tsx, admin/api-calls/page.tsx
  */
 import { expect, test } from '@playwright/test';
-import { loginAsAdmin, shot } from '../../helpers/live';
+import { appAlerts, loginAsAdmin, shot } from '../../helpers/live';
 import { adminTelegramCalls, isMobileProject } from '../../helpers/notify';
 
 test.describe('NTF admin — 알림 운영 화면 (read-only)', () => {
@@ -25,7 +25,7 @@ test.describe('NTF admin — 알림 운영 화면 (read-only)', () => {
     await expect(page.getByTestId('admin-email-deliverability-status')).not.toHaveText('');
     await expect(page.getByTestId('admin-emails-status-filter')).toBeVisible();
     await expect(page.getByTestId('admin-emails-refresh')).toBeEnabled();
-    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(appAlerts(page)).toHaveCount(0);
     await shot(page, 'NTF-022', 'emails');
   });
 
@@ -68,7 +68,7 @@ test.describe('NTF admin — 알림 운영 화면 (read-only)', () => {
     }
     // Rendered table shows the masked endpoint too.
     await expect(page.getByText(/\/bot\d+:\*\*\*\/(getChat|sendMessage)/).first()).toBeVisible();
-    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(appAlerts(page)).toHaveCount(0);
     await shot(page, 'NTF-024', 'api-calls-telegram');
   });
 });

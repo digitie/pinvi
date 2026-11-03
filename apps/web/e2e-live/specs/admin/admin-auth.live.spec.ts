@@ -96,7 +96,8 @@ test.describe('ADM auth', () => {
       await page.goto('/admin');
       await expect(page).toHaveURL(/\/admin\/login$/, { timeout: 30_000 });
       await expect(page.locator(ADMIN_LOGIN.root)).toBeVisible();
-      await expect(page.locator(ADMIN_LOGIN.error)).toHaveCount(0);
+      // LoginForm always renders the error slot as an empty role=alert live region.
+      await expect(page.locator(ADMIN_LOGIN.error)).toHaveText('');
     } finally {
       await context.close();
     }

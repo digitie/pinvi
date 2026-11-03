@@ -327,7 +327,8 @@ test.describe('SHR 공유 링크 (desktop)', () => {
       );
       await expect(fresh.page.getByTestId('trip-poi-list')).toContainText(day2Place);
       await tabs.getByRole('tab', { name: /1일차/ }).click();
-      await expect(fresh.page.getByTestId('trip-poi-list')).not.toContainText(day2Place);
+      // 1일차 has no places — the shared view then renders no list at all.
+      await expect(fresh.page.getByTestId('trip-poi-list').filter({ hasText: day2Place })).toHaveCount(0);
     } finally {
       await fresh.context.close();
     }

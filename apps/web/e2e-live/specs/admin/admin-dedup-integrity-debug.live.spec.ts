@@ -2,8 +2,8 @@
 // Verdict / issue-action submits are never clicked (Map merge and issue resolve are not reversible).
 // Selectors: admin/dedup-review/page.tsx, admin/integrity/page.tsx, admin/debug/logs/page.tsx, admin/api-calls/page.tsx
 import { expect, test } from '@playwright/test';
-import { loginAsAdmin, shot, isMobileProject } from '../../helpers/live';
-import { waitForGet } from '../../helpers/admin';
+import { appAlerts, loginAsAdmin, shot, isMobileProject } from '../../helpers/live';
+import { adminSelect, waitForGet } from '../../helpers/admin';
 
 test.describe('ADM dedup / integrity / debug (read-only)', () => {
   test.beforeEach(async ({ page }) => {
@@ -40,7 +40,7 @@ test.describe('ADM dedup / integrity / debug (read-only)', () => {
     expect(url.searchParams.get('q')).toBe('seoul');
     expect(url.searchParams.get('min_score')).toBe('85');
     const statusRes = waitForGet(page, /\/admin\/dedup-review\?.*status=accepted/);
-    await page.getByTestId('admin-dedup-status').locator('select').selectOption('accepted');
+    await adminSelect(page, 'admin-dedup-status').selectOption('accepted');
     expect(new URL((await statusRes).url()).searchParams.getAll('status')).toContain('accepted');
     await expect(page.getByTestId('admin-dedup-mutation-notice')).toHaveCount(0);
   });
@@ -52,11 +52,11 @@ test.describe('ADM dedup / integrity / debug (read-only)', () => {
     await issues;
     await reports;
     await expect(page.getByRole('heading', { name: '정합성' })).toBeVisible();
-    await expect(page.getByText('Issues')).toBeVisible();
-    await expect(page.getByText('Reports')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Issues', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible();
 
     const appIssues = waitForGet(page, /\/admin\/integrity\/issues\?.*source=pinvi_app/);
-    await page.getByTestId('admin-integrity-source').locator('select').selectOption('pinvi_app');
+    await adminSelect(page, 'admin-integrity-source').selectOption('pinvi_app');
     await appIssues;
     const appRows = page.locator('[data-testid^="admin-integrity-issue-row-"]');
     const n = await appRows.count();
@@ -68,12 +68,12 @@ test.describe('ADM dedup / integrity / debug (read-only)', () => {
     await shot(page, 'ADM-024', 'integrity');
 
     // ADM-025
-    await page.getByTestId('admin-integrity-source').locator('select').selectOption('all');
+    await adminSelect(page, 'admin-integrity-source').selectOption('all');
     const statusRes = waitForGet(page, /\/admin\/integrity\/issues\?.*status=acknowledged/);
-    await page.getByTestId('admin-integrity-status').locator('select').selectOption('acknowledged');
+    await adminSelect(page, 'admin-integrity-status').selectOption('acknowledged');
     await statusRes;
     const sevRes = waitForGet(page, /\/admin\/integrity\/issues\?.*severity=critical/);
-    await page.getByTestId('admin-integrity-severity').locator('select').selectOption('critical');
+    await adminSelect(page, 'admin-integrity-severity').selectOption('critical');
     const sev = new URL((await sevRes).url());
     expect(sev.searchParams.get('status')).toBe('acknowledged');
     expect(sev.searchParams.get('severity')).toBe('critical');
@@ -81,7 +81,7 @@ test.describe('ADM dedup / integrity / debug (read-only)', () => {
     await page.getByTestId('admin-integrity-provider').fill('visitkorea');
     await provRes;
     const repRes = waitForGet(page, /\/admin\/integrity\/reports\?.*severity_max=ERROR/);
-    await page.getByTestId('admin-integrity-report-severity').locator('select').selectOption('ERROR');
+    await adminSelect(page, 'admin-integrity-report-severity').selectOption('ERROR');
     await repRes;
     await expect(page.getByTestId('admin-integrity-action-dialog')).toHaveCount(0);
   });
@@ -99,7 +99,7 @@ test.describe('ADM dedup / integrity / debug (read-only)', () => {
     await expect(page.getByText('System logs')).toBeVisible();
     await expect(page.getByText('API call logs')).toBeVisible();
 
-    await page.getByTestId('admin-debug-level').locator('select').selectOption('error');
+    await adminSelect(page, 'admin-debug-level').selectOption('error');
     await page.getByTestId('admin-debug-q').fill('timeout');
     await page.getByTestId('admin-debug-method').fill('GET');
     await page.getByTestId('admin-debug-min-status').fill('500');
@@ -129,6 +129,7 @@ test.describe('ADM dedup / integrity / debug (read-only)', () => {
     const res = waitForGet(page, /\/admin\/api-calls/);
     await page.getByTestId('admin-api-calls-submit').click();
     await res;
-    await expect(page.getByTestId('admin-api-calls-error')).toHaveCount(0);
+    // `admin-api-calls-error` is the "Error" filter input, not an error panel.
+    await expect(appAlerts(page)).toHaveCount(0);
   });
 });

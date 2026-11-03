@@ -223,14 +223,17 @@ test.describe('NEAR explore map panel', () => {
     await page.goto('/map');
     await waitForControls(page);
     await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 7));
-    await toggleExpectingRequest(page, 'airport');
-    await toggleExpectingRequest(page, 'highway_incident');
-    const res = await toggleExpectingRequest(page, 'rest_area', (q) => q.layers.length === 3);
-    const body = await markersBody(res);
+    // Each toggle requests only the layers it needs (others come from the per-layer cache), so
+    // collect the result of every toggle instead of waiting for one 3-layer request.
+    const results = new Map<string, Awaited<ReturnType<typeof markersBody>>['layers'][number]>();
+    for (const layer of ['airport', 'highway_incident', 'rest_area'] as const) {
+      const res = await toggleExpectingRequest(page, layer);
+      for (const l of (await markersBody(res)).layers) results.set(l.layer, l);
+    }
     for (const layer of ['airport', 'highway_incident', 'rest_area'] as const) {
       const line = stateLine(page, layer);
       await expect(line).toBeVisible();
-      const result = body.layers.find((l) => l.layer === layer);
+      const result = results.get(layer);
       if (!result || result.status !== 'ok') continue;
       await expect(line).toContainText(FRESHNESS_RE);
       if (result.freshness?.stale) await expect(line).toContainText(STALE_TEXT);

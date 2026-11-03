@@ -210,7 +210,9 @@ export async function clickTransportMarker(page: Page, layer: Layer): Promise<st
       box.x + box.width <= canvasBox.x + canvasBox.width &&
       box.y + box.height <= canvasBox.y + canvasBox.height;
     if (!inside) continue;
-    await marker.click({ force: true });
+    // Overlays (search card, transport panel) can sit above a pin; dispatch the click on the marker
+    // element itself (maplibre markers listen on their own element).
+    await marker.dispatchEvent('click');
     try {
       await expect(detailDialog(page)).toBeVisible({ timeout: 5_000 });
       return title;

@@ -183,7 +183,7 @@
   notes: ADR-055 F1 — 기간 축소는 일자를 지우지 않고 out_of_range만 표시.
 
 - id: TRIP-011
-  title: 편집 다이얼로그에서 종료일 < 시작일 — 서버는 수용, 화면은 기간 수정 안내로 일자 추가 차단
+  title: 편집 다이얼로그에서 종료일 < 시작일 — 422 로 거부, 다이얼로그에 날짜 오류 안내
   priority: P3
   tags: [desktop, mobile, mutating]
   preconditions:
@@ -192,13 +192,13 @@
   steps:
     - 새 여행 D+40 ~ D+41 → '편집' → 시작일 D+45, 종료일 D+41 → 저장
   expected:
-    - 다이얼로그 닫힘(저장됨), 일자 추가 비활성 + '종료일이 시작일보다 빠릅니다. 여행 기간을 먼저 수정해주세요.'
-    - (데스크톱) 헤더 기간 '{D+45} - {D+41}'
+    - PATCH /trips/{id} → 422, 다이얼로그가 열린 채 '종료일은 시작일 이후여야 합니다.'
+    - 여행 기간은 바뀌지 않는다
   cleanup:
     - afterEach deleteTrip(id)
   automation: scripted
   spec: specs/trip/trip-create.live.spec.ts#TRIP-011
-  notes: 문서화된 현행 동작 — TripUpdate(apps/api/app/schemas/trip.py)에는 TripCreate와 달리 날짜 범위 validator가 없다. 제품 결정 필요(README open questions).
+  notes: '#624 — TripUpdate 에 범위 검증이 없다. prod(2026-11-03)는 500 INTERNAL_ERROR + "변경에 실패했습니다." → test.fail(#624). 수정 후 test.fail 제거.'
 
 # ───────────────────────────── styles / regions ─────────────────────────────
 - id: TRIP-012
@@ -460,6 +460,7 @@
     - afterEach deleteTrip(id)
   automation: scripted
   spec: specs/trip/trip-days.live.spec.ts#TRIP-026
+  notes: '#649 — 중복 날짜가 저장된다(dayUsingDate 가 effective_date 미비교). test.fail(#649).'
 
 - id: TRIP-027
   title: 가운데 일자 삭제 — 'N일차 추가' 라벨이 가장 낮은 빈 번호를 가리킨다

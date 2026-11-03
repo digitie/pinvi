@@ -5,15 +5,16 @@
  * lib/useFeatureDetailCard.ts (abort on featureId change), components/map/FeatureDetailModalController.tsx.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { loginAsUser, shot } from '../../helpers/live';
-import { annotate, featureMarkers, isMobileViewport, timed, waitForMapCanvas } from '../../helpers/core';
+import { ensureFeatureMarkers, loginAsUser, shot } from '../../helpers/live';
+import { annotate, isMobileViewport, timed, waitForMapCanvas } from '../../helpers/core';
 
 async function openExploreMap(page: Page) {
   const inBounds = page.waitForResponse((r) => r.url().includes('/features/in-bounds') && r.status() === 200, { timeout: 45_000 });
   await page.goto('/map');
   await waitForMapCanvas(page);
   await inBounds;
-  const pins = featureMarkers(page);
+  // Default Seoul viewport can be all clusters — zoom in until ≥2 individual feature pins render.
+  const pins = await ensureFeatureMarkers(page, 2);
   await expect(pins.first()).toBeVisible({ timeout: 15_000 });
   return pins;
 }
@@ -25,7 +26,9 @@ test.describe('CORE resilience', () => {
 
   test('CORE-023 상세 카드는 날씨가 느려도 3초 안에 뜬다(#622 — detail-card 경로)', async ({ page }, testInfo) => {
     const pins = await openExploreMap(page);
-    const featureId = (await page.locator('[data-testid="feature-map-marker-style"][data-kind="feature"]').first().getAttribute('data-feature-id')) ?? '';
+    const featureLegend = page.locator('[data-testid="feature-map-marker-style"][data-kind="feature"]');
+    await expect(featureLegend.first()).toBeAttached({ timeout: 20_000 });
+    const featureId = (await featureLegend.first().getAttribute('data-feature-id')) ?? '';
     let weatherMs: number | null = null;
     const tW = Date.now();
     page.on('response', (r) => {

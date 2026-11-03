@@ -81,7 +81,7 @@ test.describe('CORE auth/session', () => {
   });
 
   test('CORE-004 access 만료(10분) 뒤 자동 갱신 — 쿠키 삭제로 시뮬레이션(#612)', async ({ page, context }, testInfo) => {
-    await loginAsUser(page);
+    await loginAsUser(page, { fresh: true });
     await expireAccessCookie(context);
     expect(await hasCookie(context, 'pinvi_access')).toBe(false);
     const refreshDone = page.waitForResponse(
@@ -102,7 +102,7 @@ test.describe('CORE auth/session', () => {
   });
 
   test('CORE-006 두 탭 동시 갱신 조정(Web Locks) — 어느 탭도 로그아웃되지 않는다', async ({ page, context }) => {
-    await loginAsUser(page);
+    await loginAsUser(page, { fresh: true });
     const page2 = await context.newPage();
     await page2.goto('/trips');
     await expect(page2).not.toHaveURL(/\/login/);

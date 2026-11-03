@@ -1,8 +1,8 @@
 // ADM-009..014 — users (read-only, fixed accounts never changed), RBAC, audit log, location audit.
 // Selectors: admin/users/page.tsx, admin/users/[user_id]/page.tsx, admin/rbac/page.tsx, admin/audit/page.tsx, admin/audit/location/page.tsx
 import { expect, test } from '@playwright/test';
-import { loginAsAdmin, shot, isMobileProject } from '../../helpers/live';
-import { maskedEmail, requireEnv, waitForGet } from '../../helpers/admin';
+import { appAlerts, loginAsAdmin, shot, isMobileProject } from '../../helpers/live';
+import { adminSelect, maskedEmail, requireEnv, waitForGet } from '../../helpers/admin';
 
 test.describe('ADM users / audit (read-only)', () => {
   test.beforeEach(async ({ page }) => {
@@ -47,7 +47,7 @@ test.describe('ADM users / audit (read-only)', () => {
     await page.goto('/admin/users');
     for (const status of ['disabled', 'active']) {
       const res = waitForGet(page, new RegExp(`/admin/users\\?.*status_filter=${status}`));
-      await page.getByTestId('admin-users-status-filter').locator('select').selectOption(status);
+      await adminSelect(page, 'admin-users-status-filter').selectOption(status);
       await res;
       const rows = page.locator('[data-testid^="admin-users-row-"]');
       const count = await rows.count();
@@ -61,7 +61,7 @@ test.describe('ADM users / audit (read-only)', () => {
     const roles = page.getByTestId('admin-rbac-roles');
     await expect(roles).toBeVisible({ timeout: 30_000 });
     for (const role of ['admin', 'operator', 'cpo', 'user']) await expect(roles).toContainText(role);
-    await expect(page.getByText('권한 매트릭스')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '권한 매트릭스' })).toBeVisible();
   });
 
   test('ADM-013 audit log lists rows and chain verify responds', async ({ page }) => {
@@ -89,11 +89,12 @@ test.describe('ADM users / audit (read-only)', () => {
     await page.goto('/admin/audit/location');
     const today = new Date();
     const yesterday = new Date(today.getTime() - 24 * 3600 * 1000);
-    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    // datetime-local inputs take `YYYY-MM-DDTHH:mm`
+    const iso = (d: Date) => `${d.toISOString().slice(0, 10)}T00:00`;
     await page.getByTestId('admin-location-from').fill(iso(yesterday));
     await page.getByTestId('admin-location-to').fill(iso(today));
     await page.getByTestId('admin-location-submit').click();
-    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(appAlerts(page)).toHaveCount(0);
     await expect(page.locator('main table, main [role="table"]').first()).toBeVisible({ timeout: 30_000 });
   });
 });

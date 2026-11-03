@@ -83,6 +83,7 @@
   automation: scripted
   spec: specs/weather/weather-trip-days.live.spec.ts#WX-004
   notes: kor-travel-weather.md §9.2 — 지난 일자는 daily_summaries만, 직접 경로는 보존 2일이라 no_data.
+  # 2026-11-03 prod: kor-travel-map#1440 — 과거 일자 no_data(daily_summaries 없음). test.fail.
 
 - id: WX-005
   title: 같은 일자 서울역+성산일출봉 — 장소별 '장소 날씨' 카드가 서로 다르고 '날짜 날씨'는 첫 장소와 일치
@@ -348,6 +349,7 @@
   automation: scripted
   spec: specs/weather/weather-admin.live.spec.ts#WX-018
   notes: Admin weather-values는 플래그와 무관하게 kor-travel-weather 직접(§9 표).
+  # 2026-11-03 prod: #648 — admin 한국어 검색 503 으로 상세 진입 불가. test.fail(#648).
 
 - id: WX-019
   title: 관리자 Weather Values 새로고침 버튼은 재조회만 한다

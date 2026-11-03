@@ -56,6 +56,7 @@ test.describe('weather · admin weather-values', () => {
   test.skip(onMobile, '관리자 UI는 데스크톱 전용');
 
   test('WX-018 읽기 전용: 표 또는 "값 없음", 오류 없음, 쓰기 요청 0건', async ({ page }) => {
+    test.fail(true, '#648: /admin/features?q=<한국어> → 503 FEATURE_SERVICE_UNAVAILABLE');
     const writes = writeGuard(page);
     await loginAsAdmin(page);
     const featureId = await openWeatherValues(page);

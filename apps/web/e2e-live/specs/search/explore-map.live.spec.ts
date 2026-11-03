@@ -5,7 +5,7 @@
  * feature-map-detail-open), apps/web/app/(app)/map/page.tsx (heading '탐색 지도').
  */
 import { expect, test } from '@playwright/test';
-import { loginAsUser, shot } from '../../helpers/live';
+import { ensureFeatureMarkers, loginAsUser, shot } from '../../helpers/live';
 import {
   clickFeatureMarker,
   desktopOnly,
@@ -61,10 +61,12 @@ test.describe('SRCH explore map (/map)', () => {
     await gotoExplore(page);
     await wheelZoom(page, -4);
     await expect(explore.loading(page)).toBeHidden({ timeout: 30_000 });
-    const features = page.locator('[data-testid="feature-map-marker-style"][data-kind="feature"]');
-    const count = await features.count();
+    // The sr-only legend lists every point (also clustered/off-screen ones); click a marker that is
+    // actually rendered, identified by its aria-label (vworld-map-web Marker).
+    const markers = await ensureFeatureMarkers(page, 1);
+    const count = await markers.count();
     test.skip(count === 0, 'no individual feature markers in this viewport');
-    const title = (await features.first().innerText()).trim();
+    const title = ((await markers.first().getAttribute('aria-label')) ?? '').trim();
     await clickFeatureMarker(page, title);
     await expect(page.getByTestId('feature-map-detail-open')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(title, { exact: true }).first()).toBeVisible();

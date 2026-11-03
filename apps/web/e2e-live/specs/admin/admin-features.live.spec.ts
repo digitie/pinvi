@@ -4,7 +4,7 @@
 // Labels: lib/admin/status-label.ts (active 활성 · retired 종료 · published 공개 · suppressed 비공개 · valid 유효 · quarantined 격리)
 import { expect, test } from '@playwright/test';
 import { loginAsAdmin, shot, isMobileProject } from '../../helpers/live';
-import { waitForGet } from '../../helpers/admin';
+import { adminSelect, waitForGet } from '../../helpers/admin';
 
 const PLACE = '안동하회마을'; // Map category family: heritage
 
@@ -17,6 +17,7 @@ test.describe.serial('ADM features', () => {
   });
 
   test('ADM-015 + ADM-016 search 안동하회마을, state badges and detail inspector', async ({ page }) => {
+    test.fail(true, '#648: /admin/features?q=<한국어> → 503 FEATURE_SERVICE_UNAVAILABLE');
     await page.goto('/admin/features');
     await page.getByTestId('admin-features-search').fill(PLACE);
     const listed = waitForGet(page, /\/admin\/features\?.*q=/);
@@ -59,7 +60,7 @@ test.describe.serial('ADM features', () => {
     ];
     for (const c of checks) {
       const res = waitForGet(page, new RegExp(`/admin/features\\?.*${c.param}`), 60_000);
-      await page.getByTestId(c.testid).locator('select').selectOption(c.value);
+      await adminSelect(page, c.testid).selectOption(c.value);
       const response = await res;
       expect(new URL(response.url()).search).toContain(c.param);
       const rows = page.locator('[data-testid^="admin-features-row-"]');
@@ -71,7 +72,7 @@ test.describe.serial('ADM features', () => {
       }
       // '전체' must drop the parameter entirely (page comment: new axis values must not be silently cut).
       const reset = waitForGet(page, /\/admin\/features\?/);
-      await page.getByTestId(c.testid).locator('select').selectOption('all');
+      await adminSelect(page, c.testid).selectOption('all');
       const resetRes = await reset;
       expect(new URL(resetRes.url()).search).not.toContain(c.param.split('=')[0]);
     }

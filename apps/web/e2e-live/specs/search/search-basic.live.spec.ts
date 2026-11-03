@@ -72,6 +72,7 @@ test.describe('SRCH basic search (/map)', () => {
 
   test('SRCH-004 전체 주소 질의 → 주소 배지', async ({ page }, testInfo) => {
     desktopOnly();
+    test.fail(true, '#650: full road address (시·도 약칭) returns no address rows');
     const out = await runSearch(page, '경북 안동시 풍천면 하회종가길 40');
     if (out.degraded.includes('addresses')) {
       testInfo.annotations.push({ type: 'degraded', description: 'geo addresses degraded in this run' });

@@ -9,6 +9,14 @@ export { isMobileProject, requireEnv, waitForGet };
 export const E2E = '[e2e]';
 
 /**
+ * Admin `NativeSelect` spreads `data-testid` onto the native `<select>` itself (wrapper is
+ * `data-slot=native-select-wrapper`), so `getByTestId(id).locator('select')` never matches.
+ */
+export function adminSelect(page: Page, testId: string) {
+  return page.locator(`select[data-testid="${testId}"], [data-testid="${testId}"] select`).first();
+}
+
+/**
  * The "ordinary user" identity for the role-gate cases (ADM-002/003/004).
  * Prefers the second test account (PINVI_E2E_USER2_*) when provisioned so the primary
  * test@test.com session used by trip/POI writers is never bounced; falls back to PINVI_E2E_USER_*.
@@ -131,12 +139,16 @@ export async function createE2eSuggestion(
 
 /** Opens the admin review dialog for a suggestion from the Feature 제안 queue (desktop table row). */
 export async function openReviewDialog(admin: Page, requestId: string, statusFilter = 'pending'): Promise<void> {
+  // Register the list wait before navigating — the first list request fires during page load.
+  const firstList = waitForGet(admin, /\/admin\/feature-requests/);
   await admin.goto('/admin/feature-requests');
   await expect(admin.getByRole('heading', { name: 'Feature 제안 검토' })).toBeVisible();
+  await firstList;
   if (statusFilter !== 'pending') {
-    await admin.getByTestId('admin-fr-status-filter').locator('select').selectOption(statusFilter);
+    const filtered = waitForGet(admin, new RegExp(`/admin/feature-requests\\?.*status=${statusFilter}`));
+    await adminSelect(admin, 'admin-fr-status-filter').selectOption(statusFilter);
+    await filtered;
   }
-  await waitForGet(admin, /\/admin\/feature-requests/);
   await expect(admin.getByTestId(`admin-fr-row-${requestId}`)).toBeVisible({ timeout: 30_000 });
   await admin.getByTestId(`admin-fr-review-${requestId}`).click();
   await expect(admin.getByTestId('admin-fr-review-dialog')).toBeVisible();

@@ -144,6 +144,20 @@ export function forgetSessions(email?: string): void {
 
 async function rememberSession(page: Page, key: string): Promise<void> {
   sessionCache.set(key, await page.context().cookies());
+  // Refresh tokens rotate: whenever this context refreshes its session, re-snapshot the cookies so
+  // the next test never offers an already-rotated refresh token (that 401s and logs the test out).
+  const ctx = page.context() as BrowserContext & { __e2eSessionKey?: string };
+  if (ctx.__e2eSessionKey === key) return;
+  ctx.__e2eSessionKey = key;
+  ctx.on('requestfinished', (req) => {
+    if (!/\/auth\/refresh(\?|$)/.test(req.url())) return;
+    void req
+      .response()
+      .then(async (res) => {
+        if (res && res.ok() && ctx.__e2eSessionKey === key) sessionCache.set(key, await ctx.cookies());
+      })
+      .catch(() => undefined);
+  });
 }
 
 async function reuseSession(page: Page, key: string, landing: string, ready: Locator): Promise<boolean> {
@@ -212,9 +226,15 @@ async function submitLogin(page: Page, submit: Locator): Promise<Response | null
   }
 }
 
-async function loginWithUserForm(page: Page, email: string, password: string): Promise<void> {
+export interface LoginOptions {
+  /** Skip the session cache and log in through the form (auth/session cases that rotate tokens). */
+  fresh?: boolean;
+}
+
+async function loginWithUserForm(page: Page, email: string, password: string, opts: LoginOptions = {}): Promise<void> {
   trackApiBase(page);
-  if (await reuseSession(page, email, '/trips', page.getByRole('heading', { name: '여행', exact: true }))) return;
+  if (opts.fresh) sessionCache.delete(email);
+  else if (await reuseSession(page, email, '/trips', page.getByRole('heading', { name: '여행', exact: true }))) return;
   await page.goto('/login');
   const submit = page.getByTestId('login-submit');
   // origin/main: the submit button is rendered disabled in server HTML and enabled after hydration.
@@ -239,8 +259,8 @@ export async function loginAs(page: Page, email: string, password: string): Prom
 }
 
 /** `test@test.com` — PINVI_E2E_USER_EMAIL / PINVI_E2E_USER_PASSWORD. */
-export async function loginAsUser(page: Page): Promise<void> {
-  await loginWithUserForm(page, requireEnv('PINVI_E2E_USER_EMAIL'), requireEnv('PINVI_E2E_USER_PASSWORD'));
+export async function loginAsUser(page: Page, opts: LoginOptions = {}): Promise<void> {
+  await loginWithUserForm(page, requireEnv('PINVI_E2E_USER_EMAIL'), requireEnv('PINVI_E2E_USER_PASSWORD'), opts);
 }
 
 /** `test2@test.com` — PINVI_E2E_USER2_EMAIL / PINVI_E2E_USER2_PASSWORD (DECISIONS D2). */
@@ -443,6 +463,9 @@ export function detailPanel(page: Page): Locator {
  * Both toggles carry `aria-controls="trip-detail-panel"` + `aria-expanded`, which is what we key on.
  */
 export async function openPanel(page: Page): Promise<void> {
+  if (!/\/trips\/[0-9a-f-]{36}/i.test(page.url())) {
+    throw new Error(`openPanel: 여행 상세 페이지가 아니다 (${new URL(page.url()).pathname}) — createTrip 뒤에는 page.goto('/trips/<id>') 가 필요하다`);
+  }
   await expect(page.getByTestId('trip-detail-shell')).toBeVisible({ timeout: 45_000 });
   const panel = detailPanel(page);
   if (await panel.isVisible()) return;
@@ -592,7 +615,18 @@ export async function createShareLink(
   if (!(await section.isVisible())) await openTripTab(page, '공유');
   await section.getByLabel('권한').selectOption(opts.visibility ?? 'view_only');
   if (opts.expires) await section.getByLabel('만료일(선택)').fill(opts.expires);
-  await section.getByRole('button', { name: '링크 만들기' }).click();
+  const isCreate = (r: Response) => r.request().method() === 'POST' && /\/share-tokens(\?|$)/.test(new URL(r.url()).pathname);
+  for (let attempt = 1; ; attempt += 1) {
+    const created = page.waitForResponse(isCreate, { timeout: 30_000 });
+    await section.getByRole('button', { name: '링크 만들기' }).click();
+    const res = await created;
+    if (res.status() === 429 && attempt < 3) {
+      await backOff(res, 'POST share-tokens');
+      continue;
+    }
+    if (!res.ok()) throw new Error(`공유 링크 생성 실패: POST share-tokens → HTTP ${res.status()}`);
+    break;
+  }
   const banner = page.getByTestId('new-share-url');
   await expect(banner).toBeVisible();
   await expect(banner).toContainText('링크가 생성됐습니다. 이 주소는 지금만 표시됩니다.');
@@ -636,6 +670,44 @@ export async function openSharedInFreshContext(
   await page.goto(sharedPath(tripId, token));
   const response = await apiResponse;
   return { context, page, requests, apiStatus: response.status() };
+}
+
+/**
+ * App alerts only. Next.js mounts `<p id="__next-route-announcer__" role="alert">` on every page,
+ * so a bare `getByRole('alert')` never has count 0 (first prod run, 2026-11-03).
+ */
+export function appAlerts(scope: Page | Locator): Locator {
+  return scope.locator('[role="alert"]:not(#__next-route-announcer__)');
+}
+
+/**
+ * Individually rendered feature markers on the explore/trip map. Cluster markers are the same
+ * `.maplibregl-marker[role=button]` but labelled "N개 위치 묶음 펼치기" (vworld-map-web), and clicking one
+ * zooms instead of opening a popup.
+ */
+export function featureMarkerButtons(page: Page): Locator {
+  return page.locator('.maplibregl-marker[role="button"]:not([data-is-cluster="true"]):not([aria-label*="묶음"])');
+}
+
+/**
+ * Explore map: zooms in (keyboard `=` on the canvas, ≤ `maxSteps`) until at least `min` individual
+ * feature markers are rendered — the default Seoul viewport is often all clusters.
+ */
+export async function ensureFeatureMarkers(page: Page, min = 1, maxSteps = 4): Promise<Locator> {
+  const markers = featureMarkerButtons(page);
+  for (let step = 0; step <= maxSteps; step += 1) {
+    try {
+      await expect.poll(() => markers.count(), { timeout: 8_000 }).toBeGreaterThanOrEqual(min);
+      return markers;
+    } catch {
+      if (step === maxSteps) break;
+      const canvas = page.locator('.maplibregl-canvas').first();
+      await canvas.focus();
+      await page.keyboard.press('=');
+      await page.waitForTimeout(600);
+    }
+  }
+  return markers;
 }
 
 /** Masks a secret in text destined for logs/messages. */

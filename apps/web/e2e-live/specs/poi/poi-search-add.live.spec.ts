@@ -135,6 +135,8 @@ test('POI-016 feature 상세 "카카오·네이버에서 더 보기"는 POI 를 
   await expect(dayBadge(page, 1)).toHaveText('1곳');
 
   const featureMarkers = page.locator('.trip-map-feature-marker');
+  // Nearby features load after the trip view (separate in-bounds fetch) — wait before deciding.
+  await expect.poll(() => featureMarkers.count(), { timeout: 20_000 }).toBeGreaterThan(0).catch(() => undefined);
   test.skip((await featureMarkers.count()) === 0, '뷰포트에 feature 마커 없음(데이터 의존)');
   let posted = 0;
   page.on('request', (r) => {
@@ -161,6 +163,9 @@ test('POI-017 같은 Map 장소를 같은 일자에 두 번 추가 (map:heritage
   const id = await freshTrip(page, 'POI 중복');
   await searchPlaces(page, '안동하회마을');
   const first = await pickSearchRow(page, id, 'feature', /하회/);
+  // Like a user, wait for the list to show the first add before picking again — the web appends after
+  // the last sort_order it knows, so a second pick against a stale view is a 409 SORT_ORDER_CONFLICT.
+  await expect(poiList(page).getByRole('listitem')).toHaveCount(1, { timeout: 20_000 });
   await searchPlaces(page, '안동하회마을');
   const second = await pickSearchRow(page, id, 'feature', /하회/);
   expect(second.body.feature_id).toBe(first.body.feature_id);

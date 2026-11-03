@@ -3,7 +3,7 @@
  * UI 텍스트·testid 출처: F:\dev\pinvi\apps\web\components\trips\{TripDetail,TripShareLinks,
  * TripCompanions,TripComments,SharedTripView,TripActions}.tsx (README §selectors 참조).
  */
-import { expect, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import {
   apiBaseURL,
   createShareLink,
@@ -97,7 +97,15 @@ export async function inviteCompanion(page: Page, email: string, role: Companion
   const section = companionSection(page);
   await section.getByLabel('이메일').fill(email);
   await section.getByLabel('권한').selectOption(role);
+  // Report the server's answer instead of failing later on a missing list (status only, no body).
+  const invited = page
+    .waitForResponse((r) => r.request().method() === 'POST' && /\/trips\/[^/]+\/members$/.test(new URL(r.url()).pathname), {
+      timeout: 30_000,
+    })
+    .catch(() => null);
   await section.getByRole('button', { name: '초대' }).click();
+  const res = await invited;
+  if (res) test.info().annotations.push({ type: 'invite', description: `POST members → ${res.status()}` });
 }
 
 export async function postComment(page: Page, body: string): Promise<void> {

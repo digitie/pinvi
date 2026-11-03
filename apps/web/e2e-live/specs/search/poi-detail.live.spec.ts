@@ -26,7 +26,8 @@ test.describe('SRCH detail card', () => {
   });
 
   test('SRCH-035 핵심 필드 + 라벨 + 주소 + 3초', async ({ page }, ti) => {
-    const { card, elapsedMs } = await searchPickOpenDetail(page, '안동하회마을');
+    // pick the exact place — under the Seoul viewport bias a same-named Seoul restaurant can rank first
+    const { card, elapsedMs } = await searchPickOpenDetail(page, '안동하회마을', (r) => r.source === 'feature' && r.name === '안동하회마을');
     recordPerf(ti, 'detail-card(안동하회마을)', elapsedMs, 3_000);
     await expect(modal.title(page)).toContainText(card.name);
     await expect(modal.body(page)).toHaveAttribute('data-kind', 'place');

@@ -530,6 +530,7 @@
   automation: scripted
   spec: specs/nearby/nearby-features-api.live.spec.ts#NEAR-030
   notes: 2026-11-02 prod e2e에서 '주차장 이름'이 Map 작업으로 넘어갔다 — 이름 형식('○○ 주차장')은 단언하지 않고 포함 여부만 본다.
+  # 2026-11-03 prod: kor-travel-map#1438 — 주차장 feature 가 관광으로 분류(동작대교 주차장). test.fail.
 
 - id: NEAR-031
   title: 공중화장실(KNPS 05060000)이 국립공원(설악산) 주변 feature로 보이는지

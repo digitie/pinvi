@@ -23,6 +23,7 @@ test.describe.serial('ADM POI admin (mutating, self-cleaning)', () => {
     title = `${E2E} ADM-028 ${runTag()}`;
     const trip = await createTrip(user.page, { title, start: '2026-11-20', end: '2026-11-21', region: '안동' });
     tripId = trip.id;
+    await user.page.goto(`/trips/${tripId}`);
     const added = await searchAndAddPlace(user.page, 1, PLACE, notExternal);
     expect(added).toContain('하회');
   });

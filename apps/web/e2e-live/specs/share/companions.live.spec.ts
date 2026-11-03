@@ -140,7 +140,7 @@ test.describe('SHR 동행 (desktop)', () => {
       await user2.page.getByRole('button', { name: '편집' }).first().click();
       await user2.page.locator('#trip-edit-title').fill(`${title} viewer-edit`);
       await user2.page.getByTestId('trip-edit-save').click();
-      await expect(user2.page.getByRole('alert')).toContainText('이 여행을 편집할 권한이 없습니다');
+      await expect(user2.page.getByTestId('trip-edit-dialog').getByRole('alert')).toContainText('이 여행을 편집할 권한이 없습니다');
       await shot(user2.page, 'SHR-028', '01-viewer-edit-denied');
       await expect(user2.page.getByRole('heading', { name: title }).first()).toBeVisible();
 

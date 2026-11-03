@@ -70,8 +70,10 @@ export function dayVisibilityCheckbox(page: Page, dayLabel: string): Locator {
 
 /** Visible title of a POI row (first line of the select button). */
 export async function poiTitle(row: Locator): Promise<string> {
-  const text = await row.locator('button[aria-current]').first().innerText();
-  return text.split('\n')[0]!.trim();
+  // The select button starts with an aria-hidden ordinal badge ("1", "2", …); the name is the
+  // `.truncate` span (TripPoiList.tsx `poi.title ?? poi.feature_id ?? '장소'`).
+  const text = await row.locator('button[aria-current] span.truncate').first().innerText();
+  return text.trim();
 }
 
 export async function poiTitles(page: Page): Promise<string[]> {

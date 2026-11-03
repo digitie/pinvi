@@ -8,7 +8,7 @@
  *  - apps/web/components/trips/TripDayHeader.tsx — testids trip-day-rise-set / trip-day-rise-set-pending[data-rise-set-status], #615 wording.
  */
 import { expect, test } from '@playwright/test';
-import { createTrip, loginAsUser, searchAndAddPlace, shot } from '../../helpers/live';
+import { createTrip, findTripByTitle, loginAsUser, searchAndAddPlace, shot } from '../../helpers/live';
 import { NOAA_SELF_CHECK, clockDiffMin, hhmmToMin, noaaSunTimesKst } from '../../helpers/sun';
 import {
   D,
@@ -52,19 +52,12 @@ async function expectNoaaMatch(day: WxDay, uiText: string): Promise<void> {
   expect(dSet, '일몰 NOAA ±5분').toBeLessThanOrEqual(SUN_TOLERANCE_MIN);
 }
 
-/** Open the trip list and click the seed trip by title. Declared as "helper needed" (openTripByTitle) in README. */
+/**
+ * Seed trip id by exact title, through the API (the dashboard list renders asynchronously and
+ * `isVisible({ timeout })` does not wait, which made the first prod run skip WX-011/012).
+ */
 async function openSeedTrip(page: import('@playwright/test').Page): Promise<string | null> {
-  for (const path of ['/trips', '/']) {
-    await page.goto(path);
-    const list = page.getByTestId('trip-list');
-    if (!(await list.isVisible({ timeout: 8_000 }).catch(() => false))) continue;
-    const link = list.getByRole('link').filter({ hasText: SEED_SUN_TRIP_TITLE }).first();
-    if (!(await link.isVisible({ timeout: 3_000 }).catch(() => false))) return null;
-    const href = await link.getAttribute('href');
-    const m = href?.match(/\/trips\/([0-9a-f-]{36})/i);
-    return m?.[1] ?? null;
-  }
-  return null;
+  return findTripByTitle(page, SEED_SUN_TRIP_TITLE);
 }
 
 test.describe('weather · sunrise/sunset', () => {

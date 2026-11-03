@@ -17,7 +17,6 @@ import {
   dayTab,
   e2eTitle,
   gotoTrip,
-  isMobile,
   isoDate,
   koDate,
   openPanel,
@@ -229,24 +228,26 @@ test('[TRIP-010] 장소가 있는 상태에서 기간 축소/확장 — 기간 �
   await shot(page, 'TRIP-010', 'extended');
 });
 
-test('[TRIP-011] 편집 다이얼로그에서 종료일 < 시작일 — 서버는 수용, 화면은 기간 수정 안내로 일자 추가 차단', async ({ page }, testInfo) => {
-  // Documented behaviour: TripUpdate (apps/api/app/schemas/trip.py) has no date-range validator,
-  // unlike TripCreate. The UI then shows the add-day reason from addDayValidation().
+test('[TRIP-011] 편집 다이얼로그에서 종료일 < 시작일 — 422 로 거부, 다이얼로그에 날짜 오류 안내', async ({ page }) => {
+  // Correct behaviour (TripCreate already validates; TripUpdate must too). Prod today answers
+  // 500 INTERNAL_ERROR and the dialog says only "변경에 실패했습니다." — #624.
+  test.fail(true, '#624: PATCH /trips with end<start → 500 INTERNAL_ERROR (expected 422 + date message)');
   const { id } = await createTrip(page, { title: e2eTitle('편집역전'), start: isoDate(40), end: isoDate(41) });
   created.push(id);
   await gotoTrip(page, id);
 
-  await openTripEdit(page);
+  const dialog = await openTripEdit(page);
   await page.locator('#trip-edit-start').fill(isoDate(45));
   await page.locator('#trip-edit-end').fill(isoDate(41));
-  await saveTripEdit(page);
-
-  await expect(addDayButton(page, testInfo)).toBeDisabled();
-  await expect(addDayReasonHost(page, testInfo)).toContainText(
-    '종료일이 시작일보다 빠릅니다. 여행 기간을 먼저 수정해주세요.',
-  );
-  if (!isMobile(testInfo)) {
-    await expect(page.getByTestId('trip-top-panel')).toContainText(`${koDate(isoDate(45))} - ${koDate(isoDate(41))}`);
-  }
+  const patched = page
+    .waitForResponse((r) => r.request().method() === 'PATCH' && new RegExp(`/trips/${id}$`).test(new URL(r.url()).pathname), {
+      timeout: 20_000,
+    })
+    .catch(() => null);
+  await page.getByTestId('trip-edit-save').click();
+  const res = await patched;
   await shot(page, 'TRIP-011', 'edit-reversed');
+  expect(res?.status(), 'PATCH /trips/{id} with end < start').toBe(422);
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('종료일은 시작일 이후여야 합니다.');
 });

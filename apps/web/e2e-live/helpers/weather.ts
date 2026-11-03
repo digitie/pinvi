@@ -7,8 +7,8 @@
  *  - apps/web/components/trips/TripPoiList.tsx (trip-poi-list, 장소 날씨 label)
  *  - packages/schemas/src/trip.ts (TripViewDay/weather schema)
  */
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { deleteAllE2eTrips, deleteTrip, e2ePrefix, requireEnv, waitForRequest } from './live';
+import { expect, test, type Locator, type Page, type Response } from '@playwright/test';
+import { apiBaseURL, deleteAllE2eTrips, deleteTrip, e2ePrefix, requireEnv, waitForRequest } from './live';
 
 export const TEXT = {
   noData: '이 날짜의 날씨 정보가 없습니다.',
@@ -146,10 +146,20 @@ export function tripViewPattern(tripId: string): RegExp {
   return new RegExp(`/trips/${tripId}(\\?|$)`);
 }
 
-async function unwrap(resPromise: Promise<{ json(): Promise<unknown>; status(): number }>) {
+async function unwrap(page: Page, tripId: string, resPromise: Promise<Response>) {
   const res = await resPromise;
   expect(res.status(), 'GET /trips/{id} 는 200 이어야 한다').toBe(200);
-  const body = (await res.json()) as { data?: WxTripView } & WxTripView;
+  let body: ({ data?: WxTripView } & WxTripView) | null = null;
+  try {
+    body = (await res.json()) as { data?: WxTripView } & WxTripView;
+  } catch {
+    // The page navigated/reloaded after this response (body discarded) — read the same trip view
+    // with the page's cookies instead. Same endpoint, same data; only the timing differs.
+    const api = await apiBaseURL(page);
+    const again = await page.context().request.get(`${api}/trips/${tripId}`);
+    expect(again.status(), 'GET /trips/{id} (re-read)').toBe(200);
+    body = (await again.json()) as { data?: WxTripView } & WxTripView;
+  }
   return (body.data ?? body) as WxTripView;
 }
 
@@ -157,13 +167,13 @@ async function unwrap(resPromise: Promise<{ json(): Promise<unknown>; status(): 
 export async function loadTripView(page: Page, tripId: string): Promise<WxTripView> {
   const pending = waitForRequest(page, tripViewPattern(tripId));
   await page.goto(`/trips/${tripId}`);
-  return unwrap(pending);
+  return unwrap(page, tripId, pending);
 }
 
 export async function reloadTripView(page: Page, tripId: string): Promise<WxTripView> {
   const pending = waitForRequest(page, tripViewPattern(tripId));
   await page.reload();
-  return unwrap(pending);
+  return unwrap(page, tripId, pending);
 }
 
 export function dayOf(view: WxTripView, dayIndex: number): WxDay {
