@@ -95,7 +95,9 @@ test.describe('CORE resilience', () => {
     const b = (await pins.nth(1).getAttribute('aria-label')) ?? '';
     test.skip(a === b, '서로 다른 두 핀 필요');
     await pins.nth(0).click();
-    await pins.nth(1).click(); // immediately supersede A with B
+    // desktop: immediately supersede A with B. Mobile: A's sheet now covers the map — the mobile branch
+    // below closes it and taps B.
+    if (!isMobileViewport(page)) await pins.nth(1).click();
     if (isMobileViewport(page)) {
       // mobile: A's sheet opened; close it, tap B, sheet must be B (useFeatureDetailCard aborts A)
       const modal = page.getByTestId('feature-detail-modal');

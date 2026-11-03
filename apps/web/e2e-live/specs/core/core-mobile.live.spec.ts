@@ -53,13 +53,19 @@ test.describe('CORE mobile', () => {
     await page.keyboard.press('Escape');
     await expect(modal).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('clip');
-    // 2) close button
-    await pin!.tap();
+    // 2) close button — the camera flies to the selected pin; wait for it to settle and re-pick a tappable pin
+    const retap = async () => {
+      await page.waitForTimeout(1500);
+      const [p] = await clickableFeatureMarkers(page, 1);
+      expect(p, 'a tappable feature pin').toBeTruthy();
+      await p!.tap();
+    };
+    await retap();
     await expect(modal).toBeVisible();
     await page.getByTestId('feature-detail-modal-close').tap();
     await expect(modal).toHaveCount(0);
     // 3) backdrop
-    await pin!.tap();
+    await retap();
     await expect(modal).toBeVisible();
     await page.getByTestId('feature-detail-modal-backdrop').click({ position: { x: 10, y: 10 } });
     await expect(modal).toHaveCount(0);
