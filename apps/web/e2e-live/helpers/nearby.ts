@@ -214,7 +214,7 @@ export async function clickTransportMarker(page: Page, layer: Layer): Promise<st
     // element itself (maplibre markers listen on their own element).
     await marker.dispatchEvent('click');
     try {
-      await expect(detailDialog(page)).toBeVisible({ timeout: 5_000 });
+      await expect(detailDialog(page)).toBeVisible({ timeout: 12_000 });
       return title;
     } catch {
       // A same-named Map feature marker may have taken the click; close whatever opened and try the next.

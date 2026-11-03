@@ -83,6 +83,7 @@ test('[TRIP-029] 한 일자에 장소 8개 추가 — 순번 1..8, 헤더 8개, 
 
 test('[TRIP-030] 드래그로 순서 변경 — 3번째를 1번째로, 새로고침 후에도 유지', async ({ page }, testInfo) => {
   test.skip(testInfo.project.use.hasTouch === true, 'HTML5 drag needs a mouse pointer; mobile reorder is manual (TRIP-050)');
+  test.fail(true, '#652: POI reorder intermittently 409 SORT_ORDER_CONFLICT (raw DB error in message)');
   const { id } = await createTrip(page, { title: e2eTitle('순서'), start: isoDate(12), end: isoDate(12), region: '경주' });
   created.push(id);
   await gotoTrip(page, id);
@@ -109,6 +110,14 @@ test('[TRIP-030] 드래그로 순서 변경 — 3번째를 1번째로, 새로고
   // names share the region prefix ('경주 …'), so compare enough characters to tell them apart
   await expect.poll(async () => (await poiTitles(page)).map((t) => t.slice(0, 6))).toEqual(
     [c, a, b].map((n) => n.slice(0, 6)),
+  );
+
+  // A second reorder on the persisted order must also succeed (#652: intermittent 409 SORT_ORDER_CONFLICT).
+  const reorder2 = waitForRequest(page, /\/trips\/[0-9a-f-]{36}\/pois\/reorder/);
+  await dragPoi(page, 2, 0);
+  expect((await reorder2).status(), 'second reorder').toBe(200);
+  await expect.poll(async () => (await poiTitles(page)).map((t) => t.slice(0, 6))).toEqual(
+    [b, c, a].map((n) => n.slice(0, 6)),
   );
 });
 

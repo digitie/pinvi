@@ -531,6 +531,7 @@
   automation: scripted
   spec: specs/trip/trip-places.live.spec.ts#TRIP-030
   notes: HTML5 DnD — 터치 프로젝트(hasTouch)에서는 skip, 모바일 수동은 TRIP-051.
+  # 2026-11-03 prod: #652 — 재정렬이 간헐 409 SORT_ORDER_CONFLICT(응답에 DB 원문). 새로고침 뒤 두 번째 재정렬까지 단언, test.fail(#652).
 
 - id: TRIP-031
   title: 장소 삭제 — 행·헤더·마커가 함께 줄고 순번이 재계산된다

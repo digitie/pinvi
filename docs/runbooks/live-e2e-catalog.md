@@ -99,8 +99,8 @@ scripts/n150-live-catalog.sh --head --project session       # TRIP-046(@slow, ~1
   단계마다 독립이며 실패는 로그로만 남긴다.
 - 각 mutating 스펙은 자기 데이터를 `afterEach`/`finally` 에서 지운다. 접두 `[e2e]` 없는 데이터는
   절대 만지지 않는다.
-- 잔여(의도): admin-promotion 이 run 당 `rejected` 상태의 `[e2e]` feature 제안 3행을 남긴다
-  (DECISIONS D1, #634).
+- 잔여(의도): admin-promotion 이 run 당 `rejected` 상태의 `[e2e]` feature 제안 2행을 남긴다
+  (DECISIONS D1, #634). 범위 밖(lat > 39.5) 제안은 #614 이후 클라이언트가 막아 더는 만들지 않는다(ADM-033).
 
 ## 4. 소유자 결정 (DECISIONS.md, 2026-11-03)
 
@@ -238,6 +238,8 @@ CORE-021(#623 모바일 stats 칩 fit padding), CORE-024(#622 팝업 상세·날
 | #648 | bug | `/admin/features` 한국어 `q` 검색 503 FEATURE_SERVICE_UNAVAILABLE | ADM-015/016, WX-018 (`test.fail`) |
 | #649 | bug | 일자 날짜 중복이 저장됨(`dayUsingDate` 가 effective_date 미비교) | TRIP-026 (`test.fail`) |
 | #650 | bug | 전체 도로명 주소(시·도 약칭) 검색에 주소 행 0건 | SRCH-004 (`test.fail`) |
+| #651 | bug | admin dedup review 목록이 항상 422 FORBIDDEN(Map 거절), 화면은 빈 큐 | ADM-022/023 (`test.fail`) |
+| #652 | bug | 장소 재정렬 간헐 409 SORT_ORDER_CONFLICT + 응답에 DB 오류 원문 | TRIP-030 (`test.fail`) |
 | kor-travel-map#1438 | bug | feature 카테고리 오분류(숙박·카페·마트·캠핑장·주차장) | SRCH-019/020/022, NEAR-030 (`test.fail`) |
 | kor-travel-map#1439 | bug | event 기간·장소 누락, 축제 category·중복 | SRCH-027 (`test.fail`) |
 | kor-travel-map#1440 | bug | 과거 날짜 날씨 daily_summaries 미제공 | WX-004 (`test.fail`) |

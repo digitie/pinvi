@@ -222,7 +222,8 @@ test.describe('NEAR explore map panel', () => {
   test('NEAR-014 freshness label and stale badge mirror the response freshness for every ok layer', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 7));
+    // zoom 8: the lowest level at which all three layers are requestable (휴게소 min zoom 8)
+    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 8));
     // Each toggle requests only the layers it needs (others come from the per-layer cache), so
     // collect the result of every toggle instead of waiting for one 3-layer request.
     const results = new Map<string, Awaited<ReturnType<typeof markersBody>>['layers'][number]>();

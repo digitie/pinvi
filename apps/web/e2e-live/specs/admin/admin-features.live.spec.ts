@@ -64,6 +64,8 @@ test.describe.serial('ADM features', () => {
       const response = await res;
       expect(new URL(response.url()).search).toContain(c.param);
       const rows = page.locator('[data-testid^="admin-features-row-"]');
+      // the table re-renders after the response — wait for rows or the empty state before counting
+      await expect(rows.first().or(page.getByText('feature가 없습니다.'))).toBeVisible({ timeout: 20_000 });
       const count = await rows.count();
       if (count === 0) {
         await expect(page.getByText('feature가 없습니다.')).toBeVisible();

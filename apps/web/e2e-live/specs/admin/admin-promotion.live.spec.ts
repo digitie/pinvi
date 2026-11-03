@@ -8,7 +8,7 @@
 // Full approve (ADM-031) is BLOCKED — see catalog.yaml / README.
 // Selectors: admin/feature-requests/page.tsx, components/map/FeatureRequestDialog.tsx
 import { expect, test } from '@playwright/test';
-import { shot, isMobileProject } from '../../helpers/live';
+import { appAlerts, shot, isMobileProject } from '../../helpers/live';
 import {
   E2E,
   createE2eSuggestion,
@@ -90,9 +90,33 @@ test.describe.serial('ADM promotion review (desktop)', () => {
     await expect(page.getByTestId(`admin-fr-row-${pendingId}`)).toBeVisible();
   });
 
-  test('ADM-033 approve of an out-of-Map-range suggestion is refused with a clear message, status stays 대기', async () => {
+  test('ADM-033 an out-of-Map-range (lat > 39.5) proposal never reaches the queue', async () => {
+    // Since #614 the shared FeatureRequestCreateSchema refuses new_place lat > 39.5 before any request
+    // (packages/schemas/src/feature.ts), so such a suggestion can no longer be created from the UI and
+    // the approve-time 422 path (MAP_FEATURE_REQUEST_PAYLOAD_INVALID) is only reachable for legacy rows.
     const title = `${E2E} ADM-033 범위밖 ${tag}`;
-    outOfRangeId = await createE2eSuggestion(user, { ...OUT_OF_MAP_RANGE, title });
+    const userPage = user.page;
+    let posted = 0;
+    const onRequest = (req: { method(): string; url(): string }) => {
+      if (req.method() === 'POST' && /\/features\/requests$/.test(new URL(req.url()).pathname)) posted += 1;
+    };
+    userPage.on('request', onRequest);
+    await userPage.goto(`/map?suggest=${OUT_OF_MAP_RANGE.lon},${OUT_OF_MAP_RANGE.lat}`);
+    const dialog = userPage.getByTestId('feature-request-dialog');
+    await expect(dialog).toBeVisible({ timeout: 30_000 });
+    await dialog.getByLabel('이름').fill(title);
+    await userPage.getByTestId('feature-request-submit').click();
+    await expect(appAlerts(dialog)).toBeVisible({ timeout: 15_000 });
+    await userPage.waitForTimeout(1_000);
+    userPage.off('request', onRequest);
+    expect(posted, 'out-of-range proposal must not be sent').toBe(0);
+    await expect(dialog).not.toContainText('제안이 접수됐습니다');
+    await shot(userPage, 'ADM-033', 'refused-client-side');
+  });
+
+  test('ADM-033b legacy out-of-range row: approve is refused with a clear message (needs a pre-#614 row)', async () => {
+    test.skip(!process.env.PINVI_E2E_LEGACY_OUT_OF_RANGE_ID, 'no legacy out-of-range suggestion id provided (cannot be created from the UI since #614)');
+    outOfRangeId = process.env.PINVI_E2E_LEGACY_OUT_OF_RANGE_ID!;
 
     const page = admin.page;
     await openReviewDialog(page, outOfRangeId, 'pending');

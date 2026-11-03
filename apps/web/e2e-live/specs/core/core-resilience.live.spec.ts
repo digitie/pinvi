@@ -26,7 +26,7 @@ test.describe('CORE resilience', () => {
 
   test('CORE-023 상세 카드는 날씨가 느려도 3초 안에 뜬다(#622 — detail-card 경로)', async ({ page }, testInfo) => {
     const pins = await openExploreMap(page);
-    const featureLegend = page.locator('[data-testid="feature-map-marker-style"][data-kind="feature"]');
+    const featureLegend = page.locator('[data-testid="feature-map-marker-style"][data-feature-id]:not([data-feature-id=""])');
     await expect(featureLegend.first()).toBeAttached({ timeout: 20_000 });
     const featureId = (await featureLegend.first().getAttribute('data-feature-id')) ?? '';
     let weatherMs: number | null = null;
@@ -96,7 +96,8 @@ test.describe('CORE resilience', () => {
       await expect(page.getByTestId('feature-detail-modal-title')).not.toContainText(a.slice(0, 6));
     } else {
       const popup = page.locator('.maplibregl-popup');
-      await expect(popup).toHaveCount(1);
+      // the popup waits for detail + weather together (#622) — allow the slow path
+      await expect(popup).toHaveCount(1, { timeout: 30_000 });
       await expect(popup).toContainText(b.slice(0, 4));
       await expect(popup.getByText('상세 불러오는 중…')).toHaveCount(0, { timeout: 15_000 });
       await page.waitForTimeout(2500);

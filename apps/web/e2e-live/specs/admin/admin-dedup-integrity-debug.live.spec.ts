@@ -12,9 +12,11 @@ test.describe('ADM dedup / integrity / debug (read-only)', () => {
   });
 
   test('ADM-022 + ADM-023 dedup review list, detail panel, filter forwarding', async ({ page }) => {
+    test.fail(true, '#651: GET /admin/dedup-review → 422 FORBIDDEN (Map rejects PinVi), page looks like an empty queue');
     const list = waitForGet(page, /\/admin\/dedup-review/);
     await page.goto('/admin/dedup-review');
-    await list;
+    // soft: keep checking filter forwarding (ADM-023) even while the list itself fails (#651)
+    expect.soft((await list).status(), 'GET /admin/dedup-review').toBe(200);
     await expect(page.getByRole('heading', { name: 'Dedup review' })).toBeVisible();
     const rows = page.locator('[data-testid^="admin-dedup-row-"]');
     if (await rows.count()) {
@@ -33,15 +35,17 @@ test.describe('ADM dedup / integrity / debug (read-only)', () => {
     // ADM-023
     await page.getByTestId('admin-dedup-search').fill('seoul');
     await page.getByTestId('admin-dedup-min-score').fill('85');
-    const filtered = waitForGet(page, /\/admin\/dedup-review\?.*min_score=85/);
+    // Forwarding is a request-side contract (typing min_score already refetches without q, and the list
+    // may answer 4xx — see catalog notes): wait for the submitted request that carries both params.
+    const isDedupGet = (r: { method(): string; url(): string }, re: RegExp) => r.method() === 'GET' && re.test(r.url());
+    const filtered = page.waitForRequest((r) => isDedupGet(r, /\/admin\/dedup-review\?(?=.*q=seoul)(?=.*min_score=85)/), { timeout: 30_000 });
     await page.getByTestId('admin-dedup-submit').click();
-    const res = await filtered;
-    const url = new URL(res.url());
+    const url = new URL((await filtered).url());
     expect(url.searchParams.get('q')).toBe('seoul');
     expect(url.searchParams.get('min_score')).toBe('85');
-    const statusRes = waitForGet(page, /\/admin\/dedup-review\?.*status=accepted/);
+    const statusReq = page.waitForRequest((r) => isDedupGet(r, /\/admin\/dedup-review\?.*status=accepted/), { timeout: 30_000 });
     await adminSelect(page, 'admin-dedup-status').selectOption('accepted');
-    expect(new URL((await statusRes).url()).searchParams.getAll('status')).toContain('accepted');
+    expect(new URL((await statusReq).url()).searchParams.getAll('status')).toContain('accepted');
     await expect(page.getByTestId('admin-dedup-mutation-notice')).toHaveCount(0);
   });
 
@@ -99,12 +103,13 @@ test.describe('ADM dedup / integrity / debug (read-only)', () => {
     await expect(page.getByText('System logs')).toBeVisible();
     await expect(page.getByText('API call logs')).toBeVisible();
 
+    // Filters refetch as you type — register the waits first and match the final query shape.
+    const sys = waitForGet(page, /\/admin\/debug\/logs\/system\?(?=.*level=error)(?=.*q=timeout)/);
+    const api = waitForGet(page, /\/admin\/debug\/logs\/api-calls\?(?=.*method=GET)(?=.*min_status=500)/);
     await adminSelect(page, 'admin-debug-level').selectOption('error');
     await page.getByTestId('admin-debug-q').fill('timeout');
     await page.getByTestId('admin-debug-method').fill('GET');
     await page.getByTestId('admin-debug-min-status').fill('500');
-    const sys = waitForGet(page, /\/admin\/debug\/logs\/system\?.*q=timeout/);
-    const api = waitForGet(page, /\/admin\/debug\/logs\/api-calls\?.*min_status=500/);
     await page.getByTestId('admin-debug-submit').click();
     expect(new URL((await sys).url()).searchParams.get('level')).toBe('error');
     expect(new URL((await api).url()).searchParams.get('method')).toBe('GET');

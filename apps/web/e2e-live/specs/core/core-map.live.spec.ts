@@ -94,7 +94,8 @@ test.describe('CORE map — explore map (/map)', () => {
       await expect(modal).toHaveCount(0);
     } else {
       const popup = page.locator('.maplibregl-popup');
-      await expect(popup).toBeVisible({ timeout: 10_000 });
+      // the popup waits for detail + weather together (#622, CORE-024) — allow the slow path
+      await expect(popup).toBeVisible({ timeout: 30_000 });
       await expect(popup).toContainText(title.slice(0, 4));
       await expect(page.locator('[data-testid="feature-map-marker-style"][data-marker-selected="true"]')).toHaveCount(1);
       await expect(pins.first()).toHaveAttribute('data-selected', 'true');

@@ -407,6 +407,7 @@
     - 없음
   automation: scripted
   spec: specs/admin/admin-dedup-integrity-debug.live.spec.ts#ADM-022
+  notes: '#651 — 목록이 항상 422 FORBIDDEN(Map 이 PinVi 요청 거절), 화면은 빈 큐처럼 보인다. test.fail(#651); 필터 전달은 요청 쪽으로 계속 검증.'
 
 - id: ADM-023
   title: Dedup review 필터(q, min_score, status) 가 proxy 쿼리에 그대로 전달
@@ -619,6 +620,7 @@
   automation: scripted
   spec: specs/admin/admin-promotion.live.spec.ts#ADM-033
   notes: '카테고리 누락' 은 PinVi 승인 단계에서 거절 사유가 아니다(categories 선택 입력, 8자리 분류는 Map 운영자가 승인 시 지정). 좌표 누락은 생성 자체가 불가(dialog/API 모두 coord 필수). 따라서 PinVi 에서 검증 가능한 '명확한 거절' 은 Map 좌표 범위 위반뿐이다.
+  # 2026-11-03 prod: #614 이후 FeatureRequestCreateSchema 가 new_place lat > 39.5 를 클라이언트에서 거부 — UI 로는 범위 밖 제안을 만들 수 없다. ADM-033 은 클라이언트 거부(요청 0건)를 단언하고, 승인 시 422 경로는 레거시 행 id(PINVI_E2E_LEGACY_OUT_OF_RANGE_ID)가 있을 때만 ADM-033b 로 검증. 잔여 rejected 제안은 run 당 2건으로 줄었다.
 
 - id: ADM-034
   title: [e2e] 제안 거절(확정 다이얼로그) → 알림·'거절' 탭·사용자측 상태·감사 로그

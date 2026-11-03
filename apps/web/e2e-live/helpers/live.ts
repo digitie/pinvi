@@ -483,7 +483,8 @@ export type TripTab = '일정' | '파일' | '공유' | '동행' | '댓글';
  */
 export async function openTripTab(page: Page, label: TripTab): Promise<void> {
   await openPanel(page);
-  const tab = page.getByRole('tab', { name: new RegExp(`^${label}`) }).first();
+  // the work tabs render twice (desktop header + mobile drawer); only one copy is visible
+  const tab = page.getByRole('tab', { name: new RegExp(`^${label}`) }).filter({ visible: true }).first();
   await tab.click();
   await expect(page.getByRole('tabpanel', { name: label })).toBeVisible();
 }
