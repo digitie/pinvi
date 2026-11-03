@@ -19,7 +19,7 @@ class OAuthProvidersResponse(BaseModel):
 
 
 class OAuthStartRequest(BaseModel):
-    return_to: str = Field(default="/", max_length=2048, pattern=r"^/[\w/_\-?=&%.#]*$")
+    return_to: str = Field(default="/", max_length=2048, pattern=r"^/[^\s\\]*$")
     mode: Literal["login", "link"] = "login"
 
     @field_validator("return_to")

@@ -7,7 +7,7 @@ describe('로그인 복귀 경로', () => {
     expect(safeLoginReturnTo('/trips/abc?day=2#comments')).toBe('/trips/abc?day=2#comments');
     expect(safeLoginReturnTo('/shared/abc/token')).toBe('/shared/abc/token');
   });
-  it.each(['/trips/abc?day=2#comments', '/trips?q=%EB%B6%80%EC%82%B0'])(
+  it.each(['/trips/abc?day=2#comments', '/trips?q=%EB%B6%80%EC%82%B0', '/map?suggest=126.978,37.566', '/trips?tags[]=a;b&sort=-updated_at'])(
     'OAuth 발급 계약도 복귀 경로 %s를 허용한다', (path) => {
       expect(OAuthStartRequestSchema.parse({ return_to: safeLoginReturnTo(path) }).return_to).toBe(path);
     },

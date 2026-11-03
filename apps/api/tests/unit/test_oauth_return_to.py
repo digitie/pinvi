@@ -7,7 +7,14 @@ from app.schemas.oauth import OAuthStartRequest
 
 
 @pytest.mark.parametrize(
-    "path", ["/trips/abc?day=2#comments", "/trips?q=%EB%B6%80%EC%82%B0", "/shared/id/token"]
+    "path",
+    [
+        "/trips/abc?day=2#comments",
+        "/trips?q=%EB%B6%80%EC%82%B0",
+        "/shared/id/token",
+        "/map?suggest=126.978,37.566",
+        "/trips?tags[]=a;b&sort=-updated_at",
+    ],
 )
 def test_oauth_return_to_preserves_app_url(path: str) -> None:
     assert OAuthStartRequest(return_to=path).return_to == path

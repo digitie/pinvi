@@ -143,7 +143,7 @@ export const OAuthStartRequestSchema = z.object({
   return_to: z
     .string()
     .max(2048)
-    .regex(/^\/(?!\/)[\w/_\-?=&%.#]*$/)
+    .regex(/^\/(?!\/)[^\s\\]*$/)
     .default('/'),
   mode: z.enum(['login', 'link']).default('login'),
 });
