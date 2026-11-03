@@ -1167,3 +1167,26 @@ async def test_non_admin_dedup_route_is_hidden(
     user_id = await _create_user(session_factory, email="plain-dedup@example.com")
     resp = await client.get("/admin/dedup-review", cookies=auth_cookies(str(user_id)))
     assert resp.status_code == 404
+
+
+async def test_dedup_read_failure_returns_503_without_empty_success(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+) -> None:
+    operator_id = await _create_user(
+        session_factory, email="dedup-read-fail@example.com", roles=["user", "operator"]
+    )
+
+    class UnavailableClient(_FakeOpsClient):
+        async def list_dedup_reviews(self, **kwargs: Any) -> dict[str, Any]:
+            raise KorTravelMapUnavailable("Map 관리자 인증을 확인할 수 없습니다.")
+
+    _override(UnavailableClient())
+    try:
+        response = await client.get("/admin/dedup-review", cookies=auth_cookies(str(operator_id)))
+    finally:
+        _clear()
+    assert response.status_code == 503, response.text
+    assert response.json()["error"]["code"] == "FEATURE_SERVICE_UNAVAILABLE"
+    assert "data" not in response.json()

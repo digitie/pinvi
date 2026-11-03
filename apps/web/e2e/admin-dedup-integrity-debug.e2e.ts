@@ -488,3 +488,76 @@ test('Debug logs 페이지가 system/API log 필터를 proxy query로 전달한�
   await expect(page.getByTestId('admin-request-event-pinvi_api_call:1')).toBeVisible();
   await expect(page.getByText('secret')).toHaveCount(0);
 });
+
+test('Dedup 조회 오류를 빈 큐와 구분하고 재시도로 복구한다', async ({ page }) => {
+  let unavailable = true;
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/dedup-review',
+    async (route) => {
+      if (unavailable) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: {
+              code: 'FEATURE_SERVICE_UNAVAILABLE',
+              message: 'Map 중복 검토 조회 권한을 확인할 수 없습니다.',
+            },
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: { items: [dedupReview], page_size: 50, next_cursor: null },
+        }),
+      });
+    },
+  );
+  await page.goto('/admin/dedup-review');
+  await expect(
+    page.getByRole('alert').filter({ hasText: '목록을 불러오지 못했습니다' }),
+  ).toBeVisible();
+  await expect(page.getByText('dedup 후보가 없습니다.', { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('admin-dedup-detail')).not.toContainText('review-1');
+  await expect(page.getByText('0행', { exact: true })).toHaveCount(0);
+  unavailable = false;
+  await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+  await expect(page.getByTestId('admin-dedup-row-review-1')).toBeVisible();
+  await expect(
+    page.getByRole('alert').filter({ hasText: '목록을 불러오지 못했습니다' }),
+  ).toHaveCount(0);
+});
+
+test('Dedup 재조회가 실패하면 이전 후보의 판정 UI를 숨긴다', async ({ page }) => {
+  let unavailable = false;
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/dedup-review',
+    async (route) => {
+      await route.fulfill({
+        status: unavailable ? 503 : 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          unavailable
+            ? { error: { code: 'FEATURE_SERVICE_UNAVAILABLE', message: '중복 검토 조회 실패' } }
+            : { data: { items: [dedupReview], page_size: 50, next_cursor: null } },
+        ),
+      });
+    },
+  );
+  await page.goto('/admin/dedup-review');
+  await page.getByTestId('admin-dedup-row-review-1').click();
+  await expect(page.getByTestId('admin-dedup-decision')).toBeVisible();
+  unavailable = true;
+  await page.getByTestId('admin-dedup-refresh').click();
+  await expect(
+    page.getByRole('alert').filter({ hasText: '목록을 불러오지 못했습니다' }),
+  ).toBeVisible();
+  await expect(page.getByTestId('admin-dedup-decision')).toHaveCount(0);
+  await expect(page.getByTestId('admin-dedup-row-review-1')).toHaveCount(0);
+  await expect(page.getByText('0행', { exact: true })).toHaveCount(0);
+  unavailable = false;
+  await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+  await expect(page.getByTestId('admin-dedup-row-review-1')).toBeVisible();
+});

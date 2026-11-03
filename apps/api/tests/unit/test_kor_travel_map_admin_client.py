@@ -274,6 +274,7 @@ async def test_list_features_uses_admin_read_path_filters_and_returns_payload() 
     )
     assert seen["method"] == "GET"
     assert seen["path"] == "/v1/service/admin-features"
+    assert ("search_scope", "feature") in seen["query"]
     assert ("kind", "place") in seen["query"]
     assert ("kind", "event") in seen["query"]
     assert ("lifecycle_state", "active") in seen["query"]
@@ -289,6 +290,7 @@ async def test_list_features_uses_admin_read_path_filters_and_returns_payload() 
     # 조용히 버려 필터가 걸린 척하기 때문이다(3축 cutover `1f2bdc3a`).
     assert {name for name, _ in seen["query"]} <= {
         "q",
+        "search_scope",
         "kind",
         "category",
         "lifecycle_state",
@@ -1220,6 +1222,7 @@ async def test_list_dedup_reviews_forwards_filters() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["path"] = request.url.path
+        seen["headers"] = request.headers
         seen["query"] = list(request.url.params.multi_items())
         return httpx.Response(
             200,
@@ -1254,7 +1257,7 @@ async def test_list_dedup_reviews_forwards_filters() -> None:
             },
         )
 
-    client = _client(handler)
+    client = _client(handler, admin_proxy_secret="test-proxy-secret")
     payload = await client.list_dedup_reviews(
         statuses=["pending"],
         providers=["kma"],
@@ -1267,7 +1270,12 @@ async def test_list_dedup_reviews_forwards_filters() -> None:
         page_size=20,
         cursor="cur",
     )
-    assert seen["path"] == "/v1/admin/dedup-reviews"
+    assert seen["path"] == "/v1/ops/dedup-reviews"
+    assert seen["headers"]["X-Kor-Travel-Map-Ops-Scope"] == "ops:read"
+    assert seen["headers"]["X-Kor-Travel-Map-Ops-Token"] == "ops-read-tok"
+    assert "X-Kor-Travel-Map-Service-Token" not in seen["headers"]
+    assert "X-Kor-Travel-Map-Admin-Proxy-Secret" not in seen["headers"]
+    assert "X-Kor-Travel-Map-Actor" not in seen["headers"]
     assert ("status", "pending") in seen["query"]
     assert ("provider", "kma") in seen["query"]
     assert ("dataset_key", "places") in seen["query"]
@@ -1372,6 +1380,7 @@ async def test_ops_consistency_and_log_methods_use_ops_paths() -> None:
 
 def test_ops_observability_runtime_inventory_is_closed() -> None:
     assert _OPS_OBSERVABILITY_READ_PATHS == {
+        "/v1/ops/dedup-reviews",
         "/v1/ops/consistency/issues",
         "/v1/ops/consistency/reports",
         "/v1/ops/system-logs",
@@ -1490,3 +1499,23 @@ async def test_direct_patch_requires_current_typed_commit_receipt(data: dict[str
     assert seen["if-match"] == '"7"'
     assert seen["idempotency-key"] == "00000000-0000-4000-8000-000000000001"
     await client.aclose()
+
+
+@pytest.mark.parametrize("upstream_status", [401, 403])
+async def test_dedup_read_auth_failure_is_unavailable(upstream_status: int) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        assert request.url.path == "/v1/ops/dedup-reviews"
+        assert request.headers["X-Kor-Travel-Map-Ops-Scope"] == "ops:read"
+        return httpx.Response(upstream_status, json={"code": "FORBIDDEN"})
+
+    client = _client(handler)
+    try:
+        with pytest.raises(KorTravelMapUnavailable):
+            await client.list_dedup_reviews()
+        assert calls == 1
+    finally:
+        await client.aclose()

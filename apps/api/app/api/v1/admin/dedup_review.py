@@ -39,7 +39,7 @@ async def list_dedup_reviews(
     page_size: Annotated[int, Query(ge=1, le=500)] = 50,
     cursor: Annotated[str | None, Query()] = None,
 ) -> Envelope[AdminDedupReviewPagedResponse]:
-    """kor-travel-map `/v1/admin/dedup-reviews` queue proxy."""
+    """kor-travel-map `/v1/ops/dedup-reviews` 읽기 전용 queue proxy."""
     with map_ops_errors(message_subject="kor_travel_map dedup review"):
         payload = await admin_client.list_dedup_reviews(
             statuses=status_filter,

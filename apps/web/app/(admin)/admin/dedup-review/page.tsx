@@ -93,7 +93,7 @@ export default function AdminDedupReviewPage() {
     placeholderData: keepPreviousData,
   });
 
-  const data = reviewsQuery.data ?? null;
+  const data = reviewsQuery.isError ? null : (reviewsQuery.data ?? null);
   const selected = data?.items.find((item) => item.review_id === selectedId) ?? null;
   const selectedReviewId = selected?.review_id ?? null;
   const selectedDefaultMasterFeatureId = selected?.feature_a.feature_id ?? '';
@@ -285,20 +285,19 @@ export default function AdminDedupReviewPage() {
             data-testid="admin-dedup-min-score"
           />
         </FilterField>
-        <span className="ml-auto text-xs text-muted">{data?.items.length ?? 0}행</span>
+        <span className="ml-auto text-xs text-muted">
+          {reviewsQuery.isError ? '조회 실패' : data ? `${data.items.length}행` : '조회 중'}
+        </span>
       </FilterBar>
-
-      {error && (
-        <p role="alert" className="rounded-sm bg-error-bg p-3 text-sm text-error-text">
-          {error}
-        </p>
-      )}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
         <AdminTable
           columns={columns}
           rows={data?.items ?? []}
           loading={reviewsQuery.isLoading}
+          isError={reviewsQuery.isError}
+          error={error ? { message: error } : null}
+          onRetry={() => reviewsQuery.refetch()}
           rowKey={(item) => item.review_id}
           rowTestId={(item) => `admin-dedup-row-${item.review_id}`}
           onRowClick={(item) => setSelectedId(item.review_id)}

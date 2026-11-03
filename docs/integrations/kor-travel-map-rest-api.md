@@ -779,3 +779,18 @@ apps/api/tests/contract/kor-travel-map-openapi-user.json`
      "설명만 바뀐" Map 변경에도 이 단계가 필요하다.
 - **codegen(선택)**: frontend `openapi-typescript` + Zod mirror는 미도입(후속). 백엔드는 본
   스냅샷 게이트로 충분(kor_travel_map 권고: 수기 httpx 유지).
+
+
+### 관리자 읽기 연결 (#648/#651)
+
+관리자 Feature 목록은 `GET /v1/service/admin-features?search_scope=feature`로 이름·주소·UUID/별칭 ID를
+검색한다. 전용 Feature 읽기 token을 사용하며 원천 JSON 내용 검색은 하지 않는다. Map 기본 `all`은
+기존 소비자 동작을 보존한다.
+
+중복 검토 목록은 `GET /v1/ops/dedup-reviews`와 `ops:read` token·scope만 사용한다.
+public service token·admin proxy secret·actor를 함께 전송하거나 자격 실패 시 fallback하지 않는다.
+판정 쓰기 경계는 기존 관리자 정책을 따른다. 상류 401/403은 PinVi 503으로 전달하고 조회 실패 시
+표는 오류·재시도를 보여 준다. 이전 후보·판정 UI나 0행 성공 표시로 장애를 가리지 않는다.
+
+Map PR #1445 머지 후 같은 검토 revision의 full/service OpenAPI를 갱신한다. 운영 활성화 및 실제 데이터의
+검색 지연·후보 조회는 Claude Code의 최종 prod 검증 항목이며 이번 WSL 검증과 구분한다.
