@@ -51,7 +51,8 @@ test.describe('CORE resilience', () => {
 
   test('CORE-024 마커 팝업의 상세 텍스트가 날씨 응답을 기다리지 않는다(#622 — 팝업 경로)', async ({ page }, testInfo) => {
     test.skip(isMobileViewport(page), '모바일은 팝업 없이 상세 시트 직행');
-    test.fail(true, 'origin/main FeatureMapView.tsx는 get+weather를 allSettled로 함께 기다린다 — 분리 로드(7ec36c13)는 미머지');
+    // #622 shipped the split detail/weather load (no allSettled join in FeatureMapView) — the expected-fail
+    // marker was removed after the 2026-11-03 prod run passed (popup detail 11 ms).
     await openExploreMap(page);
     const [pin] = await clickableFeatureMarkers(page, 1);
     expect(pin).toBeTruthy();

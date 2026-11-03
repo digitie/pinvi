@@ -209,7 +209,8 @@ scripted 케이스의 spec 파일·id 존재). 목록 검증은 `test:e2e:live-c
 | CORE-005 | manual | 실제 11분 유휴 — 예산 초과 |
 
 Expected-fail(`test.fail`) 로 두고 수정 뒤 뒤집을 케이스: CORE-007(로그인 후 원래 URL 복귀 없음),
-CORE-021(#623 모바일 stats 칩 fit padding), CORE-024(#622 팝업 상세·날씨 동시 로드).
+CORE-021(#623 모바일 stats 칩 fit padding) 및 §8 의 이슈 표에 적힌 케이스. CORE-024(#622)는 prod 에서 통과해
+해제했다(2026-11-03).
 
 ## 8. 이슈 (label `e2e-catalog`, 2026-11-03)
 
@@ -249,15 +250,15 @@ CORE-021(#623 모바일 stats 칩 fit padding), CORE-024(#622 팝업 상세·날
 
 ## 8.1 1차 prod 실행 분류 (2026-11-03, run `20261103-063010`, desktop 291건)
 
-결과 159 pass / 70 fail / 62 skip. 실패 분류:
+결과 159 pass / 70 fail / 62 skip. 실패 분류(재실행 3회로 확인):
 
 | 분류 | 건수 | 처리 |
 | --- | ---: | --- |
-| (a) 테스트·helper 버그 | 36 | 수정(route announcer `role=alert`, admin `<select>` testid, `poiTitle` 순번 배지, `createTrip` 뒤 미이동, 세션 캐시의 회전된 refresh token, 지도 클러스터, 공유 링크 응답 대기 등) |
-| (b) 제품 버그 | 11 | 이슈 6건 + #624 재확인(위 표), `test.fail` |
+| (a) 테스트·helper 버그 | 34 | 수정(route announcer `role=alert`, admin `<select>` testid, `poiTitle` 순번 배지, `createTrip` 뒤 미이동, 세션 캐시의 회전된 refresh token, 지도 클러스터, 공유 링크 응답 대기 등) |
+| (b) 제품 버그 | 13 | 이슈 8건(#648~#652, Map #1438~#1440) + #624 재확인(위 표), `test.fail` |
 | (c) 데이터·가정 오류 | 9 | 스펙 수정(서울 화면 편향 #615, 카카오 행 조건, 공항 feature 없음, 형식 문구 순서, perf 예산) |
 | (d) rate limit 429 | 14 | 9건은 trace 로 확인, 5건(SHR-002/007/016/029, WX-014)은 trace 를 끄는 공유 스펙이라 추정 — 이제 helper 가 공유·초대 응답 상태를 기록한다 |
-| (e) expected-fail 불일치 | 0 | — |
+| (e) expected-fail 불일치 | 0 (+1) | 70건 중엔 없음; 재실행에서 CORE-024(#622 반영됨)가 통과해 `test.fail` 해제 |
 
 **429 수치(1103d)**: helper 가 기다려 회복한 429 10건(`DELETE /trips/{id}` 8, `POST /trips` 2, 총 대기
 176 s). 앱 자체 요청의 429 는 실패한 테스트 trace 에서 28건 — `GET /trips/{id}` 10,

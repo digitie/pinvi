@@ -402,7 +402,7 @@
   cleanup: [없음]
   automation: scripted
   spec: specs/core/core-resilience.live.spec.ts#CORE-024
-  notes: origin/main은 Promise.allSettled([get, weather]) — 분리 로드 커밋 7ec36c13은 WIP 브랜치, 미머지.
+  notes: '#622 로 분리 로드가 반영됐다 — 2026-11-03 prod 실행에서 팝업 상세 11 ms 로 통과, expected-fail 해제.'
 
 - id: CORE-025
   title: 선택 변경 시 이전 상세 요청 폐기 — stale 카드/팝업 없음
