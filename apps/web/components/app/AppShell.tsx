@@ -14,6 +14,7 @@ import {
   UserCircle,
 } from 'lucide-react';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
+import { SkipToContentLink } from '@/components/app/SkipToContentLink';
 import { Wordmark } from '@/components/app/Wordmark';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench(app) · design-system: DESIGN.md · designed-as-app
@@ -49,7 +50,7 @@ function isActivePath(pathname: string, href: string): boolean {
     return pathname === '/';
   }
   if (href === '/trips') {
-    return pathname === '/trips';
+    return pathname === '/trips' || pathname === '/trips/trash';
   }
   if (href.startsWith('/settings')) {
     // /settings/* 전체를 "설정" 탭으로 묶는다(consents·telegram·dsr·moderation 포함).
@@ -73,7 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     mobileWebLayout &&
     pathParts.length === 2 &&
     pathParts[0] === 'trips' &&
-    pathParts[1] !== 'map-shell';
+    pathParts[1] !== 'map-shell' && pathParts[1] !== 'trash';
   const secondaryActive = MOBILE_SECONDARY.some((item) => isActivePath(pathname, item.href));
 
   // 라우트가 바뀌면 시트를 닫는다 — 네이티브 <details>는 클라이언트 네비게이션 후에도 열린 채 남았다.
@@ -111,6 +112,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       // 셸의 모바일/데스크톱 전환은 CSS(lg)가 1차, 이 속성이 넓은 layout viewport를 쓰는 폰을 보정한다.
       data-mobile-layout={mobileWebLayout ? 'on' : 'off'}
     >
+      <SkipToContentLink />
       {!mobileTripDetail && (
         <header className="border-b border-hairline bg-canvas">
           <div className="flex w-full items-center justify-between gap-3 px-4 py-3 md:px-6">
@@ -146,7 +148,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
       )}
 
-      <main
+      <main id="main" tabIndex={-1}
         className={
           mobileTripDetail
             ? 'flex min-h-0 w-full flex-1 flex-col'

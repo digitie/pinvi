@@ -24,7 +24,7 @@ export default function SharedTripPage() {
           </>
         }
       />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
         <SharedTripView tripId={params.tripId} token={params.token} />
       </main>
       <PublicColophon />

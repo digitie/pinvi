@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
 import { MARKER_PALETTE, type MarkerColorKey, paletteHex } from '@pinvi/domain';
 import type { DayUpdateResult } from '@/components/trips/TripDetail';
+import { FormTextArea } from '@/components/forms/FormTextArea';
 import { FormField } from '@/components/forms/FormField';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
@@ -17,6 +18,7 @@ export interface TripDayControlsProps {
   selectedDay: {
     day_index: number;
     title: string | null;
+    note?: string | null;
     date: string | null;
     marker_color?: string | null;
     /** 다이얼로그를 연 시점의 version 스냅샷 원본 — 저장 시 If-Match로 쓴다. */
@@ -30,7 +32,7 @@ export interface TripDayControlsProps {
    */
   onUpdate: (
     dayIndex: number,
-    patch: { title: string; date: string | null; marker_color: string | null },
+    patch: { title: string; note: string | null; date: string | null; marker_color: string | null },
     expectedVersion?: number,
   ) => Promise<DayUpdateResult>;
   onDelete: (dayIndex: number) => void;
@@ -54,6 +56,7 @@ export function TripDayControls({
   onCancelBusy,
 }: TripDayControlsProps) {
   const [title, setTitle] = useState(selectedDay?.title ?? '');
+  const [note, setNote] = useState(selectedDay?.note ?? '');
   const [date, setDate] = useState(selectedDay?.date ?? '');
   const [color, setColor] = useState<string | null>(selectedDay?.marker_color ?? null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -73,22 +76,26 @@ export function TripDayControls({
     title: selectedDay?.title ?? null,
     date: selectedDay?.date ?? null,
     color: selectedDay?.marker_color ?? null,
+    note: selectedDay?.note ?? null,
   });
   if (!settingsOpen) {
     const nextSyncedDay = {
       title: selectedDay?.title ?? null,
       date: selectedDay?.date ?? null,
       color: selectedDay?.marker_color ?? null,
+      note: selectedDay?.note ?? null,
     };
     if (
       nextSyncedDay.title !== syncedDay.title ||
       nextSyncedDay.date !== syncedDay.date ||
-      nextSyncedDay.color !== syncedDay.color
+      nextSyncedDay.color !== syncedDay.color ||
+      nextSyncedDay.note !== syncedDay.note
     ) {
       setSyncedDay(nextSyncedDay);
       setTitle(nextSyncedDay.title ?? '');
       setDate(nextSyncedDay.date ?? '');
       setColor(nextSyncedDay.color);
+      setNote(nextSyncedDay.note ?? '');
     }
   }
 
@@ -103,7 +110,7 @@ export function TripDayControls({
     // 저장이 끝나기 전에 닫으면 busy 잠금이 무의미해지고, 실패 시 입력값이 사라진다.
     const result = await onUpdate(
       selectedDay.day_index,
-      { title: title.trim(), date: date || null, marker_color: color },
+      { title: title.trim(), note: note || null, date: date || null, marker_color: color },
       openedVersionRef.current,
     );
     if (result.ok) {
@@ -120,6 +127,7 @@ export function TripDayControls({
   const closeSettings = () => {
     setSaveError(null);
     setTitle(selectedDay?.title ?? '');
+    setNote(selectedDay?.note ?? '');
     setDate(selectedDay?.date ?? '');
     setColor(selectedDay?.marker_color ?? null);
     setSettingsOpen(false);
@@ -173,6 +181,9 @@ export function TripDayControls({
             <DaySettingsDialog
               dayIndex={selectedDay.day_index}
               currentTitle={selectedDay.title}
+              currentNote={selectedDay.note ?? null}
+              note={note}
+              onNoteChange={setNote}
               currentDate={selectedDay.date}
               currentColor={selectedDay.marker_color ?? null}
               title={title}
@@ -204,6 +215,9 @@ export function TripDayControls({
 interface DaySettingsDialogProps {
   dayIndex: number;
   currentTitle: string | null;
+  currentNote: string | null;
+  note: string;
+  onNoteChange: (value: string) => void;
   currentDate: string | null;
   currentColor: string | null;
   title: string;
@@ -223,6 +237,9 @@ interface DaySettingsDialogProps {
 function DaySettingsDialog({
   dayIndex,
   currentTitle,
+  currentNote,
+  note,
+  onNoteChange,
   currentDate,
   currentColor,
   title,
@@ -242,7 +259,8 @@ function DaySettingsDialog({
   const unchanged =
     normalizedTitle === (currentTitle ?? '') &&
     (date || null) === currentDate &&
-    color === currentColor;
+    color === currentColor &&
+    (note || null) === currentNote;
 
   return (
     <Dialog
@@ -300,6 +318,8 @@ function DaySettingsDialog({
           maxLength={200}
           placeholder={`${dayIndex}일차`}
         />
+        <FormTextArea id="trip-day-note-input" label="일자 메모" labelClassName={DIALOG_LABEL}
+          value={note} onChange={(event) => onNoteChange(event.target.value)} disabled={busy} rows={3} />
         <FormField
           id="trip-day-date-input"
           label="날짜"

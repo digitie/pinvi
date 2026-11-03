@@ -30,6 +30,7 @@ from app.services.poi import (
 )
 from app.services.realtime_broker import realtime_broker
 from app.services.trip import (
+    TripDayValidationError,
     TripNotFoundError,
     TripPermissionError,
     get_trip_for_user_write,
@@ -154,6 +155,14 @@ async def create_poi_endpoint(
             source=body.source,
             external_ref=external_ref,
         )
+    except TripDayValidationError as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
+    except TripNotFoundError as exc:
+        raise HTTPException(
+            status_code=404, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
     except SortOrderConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

@@ -7,7 +7,7 @@ export default function NotFound() {
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-ink">
       <PublicMasthead />
-      <main className="flex-1">
+      <main id="main" tabIndex={-1} className="flex-1">
         <FullPageMessage
           icon={MapPinOff}
           title="페이지를 찾을 수 없습니다"

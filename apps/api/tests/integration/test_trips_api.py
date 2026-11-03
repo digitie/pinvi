@@ -612,7 +612,7 @@ async def test_trip_day_create_fills_deleted_hole_and_validates_date_conflicts(
     # ADR-055: date override 없이 만들면 NULL(effective_date는 view에서 파생).
     assert recreated.json()["data"]["date"] is None
 
-    # 명시 override 날짜끼리 충돌하면 409. 먼저 day1을 06-10으로 고정.
+    # 명시 override 날짜끼리도 중복 검증 422. 먼저 day1을 06-10으로 고정.
     pin_day1 = await client.patch(
         f"/trips/{trip_id}/days/1",
         json={"date": "2026-06-10"},
@@ -626,8 +626,8 @@ async def test_trip_day_create_fills_deleted_hole_and_validates_date_conflicts(
         headers={"If-Match": "1"},
         cookies=cookies,
     )
-    assert duplicate_date.status_code == 409, duplicate_date.text
-    assert duplicate_date.json()["error"]["code"] == "TRIP_DAY_CONFLICT"
+    assert duplicate_date.status_code == 422, duplicate_date.text
+    assert duplicate_date.json()["error"]["code"] == "VALIDATION_ERROR"
 
     out_of_range = await client.patch(
         f"/trips/{trip_id}/days/2",

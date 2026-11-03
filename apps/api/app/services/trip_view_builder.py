@@ -389,6 +389,7 @@ async def build_trip_view(
                 "out_of_range": day_out_of_range[d.day_index],
                 "marker_color": d.marker_color,
                 "title": d.title,
+                "note": d.note,
                 "version": d.version,
                 "holidays": day_holidays[d.day_index],
                 "rise_set": _day_rise_set_to_dict(day_rise_sets.get(d.day_index)),

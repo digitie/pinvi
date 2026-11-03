@@ -49,6 +49,7 @@ from app.services.admin_trip_operations import (
 )
 from app.services.admin_users import mask_email
 from app.services.poi import SortOrderConflictError
+from app.services.trip import TripDayValidationError, TripNotFoundError
 
 router = APIRouter(prefix="/admin/pois", tags=["admin"])
 
@@ -230,10 +231,15 @@ async def create_poi_endpoint(
             currency=body.currency,
             user_url=body.user_url,
         )
-    except AdminPoiTripNotFoundError as exc:
+    except (AdminPoiTripNotFoundError, TripNotFoundError) as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except TripDayValidationError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=422, detail={"code": exc.code, "message": str(exc)}
         ) from exc
     except SortOrderConflictError as exc:
         await db.rollback()

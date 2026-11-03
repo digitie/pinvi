@@ -292,6 +292,7 @@ TripFeatureWeatherResolution = Annotated[
 
 
 class TripViewDay(BaseModel):
+    note: str | None = None
     day_index: int
     date: Date | None
     # ADR-055: date는 override-only, effective_date는 파생(override 또는 start_date+day_index).

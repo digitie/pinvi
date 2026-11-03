@@ -45,6 +45,7 @@ export type TripListSort = '-updated_at' | 'start_date' | '-start_date' | 'title
 
 export interface TripListParams {
   bucket?: TripBucket;
+  trashed?: boolean;
   q?: string;
   status?: 'draft' | 'planned' | 'in_progress' | 'completed' | 'archived';
   visibility?: 'private' | 'unlisted' | 'public';
@@ -63,6 +64,7 @@ export interface TripListPage {
 
 function buildTripListPath(params: TripListParams): string {
   const qs = new URLSearchParams();
+  if (params.trashed) qs.set('trashed', 'true');
   if (params.bucket) {
     qs.set('bucket', params.bucket);
   }
@@ -151,6 +153,9 @@ export const tripApi = (client: ApiClient) => ({
       method: 'DELETE',
       body: JSON.stringify(TripDeleteRequestSchema.parse(body)),
     }),
+
+  restore: (tripId: string) =>
+    client.request(`/trips/${tripId}/restore`, { method: 'POST', schema: TripResponseSchema }),
 
   copy: (tripId: string, body: TripCopyRequest = { scope: 'all', date_shift_days: 0 }) =>
     client.request(`/trips/${tripId}/copy`, {

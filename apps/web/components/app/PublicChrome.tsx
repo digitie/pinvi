@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { SkipToContentLink } from './SkipToContentLink';
 import { Wordmark } from './Wordmark';
 import { LEGAL_DOC_TITLES, LEGAL_SLUGS } from '@/lib/legalDocs';
 
@@ -10,12 +11,12 @@ import { LEGAL_DOC_TITLES, LEGAL_SLUGS } from '@/lib/legalDocs';
  */
 export function PublicMasthead({ actions }: { actions?: ReactNode }) {
   return (
-    <header className="border-b border-hairline bg-canvas">
+    <><SkipToContentLink /><header className="border-b border-hairline bg-canvas">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-3 px-6">
         <Wordmark />
         {actions ? <nav className="flex items-center gap-1 sm:gap-2">{actions}</nav> : null}
       </div>
-    </header>
+    </header></>
   );
 }
 

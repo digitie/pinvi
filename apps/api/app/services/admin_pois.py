@@ -146,7 +146,9 @@ async def create_admin_poi(
     currency: str = "KRW",
     user_url: str | None = None,
 ) -> TripDayPoi:
-    trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)))
+    trip = await db.scalar(
+        select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)).with_for_update()
+    )
     if trip is None:
         raise AdminPoiTripNotFoundError("여행을 찾을 수 없습니다.")
 

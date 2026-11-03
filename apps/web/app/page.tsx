@@ -141,7 +141,7 @@ export default function HomePage() {
         }
       />
 
-      <main id="main" className="flex-1">
+      <main id="main" tabIndex={-1} className="flex-1">
         {/* Hero — H2 split diptych 7/5. 왼쪽 문장·CTA, 오른쪽은 이미지 대신 단계 색인(페이지 내 링크).
             하단 패딩을 상단보다 크게 두어 hero가 다음 섹션 rule에 앉게 한다. */}
         <section
