@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, MessageSquare, Send, Trash2 } from 'lucide-react';
-import { ApiClient, ApiError, authApi, tripApi } from '@pinvi/api-client';
+import { ApiError, authApi, tripApi } from '@pinvi/api-client';
 import type { TripCommentResponse } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
+import { apiClient, sharedApiClient } from '@/lib/api';
 import { canDeleteComment } from '@pinvi/domain';
 
 function formatDateTime(value: string): string {
@@ -50,9 +50,7 @@ export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken 
     let cancelled = false;
     void (async () => {
       try {
-        const me = await authApi(sharedToken ? new ApiClient({
-          baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
-        }) : apiClient).me();
+        const me = await authApi(sharedToken ? sharedApiClient : apiClient).me();
         if (!cancelled) setCurrentUserId(me.user_id);
       } catch {
         /* 비로그인/실패는 삭제 버튼만 숨김. */
@@ -77,7 +75,11 @@ export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken 
     setError(null);
     try {
       if (sharedToken) {
-        await tripApi(apiClient).createSharedComment(tripId, sharedToken, { body: trimmed, target_type: 'trip' });
+        await tripApi(sharedApiClient).createSharedComment(tripId, sharedToken, { body: trimmed, target_type: 'trip' });
+        try {
+          const me = await authApi(sharedApiClient).me();
+          setCurrentUserId(me.user_id);
+        } catch { /* 작성은 성공했으므로 삭제 버튼용 조회 실패는 별도로 무시한다. */ }
       } else {
         await tripApi(apiClient).createComment(tripId, { body: trimmed, target_type: 'trip' });
       }
@@ -95,7 +97,7 @@ export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken 
     setError(null);
     try {
       if (sharedToken) {
-        await tripApi(apiClient).deleteSharedComment(tripId, sharedToken, commentId);
+        await tripApi(sharedApiClient).deleteSharedComment(tripId, sharedToken, commentId);
       } else {
         await tripApi(apiClient).deleteComment(tripId, commentId);
       }
@@ -116,6 +118,14 @@ export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken 
         <MessageSquare className="h-4 w-4 text-primary" aria-hidden="true" />
         댓글
       </h2>
+
+      {sharedToken && (
+        <p className="text-sm text-muted">
+          작성하려면 <a className="focus-ring underline" target="_blank" rel="noopener noreferrer"
+            href={`/login?next=${encodeURIComponent(`/shared/${tripId}/${sharedToken}`)}`}>새 탭에서 로그인</a>한 뒤
+          이 화면에서 다시 작성해 주세요. 입력은 유지됩니다.
+        </p>
+      )}
 
       <div className="flex items-end gap-2">
         <textarea

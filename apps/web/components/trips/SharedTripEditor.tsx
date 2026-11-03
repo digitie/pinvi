@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ApiError, tripApi } from '@pinvi/api-client';
 import type { TripResponse } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
+import { sharedApiClient } from '@/lib/api';
 
 export function SharedTripEditor({ tripId, token, trip, onSaved }: {
   tripId: string; token: string; trip: TripResponse; onSaved: (trip: TripResponse) => void;
@@ -22,7 +22,7 @@ export function SharedTripEditor({ tripId, token, trip, onSaved }: {
         if (saving) return;
         setSaving(true); setError(null); setSaved(false); setConflict(false);
         try {
-          const result = await tripApi(apiClient).updateShared(tripId, token, trip.version, {
+          const result = await tripApi(sharedApiClient).updateShared(tripId, token, trip.version, {
             title: title.trim(), description, region_hint: region || null,
           });
           onSaved(result); setSaved(true);
@@ -32,7 +32,12 @@ export function SharedTripEditor({ tripId, token, trip, onSaved }: {
         } finally { setSaving(false); }
       }}>
       <h2 className="font-semibold">여행 정보 편집</h2>
-      <p className="text-sm text-muted">로그인 후 여행 제목·설명·지역을 편집할 수 있습니다.</p>
+      <p className="text-sm text-muted">
+        여행 제목·설명·지역을 편집할 수 있습니다.
+        로그인이 필요하면 <a className="focus-ring underline" target="_blank" rel="noopener noreferrer"
+          href={`/login?next=${encodeURIComponent(`/shared/${tripId}/${token}`)}`}>새 탭에서 로그인</a>한 뒤
+        이 화면에서 다시 저장해 주세요. 입력은 유지됩니다.
+      </p>
       <label className="block text-sm">여행 제목
         <input required maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)}
           className="mt-1 block min-h-11 w-full rounded-sm border border-hairline px-3" />
@@ -57,7 +62,7 @@ export function SharedTripEditor({ tripId, token, trip, onSaved }: {
               if (saving) return;
               setSaving(true);
               try {
-                const view = await tripApi(apiClient).getShared(tripId, token);
+                const view = await tripApi(sharedApiClient).getShared(tripId, token);
                 onSaved(view.trip);
                 setTitle(view.trip.title); setDescription(view.trip.description ?? '');
                 setRegion(view.trip.region_hint ?? ''); setConflict(false); setError(null);

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { ApiError } from '@pinvi/api-client';
 import { TripComments } from '@/components/trips/TripComments';
 
 const api = vi.hoisted(() => ({
@@ -10,7 +11,7 @@ vi.mock('@pinvi/api-client', async (original) => ({
   ...await original<typeof import('@pinvi/api-client')>(),
   tripApi: () => api, authApi: () => ({ me: api.me }),
 }));
-vi.mock('@/lib/api', () => ({ apiClient: {} }));
+vi.mock('@/lib/api', () => ({ apiClient: {}, sharedApiClient: {} }));
 const comment = {
   comment_id: 'c1', author_user_id: 'author', body: '첫 의견', created_at: '2026-11-03T09:00:00+09:00',
 };
@@ -46,6 +47,16 @@ describe('댓글 권한과 갱신', () => {
     await act(async () => { resolveOld([comment]); });
     expect(screen.getByText('최신 의견')).toBeInTheDocument();
     expect(screen.queryByText('첫 의견')).not.toBeInTheDocument();
+  });
+  it('401이어도 공유 댓글 초안을 유지하고 재로그인을 안내한다', async () => {
+    api.createSharedComment.mockRejectedValueOnce(new ApiError('TOKEN_INVALID', '로그인 필요', 401));
+    render(<TripComments tripId="t1" sharedToken="share" />);
+    await screen.findByText('첫 의견');
+    fireEvent.change(screen.getByLabelText('댓글 입력'), { target: { value: '댓글 초안' } });
+    fireEvent.click(screen.getByRole('button', { name: '작성' }));
+    await screen.findByRole('alert');
+    expect(screen.getByLabelText('댓글 입력')).toHaveValue('댓글 초안');
+    expect(screen.getByRole('link', { name: '새 탭에서 로그인' })).toHaveAttribute('target', '_blank');
   });
   it('공유 댓글은 토큰 범위 API로 읽고 작성한다', async () => {
     render(<TripComments tripId="t1" sharedToken="share-token" />);

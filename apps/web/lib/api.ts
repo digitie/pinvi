@@ -15,3 +15,8 @@ export const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
   onUnauthorized: redirectToLogin,
 });
+
+/** 공개 공유 화면은 로그인 실패에도 초안을 유지하고 새 탭 로그인을 안내한다. */
+export const sharedApiClient = new ApiClient({
+  baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
+});
