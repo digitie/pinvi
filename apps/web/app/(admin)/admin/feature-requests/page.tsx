@@ -33,7 +33,7 @@ import {
 } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import type { AdminFeatureRequestSummary } from '@pinvi/schemas';
+import { AdminFeatureRequestApproveSchema, type AdminFeatureRequestSummary } from '@pinvi/schemas';
 import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterBar, FilterField } from '@/components/admin/filter-bar';
@@ -398,11 +398,13 @@ function ReviewDialog({
       setRejectConfirmOpen(false);
       if (
         !isNewPlace &&
-        (!(error instanceof ApiError) ||
-          error.status === 0 ||
-          (error.status >= 200 && error.status < 300) ||
-          error.status >= 500 ||
-          error.code === 'MAP_COMMAND_PENDING')
+        (error instanceof TypeError ||
+          (error instanceof DOMException && error.name === 'AbortError') ||
+          (error instanceof ApiError &&
+            (error.status === 0 ||
+              (error.status >= 200 && error.status < 300) ||
+              error.status >= 500 ||
+              error.code === 'MAP_COMMAND_PENDING')))
       ) {
         setCommandPending(true);
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
@@ -470,6 +472,23 @@ function ReviewDialog({
     return true;
   };
 
+  const validateApproval = () => {
+    const parsed = AdminFeatureRequestApproveSchema.safeParse(approvalBody());
+    if (parsed.success) return true;
+    const field = String(parsed.error.issues[0]?.path[0] ?? '');
+    const messages: Record<string, string> = {
+      access_reason: '검토 사유는 1~500자로 입력하세요.',
+      name: '이름은 1~200자로 입력하세요.',
+      category: '카테고리 코드는 32자 이내로 입력하세요.',
+      marker_color: '마커 색은 P-01부터 P-16까지 입력하세요.',
+      marker_icon: '마커 아이콘은 64자 이내로 입력하세요.',
+      kor_travel_map_reason: 'Map 사유는 500자 이내로 입력하세요.',
+    };
+    setErr(messages[field] ?? '입력한 승인 내용을 확인하세요.');
+    setDryRunNotice(null);
+    return false;
+  };
+
   const approve = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setRejectConfirmOpen(false);
@@ -481,6 +500,7 @@ function ReviewDialog({
       setErr('정보 수정 승인에는 이름, 카테고리, 마커 색 또는 마커 아이콘을 하나 이상 입력하세요.');
       return;
     }
+    if (!validateApproval()) return;
     setErr(null);
     approveMutation.mutate();
   };
@@ -561,7 +581,7 @@ function ReviewDialog({
         loading={dryRunMutation.isPending}
         data-testid="admin-fr-dry-run"
         onClick={() => {
-          if (validateReason()) {
+          if (validateReason() && validateApproval()) {
             setErr(null);
             dryRunMutation.mutate();
           }

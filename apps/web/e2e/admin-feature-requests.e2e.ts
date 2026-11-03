@@ -641,3 +641,59 @@ test('직접 처리 제안은 해당 Feature 상세 선택 링크를 제공한�
     '/admin/features?feature_id=f_place_1',
   );
 });
+
+test('전송 전 잘못된 마커 입력은 편집 가능하게 남기고 수정 후 승인한다', async ({ page }) => {
+  let sent = 0;
+  let lists = 0;
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/feature-requests',
+    async (route) => {
+      lists += 1;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            items: [correctionSummary],
+            total: 1,
+            page: 1,
+            limit: 50,
+          },
+        }),
+      });
+    },
+  );
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      url.pathname === `/admin/feature-requests/${correctionRequestId}/approve`,
+    async (route) => {
+      sent += 1;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            request_id: correctionRequestId,
+            status: 'added',
+          },
+        }),
+      });
+    },
+  );
+  await page.goto('/admin/feature-requests');
+  await page.getByTestId(`admin-fr-review-${correctionRequestId}`).click();
+  await page.getByTestId('admin-fr-name').fill('새 이름');
+  await page.getByTestId('admin-fr-reason').fill('확인');
+  await page.getByTestId('admin-fr-marker-color').fill('P-99');
+  const before = lists;
+  await page.getByTestId('admin-fr-approve').click();
+  await expect(page.getByTestId('admin-fr-panel-error')).toContainText('P-01부터 P-16');
+  await expect(page.getByTestId('admin-fr-marker-color')).toBeEnabled();
+  await expect(page.getByTestId('admin-fr-reason')).not.toHaveAttribute('readonly');
+  await expect(page.getByTestId('admin-fr-reject')).toBeEnabled();
+  expect(sent).toBe(0);
+  expect(lists).toBe(before);
+  await page.getByTestId('admin-fr-marker-color').fill('P-07');
+  await page.getByTestId('admin-fr-approve').click();
+  await expect(page.getByTestId('admin-fr-review-dialog')).toHaveCount(0);
+  expect(sent).toBe(1);
+});
