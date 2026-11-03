@@ -14,7 +14,7 @@
  *  - apps/api/app/middleware/api_call_logging.py (provider=telegram, token masked)
  */
 import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
-import { apiBaseURL, e2ePrefix, isMobile } from './live';
+import { apiBaseURL, e2ePrefix, isMobile, withRateLimitRetry } from './live';
 
 export const TARGETS_PATH = '/users/me/telegram-targets';
 
@@ -79,7 +79,7 @@ export async function resolveApiBase(page: Page): Promise<string> {
 }
 
 export async function listTargets(page: Page, apiBase: string): Promise<TelegramTargetDto[]> {
-  const res = await page.request.get(apiBase + TARGETS_PATH);
+  const res = await withRateLimitRetry(`GET ${TARGETS_PATH}`, () => page.request.get(apiBase + TARGETS_PATH));
   expect(res.ok(), `GET ${TARGETS_PATH} → HTTP ${res.status()}`).toBeTruthy();
   const body = (await res.json()) as { data: TelegramTargetDto[] };
   return body.data;
@@ -91,7 +91,7 @@ export async function sweepE2eTargets(page: Page, apiBase: string): Promise<numb
   let n = 0;
   for (const t of rows) {
     if (!t.telegram_label?.startsWith(e2ePrefix)) continue;
-    const res = await page.request.delete(`${apiBase}${TARGETS_PATH}/${t.id}`);
+    const res = await withRateLimitRetry(`DELETE ${TARGETS_PATH}`, () => page.request.delete(`${apiBase}${TARGETS_PATH}/${t.id}`));
     if (res.ok() || res.status() === 404) n += 1;
   }
   return n;

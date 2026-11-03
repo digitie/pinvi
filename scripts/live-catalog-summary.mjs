@@ -18,7 +18,8 @@ const rows = new Map();
 const failed = [];
 
 function areaOf(fileName) {
-  const m = /specs[\\/]([a-z]+)[\\/]/.exec(fileName ?? '');
+  // JSON `file` is relative to the config testDir (e2e-live/specs): '<area>/<file>.live.spec.ts'.
+  const m = /(?:^|[\\/])(trip|search|nearby|weather|share|poi|notify|admin|core)[\\/][^\\/]+$/.exec(fileName ?? '');
   return m ? m[1] : 'other';
 }
 

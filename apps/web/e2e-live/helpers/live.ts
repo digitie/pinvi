@@ -165,6 +165,34 @@ async function reuseSession(page: Page, key: string, landing: string, ready: Loc
   return true;
 }
 
+/*
+ * Rate limits (apps/api/app/core/config.py): auth 5/min, authenticated 60/min, both per 60 s window.
+ * A 429 is waited out (Retry-After, default 61 s, cap 70 s) and the step retried — never hidden: each
+ * wait is recorded as a `rate-limit` annotation on the test.
+ */
+async function backOff(res: { headers(): Record<string, string> }, what: string): Promise<void> {
+  const retryAfter = Number(res.headers()['retry-after'] ?? '');
+  const waitMs = Math.min(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 + 1000 : 61_000, 70_000);
+  try {
+    test.info().annotations.push({ type: 'rate-limit', description: `${what} 429 — retry in ${waitMs} ms` });
+  } catch {
+    // outside a test (global setup/teardown)
+  }
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+}
+
+/** Runs an API call made with `context.request`, retrying up to 3 times on 429. */
+export async function withRateLimitRetry<T extends { status(): number; headers(): Record<string, string> }>(
+  what: string,
+  call: () => Promise<T>,
+): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    const res = await call();
+    if (res.status() !== 429 || attempt >= 3) return res;
+    await backOff(res, what);
+  }
+}
+
 /**
  * Clicks `submit` and resolves with the `POST /auth/login` response; on 429 waits for `Retry-After`
  * (default 61 s) and submits again — up to 3 attempts. The form keeps its values across a 429.
@@ -180,14 +208,7 @@ async function submitLogin(page: Page, submit: Locator): Promise<Response | null
     await submit.click();
     const res = await loginRes;
     if (!res || res.status() !== 429 || attempt >= 3) return res;
-    const retryAfter = Number(res.headers()['retry-after'] ?? '');
-    const waitMs = Math.min(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 + 1000 : 61_000, 70_000);
-    try {
-      test.info().annotations.push({ type: 'rate-limit', description: `POST /auth/login 429 — retry in ${waitMs} ms` });
-    } catch {
-      // outside a test (global setup/teardown)
-    }
-    await page.waitForTimeout(waitMs);
+    await backOff(res, 'POST /auth/login');
   }
 }
 
@@ -304,12 +325,18 @@ export async function createTrip(page: Page, opts: CreateTripOptions): Promise<{
   await page.getByTestId('trip-create-region').fill(opts.region ?? '');
   await page.getByTestId('trip-create-start').fill(opts.start ?? '');
   await page.getByTestId('trip-create-end').fill(opts.end ?? '');
-  const created = page.waitForResponse(
-    (r) => r.request().method() === 'POST' && /\/trips$/.test(new URL(r.url()).pathname),
-    { timeout: 30_000 },
-  );
-  await page.getByTestId('trip-create-submit').click();
-  const res = await created;
+  let res: Response;
+  for (let attempt = 1; ; attempt += 1) {
+    const created = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && /\/trips$/.test(new URL(r.url()).pathname),
+      { timeout: 30_000 },
+    );
+    await page.getByTestId('trip-create-submit').click();
+    res = await created;
+    // 429: the form keeps its values on a failed save (TripDashboard clears them only on success).
+    if (res.status() !== 429 || attempt >= 3) break;
+    await backOff(res, 'POST /trips');
+  }
   if (res.status() >= 400) throw new Error(`POST /trips → HTTP ${res.status()}`);
   await expect(page.getByText('초안 여행을 저장했습니다.')).toBeVisible({ timeout: 20_000 });
   let id: string | null = null;
@@ -332,7 +359,9 @@ export async function createTrip(page: Page, opts: CreateTripOptions): Promise<{
 /** `DELETE /trips/{id}` (`soft_delete`) with the browser's cookies; 404 (already gone) is swallowed. */
 export async function deleteTrip(page: Page, id: string): Promise<void> {
   const api = await apiBaseURL(page);
-  const res = await page.context().request.delete(`${api}/trips/${id}`, { data: { mode: 'soft_delete' } });
+  const res = await withRateLimitRetry(`DELETE /trips/${id}`, () =>
+    page.context().request.delete(`${api}/trips/${id}`, { data: { mode: 'soft_delete' } }),
+  );
   if (!res.ok() && res.status() !== 404) {
     throw new Error(`DELETE /trips/${id} → HTTP ${res.status()}`);
   }
@@ -351,7 +380,7 @@ export async function listAllTrips(page: Page): Promise<TripListItem[]> {
   for (let round = 0; round < 50; round += 1) {
     const qs = new URLSearchParams({ bucket: 'all', limit: '50' });
     if (cursor) qs.set('cursor', cursor);
-    const res = await page.context().request.get(`${api}/trips?${qs.toString()}`);
+    const res = await withRateLimitRetry('GET /trips', () => page.context().request.get(`${api}/trips?${qs.toString()}`));
     if (!res.ok()) throw new Error(`GET /trips → HTTP ${res.status()}`);
     const body = (await res.json()) as {
       data?: TripListItem[];
@@ -386,7 +415,7 @@ export async function findTripByTitle(page: Page, title: string): Promise<string
 /** Per-day POI counts of a trip from `GET /trips/{id}` (the trip view the detail page loads). */
 export async function tripDayPoiCounts(page: Page, id: string): Promise<number[]> {
   const api = await apiBaseURL(page);
-  const res = await page.context().request.get(`${api}/trips/${id}`);
+  const res = await withRateLimitRetry(`GET /trips/${id}`, () => page.context().request.get(`${api}/trips/${id}`));
   if (!res.ok()) throw new Error(`GET /trips/${id} → HTTP ${res.status()}`);
   const body = (await res.json()) as { data?: { days?: Array<{ pois?: unknown[] }> } };
   return (body.data?.days ?? []).map((d) => (d.pois ?? []).length);
@@ -643,13 +672,20 @@ export async function waitForMapIdle(page: Page): Promise<void> {
   }
 }
 
+function isApiResponse(res: Response): boolean {
+  const type = res.request().resourceType();
+  return type === 'fetch' || type === 'xhr';
+}
+
 /**
- * Next response whose URL path (+ query) matches `pathPattern`. Start it before the navigation or
+ * Next fetch/XHR response whose URL path (+ query) matches `pathPattern`. Start it before the navigation or
  * click that triggers the request; `res.request().postDataJSON()` is available on the result.
  */
 export function waitForRequest(page: Page, pathPattern: RegExp, timeout = 45_000): Promise<Response> {
   return page.waitForResponse(
     (res) => {
+      // API calls only: the page navigation to `/trips/{id}` has the same path as `GET /trips/{id}`.
+      if (!isApiResponse(res)) return false;
       try {
         const url = new URL(res.url());
         return pathPattern.test(url.pathname + url.search);
@@ -665,7 +701,7 @@ export function waitForRequest(page: Page, pathPattern: RegExp, timeout = 45_000
 export function waitForGet(page: Page, pathPattern: RegExp, timeout = 30_000): Promise<Response> {
   return page.waitForResponse(
     (res) => {
-      if (res.request().method() !== 'GET') return false;
+      if (res.request().method() !== 'GET' || !isApiResponse(res)) return false;
       const url = new URL(res.url());
       return pathPattern.test(url.pathname + url.search);
     },
