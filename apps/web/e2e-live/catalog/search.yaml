@@ -727,3 +727,4 @@
   cleanup: [읽기 전용]
   automation: scripted
   spec: specs/search/search-perf.live.spec.ts#SRCH-055
+  notes: soft 기록은 예산 2배까지 통과; 상세 카드가 6 s 를 넘으면 #663 재현으로 런타임 test.fail.

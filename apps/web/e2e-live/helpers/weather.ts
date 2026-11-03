@@ -151,7 +151,11 @@ async function unwrap(page: Page, tripId: string, resPromise: Promise<Response>)
   expect(res.status(), 'GET /trips/{id} 는 200 이어야 한다').toBe(200);
   let body: ({ data?: WxTripView } & WxTripView) | null = null;
   try {
-    body = (await res.json()) as { data?: WxTripView } & WxTripView;
+    // A body discarded by a reload can hang instead of throwing (168 s on 2026-11-03) — cap the wait.
+    body = (await Promise.race([
+      res.json(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('response body timeout')), 10_000)),
+    ])) as { data?: WxTripView } & WxTripView;
   } catch {
     // The page navigated/reloaded after this response (body discarded) — read the same trip view
     // with the page's cookies instead. Same endpoint, same data; only the timing differs.

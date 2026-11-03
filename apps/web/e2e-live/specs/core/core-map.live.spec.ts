@@ -107,28 +107,36 @@ test.describe('CORE map — explore map (/map)', () => {
     }
   });
 
-  test('CORE-014 줌 컨트롤 — in-bounds 재조회의 zoom이 ±1 움직인다', async ({ page }, testInfo) => {
+  test('CORE-014 줌 컨트롤 — 축척 막대가 한 단계(×2) 움직였다 돌아온다', async ({ page }, testInfo) => {
     test.skip(isMobileViewport(page), '모바일 여행 지도는 navigation control을 숨긴다; 탐색 지도도 터치 줌 중심');
     await openExploreMap(page);
-    const zoomOf = (url: string) => Number(new URL(url).searchParams.get('zoom'));
     const zoomInBtn = page.locator('.maplibregl-ctrl-zoom-in');
     await expect(zoomInBtn).toBeVisible();
-    const before = await page.evaluate(() => Number(document.querySelector('[data-testid="map-center-state"]')?.getAttribute('data-zoom')));
-    // The viewport cache serves zoom levels already visited (openExploreMap may zoom in to find pins), so
-    // the camera state (`map-center-state[data-zoom]`) is the ground truth; a new in-bounds request is
-    // recorded when one is made.
-    const cameraZoom = () => page.evaluate(() => Number(document.querySelector('[data-testid="map-center-state"]')?.getAttribute('data-zoom')));
-    const reqs: number[] = [];
-    page.on('request', (r) => { if (r.url().includes('/features/in-bounds')) reqs.push(zoomOf(r.url())); });
+    // `map-center-state[data-zoom]` is the *requested* camera (React state) and does not follow control
+    // zooms, so the ground truth is the MapLibre scale bar: metres per pixel halve on +1 and double on -1.
+    const scale = page.locator('.maplibregl-ctrl-scale');
+    await expect(scale).toBeVisible();
+    const metresPerPixel = () =>
+      scale.evaluate((el) => {
+        const m = /([\d.]+)\s*(km|m)/.exec(el.textContent ?? '');
+        const width = el.getBoundingClientRect().width;
+        if (!m || !width) return 0;
+        return (Number(m[1]) * (m[2] === 'km' ? 1000 : 1)) / width;
+      });
+    await page.waitForTimeout(1_000);
+    const before = await metresPerPixel();
+    expect(before, 'scale bar readable').toBeGreaterThan(0);
     await zoomInBtn.click();
-    await expect.poll(cameraZoom, { timeout: 10_000 }).toBeGreaterThan(before);
-    const zIn = await cameraZoom();
+    await expect.poll(async () => before / (await metresPerPixel()), { timeout: 10_000 }).toBeGreaterThan(1.6);
+    await page.waitForTimeout(800);
+    const zIn = await metresPerPixel();
+    expect(before / zIn).toBeLessThan(2.4);
     await page.locator('.maplibregl-ctrl-zoom-out').click();
-    await expect.poll(cameraZoom, { timeout: 10_000 }).toBeLessThan(zIn);
-    const zOut = await cameraZoom();
-    expect(Math.round(zIn - zOut)).toBe(1);
-    annotate(testInfo, 'in-bounds-zooms', reqs.join(',') || 'all served from viewport cache');
-    annotate(testInfo, 'metric', `camera-zoom=${before} in=${zIn} out=${zOut}`);
+    await expect.poll(async () => (await metresPerPixel()) / zIn, { timeout: 10_000 }).toBeGreaterThan(1.6);
+    await page.waitForTimeout(800);
+    const zOut = await metresPerPixel();
+    expect(zOut / zIn).toBeLessThan(2.4);
+    annotate(testInfo, 'metric', `m/px before=${before.toFixed(2)} in=${zIn.toFixed(2)} out=${zOut.toFixed(2)}`);
     await expect(page.getByTestId('feature-map-error')).toHaveCount(0);
     await shot(page, 'CORE-014', 'zoomed');
   });

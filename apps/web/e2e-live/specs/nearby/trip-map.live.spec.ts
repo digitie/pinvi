@@ -75,7 +75,13 @@ test.describe('NEAR trip map — four-place trip', () => {
     tripId = trip.id;
     await page.goto(`/trips/${tripId}`);
     for (const place of PLACES) {
-      await searchAndAddPlace(page, 1, place, pickMapFeature);
+      const key = place.replace(/^\S+\s/, ''); // '영월 고씨굴' → '고씨굴'
+      try {
+        await searchAndAddPlace(page, 1, place, (row) => pickMapFeature(row) && row.includes(key));
+      } catch {
+        // Map rows can briefly be missing (search degraded) — any non-external row with the name keeps a pin there
+        await searchAndAddPlace(page, 1, place, (row) => row.includes(key) && !/카카오|네이버/.test(row));
+      }
     }
     await page.close();
   });

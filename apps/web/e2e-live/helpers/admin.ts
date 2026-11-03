@@ -99,19 +99,28 @@ export async function newUserActor(browser: Browser, viewport?: { width: number;
 
 /**
  * Submits the /admin/features search. #648: Korean `q` intermittently answers 503
- * FEATURE_SERVICE_UNAVAILABLE — retry up to 3 times like a user would, record each 503, and fail with the
- * issue number only when it never succeeds.
+ * FEATURE_SERVICE_UNAVAILABLE. Each attempt reloads the page (re-submitting the same query does not
+ * always refetch), so up to 3 real requests are made. When all of them fail, #648 has reproduced: the case
+ * is marked expected-fail at runtime with the issue number (an intermittent bug cannot carry a static
+ * `test.fail`) and the assertion below fails it.
  */
 export async function searchAdminFeatures(page: Page): Promise<void> {
+  const query = await page.getByTestId('admin-features-search').inputValue();
   let last = 0;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const listed = waitForGet(page, /\/admin\/features\?.*q=/);
+    if (attempt > 1) {
+      await page.reload();
+      await page.getByTestId('admin-features-search').fill(query);
+    }
+    const listed = waitForGet(page, /\/admin\/features\?.*q=/).catch(() => null);
     await page.getByTestId('admin-features-search-submit').click();
-    last = (await listed).status();
-    if (last < 500) return;
-    test.info().annotations.push({ type: 'issue', description: `#648: /admin/features?q= → ${last} (attempt ${attempt})` });
+    last = (await listed)?.status() ?? 0;
+    if (last > 0 && last < 500) return;
+    test.info().annotations.push({ type: 'issue', description: `#648: /admin/features?q= → ${last || 'no response'} (attempt ${attempt})` });
     await page.waitForTimeout(3_000);
   }
+  test.fail(true, '#648 reproduced: /admin/features?q=<한국어> → 503 on every attempt');
+  expect(last, '#648: /admin/features?q=<한국어> never answered').toBeGreaterThan(0);
   expect(last, '#648: /admin/features?q=<한국어> never answered').toBeLessThan(500);
 }
 

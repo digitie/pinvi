@@ -227,20 +227,20 @@
   notes: ADR-056 모바일 직행.
 
 - id: CORE-014
-  title: 줌 컨트롤 — in-bounds 재조회 zoom이 +1/−1
+  title: 줌 컨트롤 — 축척 막대(m/px)가 ×2 줄었다 돌아온다
   priority: P2
   tags: [desktop, poi]
   preconditions:
     - account: test@test.com
   data_sources: [map:*]
   steps:
-    - /map → .maplibregl-ctrl-zoom-in 클릭 → 요청 zoom 기록 → zoom-out 클릭
+    - /map → .maplibregl-ctrl-scale 의 m/px 기록 → zoom-in 클릭 → zoom-out 클릭
   expected:
-    - zoom-in 요청의 zoom > zoom-out 요청의 zoom, 오류 배너 없음
+    - zoom-in 후 m/px 가 1/2(1.6~2.4배), zoom-out 후 다시 2배, 오류 배너 없음
   cleanup: [없음]
   automation: scripted
   spec: specs/core/core-map.live.spec.ts#CORE-014
-  notes: 모바일 skip(여행 지도는 navigation 숨김).
+  notes: 모바일 skip(여행 지도는 navigation 숨김). `map-center-state[data-zoom]` 은 요청 카메라라 컨트롤 줌을 따르지 않아 축척 막대로 잰다(in-bounds 는 viewport 캐시로 재요청이 없을 수 있음).
 
 - id: CORE-015
   title: 내 위치 버튼 — 권한/동의 없이도 동의 다이얼로그 또는 안내 문구, 오류 없음

@@ -352,7 +352,7 @@ Spec files: 54.
 | CORE-011 | core | 여행 지도 첫 렌더 핀(#613) — 새로고침 직후 두 핀이 즉시 보인다 | P1 | desktop, mobile, mutating, poi, search | scripted | `specs/core/core-map.live.spec.ts#CORE-011` |
 | CORE-012 | core | fitBounds가 검색 카드·교통 패널·통계칩 아래에 핀을 숨기지 않는다(#619) — desktop+mobile | P1 | desktop, mobile, mutating, poi | scripted | `specs/core/core-map.live.spec.ts#CORE-012` |
 | CORE-013 | core | 마커 선택/해제 — 데스크톱 팝업, 모바일 상세 시트 직행 | P1 | desktop, mobile, poi | scripted | `specs/core/core-map.live.spec.ts#CORE-013` |
-| CORE-014 | core | 줌 컨트롤 — in-bounds 재조회 zoom이 +1/−1 | P2 | desktop, poi | scripted | `specs/core/core-map.live.spec.ts#CORE-014` |
+| CORE-014 | core | 줌 컨트롤 — 축척 막대(m/px)가 ×2 줄었다 돌아온다 | P2 | desktop, poi | scripted | `specs/core/core-map.live.spec.ts#CORE-014` |
 | CORE-015 | core | 내 위치 버튼 — 권한/동의 없이도 동의 다이얼로그 또는 안내 문구, 오류 없음 | P3 | desktop, mobile | scripted | `specs/core/core-map.live.spec.ts#CORE-015` |
 | CORE-016 | core | 타일 로드 — VWorld WMTS 200, 디코드/worker/WebGL 오류·tile-error 이벤트 없음 | P1 | desktop, mobile | scripted | `specs/core/core-map.live.spec.ts#CORE-016` |
 | CORE-017 | core | maplibre worker — /maplibre/maplibre-gl-worker.mjs JS 서빙 + module worker 실기동(#613) | P1 | desktop, mobile | scripted | `specs/core/core-map.live.spec.ts#CORE-017` |

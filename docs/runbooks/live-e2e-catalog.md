@@ -236,11 +236,12 @@ CORE-021(#623 모바일 stats 칩 fit padding) 및 §8 의 이슈 표에 적힌 
 | #641 | enhancement | 여행 내보내기(인쇄/PDF/ICS) | SHR-032 |
 | #642 | enhancement | Map 날씨 카드 stale 배지 | WX-024 |
 | #643 | umbrella | live e2e 카탈로그 발견 사항 모음 | 전부 |
-| #648 | bug | `/admin/features` 한국어 `q` 검색 **간헐** 503 FEATURE_SERVICE_UNAVAILABLE | ADM-015/016, WX-018/019 (helper 3회 재시도, 끝내 503 이면 #648 로 실패) |
+| #648 | bug | `/admin/features` 한국어 `q` 검색 **간헐** 503 FEATURE_SERVICE_UNAVAILABLE | ADM-015/016, WX-018/019 (helper 가 매 시도 reload 로 3회 재요청, 끝내 503 이면 런타임 `test.fail(#648)`) |
 | #649 | bug | 일자 날짜 중복이 저장됨(`dayUsingDate` 가 effective_date 미비교) | TRIP-026 (`test.fail`) |
 | #650 | bug | 전체 도로명 주소(시·도 약칭) 검색에 주소 행 0건 | SRCH-004 (`test.fail`) |
 | #651 | bug | admin dedup review 목록이 항상 422 FORBIDDEN(Map 거절), 화면은 빈 큐 | ADM-022/023 (`test.fail`) |
 | #652 | bug | 장소 재정렬 간헐 409 SORT_ORDER_CONFLICT + 응답에 DB 오류 원문 | TRIP-030 (`test.fail`) |
+| #663 | bug | 상세 카드 `detail-card` 지연 3.7→6.2→8.5 s(같은 장소, 실행마다 악화) | SRCH-055 (예산 2배 6 s 초과 시 런타임 `test.fail(#663)`) |
 | kor-travel-map#1438 | bug | feature 카테고리 오분류(숙박·카페·마트·캠핑장·주차장) | SRCH-019/020/022, NEAR-030 (`test.fail`) |
 | kor-travel-map#1439 | bug | event 기간·장소 누락, 축제 category·중복 | SRCH-027 (`test.fail`) |
 | kor-travel-map#1440 | bug | 과거 날짜 날씨 daily_summaries 미제공 | WX-004 (`test.fail`) |
