@@ -8,15 +8,19 @@
  *     the KASI fill needs ~20 min after creation, so a freshly created seed makes those two cases
  *     skip/tolerate on the first run — see the runbook).
  */
-import { chromium } from '@playwright/test';
+import { chromium, type Page } from '@playwright/test';
 import {
   createTrip,
   deleteAllE2eTrips,
+  deleteTrip,
   findTripByTitle,
   isoDate,
   loginAsUser,
+  pickFeature,
+  pickNotExternal,
   searchAndAddPlace,
   seedSunTripTitle,
+  tripDayPoiCounts,
 } from './helpers/live';
 
 const REQUIRED = ['PLAYWRIGHT_BASE_URL', 'PINVI_E2E_USER_EMAIL', 'PINVI_E2E_USER_PASSWORD'] as const;
@@ -29,6 +33,49 @@ const SEED_PLACES: ReadonlyArray<{ query: string; pick: string }> = [
   { query: '서울역', pick: '서울역' },
   { query: '울릉도', pick: '울릉' },
 ];
+
+function isCompleteSeed(counts: number[]): boolean {
+  return counts.length === SEED_PLACES.length && counts.every((n) => n >= 1);
+}
+
+/**
+ * Seed trip, transactional: an existing seed is kept only when complete (5 days, ≥1 place each);
+ * an incomplete one (e.g. left by an aborted setup) is deleted and rebuilt. A failure while building
+ * deletes the half-made trip again. Seed problems never abort the run — only WX-011/012 depend on it
+ * and they skip with an explicit message when it is missing.
+ */
+async function ensureSeedTrip(page: Page): Promise<void> {
+  const existing = await findTripByTitle(page, seedSunTripTitle);
+  if (existing) {
+    const counts = await tripDayPoiCounts(page, existing);
+    if (isCompleteSeed(counts)) {
+      console.log('[live-catalog] setup: seed trip present and complete');
+      return;
+    }
+    console.log(`[live-catalog] setup: seed trip incomplete (pois per day: ${counts.join(',') || 'none'}) — rebuilding`);
+    await deleteTrip(page, existing);
+  }
+  let id: string | null = null;
+  try {
+    ({ id } = await createTrip(page, { title: seedSunTripTitle, start: isoDate(30), end: isoDate(34), region: '전국' }));
+    await page.goto(`/trips/${id}`);
+    for (let day = 1; day <= SEED_PLACES.length; day += 1) {
+      const place = SEED_PLACES[day - 1]!;
+      try {
+        await searchAndAddPlace(page, day, place.query, (row) => row.includes(place.pick) && pickFeature(row));
+      } catch {
+        // no Map feature row for this query → any non-Kakao/Naver row carrying the name (coords suffice)
+        await searchAndAddPlace(page, day, place.query, (row) => row.includes(place.pick) && pickNotExternal(row));
+      }
+    }
+    const counts = await tripDayPoiCounts(page, id);
+    if (!isCompleteSeed(counts)) throw new Error(`seed incomplete after build: ${counts.join(',')}`);
+    console.log('[live-catalog] setup: seed trip created (sunrise fill needs ~20 min; WX-011/012 may skip on this run)');
+  } catch (err) {
+    if (id) await deleteTrip(page, id).catch(() => undefined);
+    console.warn(`[live-catalog] setup: seed trip NOT created (${(err as Error).message.split('\n')[0]}) — WX-011/012 will skip`);
+  }
+}
 
 export default async function globalSetup(): Promise<void> {
   const missing = REQUIRED.filter((name) => !process.env[name]);
@@ -50,23 +97,7 @@ export default async function globalSetup(): Promise<void> {
     const swept = await deleteAllE2eTrips(page);
     console.log(`[live-catalog] setup: login ok, swept ${swept} leftover [e2e] trip(s)`);
 
-    const seedId = await findTripByTitle(page, seedSunTripTitle);
-    if (seedId) {
-      console.log('[live-catalog] setup: seed trip present');
-    } else {
-      const { id } = await createTrip(page, {
-        title: seedSunTripTitle,
-        start: isoDate(30),
-        end: isoDate(34),
-        region: '전국',
-      });
-      await page.goto(`/trips/${id}`);
-      for (let day = 1; day <= SEED_PLACES.length; day += 1) {
-        const place = SEED_PLACES[day - 1]!;
-        await searchAndAddPlace(page, day, place.query, (row) => row.includes(place.pick) && row.includes('장소'));
-      }
-      console.log('[live-catalog] setup: seed trip created (sunrise fill needs ~20 min; WX-011/012 may skip on this run)');
-    }
+    await ensureSeedTrip(page);
   } finally {
     await context.close();
     await browser.close();

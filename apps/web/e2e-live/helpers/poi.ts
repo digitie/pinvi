@@ -13,7 +13,7 @@
  *  - apps/web/app/(app)/files/page.tsx                my-file-list, file-delete-confirm, '다운로드', '삭제'
  */
 import { expect, type Locator, type Page } from '@playwright/test';
-import { e2ePrefix, isMobileProject, shot, waitForMapIdle } from './live';
+import { e2ePrefix, isMobileProject, openPanel, shot, waitForMapIdle } from './live';
 
 export { isMobileProject };
 
@@ -47,10 +47,7 @@ export async function gotoTrip(page: Page, tripId: string): Promise<void> {
 /** On the mobile layout the side panel starts hidden; open it when needed. */
 export async function openPanelIfMobile(page: Page): Promise<void> {
   if (!isMobileProject()) return;
-  const panel = page.getByTestId('trip-detail-panel');
-  if (await panel.isVisible()) return;
-  await page.getByRole('button', { name: '패널 열기' }).click();
-  await expect(panel).toBeVisible();
+  await openPanel(page);
 }
 
 export async function closePanelIfMobile(page: Page): Promise<void> {

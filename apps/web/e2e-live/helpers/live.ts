@@ -314,6 +314,15 @@ export async function findTripByTitle(page: Page, title: string): Promise<string
   return trips.find((t) => t.title === title)?.trip_id ?? null;
 }
 
+/** Per-day POI counts of a trip from `GET /trips/{id}` (the trip view the detail page loads). */
+export async function tripDayPoiCounts(page: Page, id: string): Promise<number[]> {
+  const api = await apiBaseURL(page);
+  const res = await page.context().request.get(`${api}/trips/${id}`);
+  if (!res.ok()) throw new Error(`GET /trips/${id} → HTTP ${res.status()}`);
+  const body = (await res.json()) as { data?: { days?: Array<{ pois?: unknown[] }> } };
+  return (body.data?.days ?? []).map((d) => (d.pois ?? []).length);
+}
+
 export function tripIdFromUrl(page: Page): string {
   const match = page.url().match(/\/trips\/([0-9a-f-]{36})/i);
   if (!match) throw new Error(`trip id not found in url ${page.url()}`);
@@ -326,11 +335,22 @@ export function detailPanel(page: Page): Locator {
   return page.getByTestId('trip-detail-panel');
 }
 
-/** On the mobile layout the side panel starts hidden; open it via the header toggle. */
+/**
+ * Makes the trip-detail side panel visible (prod DOM, probed 2026-11-03):
+ *  - the page renders nothing until the trip view loads, so wait for `trip-detail-shell` first —
+ *    an instant `isVisible()` right after `goto` is always false;
+ *  - desktop (≥1024): `aside#trip-detail-panel` is open by default; its toggle reads '패널 접기'
+ *    (text, no aria-label) and only says '패널 열기' after a collapse;
+ *  - mobile: the panel starts hidden; the header toggle has aria-label '패널 열기'.
+ * Both toggles carry `aria-controls="trip-detail-panel"` + `aria-expanded`, which is what we key on.
+ */
 export async function openPanel(page: Page): Promise<void> {
+  await expect(page.getByTestId('trip-detail-shell')).toBeVisible({ timeout: 45_000 });
   const panel = detailPanel(page);
   if (await panel.isVisible()) return;
-  await page.getByRole('button', { name: '패널 열기' }).first().click();
+  const toggle = page.locator('button[aria-controls="trip-detail-panel"][aria-expanded="false"]:visible').first();
+  await expect(toggle).toBeVisible();
+  await toggle.click();
   await expect(panel).toBeVisible();
 }
 
@@ -341,8 +361,8 @@ export type TripTab = '일정' | '파일' | '공유' | '동행' | '댓글';
  * Opens the mobile drawer first when the tab is hidden.
  */
 export async function openTripTab(page: Page, label: TripTab): Promise<void> {
+  await openPanel(page);
   const tab = page.getByRole('tab', { name: new RegExp(`^${label}`) }).first();
-  if (!(await tab.isVisible())) await openPanel(page);
   await tab.click();
   await expect(page.getByRole('tabpanel', { name: label })).toBeVisible();
 }

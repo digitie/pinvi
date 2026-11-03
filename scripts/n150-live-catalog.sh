@@ -76,6 +76,17 @@ fi
 repo_root="$(cd "$repo_root" && pwd)"
 cd "$repo_root"
 
+# systemd-run / sudo can start us without HOME; derive it from the passwd entry of the running user.
+if [[ -z "${HOME:-}" || ! -d "${HOME}" ]]; then
+  HOME="$(getent passwd "$(id -un)" | cut -d: -f6)"
+fi
+export HOME
+# Running as root on a checkout owned by another user makes git refuse ("dubious ownership"), which
+# breaks the runner's exact-checkout gate. Trust exactly this checkout, for this process tree only.
+git_cfg_n="${GIT_CONFIG_COUNT:-0}"
+export "GIT_CONFIG_KEY_${git_cfg_n}=safe.directory" "GIT_CONFIG_VALUE_${git_cfg_n}=${repo_root}"
+export GIT_CONFIG_COUNT="$((git_cfg_n + 1))"
+
 if [[ "$(uname -s)" != "Linux" ]]; then
   echo "error: run this on N150 (Linux)" >&2
   exit 1
