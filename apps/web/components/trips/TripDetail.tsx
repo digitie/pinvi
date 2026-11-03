@@ -1199,6 +1199,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           return;
         }
         await poiApi(apiClient).update(tripId, current.poiId, current.version, patch);
+        if (patch.day_index != null) handleSelectDay(patch.day_index);
         clearConflict();
         setEditingPoiId(null);
         await reload();

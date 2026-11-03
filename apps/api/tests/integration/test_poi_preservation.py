@@ -54,6 +54,20 @@ async def test_reorder_swaps_repeatedly_without_transient_unique_conflicts(
     )
     assert invalid.status_code == 409, invalid.text
     assert not any(s in invalid.text for s in ("sqlalchemy", "asyncpg", "UPDATE", "IntegrityError"))
+    # 움직이지 않는 POI의 순위를 재사용해 실제 PG UNIQUE 오류·트랜잭션 rollback을 검증한다.
+    db_conflict = await client.post(
+        f"/trips/{trip_id}/pois/reorder",
+        json={
+            "day_index": 1,
+            "moves": [{"poi_id": pois[0]["attachment_id"], "new_sort_order": "a0"}],
+        },
+        cookies=cookies,
+    )
+    assert db_conflict.status_code == 409, db_conflict.text
+    assert not any(
+        s in db_conflict.text for s in ("sqlalchemy", "asyncpg", "UPDATE", "IntegrityError")
+    )
+
     detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
     assert all("reorder_" not in p["sort_order"] for p in detail.json()["data"]["days"][0]["pois"])
 
