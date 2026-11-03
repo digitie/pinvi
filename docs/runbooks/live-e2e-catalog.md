@@ -151,6 +151,24 @@ SPEC 계약 그대로: `baseURL`, `e2ePrefix`, `loginAsUser`, `loginAsAdmin`, `c
 | `page.context()['_options']` | 제거 — `baseURL` export 사용 |
 | `@axe-core/playwright` | 설치하지 않았다(아래 §8). CORE-029 는 동적 import 실패 시 skip |
 
+### 5.1 prod 실측으로 확정한 동작 (2026-11-03 첫 prod run)
+
+- **패널**: `/trips/{id}` 는 trip view 가 올 때까지 아무것도 렌더하지 않는다. `openPanel` 은
+  `trip-detail-shell` 을 기다린 뒤 `button[aria-controls="trip-detail-panel"][aria-expanded="false"]`
+  로 연다 — 데스크톱은 기본 열림(토글 문구 '패널 접기'), 모바일은 닫힘(aria-label '패널 열기').
+- **rate limit**: auth 5회/분, authenticated 60회/분(`apps/api/app/core/config.py`). helper 는
+  worker 메모리에 신원별 세션 쿠키를 두고 재사용하며(디스크·리포트에 남기지 않음), 폼 로그인·
+  `createTrip`·trip/telegram API 의 429 는 `Retry-After`(기본 61초)만큼 기다려 최대 3회 재시도하고
+  `rate-limit` 주석을 남긴다. 앱 자체 요청(지도·검색 등)의 429 는 재시도하지 않으므로, 한도를 넘는
+  케이스는 실패로 드러난다 — 그때는 실패를 rate limit 으로 분류하고 테스트 계정 한도 여유를
+  소유자에게 요청한다.
+- **`waitForRequest`/`waitForGet`** 은 fetch/XHR 응답만 본다(문서 내비게이션 `/trips/{id}` 와 API
+  `GET /trips/{id}` 가 같은 경로).
+- **시드**: 불완전한 기존 시드(장소가 빈 일자)는 setup 이 지우고 다시 만든다. 생성 중 실패하면
+  만든 여행을 지우고 run 은 계속한다(WX-011/012 만 skip).
+- **root 실행**: `scripts/n150-live-catalog.sh` 는 HOME 이 없으면 passwd 에서 유도하고, 이 checkout
+  만 `safe.directory` 로 신뢰한다(`GIT_CONFIG_*`, 프로세스 한정). `sudo systemd-run` 에 `-E` 불필요.
+
 ## 6. 품질 게이트
 
 CI `web` 워크플로의 `npm run lint` / `npm run typecheck` 가 `e2e-live/**` 를 포함한다
