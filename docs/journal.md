@@ -8,7 +8,11 @@
 리뷰 보완 뒤 관련 API·PG 135개·Chromium 6개 통과. Map
 [PR #1445](https://github.com/digitie/kor-travel-map/pull/1445)는 b8f88c5로 머지됐으며 전체 WSL PG 1,590개(조건부 14개 건너뜀)와 CI를 통과했다.
 같은 머지 커밋의 full/service 원본 bytes·현재 런타임 핀·M05 pair 계약을 갱신했다.
-소비 계약 108개 통과(운영 opt-in 1개 건너뜀). 최종 PinVi WSL·실제 로컬 API 연결 UI·두 리뷰어의 vendor 검토와 CI를 진행한다.
+소비 계약 108개 통과(운영 opt-in 1개 건너뜀), 최종 WSL API 단위·관련 PG 1,929개 통과(기존 조건부 9개 건너뜀).
+실제 Chromium→PinVi API→Map API와 별도 테스트 DB로 로그인·한국어 검색·인증 오류/재시도·판정/재생 등 9개 흐름을 통과했다.
+[로컬 연결 검증](reviews/pinvi-643-admin-local-live.json)은 WSL fixture 증거이며 운영 receipt가 아니다.
+두 독립 리뷰어가 vendor 최종 소스의 차단 없음을 확인했다. CI가 찾은 wheel/Docker 지문의 누락 두 곳을 갱신하고
+독립 설치 wheel과 Docker 이미지의 실제 패키지 파일·지문 일치를 WSL에서 통과했다. 최종 CI를 확인한다.
 기존 운영 receipt와 Map의 pending rollout 상태는 완료로 승격하지 않는다.
 **이전**: 관리자 제안 큐 PR #659(d6e0ddc) 머지. PinVi 19개 항목 완료.
 **다음**: 이 묶음 머지 후 지도·날씨·알림·내보내기·주소 검색을 진행한다.
