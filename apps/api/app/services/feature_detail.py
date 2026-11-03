@@ -194,9 +194,9 @@ def build_detail_card(
     if kind == "event":
         return EventDetailCard(
             **common,
-            start_date=_pick(detail, "start_date", "begin_date", "period_start", "from"),
-            end_date=_pick(detail, "end_date", "close_date", "period_end", "to"),
-            venue=_pick(detail, "venue", "place", "location"),
+            start_date=_pick(detail, "starts_on", "start_date", "begin_date", "period_start", "from"),
+            end_date=_pick(detail, "ends_on", "end_date", "close_date", "period_end", "to"),
+            venue=_pick(detail, "venue_name", "venue", "place", "location"),
         )
     if kind == "notice":
         return NoticeDetailCard(

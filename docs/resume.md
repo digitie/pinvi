@@ -1,3 +1,9 @@
+## 2026-11-04 — 행사 정본 상세 필드 회귀
+
+- Map 정본 `starts_on/ends_on/venue_name`을 구 alias보다 먼저 선택한다. 기존 상세 카드 shape·색상·빈 값 처리와 구 snapshot fallback은 유지한다.
+- 수정 전 canonical-only/구 alias 충돌 2개 단언 실패를 확인했다. 수정 후 관련 단위 35개·소스 mypy·Ruff를 통과했다.
+- 초안 #662에서 HTTP 회귀와 실제 Map→Pinvi→Chromium 연결을 검증하고, Map #1447 병합 뒤 정본 revision 핀을 맞춘 후 두 리뷰·CI로 병합한다. 운영 검증은 Claude Code 담당이다.
+
 ## 2026-11-04 — #643 Map #1439 행사 정본 상세 필드 연결
 
 - 최신 #643 본문·댓글과 연결된 Map #1444 범위를 다시 확인했다.

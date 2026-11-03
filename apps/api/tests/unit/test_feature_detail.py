@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from app.schemas.feature import (
     Coord,
     EventDetailCard,
@@ -318,3 +320,25 @@ def test_homepage_skips_invalid_key_and_uses_next_http_url() -> None:
         _map_place_dto(urls={"homepage": "javascript:alert(1)", "website": "https://ok.example"})
     )
     assert card.homepage_url == "https://ok.example"
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_event_card_reads_canonical_map_period_and_venue_before_legacy_aliases(legacy: bool) -> None:
+    detail = {"starts_on": "2026-11-01", "ends_on": "2026-11-03", "venue_name": "종묘"}
+    if legacy:
+        detail.update({"start_date": "2025-11-01", "end_date": "2025-11-03", "venue": "다른 장소"})
+    labels = build_category_labels([{"code": "01090000", "path": ["관광", "축제·행사"]}])
+    card = build_detail_card(_place_dto(kind="event", category="01090000", detail=detail), labels)
+    assert isinstance(card, EventDetailCard)
+    assert card.start_date == "2026-11-01"
+    assert card.end_date == "2026-11-03"
+    assert card.venue == "종묘"
+    assert card.category_label == "축제·행사"
+
+
+def test_event_card_never_invents_missing_canonical_period_or_venue() -> None:
+    card = build_detail_card(_place_dto(
+        kind="event", detail={"starts_on": None, "ends_on": "", "venue_name": " "},
+    ))
+    assert isinstance(card, EventDetailCard)
+    assert (card.start_date, card.end_date, card.venue) == (None, None, None)
