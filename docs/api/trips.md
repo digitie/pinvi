@@ -612,3 +612,7 @@ POI / day / trip 변경 시 `WS /ws/trips/{trip_id}` 채널로 broadcast:
 - [ ] 통합 테스트 `apps/api/tests/integration/test_trips_api.py`
 - [ ] WebSocket broadcast 트리거 추가
 - [ ] 본 문서 + `common.md` 표준 에러 코드 갱신
+
+### 여행 기간 부분 수정 검증 (#624)
+
+PATCH는 날짜 입력을 기존 값과 합쳐 시작·종료 날짜가 함께 있고 종료일이 시작일 이상인지 검사한다. 날짜의 생략·null은 기존 값을 유지한다. 무효한 기간은 다른 필드·버전을 변경하지 않고 422 VALIDATION_ERROR와 날짜 안내를 반환한다. 버전 충돌은 우선하여 409를 반환한다.

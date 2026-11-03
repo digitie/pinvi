@@ -75,6 +75,7 @@ from app.services.trip import (
     TripOptimizeError,
     TripPermissionError,
     TripStatus,
+    TripValidationError,
     TripVersionConflictError,
     TripVisibility,
     build_distance_matrix,
@@ -504,6 +505,11 @@ async def update_trip_endpoint(
     except TripVersionConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except TripValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     realtime_broker.publish_event_nowait(
