@@ -789,7 +789,11 @@ apps/api/tests/contract/kor-travel-map-openapi-user.json`
 
 중복 검토 목록은 `GET /v1/ops/dedup-reviews`와 `ops:read` token·scope만 사용한다.
 public service token·admin proxy secret·actor를 함께 전송하거나 자격 실패 시 fallback하지 않는다.
-판정 쓰기 경계는 기존 관리자 정책을 따른다. 상류 401/403은 PinVi 503으로 전달하고 조회 실패 시
+판정은 `PATCH /v1/admin/features/dedup-reviews/{id}`와 기존 관리자 BFF 정책을 따른다.
+UUID 명령 키는 관리자·후보·전체 검토 입력으로 결정해 응답 유실 뒤에도 같은 명령을 재생한다.
+Map actor는 인증 principal에서 파생하므로 deprecated `reviewed_by`는 전송하지 않는다.
+감사에는 명령 키를 보존하며 Map 효과의 중복 실행을 성공 요청별 감사와 구분한다.
+전체 필터는 Map 기본 pending과 구분하여 다섯 상태를 명시한다. 상류 401/403은 PinVi 503으로 전달하고 조회 실패 시
 표는 오류·재시도를 보여 준다. 이전 후보·판정 UI나 0행 성공 표시로 장애를 가리지 않는다.
 
 Map PR #1445 머지 후 같은 검토 revision의 full/service OpenAPI를 갱신한다. 운영 활성화 및 실제 데이터의

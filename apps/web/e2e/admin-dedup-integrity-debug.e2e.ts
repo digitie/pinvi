@@ -240,6 +240,20 @@ test('Dedup review 페이지가 후보 행과 필터 query를 표시한다', asy
   expect(lastUrl.searchParams.get('q')).toBe('seoul');
   expect(lastUrl.searchParams.get('min_score')).toBe('85');
   expect(lastUrl.searchParams.getAll('status')).toContain('accepted');
+
+  const allResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === '/admin/dedup-review' && url.searchParams.getAll('status').length === 5;
+  });
+  await page.getByTestId('admin-dedup-status').selectOption('all');
+  const allUrl = new URL((await allResponse).url());
+  expect(allUrl.searchParams.getAll('status')).toEqual([
+    'pending',
+    'accepted',
+    'rejected',
+    'merged',
+    'ignored',
+  ]);
 });
 
 test('정합성 페이지가 issue/report와 각각의 필터 query를 표시한다', async ({ page }) => {
@@ -560,4 +574,51 @@ test('Dedup 재조회가 실패하면 이전 후보의 판정 UI를 숨긴다', 
   unavailable = false;
   await page.getByRole('button', { name: '다시 시도', exact: true }).click();
   await expect(page.getByTestId('admin-dedup-row-review-1')).toBeVisible();
+});
+
+test('Dedup 필터 요청 중 이전 후보를 판정할 수 없다', async ({ page }) => {
+  let release: () => void = () => {};
+  const delayed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let verdictCalls = 0;
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/dedup-review/review-1/verdict',
+    async (route) => {
+      verdictCalls++;
+      await route.abort();
+    },
+  );
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/dedup-review',
+    async (route) => {
+      const rejected = new URL(route.request().url()).searchParams.get('status') === 'rejected';
+      if (rejected) await delayed;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            items: rejected ? [] : [dedupReview],
+            page_size: 50,
+            next_cursor: null,
+          },
+        }),
+      });
+    },
+  );
+  try {
+    await page.goto('/admin/dedup-review');
+    await page.getByTestId('admin-dedup-row-review-1').click();
+    await page.getByTestId('admin-dedup-access-reason').fill('검토 사유');
+    await expect(page.getByTestId('admin-dedup-submit-verdict')).toBeEnabled();
+    await page.getByTestId('admin-dedup-status').selectOption('rejected');
+    await expect(page.getByTestId('admin-dedup-submit-verdict')).toHaveCount(0);
+    await expect(page.getByTestId('admin-dedup-row-review-1')).toHaveCount(0);
+    await expect(page.getByText('불러오는 중…', { exact: true })).toBeAttached();
+    expect(verdictCalls).toBe(0);
+  } finally {
+    release();
+  }
+  await expect(page.getByText('dedup 후보가 없습니다.', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('admin-dedup-submit-verdict')).toHaveCount(0);
 });

@@ -1290,6 +1290,7 @@ async def test_decide_dedup_review_patches_decision_body() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["method"] = request.method
+        seen["key"] = request.headers.get("Idempotency-Key")
         seen["path"] = request.url.path
         seen["body"] = json.loads(request.content)
         return httpx.Response(
@@ -1315,15 +1316,15 @@ async def test_decide_dedup_review_patches_decision_body() -> None:
         decision="merged",
         decision_reason="동일 장소",
         master_feature_id="f_a",
-        reviewed_by="pinvi-admin",
+        idempotency_key="11111111-1111-4111-8111-111111111111",
     )
+    assert seen["key"] == "11111111-1111-4111-8111-111111111111"
     assert seen["method"] == "PATCH"
-    assert seen["path"] == "/v1/admin/dedup-reviews/dedup-1"
+    assert seen["path"] == "/v1/admin/features/dedup-reviews/dedup-1"
     assert seen["body"] == {
         "decision": "merged",
         "decision_reason": "동일 장소",
         "master_feature_id": "f_a",
-        "reviewed_by": "pinvi-admin",
     }
     assert data["merge_id"] == "merge-1"
     await client.aclose()
@@ -1517,5 +1518,30 @@ async def test_dedup_read_auth_failure_is_unavailable(upstream_status: int) -> N
         with pytest.raises(KorTravelMapUnavailable):
             await client.list_dedup_reviews()
         assert calls == 1
+    finally:
+        await client.aclose()
+
+
+async def test_dedup_verdict_retries_preserve_command_key_and_write_realm() -> None:
+    keys: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PATCH"
+        assert "X-Kor-Travel-Map-Ops-Token" not in request.headers
+        assert request.headers["X-Kor-Travel-Map-Admin-Proxy-Secret"] == "test-proxy"
+        keys.append(request.headers["Idempotency-Key"])
+        if len(keys) == 1:
+            return httpx.Response(503, json={"code": "TEMPORARILY_UNAVAILABLE"})
+        return httpx.Response(200, json={"data": {"decision": "rejected"}, "meta": {}})
+
+    client = _client(handler, admin_proxy_secret="test-proxy")
+    try:
+        result = await client.decide_dedup_review(
+            "review-1",
+            decision="rejected",
+            idempotency_key="11111111-1111-4111-8111-111111111111",
+        )
+        assert result["decision"] == "rejected"
+        assert keys == ["11111111-1111-4111-8111-111111111111"] * 2
     finally:
         await client.aclose()

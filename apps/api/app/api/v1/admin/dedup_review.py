@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from typing import Annotated
+from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import ValidationError
@@ -103,13 +105,30 @@ async def decide_dedup_review(
 ) -> Envelope[AdminDedupDecisionResponse]:
     """kor-travel-map dedup review verdict relay + Pinvi audit."""
     reason = body.kor_travel_map_reason or body.access_reason
+    # 같은 관리자·후보·검토 입력은 HTTP 응답 유실 후에도 같은 Map 명령을 재생한다.
+    command_key = str(
+        uuid5(
+            NAMESPACE_URL,
+            json.dumps(
+                {
+                    "command": "pinvi.admin.dedup-review.decide.v1",
+                    "actor_user_id": str(admin.user_id),
+                    "review_id": review_id,
+                    "body": body.model_dump(mode="json"),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ),
+        )
+    )
     with map_ops_errors(message_subject="kor_travel_map dedup decision"):
         data = await admin_client.decide_dedup_review(
             review_id,
             decision=body.decision,
             decision_reason=reason,
             master_feature_id=body.master_feature_id,
-            reviewed_by="pinvi-admin",
+            idempotency_key=command_key,
         )
     try:
         result = AdminDedupDecisionResponse.model_validate(data)
@@ -130,6 +149,7 @@ async def decide_dedup_review(
         resource_id=review_id,
         before_state=None,
         after_state={
+            "command_id": command_key,
             "decision": result.decision,
             "changed": result.changed,
             "master_feature_id": result.master_feature_id,

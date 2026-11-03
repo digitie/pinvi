@@ -80,7 +80,10 @@ export default function AdminDedupReviewPage() {
   const params = useMemo<AdminDedupReviewListParams>(
     () => ({
       q: submittedQ || undefined,
-      status: statusFilter === 'all' ? undefined : [statusFilter],
+      status:
+        statusFilter === 'all'
+          ? STATUS_OPTIONS.filter((option) => option.value !== 'all').map((option) => option.value)
+          : [statusFilter],
       minScore: minScore.trim() ? Number(minScore) : undefined,
       pageSize: 50,
     }),
@@ -93,7 +96,8 @@ export default function AdminDedupReviewPage() {
     placeholderData: keepPreviousData,
   });
 
-  const data = reviewsQuery.isError ? null : (reviewsQuery.data ?? null);
+  const data =
+    reviewsQuery.isError || reviewsQuery.isPlaceholderData ? null : (reviewsQuery.data ?? null);
   const selected = data?.items.find((item) => item.review_id === selectedId) ?? null;
   const selectedReviewId = selected?.review_id ?? null;
   const selectedDefaultMasterFeatureId = selected?.feature_a.feature_id ?? '';
@@ -266,7 +270,10 @@ export default function AdminDedupReviewPage() {
           <NativeSelect
             id="admin-dedup-status"
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            onChange={(event) => {
+              setSelectedId(null);
+              setStatusFilter(event.target.value as typeof statusFilter);
+            }}
             data-testid="admin-dedup-status"
           >
             {STATUS_OPTIONS.map((item) => (
@@ -280,7 +287,10 @@ export default function AdminDedupReviewPage() {
           <Input
             id="admin-dedup-min-score"
             value={minScore}
-            onChange={(event) => setMinScore(event.target.value)}
+            onChange={(event) => {
+              setSelectedId(null);
+              setMinScore(event.target.value);
+            }}
             inputMode="numeric"
             data-testid="admin-dedup-min-score"
           />
@@ -294,7 +304,7 @@ export default function AdminDedupReviewPage() {
         <AdminTable
           columns={columns}
           rows={data?.items ?? []}
-          loading={reviewsQuery.isLoading}
+          loading={reviewsQuery.isLoading || reviewsQuery.isPlaceholderData}
           isError={reviewsQuery.isError}
           error={error ? { message: error } : null}
           onRetry={() => reviewsQuery.refetch()}
