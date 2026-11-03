@@ -5,7 +5,7 @@
  * lib/useFeatureDetailCard.ts (abort on featureId change), components/map/FeatureDetailModalController.tsx.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { ensureFeatureMarkers, loginAsUser, shot } from '../../helpers/live';
+import { clickableFeatureMarkers, ensureFeatureMarkers, loginAsUser, shot } from '../../helpers/live';
 import { annotate, isMobileViewport, timed, waitForMapCanvas } from '../../helpers/core';
 
 async function openExploreMap(page: Page) {
@@ -25,18 +25,19 @@ test.describe('CORE resilience', () => {
   });
 
   test('CORE-023 상세 카드는 날씨가 느려도 3초 안에 뜬다(#622 — detail-card 경로)', async ({ page }, testInfo) => {
-    const pins = await openExploreMap(page);
-    const featureLegend = page.locator('[data-testid="feature-map-marker-style"][data-feature-id]:not([data-feature-id=""])');
-    await expect(featureLegend.first()).toBeAttached({ timeout: 20_000 });
-    const featureId = (await featureLegend.first().getAttribute('data-feature-id')) ?? '';
+    await openExploreMap(page);
+    const [pin] = await clickableFeatureMarkers(page, 1);
+    expect(pin, 'a feature pin inside the visible map area').toBeTruthy();
+    const featureId = ((await pin!.getAttribute('aria-label')) ?? '').slice(0, 20);
     let weatherMs: number | null = null;
     const tW = Date.now();
     page.on('response', (r) => {
       if (/\/features\/[^/]+\/weather/.test(r.url()) && weatherMs == null) weatherMs = Date.now() - tW;
     });
-    await pins.first().click();
+    await pin!.click();
     if (!isMobileViewport(page)) {
-      await page.getByTestId('feature-map-detail-open').click({ timeout: 10_000 });
+      // the popup itself waits for detail + weather (#622 popup path, CORE-024)
+      await page.getByTestId('feature-map-detail-open').click({ timeout: 30_000 });
     }
     const { ms } = await timed(async () => {
       await expect(page.getByTestId('feature-detail-card-body')).toBeVisible({ timeout: 10_000 });
@@ -51,7 +52,9 @@ test.describe('CORE resilience', () => {
   test('CORE-024 마커 팝업의 상세 텍스트가 날씨 응답을 기다리지 않는다(#622 — 팝업 경로)', async ({ page }, testInfo) => {
     test.skip(isMobileViewport(page), '모바일은 팝업 없이 상세 시트 직행');
     test.fail(true, 'origin/main FeatureMapView.tsx는 get+weather를 allSettled로 함께 기다린다 — 분리 로드(7ec36c13)는 미머지');
-    const pins = await openExploreMap(page);
+    await openExploreMap(page);
+    const [pin] = await clickableFeatureMarkers(page, 1);
+    expect(pin).toBeTruthy();
     let detailAt: number | null = null;
     let weatherAt: number | null = null;
     const t0 = Date.now();
@@ -60,9 +63,9 @@ test.describe('CORE resilience', () => {
       if (/\/features\/[^/?]+\/weather/.test(u)) weatherAt = Date.now() - t0;
       else if (/\/features\/[^/?]+$/.test(u) && r.request().method() === 'GET') detailAt = Date.now() - t0;
     });
-    await pins.first().click();
+    await pin!.click();
     const popup = page.locator('.maplibregl-popup');
-    await expect(popup).toBeVisible();
+    await expect(popup).toBeVisible({ timeout: 30_000 });
     const { ms } = await timed(async () => {
       await expect(popup.getByText('상세 불러오는 중…')).toHaveCount(0, { timeout: 10_000 });
     });
@@ -76,9 +79,10 @@ test.describe('CORE resilience', () => {
   });
 
   test('CORE-025 선택 변경 시 이전 상세 요청을 버린다 — stale 카드 없음', async ({ page }) => {
-    const pins = await openExploreMap(page);
-    const count = await pins.count();
-    test.skip(count < 2, '뷰포트에 feature 핀이 2개 미만');
+    await openExploreMap(page);
+    const clickable = await clickableFeatureMarkers(page, 2);
+    test.skip(clickable.length < 2, '보이는 영역에 클릭 가능한 feature 핀이 2개 미만');
+    const pins = { nth: (k: number) => clickable[k]! };
     const a = (await pins.nth(0).getAttribute('aria-label')) ?? '';
     const b = (await pins.nth(1).getAttribute('aria-label')) ?? '';
     test.skip(a === b, '서로 다른 두 핀 필요');

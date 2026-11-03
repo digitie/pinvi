@@ -144,6 +144,7 @@ test.describe.serial('ADM promotion review (desktop)', () => {
   });
 
   test('ADM-034 reject flow: notice, 거절 tab, user-side status, audit row', async () => {
+    test.skip(!pendingId, 'ADM-032 did not run in this selection (it creates the pending suggestion)');
     const reason = `${E2E} ADM-034 reject ${tag}`;
     const page = admin.page;
     await rejectSuggestionAsAdmin(page, pendingId, reason);

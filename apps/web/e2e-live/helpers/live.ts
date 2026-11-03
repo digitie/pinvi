@@ -711,6 +711,31 @@ export async function ensureFeatureMarkers(page: Page, min = 1, maxSteps = 4): P
   return markers;
 }
 
+/**
+ * Feature markers that a user can actually click right now: rendered inside the map canvas and the
+ * topmost element at their centre (markers outside the viewport stay in the DOM, and the search card /
+ * transport panel overlay part of the canvas). Clicking anything else lands on the map, and the
+ * popup's `closeOnClick` closes it again (first prod run: CORE-013/025 never saw a popup).
+ */
+export async function clickableFeatureMarkers(page: Page, max = 5): Promise<Locator[]> {
+  const all = featureMarkerButtons(page);
+  const indexes = await all.evaluateAll((els, limit) => {
+    const canvas = document.querySelector('.maplibregl-canvas')?.getBoundingClientRect();
+    const out: number[] = [];
+    els.forEach((el, i) => {
+      if (out.length >= limit || !canvas) return;
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      if (r.width === 0 || cx < canvas.left || cx > canvas.right || cy < canvas.top || cy > canvas.bottom) return;
+      const top = document.elementFromPoint(cx, cy);
+      if (top && (top === el || el.contains(top))) out.push(i);
+    });
+    return out;
+  }, max);
+  return indexes.map((i) => all.nth(i));
+}
+
 /** Masks a secret in text destined for logs/messages. */
 export function redact(text: string, secret: string): string {
   return secret ? text.split(secret).join('<token>') : text;

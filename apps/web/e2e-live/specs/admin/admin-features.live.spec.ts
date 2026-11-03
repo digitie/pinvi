@@ -73,10 +73,13 @@ test.describe.serial('ADM features', () => {
         for (let i = 0; i < Math.min(count, 25); i += 1) await expect(rows.nth(i).getByTestId('admin-features-state-axes')).toContainText(c.label);
       }
       // '전체' must drop the parameter entirely (page comment: new axis values must not be silently cut).
-      const reset = waitForGet(page, /\/admin\/features\?/);
+      // '전체' may be served from the query cache (same params as an earlier state) — when a request is
+      // made it must not carry the axis parameter.
+      const reset = waitForGet(page, /\/admin\/features\?/, 8_000).catch(() => null);
       await adminSelect(page, c.testid).selectOption('all');
       const resetRes = await reset;
-      expect(new URL(resetRes.url()).search).not.toContain(c.param.split('=')[0]);
+      if (resetRes) expect(new URL(resetRes.url()).search).not.toContain(c.param.split('=')[0]);
+      await expect(adminSelect(page, c.testid)).toHaveValue('all');
     }
   });
 

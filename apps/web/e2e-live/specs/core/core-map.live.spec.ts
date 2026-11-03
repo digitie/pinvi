@@ -10,6 +10,7 @@ import {
   createTrip,
   deleteTrip,
   e2ePrefix,
+  clickableFeatureMarkers,
   ensureFeatureMarkers,
   loginAsUser,
   searchAndAddPlace,
@@ -80,10 +81,10 @@ test.describe('CORE map — explore map (/map)', () => {
 
   test('CORE-013 마커 선택/해제 — 팝업(데스크톱) 또는 상세 시트(모바일)', async ({ page }) => {
     await openExploreMap(page);
-    const pins = featureMarkers(page);
-    await expect(pins.first()).toBeVisible({ timeout: 15_000 });
-    const title = (await pins.first().getAttribute('aria-label')) ?? '';
-    await pins.first().click();
+    const [pin] = await clickableFeatureMarkers(page, 1);
+    expect(pin, 'a feature pin inside the visible map area').toBeTruthy();
+    const title = (await pin!.getAttribute('aria-label')) ?? '';
+    await pin!.click();
     if (isMobileViewport(page)) {
       // ADR-056: mobile tap opens the detail sheet directly (FeatureMapView.handlePointClick)
       const modal = page.getByTestId('feature-detail-modal');
@@ -98,7 +99,7 @@ test.describe('CORE map — explore map (/map)', () => {
       await expect(popup).toBeVisible({ timeout: 30_000 });
       await expect(popup).toContainText(title.slice(0, 4));
       await expect(page.locator('[data-testid="feature-map-marker-style"][data-marker-selected="true"]')).toHaveCount(1);
-      await expect(pins.first()).toHaveAttribute('data-selected', 'true');
+      await expect(pin!).toHaveAttribute('data-selected', 'true');
       await shot(page, 'CORE-013', 'popup');
       await popup.getByRole('button', { name: '닫기' }).click();
       await expect(popup).toHaveCount(0);
