@@ -269,6 +269,24 @@ CORE-021(#623 모바일 stats 칩 fit padding) 및 §8 의 이슈 표에 적힌 
 를 연속 실행하면 지도 화면(in-bounds·weather markers·transport 동시 조회)과 trip 상세 재조회가 분당
 60을 넘는다.
 
+### 8.2 mobile 실행 분류 (2026-11-03, run `20261103-110548`, mobile 292건)
+
+결과 100 pass / 16 fail / 176 skip(30.3 분). 실패 분류:
+
+| 분류 | 건수 | 처리 |
+| --- | ---: | --- |
+| (a) 테스트·helper 버그 | 13 | 드로어 안 탭은 `openPanel`/`openTripTab` 경유, `closePanel()`(헤더 토글 — 드로어 안 '패널 닫기'와 이름 중복), 터치 에뮬레이션은 마우스 드래그·휠이 지도를 안 움직여 키보드 팬/줌, 탭 가능한 feature 핀만(이름 붙은 1개짜리 서버 클러스터 제외, aria-label 로 고정), 시트를 닫은 뒤 남는 선택 popup 닫기, ADM-030 afterAll 가드 |
+| (b) 제품 버그 | 0 | — |
+| (c) 데이터·가정 | 0 | (SRCH-045: 모바일 탭은 시트를 열고 선택 popup 을 시트 아래에 남긴다 — 설계, 기대값 수정) |
+| (d) rate limit 429 | 2 | NEAR-022(`GET /search` "요청 한도를 초과했습니다"), TRIP-040(`GET /trips/{id}`) — 테스트 계정 rate-limit override 이후 재실행에서 재현 없음 |
+| (e) expected-fail 불일치 | 1 | CORE-021(#623) 이 통과 — #623 은 핀 위치에 따라 재현되므로 `test.fail` 대신 정상 단언(실패 = #623 재현) |
+
+skip 176건: catalog 에 `mobile` 태그가 **없는** 케이스가 160건(데스크톱 전용 설계 — admin 전 영역, 공유
+링크 데스크톱 스펙, weather 표/admin, poi 데스크톱 생성·첨부 등; catalog 태그가 정본). `mobile` 태그가 있는데
+skip 된 16건: NEAR 10(직렬 선행 NEAR-022 429 연쇄 — 재실행에서 실행), CORE-025·SRCH-045(핀 선택 helper — 수정 후
+실행), NTF-004/006/009(Telegram chat env 미설정), CORE-029(axe 미설치). 모바일에서 잘못 skip 된 데스크톱 전용
+판정은 없었다.
+
 skip 62건: 직렬 describe 의 선행 실패에 따른 연쇄 skip 27(선행 실패 수정으로 해소), 모바일 전용
 케이스가 desktop 에서 skip 19, Telegram chat env 미설정 10(NTF-004~012·016·024), 시드 조회 helper 버그 2
 (WX-011/012, 수정), feature 로드 대기 부족 1(POI-016, 수정), axe 미설치 1(CORE-029), 미가입 sink 메일
