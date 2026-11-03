@@ -30,5 +30,17 @@
   },
   "map_revision": "c71df84a71c5d10a04fe2be10dc82d3c8fefc1cd",
   "map_product_blob": "b5271decd8dcba9f1be56e3634c60a06e0806a1a",
-  "test_only_worktree_typing_fix": "TripWeatherSummary.test.tsx의 fixture 키를 Record<typeof CARD_KEY, TripWeatherCard>로 한정"
+  "test_only_worktree_typing_fix": "TripWeatherSummary.test.tsx의 fixture 키를 Record<typeof CARD_KEY, TripWeatherCard>로 한정",
+  "map_merged_revision": "a69d188d8c78ea573afc6e862f8ec9e0aa423ec0",
+  "contract_release_pin": {
+    "map_revision": "a69d188d8c78ea573afc6e862f8ec9e0aa423ec0",
+    "wire_snapshots_unchanged": true,
+    "service_openapi_sha256": "fd2aaa9e8c38e8a7f1a54550233b1b5af5a7aea1089c5432100d7464e5e4aaff",
+    "service_provenance_sha256": "fb4cb2085241511b14ef7742220a4078852e972f8eab6c45f6d3f6574adad575",
+    "pair_historical_envelope_unchanged": true
+  },
+  "packaging_checks": {
+    "isolated_installed_wheel": true,
+    "network_isolated_docker": true
+  }
 }

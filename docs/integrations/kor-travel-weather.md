@@ -1135,3 +1135,5 @@ Map의 freshness.stale(SLA 초과)와 source_status=stale(원천의 지연된 �
 이전 source 목록 캐시에 Map 후보 수정이 가려지지 않도록 measurement_point.selection_version=2를 기록한다. 구버전 캐시는 재해석 성공 후 새 버전으로 재사용하며 실패·동시 요청에서는 재시도가 가능하다. 7일 TTL·stale 행 15분 재시도와 resolved_via 소유 경계를 유지한다. 플래그를 끄면 신·구 Map 행 모두 직접 경로의 캐시로 쓰지 않는다.
 
 운영 후속 담당자는 Map #1446 수정이 실제 모든 요청 처리 인스턴스에 반영된 뒤 Pinvi 소비자를 배포해야 한다. OpenAPI bytes만으로 런타임 코드 반영을 증명할 수 없다. 이 작업에서는 운영 접속·배포·검증을 하지 않으며 최종 운영 확인은 사용자 지시에 따라 Claude Code 담당이다.
+
+Map #1446 병합본은 a69d188d8c78ea573afc6e862f8ec9e0aa423ec0이다. 소비자 service provenance와 예제의 expected source revision은 이 버전으로 결박한다. admin/service/user wire bytes와 capability generation은 그대로이며 과거 receipt·pair source 선언을 새 실행 증거로 바꾸지 않는다. 최종 운영 확인에서는 기존 Map weather 플래그와 Valkey의 과거 요약 적재 상태를 함께 확인해야 한다.

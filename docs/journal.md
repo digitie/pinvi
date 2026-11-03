@@ -1,5 +1,13 @@
 ## 2026-11-04 (codex) — #643 관리자 읽기 연결 (#648/#651)
 
+## 2026-11-04 — 날씨 기반 병합·출처 버전 지문 대조 완료
+
+- Map #1446의 두 독립 리뷰·전체 CI가 통과해 a69d188로 일반 병합했다. 실제 연결 UI에서 실행한 c71df84 제품 객체가 해당 병합본과 같은 것을 대조했다.
+- Map admin/service/user OpenAPI bytes가 이전 vendor와 모두 같음을 확인하고 서비스 provenance 및 테스트·예제의 release revision만 실제 병합본으로 갱신했다. capability generation·16개 pair digest와 과거 source/receipt 선언은 보존했다.
+- 관련 계약 274개 통과·운영 opt-in 1개 생략, 독립 설치 wheel과 network none Docker의 실제 포함 JSON·지문·release revision 검증을 통과했다. API 이미지 검증의 고정 artifact 지문도 새 provenance와 맞췄다.
+- 제품 로직은 앞서 전체 backend 2,728개·web 280개·실제 연결 UI 8항목을 통과한 것과 같다. 최종 SHA 두 리뷰와 CI 후 소비자 #661을 병합한다. 운영 접속·배포·검증은 수행하지 않았다.
+
+
 ## 2026-11-04 — #642·Map #1440 실제 날씨 연결 검증
 
 - WSL에서 전체 backend 2,728개 통과·12개 조건부 생략, Ruff·481파일 포맷·엄격 mypy 256파일, 전체 workspace typecheck와 web 280개를 통과했다. 초기 web fixture 키의 인덱스 타입 오류를 실제 실패 후 한정된 키 타입으로 수정했다.
