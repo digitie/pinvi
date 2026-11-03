@@ -90,6 +90,16 @@ export function FeatureDetailCardBody({
 }: FeatureDetailCardBodyProps) {
   return (
     <div className="space-y-3" data-testid={testId} data-kind={card.kind}>
+      {card.degraded_providers.length > 0 && (
+        <p
+          className="flex items-center gap-1 text-xs text-muted"
+          role="status"
+          data-testid={`${testId}-enrichment-degraded`}
+        >
+          <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+          일부 상세 정보를 불러오지 못했습니다.
+        </p>
+      )}
       {card.category_label && (
         <p className="text-xs font-medium text-muted" data-testid={`${testId}-category`}>
           {card.category_label}
@@ -204,15 +214,6 @@ export function FeatureDetailCardBody({
                   <EnrichmentRow key={row.provider} row={row} />
                 ))}
               </ul>
-              {card.degraded_providers.length > 0 && (
-                <p
-                  className="flex items-center gap-1 text-xs text-muted"
-                  data-testid={`${testId}-enrichment-degraded`}
-                >
-                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                  일부 외부 정보를 불러오지 못했습니다.
-                </p>
-              )}
             </div>
           )}
         </div>

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -205,4 +206,142 @@ async def test_detail_card_projects_canonical_map_event_period_and_venue(
         assert data["marker_color"] == "P-07"
         assert "detail" not in data
     finally:
+        _clear()
+
+
+async def test_detail_card_slow_map_is_bounded_503(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, monkeypatch: Any
+) -> None:
+    from app.api.v1 import features
+
+    cancelled = asyncio.Event()
+
+    class SlowMap(_FakeMapClient):
+        async def get_feature(self, feature_id: str) -> dict[str, Any] | None:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+            return None
+
+    monkeypatch.setattr(features, "_DETAIL_CARD_BUDGET_SECONDS", 0.03, raising=False)
+    _override()
+    app.dependency_overrides[get_kor_travel_map_client] = lambda: SlowMap()
+    try:
+        response = await asyncio.wait_for(
+            client.get("/features/place:1/detail-card", cookies=auth_cookies(verified_user[0])), 2
+        )
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "FEATURE_SERVICE_UNAVAILABLE"
+        assert cancelled.is_set()
+    finally:
+        _clear()
+
+
+async def test_detail_card_category_timeout_preserves_base_card(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, monkeypatch: Any
+) -> None:
+    from app.api.v1 import features
+
+    async def slow_labels(_: Any) -> Any:
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(features, "_DETAIL_CARD_BUDGET_SECONDS", 0.03, raising=False)
+    monkeypatch.setattr(features, "get_category_labels", slow_labels)
+    _override(map_extra={"category": "02020100"})
+    try:
+        response = await asyncio.wait_for(
+            client.get("/features/place:1/detail-card", cookies=auth_cookies(verified_user[0])), 2
+        )
+        assert response.status_code == 200
+        card = response.json()["data"]
+        assert card["name"] == "스타벅스 광안리"
+        assert card["phone"] == "051-000-0000"
+        assert card["category_label"] is None
+        assert card["degraded_providers"] == ["category_labels"]
+    finally:
+        _clear()
+
+
+async def test_detail_card_provider_timeout_keeps_completed_enrichment(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, monkeypatch: Any
+) -> None:
+    from app.api.v1 import features
+
+    class SlowNaver:
+        async def search_local(self, **kwargs: Any) -> dict[str, Any]:
+            await asyncio.Event().wait()
+            return {}
+
+    monkeypatch.setattr(features, "_DETAIL_CARD_BUDGET_SECONDS", 0.03, raising=False)
+    _override(kakao=_FakeKakao(), naver=SlowNaver())
+    try:
+        response = await asyncio.wait_for(
+            client.get(
+                "/features/place:1/detail-card?providers=kakao,naver",
+                cookies=auth_cookies(verified_user[0]),
+            ),
+            2,
+        )
+        assert response.status_code == 200
+        card = response.json()["data"]
+        assert [row["provider"] for row in card["enrichment"]] == ["kakao"]
+        assert card["degraded_providers"] == ["naver"]
+    finally:
+        _clear()
+
+
+@pytest.mark.parametrize("catalog_present", [True, False])
+async def test_detail_card_unknown_code_is_not_catalog_failure(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    monkeypatch: Any,
+    catalog_present: bool,
+) -> None:
+    from app.api.v1 import features
+    from app.services.category_labels import CategoryLabels
+
+    async def labels(_: Any) -> CategoryLabels:
+        return CategoryLabels({"02020100": "카페"} if catalog_present else {})
+
+    monkeypatch.setattr(features, "get_category_labels", labels)
+    _override(map_extra={"category": "99999999"})
+    try:
+        response = await client.get(
+            "/features/place:1/detail-card", cookies=auth_cookies(verified_user[0])
+        )
+        assert response.status_code == 200
+        card = response.json()["data"]
+        assert card["category_label"] is None
+        assert card["degraded_providers"] == ([] if catalog_present else ["category_labels"])
+    finally:
+        _clear()
+
+
+async def test_detail_card_request_cancellation_is_not_partial_success(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    entered = asyncio.Event()
+
+    class SlowMap(_FakeMapClient):
+        async def get_feature(self, feature_id: str) -> dict[str, Any] | None:
+            entered.set()
+            await asyncio.Event().wait()
+            return None
+
+    _override()
+    app.dependency_overrides[get_kor_travel_map_client] = lambda: SlowMap()
+    task = asyncio.create_task(
+        client.get("/features/place:1/detail-card", cookies=auth_cookies(verified_user[0]))
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         _clear()

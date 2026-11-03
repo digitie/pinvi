@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -18,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, cast
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -76,6 +79,19 @@ from app.services.feature_request import find_active_suggestion_by_external_ref
 from app.services.weather_card import build_feature_weather_card
 
 router = APIRouter(prefix="/features", tags=["features"])
+log = structlog.get_logger("feature_detail_card")
+# 상세 카드 3초 UI 예산에서 인증·직렬화·전송 여유를 남긴 handler 전체 대기 상한이다.
+_DETAIL_CARD_BUDGET_SECONDS = 2.5
+
+
+@contextmanager
+def _detail_card_stage(durations: dict[str, float], stage: str) -> Iterator[None]:
+    started = time.perf_counter()
+    try:
+        yield
+    finally:
+        durations[stage] = round((time.perf_counter() - started) * 1000, 3)
+
 
 # 허용 viewport 한국 범위 (ADR-018)
 # 좌표 **입력 유효** 범위다(한반도 전체). 서비스 지역 판정이 아니다 — 둘의 차이는
@@ -611,22 +627,69 @@ async def get_feature_detail_card(
     naver_local: NaverLocalClientDep,
     providers: Annotated[str | None, Query()] = None,
 ) -> Envelope[FeatureDetailCard]:
-    """사용자 상세 읽기 — kind별 투영 detail-card + 옵트인 외부 enrichment(ADR-056)."""
-    with _map_kor_travel_map_errors():
-        dto = await client.get_feature(feature_id)
-    if dto is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature not found."},
-        )
-    card = build_detail_card(dto, await get_category_labels(client))
+    """단일 대기 예산으로 정본 상세를 읽고 늦은 선택 정보는 부분 카드로 표시한다."""
     requested = _parse_providers(providers)
-    # enrichment은 place kind + 이름이 있을 때만(다른 kind는 매칭 근거가 약함).
-    if requested and isinstance(card, PlaceDetailCard) and card.name:
-        await _enrich_place_card(
-            card, kakao_local=kakao_local, naver_local=naver_local, providers=requested
+    started = time.perf_counter()
+    durations: dict[str, float] = {}
+    dto: dict[str, Any] | None = None
+    card: FeatureDetailCard | None = None
+    stage = "map_detail"
+    exceeded = False
+    outcome = "failed"
+    try:
+        with _map_kor_travel_map_errors():
+            try:
+                async with asyncio.timeout(_DETAIL_CARD_BUDGET_SECONDS):
+                    with _detail_card_stage(durations, stage):
+                        dto = await client.get_feature(feature_id)
+                    if dto is None:
+                        raise HTTPException(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature not found."},
+                        )
+                    stage = "category_wait"
+                    with _detail_card_stage(durations, stage):
+                        labels = await get_category_labels(client)
+                    card = build_detail_card(dto, labels)
+                    # 미지 코드와 카탈로그 자체를 못 받은 경우는 구분한다.
+                    if not labels.by_code and isinstance(dto.get("category"), str):
+                        category = dto["category"]
+                        if len(category) == 8 and category.isascii() and category.isdigit():
+                            card.degraded_providers.append("category_labels")
+                    stage = "enrichment"
+                    with _detail_card_stage(durations, stage):
+                        if requested and isinstance(card, PlaceDetailCard) and card.name:
+                            await _enrich_place_card(
+                                card,
+                                kakao_local=kakao_local,
+                                naver_local=naver_local,
+                                providers=requested,
+                            )
+            except TimeoutError:
+                exceeded = True
+                if dto is None:
+                    raise KorTravelMapUnavailable("detail-card request budget exceeded") from None
+                if card is None:
+                    card = build_detail_card(dto, EMPTY_CATEGORY_LABELS)
+                    card.degraded_providers.append("category_labels")
+                # 이미 받은 보강값은 보존하고 아직 끝나지 않은 요청만 저하로 표시한다.
+                if isinstance(card, PlaceDetailCard) and card.name:
+                    completed = {row.provider for row in card.enrichment} | set(
+                        card.degraded_providers
+                    )
+                    card.degraded_providers.extend(p for p in requested if p not in completed)
+        assert card is not None
+        outcome = "degraded" if card.degraded_providers else "complete"
+        return Envelope.of(card)
+    finally:
+        log.info(
+            "feature_detail_card.completed",
+            outcome=outcome,
+            budget_exceeded=exceeded,
+            deadline_stage=stage,
+            total_ms=round((time.perf_counter() - started) * 1000, 3),
+            stage_ms=durations,
         )
-    return Envelope.of(card)
 
 
 @router.get("/{feature_id}/weather", response_model=Envelope[FeatureWeatherCard])

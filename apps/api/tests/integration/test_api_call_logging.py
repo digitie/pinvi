@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.clients.resend import create_resend_client
 from app.core.config import settings
@@ -105,3 +106,60 @@ async def test_sanitize_api_call_endpoint_masks_telegram_token() -> None:
         )
         == "https://api.telegram.org/bot123456:***/sendMessage"
     )
+
+
+async def test_cancelled_log_insert_releases_session_and_pool(session_factory) -> None:
+    """실제 PG INSERT 잠금 대기 중 취소해도 이후 요청이 같은 pool을 사용한다."""
+    tracker = ApiCallTracker(session_factory)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    async with session_factory() as blocker:
+        await blocker.execute(text("LOCK TABLE app.api_call_log IN SHARE MODE"))
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            event_hooks={"request": [tracker.on_request], "response": [tracker.on_response]},
+        ) as client:
+            pending = asyncio.create_task(client.get("https://provider.pinvi.test/cancelled"))
+            try:
+                async with session_factory() as observer:
+                    for _ in range(200):
+                        waiting = await observer.scalar(
+                            text("""
+                            SELECT EXISTS (
+                                SELECT 1 FROM pg_catalog.pg_locks
+                                WHERE relation = 'app.api_call_log'::regclass
+                                  AND database = (SELECT oid FROM pg_database
+                                                  WHERE datname = current_database())
+                                  AND NOT granted
+                            )
+                        """)
+                        )
+                        if waiting:
+                            break
+                        await asyncio.sleep(0.01)
+                    else:
+                        pytest.fail("owned PG insert did not reach lock wait")
+                pending.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(pending, 2)
+            finally:
+                if not pending.done():
+                    pending.cancel()
+                    await asyncio.gather(pending, return_exceptions=True)
+                await blocker.rollback()
+            response = await asyncio.wait_for(
+                client.get("https://provider.pinvi.test/after-cancellation"), 2
+            )
+            assert response.status_code == 200
+    async with session_factory() as db:
+        assert await db.scalar(text("SELECT 1")) == 1
+        assert (
+            await db.scalar(
+                select(ApiCallLog).where(
+                    ApiCallLog.endpoint == "https://provider.pinvi.test/after-cancellation"
+                )
+            )
+            is not None
+        )
