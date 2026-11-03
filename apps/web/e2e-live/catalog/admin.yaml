@@ -284,7 +284,7 @@
     - 없음
   automation: scripted
   spec: specs/admin/admin-features.live.spec.ts#ADM-015
-  notes: '#648 — 한국어 q 검색이 503 FEATURE_SERVICE_UNAVAILABLE. test.fail(#648).'
+  notes: '#648 — 한국어 q 검색이 간헐적으로 503 FEATURE_SERVICE_UNAVAILABLE(2026-11-03 같은 실행에서 503·200 모두 관찰). helper 가 3회까지 재시도하고 끝내 503 이면 #648 로 실패한다.'
 
 - id: ADM-016
   title: Feature 상세 인스펙터(종류·상태·좌표·카운트·탭 링크)

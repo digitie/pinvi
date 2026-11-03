@@ -11,6 +11,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { loginAsAdmin, shot, waitForRequest } from '../../helpers/live';
 import { annotate, onMobile } from '../../helpers/weather';
+import { searchAdminFeatures } from '../../helpers/admin';
 
 const WEATHER_VALUES_RE = /\/admin\/features\/[^/?]+\/weather-values(\?|$)/;
 
@@ -27,7 +28,7 @@ function writeGuard(page: Page): () => string[] {
 async function openWeatherValues(page: Page): Promise<string> {
   await page.goto('/admin/features');
   await page.getByTestId('admin-features-search').fill('안동하회마을');
-  await page.getByTestId('admin-features-search-submit').click();
+  await searchAdminFeatures(page);
   const detailBtn = page.locator('[data-testid^="admin-features-detail-"]').first();
   await expect(detailBtn).toBeVisible({ timeout: 20_000 });
   await detailBtn.click();
@@ -56,7 +57,6 @@ test.describe('weather · admin weather-values', () => {
   test.skip(onMobile, '관리자 UI는 데스크톱 전용');
 
   test('WX-018 읽기 전용: 표 또는 "값 없음", 오류 없음, 쓰기 요청 0건', async ({ page }) => {
-    test.fail(true, '#648: /admin/features?q=<한국어> → 503 FEATURE_SERVICE_UNAVAILABLE');
     const writes = writeGuard(page);
     await loginAsAdmin(page);
     const featureId = await openWeatherValues(page);

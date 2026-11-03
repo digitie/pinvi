@@ -349,7 +349,7 @@
   automation: scripted
   spec: specs/weather/weather-admin.live.spec.ts#WX-018
   notes: Admin weather-values는 플래그와 무관하게 kor-travel-weather 직접(§9 표).
-  # 2026-11-03 prod: #648 — admin 한국어 검색 503 으로 상세 진입 불가. test.fail(#648).
+  # 2026-11-03 prod: #648 — admin 한국어 검색이 간헐 503. helper 재시도(3회), 끝내 503 이면 #648 로 실패.
 
 - id: WX-019
   title: 관리자 Weather Values 새로고침 버튼은 재조회만 한다

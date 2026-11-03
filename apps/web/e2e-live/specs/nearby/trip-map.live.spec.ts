@@ -167,9 +167,14 @@ test.describe('NEAR trip map — four-place trip', () => {
     const pending = nextMarkersResponse(page, (q) => q.layers.includes('highway_incident') && q.bbox.join(',') !== first.bbox.join(','));
     await pin.click({ force: true });
     const next = markersQuery(await pending);
-    // flyTo keeps the zoom; the bbox is now centred on 고씨굴 (영월, lat ≈ 37.17).
-    expect(next.zoom).toBe(first.zoom);
+    // flyTo moves (and may zoom) to the pin: the re-query must cover 고씨굴 (영월 ≈ 128.47E 37.17N) and
+    // is centred north of the first (4-place) viewport.
+    expect(next.bbox[0]).toBeLessThanOrEqual(128.47);
+    expect(next.bbox[2]).toBeGreaterThanOrEqual(128.47);
+    expect(next.bbox[1]).toBeLessThanOrEqual(37.17);
+    expect(next.bbox[3]).toBeGreaterThanOrEqual(37.17);
     expect((next.bbox[1] + next.bbox[3]) / 2).toBeGreaterThan((first.bbox[1] + first.bbox[3]) / 2);
+    test.info().annotations.push({ type: 'flyto-zoom', description: `${first.zoom} → ${next.zoom}` });
     await expectLayerLineShape(page, 'highway_incident');
   });
 

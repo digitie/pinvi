@@ -4,7 +4,7 @@
 // Labels: lib/admin/status-label.ts (active 활성 · retired 종료 · published 공개 · suppressed 비공개 · valid 유효 · quarantined 격리)
 import { expect, test } from '@playwright/test';
 import { loginAsAdmin, shot, isMobileProject } from '../../helpers/live';
-import { adminSelect, waitForGet } from '../../helpers/admin';
+import { adminSelect, searchAdminFeatures, waitForGet } from '../../helpers/admin';
 
 const PLACE = '안동하회마을'; // Map category family: heritage
 
@@ -17,12 +17,9 @@ test.describe.serial('ADM features', () => {
   });
 
   test('ADM-015 + ADM-016 search 안동하회마을, state badges and detail inspector', async ({ page }) => {
-    test.fail(true, '#648: /admin/features?q=<한국어> → 503 FEATURE_SERVICE_UNAVAILABLE');
     await page.goto('/admin/features');
     await page.getByTestId('admin-features-search').fill(PLACE);
-    const listed = waitForGet(page, /\/admin\/features\?.*q=/);
-    await page.getByTestId('admin-features-search-submit').click();
-    await listed;
+    await searchAdminFeatures(page); // #648: retries intermittent 503s, fails with the issue number otherwise
 
     const row = page.locator('[data-testid^="admin-features-row-"]').filter({ hasText: PLACE }).first();
     await expect(row).toBeVisible({ timeout: 30_000 });

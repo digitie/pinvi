@@ -114,16 +114,20 @@ test.describe('CORE map — explore map (/map)', () => {
     const zoomInBtn = page.locator('.maplibregl-ctrl-zoom-in');
     await expect(zoomInBtn).toBeVisible();
     const before = await page.evaluate(() => Number(document.querySelector('[data-testid="map-center-state"]')?.getAttribute('data-zoom')));
-    const afterIn = page.waitForRequest((r) => r.url().includes('/features/in-bounds'), { timeout: 20_000 });
+    // The viewport cache serves zoom levels already visited (openExploreMap may zoom in to find pins), so
+    // the camera state (`map-center-state[data-zoom]`) is the ground truth; a new in-bounds request is
+    // recorded when one is made.
+    const cameraZoom = () => page.evaluate(() => Number(document.querySelector('[data-testid="map-center-state"]')?.getAttribute('data-zoom')));
+    const reqs: number[] = [];
+    page.on('request', (r) => { if (r.url().includes('/features/in-bounds')) reqs.push(zoomOf(r.url())); });
     await zoomInBtn.click();
-    const zIn = zoomOf((await afterIn).url());
-    // Zooming back to the first viewport is a viewport-cache hit (no request) — go one level further out.
-    const afterOut = page.waitForRequest((r) => r.url().includes('/features/in-bounds') && zoomOf(r.url()) < zIn - 1, { timeout: 20_000 });
+    await expect.poll(cameraZoom, { timeout: 10_000 }).toBeGreaterThan(before);
+    const zIn = await cameraZoom();
     await page.locator('.maplibregl-ctrl-zoom-out').click();
-    await page.waitForTimeout(600);
-    await page.locator('.maplibregl-ctrl-zoom-out').click();
-    const zOut = zoomOf((await afterOut).url());
-    expect(zIn).toBeGreaterThan(zOut);
+    await expect.poll(cameraZoom, { timeout: 10_000 }).toBeLessThan(zIn);
+    const zOut = await cameraZoom();
+    expect(Math.round(zIn - zOut)).toBe(1);
+    annotate(testInfo, 'in-bounds-zooms', reqs.join(',') || 'all served from viewport cache');
     annotate(testInfo, 'metric', `camera-zoom=${before} in=${zIn} out=${zOut}`);
     await expect(page.getByTestId('feature-map-error')).toHaveCount(0);
     await shot(page, 'CORE-014', 'zoomed');

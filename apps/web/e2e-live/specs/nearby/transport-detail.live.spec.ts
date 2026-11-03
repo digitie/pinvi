@@ -202,7 +202,8 @@ test.describe('NEAR transport detail dialog', () => {
     const res = await toggleExpectingRequest(page, 'airport');
     const airports = (await markersBody(res)).layers.find((l) => l.layer === 'airport')!;
     test.skip(airports.status !== 'ok' || airports.items.length === 0, 'no airports to open');
-    await clickTransportMarker(page, 'airport');
+    // airports are clustered at country scale — open one from an individually rendered pin
+    await openTransportNear(page, 'airport', '김포공항');
     const dialog = detailDialog(page);
     await expect(dialog.getByRole('button', { name: '일정에 추가' })).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: '상세보기' })).toHaveCount(0);
