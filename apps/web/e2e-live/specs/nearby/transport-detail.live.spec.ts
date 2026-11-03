@@ -18,6 +18,7 @@ import {
   LAYER_PATH,
   clickTransportMarker,
   closeDetail,
+  openTransportNear,
   detailBody,
   detailDialog,
   detailError,
@@ -179,8 +180,9 @@ test.describe('NEAR transport detail dialog', () => {
     const airports = (await markersBody(res)).layers.find((l) => l.layer === 'airport')!;
     test.skip(airports.status !== 'ok', `airport layer ${airports.reason ?? ''}`);
     expect(airports.items.length, 'operating airports nationwide (15 in the krairport bundle)').toBeGreaterThanOrEqual(5);
+    // country scale proves the count; the detail opens from an individually rendered pin (clustered at zoom 6)
     const detail = waitForRequest(page, new RegExp(`/transport/${LAYER_PATH.airport}/`));
-    const title = await clickTransportMarker(page, 'airport');
+    const title = await openTransportNear(page, 'airport', '김포공항');
     const item = ((await (await detail).json()) as { data: { item: { iata_code: string; name_english: string } } }).data.item;
     await expect(detailDialog(page)).toContainText(title);
     await expect(detailDialog(page)).toContainText('공항');
@@ -219,24 +221,17 @@ test.describe('NEAR transport detail dialog', () => {
     const res = await toggleExpectingRequest(page, 'airport');
     const airports = (await markersBody(res)).layers.find((l) => l.layer === 'airport')!;
     test.skip(airports.status !== 'ok' || airports.items.length < 2, 'need two airports');
-    const first = await clickTransportMarker(page, 'airport');
+    // airports are clustered at country scale — open them one at a time near each airport
+    const first = await openTransportNear(page, 'airport', '김포공항');
     await expect(detailDialog(page)).toContainText(first);
     await closeDetail(page);
-    // Pick a different one: temporarily exclude the first title by clicking any other individual marker.
-    const titles = (await page.locator('[data-testid="transport-marker"][data-layer="airport"]').allTextContents()).filter((t) => t !== first);
     let second: string | null = null;
-    for (const t of titles) {
-      const marker = page.locator('.maplibregl-marker').and(page.getByLabel(t, { exact: true })).first();
-      if ((await marker.count()) === 0) continue;
-      const detail = waitForRequest(page, DETAIL_RE);
-      await marker.click({ force: true });
-      if (await detailDialog(page).isVisible().catch(() => false)) {
-        await detail;
-        second = t;
-        break;
-      }
+    try {
+      second = await openTransportNear(page, 'airport', '김해공항');
+    } catch {
+      second = null;
     }
-    test.skip(second == null, 'only one airport rendered individually at this zoom');
+    test.skip(second == null || second === first, 'data: no second individually rendered airport near 김해공항');
     await expect(detailDialog(page)).toContainText(second!);
     await expect(detailDialog(page)).not.toContainText(first);
     await closeDetail(page);

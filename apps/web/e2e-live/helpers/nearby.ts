@@ -238,6 +238,19 @@ export async function clickTransportMarker(page: Page, layer: Layer): Promise<st
   throw new Error(`no individually rendered ${layer} marker could open the transport dialog`);
 }
 
+/**
+ * Opens a `layer` marker near `query`. At country scale transport pins are clustered (narrow phone
+ * viewports cluster every airport), so fly to the place (search → zoom 15), widen to zoom 12 — far
+ * enough to include the facility, close enough that a lone airport is not clustered — and click.
+ */
+export async function openTransportNear(page: Page, layer: Layer, query: string): Promise<string> {
+  await searchAndFly(page, query);
+  const pending = nextMarkersResponse(page, (q) => q.layers.includes(layer) && q.zoom <= 13, 45_000);
+  await zoomBy(page, -3);
+  await pending;
+  return clickTransportMarker(page, layer);
+}
+
 export async function closeDetail(page: Page): Promise<void> {
   await page.keyboard.press('Escape');
   await expect(detailDialog(page)).toHaveCount(0);
