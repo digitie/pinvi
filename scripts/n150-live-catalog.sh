@@ -151,7 +151,10 @@ if [[ ${#extra[@]} -gt 0 ]]; then
 fi
 
 if [[ "$list_only" == "1" ]]; then
-  # Listing needs no browser and no credentials; use the checkout's own node_modules.
+  # Listing needs no browser and no credentials; use the checkout's own node_modules. Reporters still
+  # create their output, so point it at a throwaway dir (never root-owned files inside the checkout).
+  PINVI_E2E_OUTPUT_DIR="$(mktemp -d)"
+  export PINVI_E2E_OUTPUT_DIR
   exec npm -w @pinvi/web run test:e2e:live-catalog:list -- "${pw_args[@]}"
 fi
 
