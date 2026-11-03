@@ -1156,3 +1156,80 @@ async def test_attachment_upload_url_and_trip_quota_overrides(
         cookies=cookies,
     )
     assert second.status_code == 201, second.text
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"end_date": "2026-06-09"},
+        {"start_date": "2026-06-14"},
+        {"start_date": "2026-06-15", "end_date": "2026-06-14"},
+        {"start_date": None, "end_date": "2026-06-09"},
+    ],
+)
+async def test_trip_patch_rejects_reversed_dates_without_mutation(
+    client, verified_user, auth_cookies, patch
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post(
+        "/trips",
+        json={"title": "날짜 검증", "start_date": "2026-06-10", "end_date": "2026-06-13"},
+        cookies=cookies,
+    )
+    assert created.status_code == 201, created.text
+    trip_id = created.json()["data"]["trip_id"]
+    response = await client.patch(
+        f"/trips/{trip_id}",
+        json={**patch, "title": "저장되면 안 됨", "primary_region_code": "11"},
+        headers={"If-Match": "1"},
+        cookies=cookies,
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert response.json()["error"]["message"] == "end_date는 start_date 이후여야 합니다."
+    detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
+    trip = detail.json()["data"]["trip"]
+    assert trip["start_date"] == "2026-06-10"
+    assert trip["end_date"] == "2026-06-13"
+    assert trip["title"] == "날짜 검증"
+    assert trip["primary_region_code"] is None
+    assert trip["version"] == 1
+
+
+async def test_trip_patch_dates_merge_existing_and_accept_same_day(
+    client, verified_user, auth_cookies
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    created = await client.post("/trips", json={"title": "날짜 미정"}, cookies=cookies)
+    trip_id = created.json()["data"]["trip_id"]
+    partial = await client.patch(
+        f"/trips/{trip_id}",
+        json={"start_date": "2026-06-10"},
+        headers={"If-Match": "1"},
+        cookies=cookies,
+    )
+    assert partial.status_code == 422, partial.text
+    valid = await client.patch(
+        f"/trips/{trip_id}",
+        json={"start_date": "2026-06-10", "end_date": "2026-06-13"},
+        headers={"If-Match": "1"},
+        cookies=cookies,
+    )
+    assert valid.status_code == 200, valid.text
+    same_day = await client.patch(
+        f"/trips/{trip_id}",
+        json={"end_date": "2026-06-10"},
+        headers={"If-Match": "2"},
+        cookies=cookies,
+    )
+    assert same_day.status_code == 200, same_day.text
+    assert same_day.json()["data"]["end_date"] == "2026-06-10"
+    stale = await client.patch(
+        f"/trips/{trip_id}",
+        json={"end_date": "2026-06-09"},
+        headers={"If-Match": "1"},
+        cookies=cookies,
+    )
+    assert stale.status_code == 409, stale.text

@@ -38,6 +38,10 @@ class TripNotFoundError(TripError):
     code = "RESOURCE_NOT_FOUND"
 
 
+class TripValidationError(TripError):
+    code = "VALIDATION_ERROR"
+
+
 class TripVersionConflictError(TripError):
     code = "VERSION_CONFLICT"
 
@@ -286,6 +290,13 @@ async def update_trip(
 ) -> Trip:
     if trip.version != expected_version:
         raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
+    # PATCH에서 생략하거나 null인 날짜는 기존 값을 유지한다.
+    start_date = patch.get("start_date") or trip.start_date
+    end_date = patch.get("end_date") or trip.end_date
+    if (start_date is None) != (end_date is None):
+        raise TripValidationError("start_date와 end_date는 동시에 채워지거나 동시에 비어야 합니다.")
+    if start_date is not None and end_date is not None and end_date < start_date:
+        raise TripValidationError("end_date는 start_date 이후여야 합니다.")
     if "primary_region_code" in patch:
         primary_region_code = patch.pop("primary_region_code")
         trip.primary_region_code = primary_region_code
