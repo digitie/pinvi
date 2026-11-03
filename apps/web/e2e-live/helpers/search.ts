@@ -15,14 +15,26 @@ export function isMobileProject(testInfo: TestInfo): boolean {
 
 /**
  * Cases not tagged `mobile` skip under the mobile project (SPEC rule: only mobile-tagged cases run there).
- * Called inside test bodies, so the boolean form of `test.skip` (the callback form is describe-only).
+ * Works both inside a test body (boolean form) and at describe level (callback form) — Playwright allows
+ * the callback form only in a describe, and `test.info()` only while a test runs.
  */
+function skipWhen(mobile: boolean, reason: string): void {
+  let info: TestInfo | null = null;
+  try {
+    info = test.info();
+  } catch {
+    info = null;
+  }
+  if (info) test.skip(isMobile(info) === mobile, reason);
+  else test.skip(({ isMobile: m }) => m === mobile, reason);
+}
+
 export function desktopOnly(): void {
-  test.skip(isMobile(test.info()), 'desktop-only case (not tagged mobile)');
+  skipWhen(true, 'desktop-only case (not tagged mobile)');
 }
 
 export function mobileOnly(): void {
-  test.skip(!isMobile(test.info()), 'mobile-only case');
+  skipWhen(false, 'mobile-only case');
 }
 
 // ──────────────────────────────── search API shapes ────────────────────────────────
