@@ -24,6 +24,22 @@ _SNAPSHOT_SHA256 = SNAPSHOT_SHA256
 
 _OPS_SECURITY = [{"AdminBFF": []}, {"OpsScope": [], "OpsToken": []}]
 _CONSUMED_ENDPOINTS: dict[tuple[str, str], tuple[set[str], str]] = {
+    ("/v1/ops/dedup-reviews", "get"): (
+        {
+            "status",
+            "provider",
+            "dataset_key",
+            "kind",
+            "category",
+            "min_score",
+            "max_score",
+            "q",
+            "page_size",
+            "cursor",
+            "X-Kor-Travel-Map-Ops-Scope",
+        },
+        "DedupReviewListResponse",
+    ),
     ("/v1/ops/pipeline/overview", "get"): (
         {"run_limit", "X-Kor-Travel-Map-Ops-Scope"},
         "PipelineOverviewResponse",

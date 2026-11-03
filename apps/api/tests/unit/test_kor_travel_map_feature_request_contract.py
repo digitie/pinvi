@@ -16,8 +16,8 @@ from app.core.config import (
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_MAP_SOURCE_REVISION = "8555b1f6c65253907fac502b0254492b56b4bb9a"
-_SNAPSHOT_SHA256 = "9c6724f10a8bb784ca4872bf15ec0f94ea0a0a5062290ff22c2ee215c430ce3f"
+_MAP_SOURCE_REVISION = "b8f88c518aaeea76bcd6a0b31734838a775183f4"
+_SNAPSHOT_SHA256 = "fd2aaa9e8c38e8a7f1a54550233b1b5af5a7aea1089c5432100d7464e5e4aaff"
 _PATH = "/v1/service/feature-requests"
 
 

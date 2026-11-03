@@ -796,5 +796,7 @@ Map actor는 인증 principal에서 파생하므로 deprecated `reviewed_by`는 
 전체 필터는 Map 기본 pending과 구분하여 다섯 상태를 명시한다. 상류 401/403은 PinVi 503으로 전달하고 조회 실패 시
 표는 오류·재시도를 보여 준다. 이전 후보·판정 UI나 0행 성공 표시로 장애를 가리지 않는다.
 
-Map PR #1445 머지 후 같은 검토 revision의 full/service OpenAPI를 갱신한다. 운영 활성화 및 실제 데이터의
+Map [PR #1445](https://github.com/digitie/kor-travel-map/pull/1445)의 머지 커밋 `b8f88c518aaeea76bcd6a0b31734838a775183f4`에서
+full/service OpenAPI를 원본 bytes 그대로 갱신했다. 현재 서비스 핀과 M05 pair 계약도 함께 갱신하며,
+실제 배포는 같은 Map/PinVi 쌍으로 진행해야 한다. 과거 운영 receipt는 변경하지 않는다. 운영 활성화 및 실제 데이터의
 검색 지연·후보 조회는 Claude Code의 최종 prod 검증 항목이며 이번 WSL 검증과 구분한다.
