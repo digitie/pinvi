@@ -1,5 +1,30 @@
 ## 2026-11-04 (codex) — #643 관리자 읽기 연결 (#648/#651)
 
+## 2026-11-04 — 날씨 기반 병합·출처 버전 지문 대조 완료
+
+- Map #1446의 두 독립 리뷰·전체 CI가 통과해 a69d188로 일반 병합했다. 실제 연결 UI에서 실행한 c71df84 제품 객체가 해당 병합본과 같은 것을 대조했다.
+- Map admin/service/user OpenAPI bytes가 이전 vendor와 모두 같음을 확인하고 서비스 provenance 및 테스트·예제의 release revision만 실제 병합본으로 갱신했다. capability generation·16개 pair digest와 과거 source/receipt 선언은 보존했다.
+- 관련 계약 274개 통과·운영 opt-in 1개 생략, 독립 설치 wheel과 network none Docker의 실제 포함 JSON·지문·release revision 검증을 통과했다. API 이미지 검증의 고정 artifact 지문도 새 provenance와 맞췄다.
+- 제품 로직은 앞서 전체 backend 2,728개·web 280개·실제 연결 UI 8항목을 통과한 것과 같다. 최종 SHA 두 리뷰와 CI 후 소비자 #661을 병합한다. 운영 접속·배포·검증은 수행하지 않았다.
+
+
+## 2026-11-04 — #642·Map #1440 실제 날씨 연결 검증
+
+- WSL에서 전체 backend 2,728개 통과·12개 조건부 생략, Ruff·481파일 포맷·엄격 mypy 256파일, 전체 workspace typecheck와 web 280개를 통과했다. 초기 web fixture 키의 인덱스 타입 오류를 실제 실패 후 한정된 키 타입으로 수정했다.
+- 실제 Map·Pinvi 앱 생명주기와 인증, 일회용 PostGIS·Valkey·Chromium으로 8항목을 검증했다. weather export는 fixture 적재이며 서비스 HTTP mock·dependency override는 사용하지 않았다.
+- 과거 날짜만 있는 여행의 5일 전 요약 4개, 여행/익명 공유의 카드 범위 경고, fresh 현재기온+원천 지연 예보의 Feature API, 정상 새 세대에서 경고 해제와 과거 값 보존을 확인했다. 구버전 source 캐시에는 빈 위치만 넣고 시작했다. 안전한 제품 객체 지문과 범위는 docs/reviews/pinvi-642-weather-local-live.json에 기록했다.
+- 두 독립 리뷰어는 제품 HEAD 0791355에 추가 P0/P1/P2가 없다고 판정했다. 원격 CI의 web build/e2e/Docker 실패도 같은 테스트 키 타입 오류임을 대조했다. 전체 backend 실행 중에는 HEAD를 유지했고 종료 후 이 보완을 커밋한다.
+- Map 기반 PR의 최종 CI/병합 후 실제 merge revision과 서비스 provenance·pair pin을 대조하고, 최종 SHA 리뷰·CI 뒤 소비자를 병합한다. 테스트 서버와 소유 fixture 컨테이너는 종료했다. 운영 접속·배포·검증은 하지 않았다.
+
+
+## 2026-11-04 — #642·Map #1440 날씨 품질 묶음 소비자 착수
+
+- Geo PR #622의 WSL·CI·두 독립 리뷰와 병합으로 #650을 완료했다. 다음 날씨 묶음에서 Map 초안 #1446은 가까운 빈 요약 후보가 유효한 과거 요약을 가리는 경로를 보완하며 검증 중이다.
+- Pinvi는 선택된 사실의 상류 freshness를 카드까지 보존하고 여행·공유·장소 표시에서 오래된 정보를 알린다. 과거 대상 날짜, 위치 roster, 위치 캐시의 stale와 수집 freshness를 혼동하지 않는다.
+- 기존 Map 위치 선택 캐시의 재해석과 날짜·provider 간 격리를 검증한다. 초안을 먼저 만들고 수시 원격 커밋, 두 독립 적대적 리뷰, WSL·CI 후 Map 기반 변경부터 순서대로 병합한다.
+- 사용자 지시에 따라 운영 접속·배포·검증은 하지 않으며 최종 운영 검증은 Claude Code에게 남긴다.
+
+
 **작업**: 관리자 Feature 검색에 이름·주소·ID 범위를 명시하고 중복 검토를 ops 읽기 전용 경계로 연결한다.
 오류·필터 대기 중 이전 후보·판정 UI와 거짓 0행 표시를 숨기며 재시도를 제공한다. 전체 상태는 다섯 상태를 명시한다.
 판정은 현재 관리자 경로와 UUID 명령 키를 사용한다. 같은 관리자·후보·검증 입력의 재시도는 같은 키를 재생하고,

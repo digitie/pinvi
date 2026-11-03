@@ -309,7 +309,7 @@ def _project(
                     day_cards[card_key] = {
                         "asof": _weather_target_at(effective_date),
                         "latest_at": latest_known,
-                        "is_stale": False,
+                        "is_stale": any(value.source_stale for value in day_values),
                         "source_styles": sorted({metric.forecast_style for metric in metrics}),
                         "metrics": [metric.model_dump() for metric in metrics],
                     }

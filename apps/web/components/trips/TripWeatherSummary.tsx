@@ -228,7 +228,18 @@ export function TripWeatherSummary({
       aria-label={label}
       data-testid="trip-weather-summary"
     >
-      <p className="text-xs font-semibold text-muted">{label}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-xs font-semibold text-muted">{label}</p>
+        {card.is_stale && (
+          <span
+            className="rounded-sm border border-hairline px-1.5 py-0.5 text-xs text-muted"
+            title="일부 날씨 정보의 업데이트가 지연되었습니다."
+            role="status"
+          >
+            오래된 정보 포함
+          </span>
+        )}
+      </div>
       <div className="flex flex-wrap gap-1.5">
         {groups.map((group) => {
           const Icon = group.icon;

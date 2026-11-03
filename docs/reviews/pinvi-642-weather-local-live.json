@@ -1,0 +1,46 @@
+{
+  "ok": true,
+  "fixtureOnly": true,
+  "production_validation": false,
+  "browser": "156.0.8078.4",
+  "checks": [
+    "정상 Pinvi 로그인",
+    "과거 일자만 있는 여행의 5일 전 실제 Map 요약 4개·stale API",
+    "여행 실제 요약·카드 범위 오래된 정보 배지",
+    "신선한 현재기온·원천 지연 예보의 Feature 카드 범위 경고 API",
+    "로그인 없는 공유 화면의 동일 요약·오래된 정보 배지",
+    "새 수집 세대 반영 후 여행·공유 배지 해제와 과거 값 보존",
+    "원천 정상 세대의 Feature 카드 경고 해제",
+    "소유자 화면은 Pinvi API를 경유하며 Map에 직접 접근하지 않음"
+  ],
+  "normal_lifespans_and_auth": true,
+  "serving_http_mocks": false,
+  "dependency_overrides": false,
+  "fixture_weather_exports_for_seed": true,
+  "pinvi_revision": "079135560ef8ac7e63b926e20d73ffe64a948247",
+  "pinvi_product_blobs": {
+    "apps/api/app/clients/kor_travel_weather.py": "7e473a0463c7ce66b3ba52dfeb2f4d635bc3cd6b",
+    "apps/api/app/services/weather_map_state.py": "7fc93fe22014070c89d0fbb4ded2b12fbde134c2",
+    "apps/api/app/services/weather_metrics.py": "b2efc5d317506a2139074e5fb0e10f5ea6747b93",
+    "apps/api/app/services/weather_card.py": "1ca6c4a0c54a7822548c919a2f87a1a0a0c9cfa1",
+    "apps/api/app/services/trip_weather_batch.py": "c9cd39e99300076683b666fae1ef752e1f22befd",
+    "apps/api/app/services/weather_map_resolver.py": "9135d72672fb2d4eaec4efb6c641cc5f6ed50958",
+    "apps/web/components/trips/TripWeatherSummary.tsx": "3ad0e66f51162c013df2b46af1a128f2b1d8a75d",
+    "apps/web/components/map/FeatureMapView.tsx": "5ef269d4a57e95641d8d534d15d3b9203e1ccb88"
+  },
+  "map_revision": "c71df84a71c5d10a04fe2be10dc82d3c8fefc1cd",
+  "map_product_blob": "b5271decd8dcba9f1be56e3634c60a06e0806a1a",
+  "test_only_worktree_typing_fix": "TripWeatherSummary.test.tsx의 fixture 키를 Record<typeof CARD_KEY, TripWeatherCard>로 한정",
+  "map_merged_revision": "a69d188d8c78ea573afc6e862f8ec9e0aa423ec0",
+  "contract_release_pin": {
+    "map_revision": "a69d188d8c78ea573afc6e862f8ec9e0aa423ec0",
+    "wire_snapshots_unchanged": true,
+    "service_openapi_sha256": "fd2aaa9e8c38e8a7f1a54550233b1b5af5a7aea1089c5432100d7464e5e4aaff",
+    "service_provenance_sha256": "fb4cb2085241511b14ef7742220a4078852e972f8eab6c45f6d3f6574adad575",
+    "pair_historical_envelope_unchanged": true
+  },
+  "packaging_checks": {
+    "isolated_installed_wheel": true,
+    "network_isolated_docker": true
+  }
+}

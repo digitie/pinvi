@@ -267,7 +267,7 @@ async def test_resolver_builds_direct_path_superset_and_escalates_radius(
     row = await _link(session_factory, feature_id)
     assert row.stale is False  # 실패한 부분은 daily_summaries(핵심 아님)뿐
     assert row.distance_km == pytest.approx(0.27)
-    assert row.measurement_point == {"resolved_via": "kor_travel_map"}
+    assert row.measurement_point == {"resolved_via": "kor_travel_map", "selection_version": 2}
 
     # 캐시 적중 — Map을 다시 부르지 않는다.
     async with session_factory() as db:
@@ -553,6 +553,7 @@ async def test_flag_on_card_degrades_per_section(
     assert resp.status_code == 200, resp.text
     styles = {m["forecast_style"] for m in resp.json()["data"]["metrics"]}
     assert styles == {"short"}
+    assert resp.json()["data"]["is_stale"] is False
 
 
 async def test_flag_on_card_with_map_down_is_empty_card_not_500(
@@ -854,3 +855,114 @@ async def test_trip_view_flag_on_without_service_token_is_unavailable(session_fa
     )
     assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "unavailable"}
     assert fake.weather_requests() == []
+
+
+@pytest.mark.parametrize("signal", ["sla", "source"])
+async def test_feature_card_preserves_source_freshness(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, signal: str
+) -> None:
+    settings.pinvi_kor_travel_map_weather_enabled = True
+
+    def batch(ids: list[str]) -> httpx.Response:
+        data = fx.kma_bundle(ids[0])
+        freshness = data["forecasts"]["short"]["freshness"]
+        freshness["stale"] = signal == "sla"
+        freshness["source_status"] = "stale" if signal == "source" else "ok"
+        return httpx.Response(200, json=fx.batch_body([data]))
+
+    fake = _Map(_nearest_then_batch(batch=batch))
+    _install(fake, None)
+    resp = await client.get(
+        f"/features/f_freshness_{uuid.uuid4().hex[:6]}/weather",
+        cookies=auth_cookies(verified_user[0]),
+    )
+    assert resp.status_code == 200, resp.text
+    card = resp.json()["data"]
+    assert card["is_stale"] is True
+    # 신선한 현재 기온도 남으므로 경고는 기온 한 값이 아닌 카드 전체 범위다.
+    assert any(m["metric_key"] == "T1H" for m in card["metrics"])
+
+
+async def test_past_only_trip_keeps_five_day_summary_and_source_freshness(
+    session_factory: Any,
+) -> None:
+    settings.pinvi_kor_travel_map_weather_enabled = True
+    past = datetime.now(KST).date() - timedelta(days=5)
+    feature_id = f"f_history_{uuid.uuid4().hex[:8]}"
+    data = fx.bundle(daily=fx.daily_section(slots=[fx.daily_slot(past)]))
+    data["daily_summaries"]["freshness"]["stale"] = True
+    fake = _Map(
+        _nearest_then_batch(
+            batch=lambda ids: httpx.Response(200, json=fx.batch_body([data])),
+        )
+    )
+    view = await _trip_view(
+        session_factory, pois=[(1, past, feature_id)], map_client=fake.client, weather_client=None
+    )
+    day = _day(view, 1)
+    resolution = day["weather_by_feature_id"][feature_id]
+    assert resolution["state"] == "found"
+    card = day["weather_cards"][resolution["card_key"]]
+    assert card["is_stale"] is True
+    assert len(card["metrics"]) == 4
+    assert {m["forecast_style"] for m in card["metrics"]} == {"daily_summary"}
+    requests = [
+        json.loads(r.content) for r in fake.weather_requests() if r.url.path.endswith("/batch")
+    ]
+    assert requests[0]["sections"] == ["current", "daily_summaries"]
+    assert "forecast_from" not in requests[0]
+    assert "forecast_to" not in requests[0]
+
+
+@pytest.mark.parametrize("failed", [False, True])
+async def test_legacy_selection_cache_refreshes_only_after_success(
+    session_factory: Any, failed: bool
+) -> None:
+    from app.clients.kor_travel_map import KorTravelMapError
+
+    feature_id = f"f_legacy_{uuid.uuid4().hex[:8]}"
+    async with session_factory() as db:
+        db.add(
+            WeatherLocationLink(
+                feature_id=feature_id,
+                lat=_LAT,
+                lon=_LON,
+                location_id="old-source",
+                distance_km=0.1,
+                source_location_ids=["old-source"],
+                resolved_at=datetime.now(UTC),
+                stale=False,
+                measurement_point={"resolved_via": "kor_travel_map"},
+            )
+        )
+        await db.commit()
+    fake = _Map(
+        (lambda r: httpx.Response(503, json=fx.problem_body(503, "WEATHER_STATE_UNAVAILABLE")))
+        if failed
+        else _resolver_handler(nearest=_no_core_failure)
+    )
+    wrapped = _resolver_client(fake)
+    async with session_factory() as db:
+        if failed:
+            for _ in range(2):
+                with pytest.raises(KorTravelMapError):
+                    await resolve_weather_location_via_map(
+                        db, feature_id=feature_id, lat=_LAT, lon=_LON, client=wrapped
+                    )
+            assert len(fake.weather_requests()) == 2
+        else:
+            first = await resolve_weather_location_via_map(
+                db, feature_id=feature_id, lat=_LAT, lon=_LON, client=wrapped
+            )
+            second = await resolve_weather_location_via_map(
+                db, feature_id=feature_id, lat=_LAT, lon=_LON, client=wrapped
+            )
+            assert first == second
+            assert first.location_id == fx.LOC_AIR
+            assert len(fake.weather_requests()) == 2
+    point = (await _link(session_factory, feature_id)).measurement_point
+    assert point == (
+        {"resolved_via": "kor_travel_map"}
+        if failed
+        else {"resolved_via": "kor_travel_map", "selection_version": 2}
+    )
