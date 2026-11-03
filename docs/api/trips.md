@@ -390,8 +390,8 @@ Content-Type: application/json
 
 `url`은 `PINVI_WEB_BASE_URL`을 base로 생성한다. 개발 기본값은
 `http://localhost:12805`, 운영값은 `https://pinvi.example.com`다.
-owner만 발급 가능하다. 현재 구현은 shared-token 조회를 제공한다. `comment` / `edit`
-visibility는 후속 shared 댓글/편집 흐름을 위한 권한 metadata이며, 로그인 없는 댓글 작성
+owner만 발급 가능하다. 공유 토큰은 비로그인 조회를 제공한다. `comment` / `edit`
+visibility는 아래 공유 댓글/편집 API에서 서버가 검사하며, 로그인 없는 댓글 작성
 라우트는 아직 열지 않는다.
 
 ### 7.2 `DELETE /trips/{trip_id}/share-tokens/{share_id}`
@@ -616,3 +616,13 @@ POI / day / trip 변경 시 `WS /ws/trips/{trip_id}` 채널로 broadcast:
 ### 여행 기간 부분 수정 검증 (#624)
 
 PATCH는 날짜 입력을 기존 값과 합쳐 시작·종료 날짜가 함께 있고 종료일이 시작일 이상인지 검사한다. 날짜의 생략·null은 기존 값을 유지한다. 무효한 기간은 다른 필드·버전을 변경하지 않고 422 VALIDATION_ERROR와 날짜 안내를 반환한다. 버전 충돌은 우선하여 409를 반환한다.
+
+### 공유 댓글·여행 정보 편집 (#625)
+
+유효한 토큰으로 GET /trips/{trip_id}/shared/{token}/comments를 읽는다(comment/edit 링크만).
+로그인 사용자는 같은 경로에 POST로 여행 댓글을 작성하고 /comments/{comment_id} DELETE로 본인 댓글을 지울 수 있다.
+여행 소유자도 댓글을 삭제할 수 있다. view_only 링크는 이 경로에서 403이다.
+edit 링크는 PATCH /trips/{trip_id}/shared/{token}로 제목·설명·지역·기간을 변경할 수 있다.
+If-Match 버전을 요구하고 공유 관리·소유권·visibility·status 필드는 허용하지 않는다.
+모든 요청에서 trip_id, 토큰 만료·철회를 검사하며 공유 권한을 영구 동반자 권한으로 전환하지 않는다.
+미래의 timezone-aware expires_at만 발급 가능하다(#626). 날짜 UI는 한국 날짜 기준으로 과거 일자를 막는다.

@@ -10,6 +10,7 @@ from json import JSONDecodeError, dumps, loads
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.request_url import public_api_base_url
 from app.clients.kor_travel_map import OptionalKorTravelMapHttpClientDep
@@ -17,6 +18,7 @@ from app.clients.kor_travel_weather import OptionalKorTravelWeatherClientDep
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
 from app.models.attachment import CuratedPlanAttachment
+from app.models.trip import Trip
 from app.schemas.envelope import Envelope, EnvelopeMeta, EnvelopeWithMeta
 from app.schemas.share_link import ShareLinkCreate, ShareLinkResponse
 from app.schemas.storage import (
@@ -43,6 +45,7 @@ from app.schemas.trip import (
     TripDeleteRequest,
     TripDistanceMatrixResponse,
     TripResponse,
+    TripSharedUpdate,
     TripSharedView,
     TripUpdate,
     TripView,
@@ -806,6 +809,141 @@ async def get_shared_trip_endpoint(
             broken_feature_count=view.broken_feature_count,
         )
     )
+
+
+async def _shared_access(
+    db: AsyncSession, trip_id: uuid.UUID, token: str, *, edit: bool = False
+) -> Trip:
+    try:
+        trip, share = await get_trip_for_share_token(db, trip_id=trip_id, token=token)
+    except TripNotFoundError as exc:
+        _raise_trip_http(exc)
+    if share.visibility not in ({"edit"} if edit else {"comment", "edit"}):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "PERMISSION_DENIED",
+                "message": "이 공유 링크에서는 수행할 수 없습니다.",
+            },
+        )
+    return trip
+
+
+@router.get(
+    "/{trip_id}/shared/{token}/comments",
+    response_model=Envelope[list[TripCommentResponse]],
+)
+async def list_shared_comments(
+    trip_id: uuid.UUID,
+    token: str,
+    db: DbSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> Envelope[list[TripCommentResponse]]:
+    await _shared_access(db, trip_id, token)
+    comments = await list_comments(db, trip_id=trip_id, limit=limit)
+    return Envelope.of([_to_comment_response(comment) for comment in comments])
+
+
+@router.post(
+    "/{trip_id}/shared/{token}/comments",
+    status_code=201,
+    response_model=Envelope[TripCommentResponse],
+)
+async def create_shared_comment(
+    trip_id: uuid.UUID,
+    token: str,
+    body: TripCommentCreate,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> Envelope[TripCommentResponse]:
+    await _shared_access(db, trip_id, token)
+    if body.target_type != "trip" or body.target_id is not None or body.day_index is not None:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "VALIDATION_ERROR", "message": "공유 댓글은 여행 전체에 작성합니다."},
+        )
+    actor_id = uuid.UUID(current_user_id)
+    comment = await create_comment(
+        db,
+        trip_id=trip_id,
+        author_user_id=actor_id,
+        body=body.body,
+        target_type="trip",
+        target_id=None,
+        day_index=None,
+    )
+    response = _to_comment_response(comment)
+    realtime_broker.publish_event_nowait(
+        trip_id=trip_id,
+        event_type="comment.created",
+        actor_user_id=actor_id,
+        payload={"comment": response.model_dump(mode="json")},
+    )
+    return Envelope.of(response)
+
+
+@router.delete("/{trip_id}/shared/{token}/comments/{comment_id}", status_code=204)
+async def delete_shared_comment(
+    trip_id: uuid.UUID,
+    token: str,
+    comment_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+) -> None:
+    trip = await _shared_access(db, trip_id, token)
+    actor_id = uuid.UUID(current_user_id)
+    try:
+        await delete_comment(db, trip=trip, comment_id=comment_id, actor_user_id=actor_id)
+    except TripPermissionError as exc:
+        _raise_trip_http(exc)
+    except TripCommentNotFoundError as exc:
+        raise HTTPException(
+            status_code=404, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
+    realtime_broker.publish_event_nowait(
+        trip_id=trip_id,
+        event_type="comment.deleted",
+        actor_user_id=actor_id,
+        payload={"comment_id": str(comment_id)},
+    )
+
+
+@router.patch("/{trip_id}/shared/{token}", response_model=Envelope[TripResponse])
+async def update_shared_trip(
+    trip_id: uuid.UUID,
+    token: str,
+    body: TripSharedUpdate,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    if_match: Annotated[int, Header(alias="If-Match")],
+) -> Envelope[TripResponse]:
+    trip = await _shared_access(db, trip_id, token, edit=True)
+    try:
+        trip = await update_trip(
+            db,
+            trip=trip,
+            expected_version=if_match,
+            patch=body.model_dump(exclude_unset=True),
+        )
+    except TripVersionConflictError as exc:
+        raise HTTPException(
+            status_code=409, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
+    except TripValidationError as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
+    realtime_broker.publish_event_nowait(
+        trip_id=trip_id,
+        event_type="trip.updated",
+        actor_user_id=uuid.UUID(current_user_id),
+        payload={
+            "changes": body.model_dump(exclude_unset=True, mode="json"),
+            "version": trip.version,
+        },
+        version=trip.version,
+    )
+    return Envelope.of(_to_response(trip))
 
 
 @router.get(

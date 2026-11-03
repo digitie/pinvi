@@ -6,6 +6,8 @@ import { ApiError, tripApi } from '@pinvi/api-client';
 import type { TripSharedView } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { tripDaysToMapPoints } from '@pinvi/domain';
+import { TripComments } from '@/components/trips/TripComments';
+import { SharedTripEditor } from '@/components/trips/SharedTripEditor';
 import { TripDayHeader } from '@/components/trips/TripDayHeader';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
@@ -111,7 +113,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
   return (
     <div className="space-y-5">
       <header className="space-y-2 border-b border-hairline pb-4">
-        <p className="text-sm text-muted">공유된 여행 · 읽기 전용</p>
+        <p className="text-sm text-muted">공유된 여행 · {view.visibility === 'edit' ? '편집 가능' : view.visibility === 'comment' ? '댓글 가능' : '읽기 전용'}</p>
         <h1 className="text-2xl font-bold tracking-tight text-ink [overflow-wrap:anywhere] md:text-3xl">
           {trip.title}
         </h1>
@@ -126,6 +128,17 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
           </span>
         </p>
       </header>
+
+      {view.visibility === 'edit' && (
+        <SharedTripEditor key={tripId + token} tripId={tripId} token={token} trip={trip}
+          onSaved={(updated) => setView((current) => current ? { ...current, trip: updated } : current)} />
+      )}
+      {view.visibility !== 'view_only' && (
+        <>
+          <p className="text-sm text-muted">댓글 작성·삭제와 여행 정보 편집에는 로그인이 필요합니다.</p>
+          <TripComments tripId={tripId} ownerUserId={trip.owner_user_id} sharedToken={token} />
+        </>
+      )}
 
       {view.days.length > 0 && (
         <div className="flex flex-wrap gap-2" role="tablist" aria-label="일자 선택">

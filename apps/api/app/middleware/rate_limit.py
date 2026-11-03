@@ -43,7 +43,9 @@ OAUTH_LIMIT_PATH_RE: Final[re.Pattern[str]] = re.compile(
     r"^/auth/oauth/(providers|[^/]+/(start|callback))$"
 )
 TRIP_EXPORT_PATH_RE: Final[re.Pattern[str]] = re.compile(r"^/trips/[^/]+/exports/")
-SHARED_TRIP_PATH_RE: Final[re.Pattern[str]] = re.compile(r"^/trips/[^/]+/shared/([^/]+)$")
+SHARED_TRIP_PATH_RE: Final[re.Pattern[str]] = re.compile(
+    r"^/trips/[^/]+/shared/([^/]+)(?:/comments(?:/[^/]+)?)?$"
+)
 
 
 @dataclass(frozen=True)

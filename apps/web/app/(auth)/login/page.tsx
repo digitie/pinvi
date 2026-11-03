@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { safeLoginReturnTo } from '@/lib/loginReturnTo';
 import { LoginRequestSchema } from '@pinvi/schemas';
 import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 import { FormField } from '@/components/forms/FormField';
@@ -148,7 +149,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await authApi(apiClient).login(result.data);
-      router.push('/trips');
+      router.push(safeLoginReturnTo(new URLSearchParams(window.location.search).get('next')));
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === 'EMAIL_NOT_VERIFIED') {

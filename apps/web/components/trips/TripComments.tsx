@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, MessageSquare, Send, Trash2 } from 'lucide-react';
-import { ApiError, authApi, tripApi } from '@pinvi/api-client';
+import { ApiClient, ApiError, authApi, tripApi } from '@pinvi/api-client';
 import type { TripCommentResponse } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { canDeleteComment } from '@pinvi/domain';
@@ -15,9 +15,12 @@ function formatDateTime(value: string): string {
 
 export interface TripCommentsProps {
   tripId: string;
+  ownerUserId?: string | null;
+  refreshKey?: number;
+  sharedToken?: string;
 }
 
-export function TripComments({ tripId }: TripCommentsProps) {
+export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken }: TripCommentsProps) {
   const [comments, setComments] = useState<TripCommentResponse[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,32 +31,38 @@ export function TripComments({ tripId }: TripCommentsProps) {
 
   const reload = useCallback(async () => {
     try {
-      setComments(await tripApi(apiClient).listComments(tripId));
+      setComments(await (sharedToken
+        ? tripApi(apiClient).listSharedComments(tripId, sharedToken)
+        : tripApi(apiClient).listComments(tripId)));
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '댓글을 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
-  }, [tripId]);
+  }, [tripId, sharedToken]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const me = await authApi(apiClient).me();
+        const me = await authApi(sharedToken ? new ApiClient({
+          baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
+        }) : apiClient).me();
         if (!cancelled) setCurrentUserId(me.user_id);
       } catch {
         /* 비로그인/실패는 삭제 버튼만 숨김. */
       }
     })();
-    void (async () => {
-      await reload();
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [reload]);
+    return () => { cancelled = true; };
+  }, [sharedToken]);
+
+  useEffect(() => {
+    void (async () => { await reload(); })();
+    if (!sharedToken) return;
+    const timer = setInterval(() => { void reload(); }, 30_000);
+    return () => clearInterval(timer);
+  }, [reload, refreshKey, sharedToken]);
 
   const post = async () => {
     const trimmed = body.trim();
@@ -61,7 +70,11 @@ export function TripComments({ tripId }: TripCommentsProps) {
     setPosting(true);
     setError(null);
     try {
-      await tripApi(apiClient).createComment(tripId, { body: trimmed, target_type: 'trip' });
+      if (sharedToken) {
+        await tripApi(apiClient).createSharedComment(tripId, sharedToken, { body: trimmed, target_type: 'trip' });
+      } else {
+        await tripApi(apiClient).createComment(tripId, { body: trimmed, target_type: 'trip' });
+      }
       setBody('');
       await reload();
     } catch (err) {
@@ -75,7 +88,11 @@ export function TripComments({ tripId }: TripCommentsProps) {
     setBusyId(commentId);
     setError(null);
     try {
-      await tripApi(apiClient).deleteComment(tripId, commentId);
+      if (sharedToken) {
+        await tripApi(apiClient).deleteSharedComment(tripId, sharedToken, commentId);
+      } else {
+        await tripApi(apiClient).deleteComment(tripId, commentId);
+      }
       await reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '삭제에 실패했습니다.');
@@ -142,7 +159,7 @@ export function TripComments({ tripId }: TripCommentsProps) {
                 <p className="min-w-0 whitespace-pre-wrap break-words text-sm text-ink">
                   {comment.body}
                 </p>
-                {canDeleteComment(comment, currentUserId) && (
+                {canDeleteComment(comment, currentUserId, ownerUserId) && (
                   <button
                     type="button"
                     onClick={() => void remove(comment.comment_id)}

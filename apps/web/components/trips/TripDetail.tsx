@@ -487,6 +487,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
     };
   }, [reload]);
 
+  const [commentsRevision, setCommentsRevision] = useState(0);
+
   const scheduleRealtimeReload = useCallback(() => {
     if (realtimeReloadTimerRef.current != null) return;
     realtimeReloadTimerRef.current = setTimeout(() => {
@@ -511,6 +513,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
         return;
       }
 
+      if (event.type === 'comment.created' || event.type === 'comment.deleted') {
+        setCommentsRevision((value) => value + 1);
+      }
       const invalidationKeys = tripRealtimeInvalidationKeys(event, tripId);
       if (invalidationKeys.length === 0) return;
       scheduleRealtimeReload();
@@ -1907,7 +1912,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 aria-label="댓글"
                 className="space-y-4 p-4 md:p-5"
               >
-                <TripComments tripId={tripId} />
+                <TripComments tripId={tripId} ownerUserId={view.trip.owner_user_id} refreshKey={commentsRevision} />
               </div>
             )}
           </div>

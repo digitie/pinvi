@@ -43,7 +43,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
     try {
       const res = await tripApi(apiClient).createShareToken(tripId, {
         visibility,
-        expires_at: expiresAt ? new Date(`${expiresAt}T23:59:59`).toISOString() : null,
+        expires_at: expiresAt ? new Date(`${expiresAt}T23:59:59+09:00`).toISOString() : null,
       });
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       setNewUrl(buildShareUrl(origin, tripId, res.token));
@@ -99,6 +99,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
           만료일(선택)
           <input
             type="date"
+            min={new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date())}
             value={expiresAt}
             onChange={(event) => setExpiresAt(event.target.value)}
             className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-hidden focus:border-primary"

@@ -126,6 +126,17 @@ class TripUpdate(BaseModel):
     status: Literal["draft", "planned", "in_progress", "completed", "archived"] | None = None
 
 
+class TripSharedUpdate(BaseModel):
+    """공유 편집은 여행의 공개 정보만 허용한다."""
+
+    model_config = {"extra": "forbid"}
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    region_hint: str | None = Field(default=None, max_length=120)
+    start_date: Date | None = None
+    end_date: Date | None = None
+
+
 class TripDeleteRequest(BaseModel):
     mode: Literal["soft_delete", "transfer_leader"] = "soft_delete"
     new_owner_user_id: uuid.UUID | None = None
