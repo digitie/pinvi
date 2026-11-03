@@ -357,12 +357,10 @@ export async function createTrip(page: Page, opts: CreateTripOptions): Promise<{
   await page.getByTestId('trip-create-end').fill(opts.end ?? '');
   let res: Response;
   for (let attempt = 1; ; attempt += 1) {
-    const created = page.waitForResponse(
-      (r) => r.request().method() === 'POST' && /\/trips$/.test(new URL(r.url()).pathname),
-      { timeout: 30_000 },
-    );
+    const isTripPost = (r: Response) => r.request().method() === 'POST' && /\/trips$/.test(new URL(r.url()).pathname);
+    const created = page.waitForResponse(isTripPost, { timeout: 30_000 });
     await page.getByTestId('trip-create-submit').click();
-    res = await created;
+    res = await settleAfterRefresh(page, await created, isTripPost);
     // 429: the form keeps its values on a failed save (TripDashboard clears them only on success).
     if (res.status() !== 429 || attempt >= 3) break;
     await backOff(res, 'POST /trips');
@@ -592,12 +590,10 @@ export async function searchAndAddPlace(
     throw new Error(`검색 '${query}': pick 조건에 맞는 결과 행이 없습니다 (행 ${count}개)`);
   }
   const name = (await target.locator('button span.truncate').first().innerText()).trim() || targetText.split('\n')[0]!.trim();
-  const posted = page.waitForResponse(
-    (r) => r.request().method() === 'POST' && /\/trips\/[^/]+\/pois$/.test(new URL(r.url()).pathname),
-    { timeout: 30_000 },
-  );
+  const isPoiPost = (r: Response) => r.request().method() === 'POST' && /\/trips\/[^/]+\/pois$/.test(new URL(r.url()).pathname);
+  const posted = page.waitForResponse(isPoiPost, { timeout: 30_000 });
   await target.locator('button').first().click();
-  const res = await posted;
+  const res = await settleAfterRefresh(page, await posted, isPoiPost);
   if (res.status() >= 400) throw new Error(`POST /pois → HTTP ${res.status()} (${name})`);
   await expect(poiRows(page)).toHaveCount(before + 1, { timeout: 30_000 });
   return name;
