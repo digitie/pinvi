@@ -105,11 +105,11 @@ export default function TripEditScreen() {
 
   const reorderMutation = useMutation({
     mutationFn: ({
-      moves,
+      moves, dayIndex,
     }: {
       dayIndex: number;
       moves: { poi_id: string; new_sort_order: string }[];
-    }) => api.pois.reorder(tripId, { moves }),
+    }) => api.pois.reorder(tripId, { moves, day_index: dayIndex }),
     onSuccess: async (_data, { dayIndex }) => {
       // 서버 순서를 받은 다음 override를 걷어야 순서가 튀지 않는다.
       await queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });

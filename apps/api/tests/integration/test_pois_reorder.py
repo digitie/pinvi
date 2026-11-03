@@ -51,7 +51,7 @@ async def test_add_and_reorder_pois(client, verified_user, auth_cookies) -> None
     # p3 을 p1 과 p2 사이로 이동 (a0 < a05 < a1)
     resp = await client.post(
         f"/trips/{trip_id}/pois/reorder",
-        json={"moves": [{"poi_id": p3["attachment_id"], "new_sort_order": "a05"}]},
+        json={"day_index": 1, "moves": [{"poi_id": p3["attachment_id"], "new_sort_order": "a05"}]},
         cookies=cookies,
     )
     assert resp.status_code == 200, resp.text

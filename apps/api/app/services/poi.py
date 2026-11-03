@@ -97,6 +97,7 @@ async def create_poi(
     source: str | None = None,
     external_ref: dict[str, Any] | None = None,
 ) -> TripDayPoi:
+    await db.scalar(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
     day = await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
     # ADR-055: day.date는 override-only. rise/set seed는 effective_date(override 또는 파생)로.
     locdate = await trip_day_effective_locdate(
@@ -110,7 +111,10 @@ async def create_poi(
         feature_snapshot=feature_snapshot,
         custom_marker_color=custom_marker_color,
         custom_marker_icon=custom_marker_icon,
-        source=source,
+        source=source
+        or (
+            "feature" if feature_id else external_ref.get("provider") if external_ref else "manual"
+        ),
         external_ref=external_ref,
         planned_arrival_at=planned_arrival_at,
         planned_departure_at=planned_departure_at,
@@ -165,8 +169,34 @@ async def update_poi(
     expected_version: int,
     patch: dict[str, Any],
 ) -> TripDayPoi:
+    await db.scalar(select(Trip).where(Trip.trip_id == poi.trip_id).with_for_update())
+    await db.refresh(poi, with_for_update=True)
+    if poi.deleted_at is not None:
+        raise PoiNotFoundError("POI를 찾을 수 없습니다.")
     if poi.version != expected_version:
         raise PoiVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
+    destination = patch.get("day_index")
+    moved = destination is not None and destination != poi.day_index
+    if moved:
+        day = await db.scalar(
+            select(TripDay).where(TripDay.trip_id == poi.trip_id, TripDay.day_index == destination)
+        )
+        if day is None:
+            raise PoiNotFoundError("이동할 여행 일자를 찾을 수 없습니다.")
+        if patch.get("sort_order") is None:
+            last = await db.scalar(
+                select(TripDayPoi.sort_order)
+                .where(
+                    TripDayPoi.trip_id == poi.trip_id,
+                    TripDayPoi.day_index == destination,
+                    TripDayPoi.deleted_at.is_(None),
+                )
+                .order_by(TripDayPoi.sort_order.desc())
+                .limit(1)
+            )
+            patch = {**patch, "sort_order": last + "0" if last is not None else "a0"}
+            if len(patch["sort_order"]) > 80:
+                raise SortOrderConflictError("이동할 일자의 정렬 위치를 다시 정리해 주세요.")
     for key, value in patch.items():
         if value is None and key not in {
             "custom_marker_color",
@@ -182,7 +212,27 @@ async def update_poi(
             continue
         setattr(poi, key, value)
     poi.version += 1
-    await db.commit()
+    try:
+        if moved:
+            assert day is not None
+            old_rise_set = await db.get(TripPoiRiseSet, poi.attachment_id)
+            if old_rise_set is not None:
+                await db.delete(old_rise_set)
+                await db.flush()
+            locdate = await trip_day_effective_locdate(
+                db, trip_id=poi.trip_id, day_index=poi.day_index, override=day.date
+            )
+            db.add(
+                build_initial_poi_rise_set(
+                    poi=poi, locdate=locdate, feature_snapshot=poi.feature_snapshot
+                )
+            )
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise SortOrderConflictError(
+            "정렬 위치가 충돌했습니다. 다시 불러온 후 시도해 주세요."
+        ) from exc
     await db.refresh(poi)
     return poi
 
@@ -234,31 +284,45 @@ async def reorder_pois(
     *,
     trip_id: uuid.UUID,
     moves: list[tuple[uuid.UUID, str]],
+    day_index: int,
 ) -> list[TripDayPoi]:
+    await db.scalar(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
     poi_ids = [pid for pid, _ in moves]
+    if len(set(poi_ids)) != len(poi_ids):
+        raise SortOrderConflictError("같은 POI를 두 번 정렬할 수 없습니다.")
     result = await db.execute(
-        select(TripDayPoi).where(
+        select(TripDayPoi)
+        .where(
             TripDayPoi.attachment_id.in_(poi_ids),
             TripDayPoi.trip_id == trip_id,
             TripDayPoi.deleted_at.is_(None),
         )
+        .with_for_update()
     )
     pois = {p.attachment_id: p for p in result.scalars()}
-
-    updated: list[TripDayPoi] = []
-    for poi_id, new_sort in moves:
-        poi = pois.get(poi_id)
-        if poi is None:
-            raise PoiNotFoundError(f"POI {poi_id} not found")
-        poi.sort_order = new_sort
-        poi.version += 1
-        updated.append(poi)
-
+    if len(pois) != len(poi_ids):
+        raise PoiNotFoundError("정렬할 POI를 찾을 수 없습니다.")
+    if any(p.day_index != day_index for p in pois.values()):
+        raise SortOrderConflictError("장소의 일자가 변경됐습니다. 다시 불러온 후 정렬해 주세요.")
+    final_positions = [(pois[pid].day_index, rank) for pid, rank in moves]
+    if len(set(final_positions)) != len(final_positions):
+        raise SortOrderConflictError("같은 일자의 정렬 위치가 중복됩니다.")
+    updated = [pois[pid] for pid in poi_ids]
     try:
+        # 하나의 트랜잭션에서 임시 고유 위치로 옮긴 뒤 최종 순서를 적용한다.
+        nonce = uuid.uuid4().hex
+        for index, poi in enumerate(updated):
+            poi.sort_order = f"reorder_{nonce}_{index}"
+        await db.flush()
+        for poi_id, new_sort in moves:
+            pois[poi_id].sort_order = new_sort
+            pois[poi_id].version += 1
         await db.commit()
-    except Exception as exc:  # PG UNIQUE 위반 등
+    except IntegrityError as exc:
         await db.rollback()
-        raise SortOrderConflictError(str(exc)) from exc
+        raise SortOrderConflictError(
+            "정렬 위치가 충돌했습니다. 다시 불러온 후 시도해 주세요."
+        ) from exc
 
     for poi in updated:
         await db.refresh(poi)

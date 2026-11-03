@@ -379,13 +379,18 @@ function buildTripConflictFields(patch: TripUpdate, trip: TripView['trip']): Con
   }));
 }
 
-function buildPoiConflictFields(patch: PoiUpdate, poi: TripViewPoi): ConflictField[] {
-  return POI_CONFLICT_FIELDS.filter((field) => hasOwnField(patch, field.key)).map((field) => ({
+export function buildPoiConflictFields(patch: PoiUpdate, poi: TripViewPoi, dayIndex: number | null): ConflictField[] {
+  const fields: ConflictField[] = [];
+  if (hasOwnField(patch, 'day_index')) fields.push({
+    key: 'day_index', label: '일자 이동',
+    serverValue: displayConflictValue(dayIndex), myValue: displayConflictValue(patch.day_index),
+  });
+  return [...fields, ...POI_CONFLICT_FIELDS.filter((field) => hasOwnField(patch, field.key)).map((field) => ({
     key: field.key,
     label: field.label,
     serverValue: displayConflictValue(field.serverValue(poi)),
     myValue: displayConflictValue(patch[field.key]),
-  }));
+  }))];
 }
 
 function findPoi(view: TripView | null, poiId: string): TripViewPoi | null {
@@ -670,7 +675,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
       title: latestPoi.title ?? latestPoi.feature_id ?? '장소',
       version: latestPoi.version,
       patch,
-      fields: buildPoiConflictFields(patch, latestPoi),
+      fields: buildPoiConflictFields(patch, latestPoi,
+        (latest ?? view)?.days.find((day) => day.pois.some((poi) => poi.poi_id === poiId))?.day_index ?? null),
     });
   };
 
@@ -893,6 +899,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           sort_order: appendRank(last),
           feature_id: null,
           feature_snapshot: buildManualPoiSnapshot(input),
+          source: 'manual',
           custom_marker_color: 'P-08',
           custom_marker_icon: 'marker',
           currency: 'KRW',
@@ -913,7 +920,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
     const currentSortById = new Map(selectedDay.pois.map((p) => [p.poi_id, p.sort_order]));
     const moves = reorderMoves(orderedPoiIds, currentSortById);
     if (moves.length === 0) return;
-    void runMutation(() => poiApi(apiClient).reorder(tripId, { moves }));
+    void runMutation(() => poiApi(apiClient).reorder(tripId, { moves, day_index: selectedDay.day_index }));
   };
 
   const handleEditPoi = (poi: { poi_id: string; version: number }, patch: PoiUpdate) => {
@@ -921,6 +928,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
     return runMutation(
       async () => {
         await poiApi(apiClient).update(tripId, poi.poi_id, poi.version, patch);
+        if (patch.day_index != null) handleSelectDay(patch.day_index);
         setEditingPoiId(null);
       },
       { onConflict: (latest) => openPoiConflict(poi.poi_id, patch, latest) },
@@ -1191,6 +1199,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           return;
         }
         await poiApi(apiClient).update(tripId, current.poiId, current.version, patch);
+        if (patch.day_index != null) handleSelectDay(patch.day_index);
         clearConflict();
         setEditingPoiId(null);
         await reload();
@@ -1793,6 +1802,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                 )}
                                 <TripPoiList
                                   pois={day.pois}
+                                  dayIndex={day.day_index}
                                   selectedPoiId={selectedPoiId}
                                   onSelectPoi={handleSelectPoi}
                                   tripId={tripId}
@@ -1805,6 +1815,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                                   editable={!busy}
                                   onReorder={handleReorder}
                                   onEditPoi={handleEditPoi}
+                                  dayOptions={view.days.map((day) => ({ day_index: day.day_index, title: day.title }))}
                                   onDelete={handleDelete}
                                   savingPoiId={savingPoiId}
                                   editingPoiId={editingPoiId}

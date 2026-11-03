@@ -32,8 +32,9 @@ from app.services.realtime_broker import realtime_broker
 from app.services.trip import (
     TripNotFoundError,
     TripPermissionError,
-    get_trip_for_user,
+    get_trip_for_user_write,
 )
+from app.services.trip_day_rise_set import sync_trip_day_rise_sets
 
 router = APIRouter(prefix="/trips/{trip_id}/pois", tags=["pois"])
 
@@ -105,7 +106,7 @@ async def _auto_fire_feature_request(
 
 async def _trip_or_404(db, trip_id: uuid.UUID, user_id: uuid.UUID):  # type: ignore[no-untyped-def]
     try:
-        return await get_trip_for_user(db, trip_id=trip_id, user_id=user_id)
+        return await get_trip_for_user_write(db, trip_id=trip_id, user_id=user_id)
     except TripNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -207,11 +208,14 @@ async def update_poi_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    except PoiVersionConflictError as exc:
+    except (PoiVersionConflictError, SortOrderConflictError) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+    # 이동은 양쪽 일자의 대표 일출/일몰 기준도 바꾼다.
+    if body.day_index is not None:
+        await sync_trip_day_rise_sets(db, trip_id=trip_id)
     rise_set = await get_poi_rise_set(db, poi_id=poi.attachment_id)
     response = _to_response(poi, rise_set=rise_set)
     realtime_broker.publish_event_nowait(
@@ -262,7 +266,7 @@ async def reorder_pois_endpoint(
     await _trip_or_404(db, trip_id, uuid.UUID(current_user_id))
     moves = [(m.poi_id, m.new_sort_order) for m in body.moves]
     try:
-        updated = await reorder_pois(db, trip_id=trip_id, moves=moves)
+        updated = await reorder_pois(db, trip_id=trip_id, moves=moves, day_index=body.day_index)
     except PoiNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

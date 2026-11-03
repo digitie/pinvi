@@ -52,6 +52,7 @@ export const PoiCreateSchema = z.object({
 export type PoiCreate = z.infer<typeof PoiCreateSchema>;
 
 export const PoiUpdateSchema = z.object({
+  day_index: z.number().int().min(1).nullable().optional(),
   sort_order: z.string().min(1).max(80).optional(),
   feature_snapshot: z.record(z.string(), z.unknown()).nullable().optional(),
   custom_marker_color: z.string().regex(MarkerColorPattern).nullable().optional(),
@@ -67,6 +68,7 @@ export const PoiUpdateSchema = z.object({
 export type PoiUpdate = z.infer<typeof PoiUpdateSchema>;
 
 export const PoiReorderRequestSchema = z.object({
+  day_index: z.number().int().min(1),
   moves: z
     .array(
       z.object({
