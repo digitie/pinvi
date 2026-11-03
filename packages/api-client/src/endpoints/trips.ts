@@ -194,6 +194,30 @@ export const tripApi = (client: ApiClient) => ({
       schema: TripSharedViewSchema,
     }),
 
+  listSharedComments: (tripId: string, token: string) =>
+    client.request(`/trips/${tripId}/shared/${encodeURIComponent(token)}/comments`, {
+      method: 'GET', schema: z.array(TripCommentResponseSchema),
+    }),
+
+  createSharedComment: (tripId: string, token: string, body: TripCommentCreate) =>
+    client.request(`/trips/${tripId}/shared/${encodeURIComponent(token)}/comments`, {
+      method: 'POST', body: JSON.stringify(TripCommentCreateSchema.parse(body)),
+      schema: TripCommentResponseSchema,
+    }),
+
+  deleteSharedComment: (tripId: string, token: string, commentId: string) =>
+    client.requestNoContent(`/trips/${tripId}/shared/${encodeURIComponent(token)}/comments/${commentId}`, {
+      method: 'DELETE',
+    }),
+
+  updateShared: (
+    tripId: string, token: string, version: number,
+    body: Pick<TripUpdate, 'title' | 'description' | 'region_hint' | 'start_date' | 'end_date'>,
+  ) => client.request(`/trips/${tripId}/shared/${encodeURIComponent(token)}`, {
+    method: 'PATCH', headers: { 'If-Match': String(version) },
+    body: JSON.stringify(body), schema: TripResponseSchema,
+  }),
+
   listAttachments: (tripId: string) =>
     client.request(`/trips/${tripId}/attachments`, {
       method: 'GET',
