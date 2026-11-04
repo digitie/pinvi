@@ -23,6 +23,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
+from urllib.parse import quote
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -36,6 +37,14 @@ logger = logging.getLogger(__name__)
 _SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - 헤더 이름(비밀 아님)
 _PUBLIC_API_KEY_HEADER = "X-Kor-Travel-Map-Api-Key"
 _POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807
+
+
+def _path_segment(value: str) -> str | None:
+    """외부 id를 Map URL 경로 한 세그먼트로만 넣는다. 라우터가 %3F·%2F를 디코드해 넘기므로
+    그대로 붙이면 query·경로를 덧붙일 수 있다. 점 세그먼트는 존재할 수 없는 id라 None."""
+    if value in ("", ".", ".."):
+        return None
+    return quote(value, safe="")
 
 
 class KorTravelMapError(Exception):
@@ -524,6 +533,11 @@ class KorTravelMapClient:
 
     async def get_feature(self, feature_id: str) -> dict[str, Any] | None:
         """단건 상세. 404 → None."""
+        segment = _path_segment(feature_id)
+        if segment is None:
+            return None
+        # 계약 경로 표(test_kor_travel_map_contract)가 f-string 자리 이름으로 경로를 대조한다.
+        feature_id = segment
         resp = await self._send("GET", f"/v1/features/{feature_id}", allow_public_api_key=True)
         if resp.status_code == status.HTTP_404_NOT_FOUND:
             return None
@@ -757,6 +771,11 @@ class KorTravelMapClient:
 
     async def get_public_beach(self, feature_id: str) -> dict[str, Any] | None:
         """공개 해수욕장 상세. 404 → None."""
+        segment = _path_segment(feature_id)
+        if segment is None:
+            return None
+        # 계약 경로 표(test_kor_travel_map_contract)가 f-string 자리 이름으로 경로를 대조한다.
+        feature_id = segment
         resp = await self._send(
             "GET", f"/v1/public/beaches/{feature_id}", allow_public_api_key=True
         )
@@ -832,6 +851,11 @@ class KorTravelMapClient:
 
     async def get_public_festival(self, feature_id: str) -> dict[str, Any] | None:
         """공개 축제 상세. 404 → None."""
+        segment = _path_segment(feature_id)
+        if segment is None:
+            return None
+        # 계약 경로 표(test_kor_travel_map_contract)가 f-string 자리 이름으로 경로를 대조한다.
+        feature_id = segment
         resp = await self._send(
             "GET", f"/v1/public/festivals/{feature_id}", allow_public_api_key=True
         )

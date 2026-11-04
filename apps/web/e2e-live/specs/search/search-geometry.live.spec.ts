@@ -12,10 +12,20 @@ import {
 import { loginAsUser } from '../../helpers/live';
 import { desktopOnly, gotoExplore, searchPickOpenDetail } from '../../helpers/search';
 
+// 운영 Map 데이터로 확인한 근처 point(2026-11-05): 줌 15 화면 안에 '설악산_대청봉'·'북한산_백운대'
+// route가 여럿 걸린다. 다른 환경은 env로 바꾼다.
+const SEORAK_ANCHOR = '설악산국립공원';
+const BUKHAN_ANCHOR = '북한산성';
+
 async function showGeometry(page: Page, kind: 'route' | 'area', anchor: string) {
   await gotoExplore(page);
   // coord가 없는 도형을 가짜 point로 바꾸지 않는다. 별도 근처 point로 이동한다.
-  await searchPickOpenDetail(page, anchor, (row) => row.coord != null);
+  // 경로 행(이름 '설악산_대청봉' 등)이 아니라 anchor 이름을 담은 point feature로 이동한다.
+  await searchPickOpenDetail(
+    page,
+    anchor,
+    (row) => row.source === 'feature' && row.coord != null && row.name.includes(anchor),
+  );
   await page.keyboard.press('Escape');
   const response = page.waitForResponse((res) => {
     const url = new URL(res.url());
@@ -36,8 +46,7 @@ async function showGeometry(page: Page, kind: 'route' | 'area', anchor: string) 
 test.describe('경로·영역 실제 geometry', () => {
   test('SRCH-023 대청봉 경로 토글·목록 선택·상세', async ({ page }) => {
     desktopOnly();
-    const anchor = process.env.PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY ?? '';
-    test.skip(!anchor, '설악산 경로와 교차하는 근처 point 검색 fixture를 명시해야 한다');
+    const anchor = process.env.PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY || SEORAK_ANCHOR;
     await loginAsUser(page);
     const rows = await showGeometry(page, 'route', anchor);
     const route = rows.find((row) => row.kind === 'route' && row.name.includes('대청봉'));
@@ -65,8 +74,7 @@ test.describe('경로·영역 실제 geometry', () => {
 
   test('SRCH-024 북한산 경로 복수 part·목록·OFF', async ({ page }) => {
     desktopOnly();
-    const anchor = process.env.PINVI_E2E_GEOMETRY_BUKHAN_ANCHOR_QUERY ?? '';
-    test.skip(!anchor, '북한산 경로들과 교차하는 근처 point 검색 fixture를 명시해야 한다');
+    const anchor = process.env.PINVI_E2E_GEOMETRY_BUKHAN_ANCHOR_QUERY || BUKHAN_ANCHOR;
     await loginAsUser(page);
     const rows = await showGeometry(page, 'route', anchor);
     const routes = rows.filter((row) => row.kind === 'route' && row.name.includes('북한산'));
@@ -90,8 +98,12 @@ test.describe('경로·영역 실제 geometry', () => {
 
   test('SRCH-028 국립공원 영역·큰 bounds 선택 후 상세 유지', async ({ page }) => {
     desktopOnly();
-    const anchor = process.env.PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY ?? '';
-    test.skip(!anchor, '설악산 영역과 교차하는 근처 point 검색 fixture를 명시해야 한다');
+    const anchor = process.env.PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY ?? '';
+    // 운영 Map에 area kind가 아직 0건이다(2026-11-05 전국 in-bounds kind=area 0) — 적재 뒤 env로 켠다.
+    test.skip(
+      !anchor,
+      '설악산 영역과 교차하는 근처 point 검색 fixture(PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY)가 필요하다',
+    );
     await loginAsUser(page);
     const rows = await showGeometry(page, 'area', anchor);
     const area = rows.find((row) => row.kind === 'area' && row.name.includes('설악산'));

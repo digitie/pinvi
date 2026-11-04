@@ -194,7 +194,7 @@ scripted 케이스의 spec 파일·id 존재). 목록 검증은 `test:e2e:live-c
 | TRIP-054 | blocked | 일자 메모 UI 없음(API 는 있음, #640) |
 | TRIP-055 | manual | 동선 최적화 시작/끝 고정 옵션 없음 — 서버 동작 관찰 후 승격 |
 | SRCH-016/026/029/030/032/047 | manual | 편향 효과 없음(장소 없는 여행), 중복 스팟체크, 수목원·휴양림 적재 미확인, 휴게소 이름 불안정, 먼바다 이동 API 없음 |
-| SRCH-023/024/028 | blocked | route(등산로)·area(국립공원) kind 를 PinVi 가 렌더하지 않음(#635) |
+| SRCH-028 | blocked | 운영 Map area kind 0건(KNPS 국립공원 경계 미적재, 2026-11-05) — spec 있음, `PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY`로 켠다. SRCH-023/024는 #635(#665)로 scripted |
 | SRCH-040 | blocked | `unverified` 는 Map 장애 유도가 필요 — 격리 스택 하네스에서만 |
 | SRCH-041 | blocked | detail-card 계약에 이미지/요금/설명 없음 |
 | NEAR-031/037 | manual | KNPS 화장실 prod 적재 미확인, 신선도 tick 은 2분 고정 대기 |
@@ -237,7 +237,7 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | #632 | closed, no change (D7) | 비관리자 admin API 는 404 RESOURCE_NOT_FOUND 유지 | ADM-003/004 |
 | #633 | fixed (#657, D8 변경) | 여행 휴지통·복원 | TRIP-043 — 삭제 → 휴지통 → 복원(초안·장소 보존) |
 | #634 | done (#659) | Kakao/Naver pick 자동 feature 제안의 admin 삭제·dry-run | POI-014/015, ADM-031, D1 |
-| #635 | enhancement | route·area kind 렌더링 | SRCH-023/024/028 |
+| #635 | done (#665 + 리뷰 PR) | route·area kind 렌더링 | SRCH-023/024 scripted(기본 근처 point 설악산국립공원·북한산성), SRCH-028 데이터 blocked |
 | #636 | enhancement | '일정 정보 알람으로 보내기' | NTF-020 |
 | #637 | enhancement | 기상 특보 Telegram 알림 | NTF-018 |
 | #638 | enhancement | 일간/주간 브리프 예약 알림 | NTF-019 |
@@ -253,6 +253,11 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | #651 | fixed (#660) | admin dedup review 목록이 항상 422 FORBIDDEN(Map 거절), 화면은 빈 큐 | ADM-022/023 — `test.fail` 제거, GET 200 단언 |
 | #652 | fixed (#656) | 장소 재정렬 간헐 409 SORT_ORDER_CONFLICT + 응답에 DB 오류 원문 | TRIP-030 — `test.fail` 제거 |
 | #663 | fixed (#662) | 상세 카드 `detail-card` 지연 3.7→6.2→8.5 s(같은 장소, 실행마다 악화) | SRCH-055 — 런타임 `test.fail` 제거, 6 s 초과는 soft 실패 |
+| #653 | fixed (#680 + 리뷰 PR) | 테스트 계정 요청 상한의 영구 설정(`PINVI_RATE_LIMIT_USER_LIMIT_OVERRIDES`, 상한 6000/분) | 전 영역 429 — 운영 Manager compose 전달 전까지 DB override 6건 유지 |
+| #669 | fixed (#677) | 상세 카드 병렬 보강 회귀 | CORE-023/024 — `test.fail` 제거 |
+| #673 | fixed (#679 + 리뷰 PR) | 날짜 날씨 핵심 지표·단위(기상청 우선·PTY 코드표·같은 라벨) | WX-002 — `test.fail` 제거 |
+| #674 | fixed (#677) | 지도 선택·모바일 맞춤·팝업 | NEAR-004/024, CORE-025 — `test.fail` 제거(NEAR-024 모바일은 원인 미재현, 재발 시 재확인) |
+| #675 | fixed (#679) | 관리자 날씨 소스 정합성 | ADM-020 |
 | kor-travel-map#1438 | bug | feature 카테고리 오분류(숙박·카페·마트·캠핑장·주차장) | SRCH-019/020/022, NEAR-030 (`test.fail`) |
 | kor-travel-map#1439 | bug | event 기간·장소 누락, 축제 category·중복 | SRCH-027 (`test.fail`) |
 | kor-travel-map#1440 | bug | 과거 날짜 날씨 daily_summaries 미제공 | WX-004 (`test.fail`) |
@@ -324,10 +329,13 @@ env 1(SHR-027), 데이터/타이밍 2(SRCH-048 이벤트 없음, POI-032 마커 
 
 ## 경로·영역 fixture (#635)
 
-- SRCH-023/028은 설악산 도형과 교차하는 point의 검색어를
-  `PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY`로 받는다.
+- SRCH-023은 설악산 경로와 교차하는 point의 검색어를
+  `PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY`로 받는다(기본 `설악산국립공원`).
 - SRCH-024는 북한산 경로 둘 이상과 교차하는 point의 검색어를
-  `PINVI_E2E_GEOMETRY_BUKHAN_ANCHOR_QUERY`로 받는다.
-- 설정이 없으면 데이터 전제 미충족으로 skip한다. 설정이 있으면 해당 도형의 존재·kind·geometry·UI를 단언한다.
+  `PINVI_E2E_GEOMETRY_BUKHAN_ANCHOR_QUERY`로 받는다(기본 `북한산성`).
+- 기본값은 운영 Map 데이터로 확인했다(2026-11-05, 줌 15 화면에 대상 route 여럿). 검색 결과 중
+  anchor 이름을 담은 point feature 행으로 이동한다(같은 이름의 route 행은 고르지 않는다).
+- SRCH-028(area)은 `PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY`가 있을 때만 돈다. 운영 Map에 area
+  kind가 0건이라 현재 blocked다.
 - 도형에 없는 coord를 만들지 않는다. point는 카메라 이동용 fixture다.
 - 운영 origin guard는 유지한다. 격리 WSL 실제 HTTP/WebGL 검증은 별도 fixture에서 실행하며 운영 통과로 기록하지 않는다.

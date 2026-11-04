@@ -74,7 +74,8 @@ export const FeatureSummarySchema = z.object({
   marker_color: MarkerColorSchema,
   marker_icon: z.string().max(64),
   distance_m: z.number().nullable().optional(),
-  geometry: FeatureGeometrySchema.nullable().optional(),
+  // 도형 하나가 계약을 어기면 그 도형만 비운다 — 응답 전체(다른 경로·영역)를 버리지 않는다.
+  geometry: FeatureGeometrySchema.nullable().optional().catch(null),
 });
 export type FeatureSummary = z.infer<typeof FeatureSummarySchema>;
 
