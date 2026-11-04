@@ -64,3 +64,11 @@ def test_oauth_return_to_accepts_column_sized_path() -> None:
 def test_oauth_return_to_drops_share_and_storage_tokens(path: str, expected: str) -> None:
     """#671 — 복귀 경로(`oauth_login_states.return_to_path`, callback `Location`)에 토큰을 남기지 않는다."""
     assert OAuthStartRequest(return_to=path).return_to == expected
+
+
+def test_oauth_return_to_redaction_never_grows_or_reencodes() -> None:
+    """비밀 query를 빼도 나머지는 원문 그대로 — 길이가 255자 계약을 넘지 않는다."""
+    path = "/trips?q=" + "부" * 60 + "&tags[]=a;b&token=x"
+    result = OAuthStartRequest(return_to=path).return_to
+    assert result == "/trips?q=" + "부" * 60 + "&tags[]=a;b"
+    assert len(result) <= len(path)

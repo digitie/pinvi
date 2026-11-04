@@ -151,6 +151,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
             {newToken && (
               <Link
                 href={`/shared/${tripId}/${newToken}`}
+                prefetch={false}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex h-7 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2 text-xs font-semibold text-ink hover:bg-surface-soft"

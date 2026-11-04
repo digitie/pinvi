@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Literal
-from urllib.parse import parse_qsl, urlencode
+from urllib.parse import unquote_plus
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -44,11 +44,16 @@ def redact_return_path(value: str) -> str:
     base, query_sep, query = path.partition("?")
     if not query_sep:
         return value
-    pairs = parse_qsl(query, keep_blank_values=True)
-    if not any(key.lower() in _SECRET_RETURN_QUERY_KEYS for key, _ in pairs):
+    # 비밀 쌍만 빼고 나머지 원문은 다시 인코딩하지 않는다 — 길이는 줄기만 한다(varchar(255) 계약).
+    parts = query.split("&")
+    kept = [
+        part
+        for part in parts
+        if unquote_plus(part.partition("=")[0]).lower() not in _SECRET_RETURN_QUERY_KEYS
+    ]
+    if len(kept) == len(parts):
         return value
-    kept = [(key, val) for key, val in pairs if key.lower() not in _SECRET_RETURN_QUERY_KEYS]
-    rebuilt = base + (f"?{urlencode(kept)}" if kept else "")
+    rebuilt = base + (f"?{'&'.join(kept)}" if kept else "")
     return rebuilt + (hash_sep + fragment if hash_sep else "")
 
 

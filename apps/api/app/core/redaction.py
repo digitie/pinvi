@@ -65,14 +65,16 @@ _AUTH_HEADER_RE = re.compile(
     re.IGNORECASE,
 )
 # path에 실린 PinVi 자체 자격 증명: 여행 공유 링크, 서명된 업로드·다운로드 토큰(uvicorn access 줄).
+# `/`가 `%2F`(이중 `%252F`)로 인코딩된 꼴(`/login?next=%2Fshared%2F…`)도 잡는다(#671). 인코딩된 꼴에서는
+# 토큰 뒤 하위 경로(`%2Fcomments`)까지 함께 가려진다 — 덜 가리는 것보다 낫다.
+_SLASH = "(?:/|%2[Ff]|%252[Ff])"
 _PATH_TOKEN_RE = re.compile(
-    r"(?P<prefix>/trips/[^/?\s\"'<>#\\]+/shared/|/storage/(?:uploads|downloads)/)"
+    rf"(?P<prefix>{_SLASH}trips{_SLASH}[^/?%\s\"'<>#\\]+{_SLASH}shared{_SLASH}"
+    rf"|{_SLASH}storage{_SLASH}(?:uploads|downloads){_SLASH})"
     rf"(?P<token>[^/?{_VALUE_END}]+)"
 )
 # 웹 공유 화면 `/shared/{tripId}/{token}` — 접근 로그·`next=`·OAuth `return_to`에 실린다(#671).
-# `/`가 `%2F`(이중 `%252F`)로 인코딩된 꼴(`/login?next=%2Fshared%2F…`)도 잡는다. API 꼴
-# `/trips/{id}/shared/{token}/…`은 위 규칙이 먼저 `***`로 바꾸므로 id 자리가 `***`이면 건너뛴다.
-_SLASH = "(?:/|%2[Ff]|%252[Ff])"
+# API 꼴 `/trips/{id}/shared/{token}/…`은 위 규칙이 먼저 `***`로 바꾸므로 id 자리가 `***`이면 건너뛴다.
 _WEB_SHARED_RE = re.compile(
     rf"(?P<prefix>{_SLASH}shared{_SLASH}(?!\*\*\*)[^/?%{_VALUE_END}]+{_SLASH})"
     rf"(?P<token>[^/?%{_VALUE_END}]+)"

@@ -248,6 +248,10 @@ def test_redact_secrets_web_shared_page_token() -> None:
     assert redact_secrets(f'{{"return_to": "/shared/{trip}/tok_abc"}}') == (
         f'{{"return_to": "/shared/{trip}/***"}}'
     )
+    # 인코딩된 API 공유 경로도 tripId가 아니라 토큰(과 뒤 하위 경로)을 가린다
+    assert redact_secrets(f"next=%2Fapi%2Fv1%2Ftrips%2F{trip}%2Fshared%2Ftok_abc%2Fcomments") == (
+        f"next=%2Fapi%2Fv1%2Ftrips%2F{trip}%2Fshared%2F***"
+    )
     # 토큰 없는 복귀 경로는 그대로
     assert redact_secrets(f"/login?next=%2Fshared%2F{trip}") == f"/login?next=%2Fshared%2F{trip}"
 
