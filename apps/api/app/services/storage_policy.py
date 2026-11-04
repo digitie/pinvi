@@ -131,6 +131,7 @@ def _active_attachment_parent() -> ColumnElement[bool]:
     )
     active_poi = active_poi.correlate(CuratedPlanAttachment)
     return and_(
+        CuratedPlanAttachment.purged_at.is_(None),
         or_(CuratedPlanAttachment.trip_id.is_(None), active_trip),
         or_(CuratedPlanAttachment.trip_poi_id.is_(None), active_poi),
     )
@@ -169,6 +170,7 @@ async def attachment_bytes_for_trip(db: AsyncSession, *, trip_id: uuid.UUID) -> 
     poi_ids = select(TripDayPoi.attachment_id).where(TripDayPoi.trip_id == trip_id)
     total = await db.scalar(
         select(func.coalesce(func.sum(CuratedPlanAttachment.byte_size), 0)).where(
+            CuratedPlanAttachment.purged_at.is_(None),
             or_(
                 CuratedPlanAttachment.trip_id == trip_id,
                 CuratedPlanAttachment.trip_poi_id.in_(poi_ids),
@@ -181,10 +183,12 @@ async def attachment_bytes_for_trip(db: AsyncSession, *, trip_id: uuid.UUID) -> 
 async def attachment_bytes_for_user(db: AsyncSession, *, user_id: uuid.UUID) -> int:
     total = await db.scalar(
         select(func.coalesce(func.sum(CuratedPlanAttachment.byte_size), 0)).where(
+            CuratedPlanAttachment.purged_at.is_(None),
             CuratedPlanAttachment.uploaded_by_user_id == user_id,
         )
     )
-    return int(total or 0)
+    from app.services.storage_lifecycle import pending_upload_bytes
+    return int(total or 0) + await pending_upload_bytes(db, user_id)
 
 
 async def assert_attachment_capacity(

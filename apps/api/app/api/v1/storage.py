@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 from botocore.exceptions import ClientError
@@ -10,25 +11,38 @@ from sqlalchemy import select
 
 from app.api.request_url import public_api_base_url
 from app.core.deps import CurrentUserId, DbSession
+from app.models.storage_lifecycle import AttachmentUploadIntent
 from app.models.user import User
 from app.schemas.envelope import Envelope
 from app.schemas.storage import UploadUrlRequest, UploadUrlResponse
 from app.services.rustfs_storage import (
     FileTooLargeError,
     InvalidStorageProxyTokenError,
+    InvalidStorageRefError,
     MimeNotAllowedError,
     get_storage_object,
     make_upload_url,
     parse_storage_proxy_token,
     put_storage_object,
 )
-from app.services.storage_policy import effective_attachment_quota, get_storage_settings
+from app.services.storage_lifecycle import (
+    ATTACHMENT_PURPOSES,
+    assert_objects_writable,
+    reserve_attachment_upload,
+)
+from app.services.storage_policy import (
+    AttachmentQuotaError,
+    effective_attachment_quota,
+    get_storage_settings,
+)
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 _ADMIN_ONLY_PURPOSES = {"curated_plan_attachment", "curated_poi_attachment"}
 
 
 def _storage_http_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, InvalidStorageRefError):
+        return HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)})
     if isinstance(exc, InvalidStorageProxyTokenError):
         return HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -88,15 +102,50 @@ async def upload_urls(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+    if body.purpose in ATTACHMENT_PURPOSES:
+        try:
+            await reserve_attachment_upload(
+                db, user=user, bucket=response.bucket, key=response.storage_key,
+                byte_size=body.content_length, expires_at=response.expires_at,
+            )
+            await db.commit()
+        except AttachmentQuotaError as exc:
+            raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)}) from exc
     return Envelope.of(response)
 
 
 @router.put("/uploads/{token}", status_code=status.HTTP_204_NO_CONTENT)
-async def storage_upload_proxy(token: str, request: Request) -> Response:
+async def storage_upload_proxy(token: str, request: Request, db: DbSession) -> Response:
     try:
         ref = parse_storage_proxy_token(token, expected_op="put")
         body = await request.body()
-        put_storage_object(ref=ref, body=body, content_type=request.headers.get("content-type"))
+        ref = parse_storage_proxy_token(token, expected_op="put")
+        tracked = len(ref.storage_key.split("/")) > 1 and ref.storage_key.split("/")[1] in ATTACHMENT_PURPOSES
+        await assert_objects_writable(db, [(ref.bucket, ref.storage_key)])
+        intent: AttachmentUploadIntent | None = None
+        if tracked:
+            intent = await db.get(AttachmentUploadIntent, (ref.bucket, ref.storage_key), populate_existing=True)
+            if intent is None or intent.registered_at is not None or intent.purged_at is not None or intent.byte_size != len(body):
+                raise InvalidStorageRefError("업로드가 만료되었거나 이미 등록된 파일입니다. 다시 업로드해 주세요.")
+        write = asyncio.create_task(asyncio.to_thread(
+            put_storage_object, ref=ref, body=body, content_type=request.headers.get("content-type")
+        ))
+        try:
+            await asyncio.shield(write)
+        except asyncio.CancelledError:
+            while not write.done():
+                try:
+                    await asyncio.shield(write)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:
+                    break
+            if not write.cancelled():
+                write.exception()
+            raise
+        if tracked and intent is not None:
+            intent.uploaded_bytes = len(body)
+        await db.commit()
     except Exception as exc:
         raise _storage_http_error(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)

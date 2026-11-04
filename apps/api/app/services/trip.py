@@ -27,6 +27,11 @@ from app.services import lexorank
 from app.services.email_service import enqueue_trip_invite_email
 from app.services.hash_chain import sha256_hex
 from app.services.rustfs_storage import InvalidStorageRefError, validate_attachment_storage_ref
+from app.services.storage_lifecycle import (
+    TRASH_RETENTION_DAYS,
+    assert_objects_writable,
+    claim_attachment_upload,
+)
 from app.services.storage_policy import (
     AttachmentQuotaError,
     assert_attachment_capacity,
@@ -99,6 +104,10 @@ class TripAttachmentLimitError(TripError):
 
 class TripAttachmentStorageRefError(TripError):
     code = "INVALID_ATTACHMENT_STORAGE_REF"
+
+
+class TripTrashExpiredError(TripError):
+    code = "TRIP_TRASH_EXPIRED"
 
 
 class TripAttachmentQuotaError(TripError):
@@ -357,8 +366,10 @@ async def restore_trip(db: AsyncSession, *, trip_id: uuid.UUID, owner_user_id: u
         )
         .with_for_update()
     )
-    if trip is None:
+    if trip is None or trip.deleted_at is None:
         raise TripNotFoundError("휴지통에서 여행을 찾을 수 없습니다.")
+    if trip.purge_started_at is not None or trip.deleted_at <= datetime.now(UTC) - timedelta(days=TRASH_RETENTION_DAYS):
+        raise TripTrashExpiredError("30일 보관 기한이 지난 여행은 복원할 수 없습니다.")
     # 휴지통의 첨부도 이미 쿼터에 포함된다. 복원은 추가 저장 공간을 만들지 않는다.
     trip.deleted_at = None
     trip.status = "draft"
@@ -888,6 +899,13 @@ async def create_attachment(
     if uploader is None:
         raise TripAttachmentStorageRefError("업로드 사용자를 찾을 수 없습니다.")
     try:
+        await claim_attachment_upload(
+            db, user_id=uploaded_by_user_id, bucket=str(payload["bucket"]),
+            key=str(payload["storage_key"]), byte_size=int(payload["byte_size"]),
+        )
+    except InvalidStorageRefError as exc:
+        raise TripAttachmentStorageRefError(str(exc)) from exc
+    try:
         await assert_attachment_quota(
             db,
             user=uploader,
@@ -1343,6 +1361,10 @@ async def _copy_trip_attachments(
             )
         except AttachmentQuotaError as exc:
             raise TripAttachmentQuotaError(str(exc)) from exc
+    try:
+        await assert_objects_writable(db, [(row.bucket, row.storage_key) for row in attachments])
+    except InvalidStorageRefError as exc:
+        raise TripAttachmentStorageRefError(str(exc)) from exc
     for attachment in attachments:
         source_poi_id = attachment.trip_poi_id
         trip_poi_id = (

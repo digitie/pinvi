@@ -836,3 +836,11 @@ export type {
   TransportStatusResponse,
   TransportUnavailableReason,
 } from './transport';
+
+
+export {
+  StorageRetentionStatusSchema,
+  StorageRetentionExecuteSchema,
+  StorageRetentionResultSchema,
+} from './storage';
+export type { StorageRetentionStatus, StorageRetentionResult } from './storage';

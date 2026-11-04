@@ -20,7 +20,11 @@ from app.models.curated_plan import CuratedPlanPoi, CuratedTripPlan
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
+from app.models.user import User
 from app.services import lexorank
+from app.services.rustfs_storage import InvalidStorageRefError
+from app.services.storage_lifecycle import assert_objects_writable
+from app.services.storage_policy import AttachmentQuotaError, assert_attachment_capacity
 
 
 class NoticePlanError(Exception):
@@ -506,7 +510,7 @@ async def copy_plan_to_trip(
     created_trip = False
     if target_trip_id is not None:
         trip = await db.scalar(
-            select(Trip).where(Trip.trip_id == target_trip_id, Trip.deleted_at.is_(None))
+            select(Trip).where(Trip.trip_id == target_trip_id, Trip.deleted_at.is_(None)).with_for_update()
         )
         if trip is None:
             raise NoticePlanNotFoundError("대상 여행을 찾을 수 없습니다.")
@@ -574,7 +578,19 @@ async def copy_plan_to_trip(
                 CuratedPlanAttachment.deleted_at.is_(None),
             )
         )
-        for att in attachments.scalars():
+        source_attachments = list(attachments.scalars())
+        user = await db.get(User, user_id)
+        if user is None:
+            raise NoticePlanCopyError("사용자를 찾을 수 없습니다.")
+        try:
+            await assert_attachment_capacity(
+                db, user=user, trip_id=trip.trip_id,
+                additional_bytes=sum(row.byte_size for row in source_attachments),
+            )
+            await assert_objects_writable(db, [(row.bucket, row.storage_key) for row in source_attachments])
+        except (AttachmentQuotaError, InvalidStorageRefError) as exc:
+            raise NoticePlanCopyError(str(exc)) from exc
+        for att in source_attachments:
             db.add(
                 CuratedPlanAttachment(
                     trip_poi_id=new_poi.attachment_id,

@@ -32,6 +32,7 @@ from app.api.v1.admin import (
     seed,
     settings,
     stats,
+    storage_retention,
     system,
     trips,
     users,
@@ -68,6 +69,7 @@ admin_router.include_router(notice_plans.router)
 admin_router.include_router(system.router)
 admin_router.include_router(etl.router)
 admin_router.include_router(retention.router)
+admin_router.include_router(storage_retention.router)
 admin_router.include_router(settings.router)
 
 if is_dev_safety_route_enabled():

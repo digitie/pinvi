@@ -170,3 +170,29 @@ export const AttachmentLibraryPageSchema = z.object({
   limit: z.number().int().positive(),
 });
 export type AttachmentLibraryPage = z.infer<typeof AttachmentLibraryPageSchema>;
+
+
+export const StorageRetentionStatusSchema = z.object({
+  retention_days: z.number().int().positive(),
+  expired_trips: z.number().int().nonnegative(),
+  eligible_attachments: z.number().int().nonnegative(),
+  expired_uploads: z.number().int().nonnegative(),
+  pending_objects: z.number().int().nonnegative(),
+  in_progress_objects: z.number().int().nonnegative(),
+  errors: z.array(z.object({ code: z.string(), count: z.number().int().nonnegative() })),
+  can_execute: z.boolean(),
+});
+export const StorageRetentionExecuteSchema = z.object({
+  access_reason: z.string().trim().min(5).max(1000),
+  confirm_phrase: z.literal('DELETE EXPIRED FILES'),
+});
+export const StorageRetentionResultSchema = z.object({
+  expired_trips_started: z.number().int().nonnegative(),
+  retired_references: z.number().int().nonnegative(),
+  objects_deleted: z.number().int().nonnegative(),
+  objects_failed: z.number().int().nonnegative(),
+  trips_deleted: z.number().int().nonnegative(),
+  status: StorageRetentionStatusSchema,
+});
+export type StorageRetentionStatus = z.infer<typeof StorageRetentionStatusSchema>;
+export type StorageRetentionResult = z.infer<typeof StorageRetentionResultSchema>;

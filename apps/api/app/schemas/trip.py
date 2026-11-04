@@ -211,6 +211,9 @@ class TripResponse(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+    trash_expires_at: datetime | None = None
+    can_restore: bool = False
+
 
 
 class TripCopyResponse(BaseModel):

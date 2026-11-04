@@ -49,6 +49,7 @@ from app.models import (  # noqa: E402,F401
     security,
     session,
     share_link,
+    storage_lifecycle,
     storage_settings,
     trip,
     trip_day,

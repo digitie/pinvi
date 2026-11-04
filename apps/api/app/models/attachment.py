@@ -78,6 +78,8 @@ class CuratedPlanAttachment(Base, TimestampMixin):
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     @property
     def notice_plan_id(self) -> uuid.UUID | None:
         """Deprecated API alias retained for `/notice-plans` compatibility."""

@@ -141,6 +141,8 @@ export const TripResponseSchema = z.object({
   version: z.number().int(),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,
+  trash_expires_at: Iso8601Schema.nullable().optional(),
+  can_restore: z.boolean().optional(),
 });
 export type TripResponse = z.infer<typeof TripResponseSchema>;
 

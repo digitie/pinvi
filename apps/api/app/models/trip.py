@@ -65,3 +65,5 @@ class Trip(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="draft")
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    purge_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

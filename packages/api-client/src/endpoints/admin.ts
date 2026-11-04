@@ -69,6 +69,9 @@ import {
   AdminRateLimitOverrideRollbackRequestSchema,
   AdminRetentionDryRunRequestSchema,
   AdminRetentionExecuteRequestSchema,
+  StorageRetentionStatusSchema,
+  StorageRetentionExecuteSchema,
+  StorageRetentionResultSchema,
   AdminRetentionRunListResponseSchema,
   AdminRetentionRunSchema,
   AdminRetentionSummarySchema,
@@ -680,6 +683,16 @@ export const adminApi = (client: ApiClient) => ({
       body: JSON.stringify(AdminRetentionDryRunRequestSchema.parse(body)),
       schema: AdminRetentionRunSchema,
       timeoutMs: NO_CLIENT_DEADLINE,
+    }),
+
+  getStorageRetention: () =>
+    client.request('/admin/storage-retention', { schema: StorageRetentionStatusSchema }),
+  executeStorageRetention: (body: z.infer<typeof StorageRetentionExecuteSchema>) =>
+    client.request('/admin/storage-retention/execute', {
+      method: 'POST',
+      body: JSON.stringify(StorageRetentionExecuteSchema.parse(body)),
+      schema: StorageRetentionResultSchema,
+      timeoutMs: 60_000,
     }),
 
   executeRetention: (body: AdminRetentionExecuteBody) =>

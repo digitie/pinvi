@@ -1331,3 +1331,12 @@ v1의 `apps/api/alembic/versions/`에서 v2로 그대로 가져올 항목:
 | 0028 plan_poi_attachments                  | T-137 완료                | 추천 여행 첨부는 본 §3.7의 `curated_plan_attachments`로 개명 |
 
 자세한 매핑은 v2 코드 작성 단계에서 ADR로 박는다.
+
+
+## 첨부 수명·휴지통 정리 (#667, 0103)
+
+- trips.purge_started_at은 30일이 지난 휴지통 정리의 비가역 시작 표식이다. 일반/신고 복원은 이 표식과 보존 기한을 검사한다.
+- curated_plan_attachments.purged_at은 보존 참조의 과금 종료 표식이다. 공유 참조가 남으면 객체는 보존하고 삭제 대상 참조만 정리한다. 마지막 참조는 물리 삭제 확인 뒤에만 과금을 해제한다.
+- attachment_upload_intents는 첨부 purpose의 URL 발급·예약 크기·만료·실제 PUT 완료 크기·등록/정리를 기록한다. 미등록 예약도 사용자 총량에 포함하며 등록과 과금 전환은 원자적이다.
+- attachment_gc_objects의 (bucket,storage_key) 기본키는 영구 tombstone이다. lease token·기한·시도 횟수·비밀 없는 provider 오류 코드를 보존한다. 새 참조와 실제 proxy PUT은 같은 객체별 advisory 잠금을 사용한다.
+- 보존 첨부의 사용자/여행/POI 합산에는 purged_at IS NULL 부분 인덱스를 제공한다. 0103은 app schema만 변경하며 M05 boundary의 과거 revision OR 리터럴을 보존하고 새 head를 추가한다.

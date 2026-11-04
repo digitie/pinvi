@@ -19,6 +19,8 @@ from app.models.trip_day import TripDay
 from app.models.user import User
 from app.schemas.admin import AdminOperationImpact, AdminOperationPolicyOption, AdminOperationResult
 from app.services import lexorank
+from app.services.rustfs_storage import InvalidStorageRefError
+from app.services.storage_lifecycle import assert_objects_writable
 from app.services.storage_policy import (
     AttachmentQuotaError,
     assert_attachment_capacity,
@@ -626,7 +628,8 @@ async def _assert_admin_attachment_copy_capacity(
             db, user=uploader, trip_id=target_trip_id,
             additional_bytes=sum(row.byte_size for row in attachments),
         )
-    except AttachmentQuotaError as exc:
+        await assert_objects_writable(db, [(row.bucket, row.storage_key) for row in attachments])
+    except (AttachmentQuotaError, InvalidStorageRefError) as exc:
         raise AdminTripOperationConflictError(str(exc)) from exc
 
 
