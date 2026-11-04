@@ -254,7 +254,7 @@ HMAC-SHA256으로 해시되며 원문 IP/email/token은 DB에 저장하지 않�
 
 ### 사용자별 영구 상한(#653)
 
-PINVI_RATE_LIMIT_USER_LIMIT_OVERRIDES는 canonical 사용자 UUID를 양의 정수 상한에 대응시키는 JSON 객체이며 기본값은 빈 객체다. 예시는 다음과 같다(실제 UUID는 로컬 운영 구성에만 둔다).
+PINVI_RATE_LIMIT_USER_LIMIT_OVERRIDES는 canonical 사용자 UUID를 양의 정수 상한(최대 6000/분)에 대응시키는 JSON 객체이며 기본값은 빈 객체다. 예시는 다음과 같다(실제 UUID는 로컬 운영 구성에만 둔다).
 
     PINVI_RATE_LIMIT_USER_LIMIT_OVERRIDES={"00000000-0000-0000-0000-000000000101":600}
 

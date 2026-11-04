@@ -480,3 +480,80 @@ it.each(['원천 설명', '9'])('기상청 SKY의 실제 설명·미등록 문�
   expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('하늘 ' + text);
   expect(screen.getByTestId('trip-weather-summary')).not.toHaveTextContent('구름많음');
 });
+
+it('같은 지표는 시각이 더 이르더라도 외부 제공자보다 기상청 값을 대표로 고른다', () => {
+  const cards = weatherCards();
+  cards[CARD_KEY].metrics = [
+    {
+      metric_key: 'TEMP',
+      metric_name: null,
+      forecast_style: 'short',
+      provider: 'open_meteo',
+      valid_at: '2026-07-30T00:00:00+09:00',
+      value_number: 30,
+      unit: 'deg_c',
+    },
+    {
+      metric_key: 'TMP',
+      metric_name: '기온',
+      forecast_style: 'short',
+      provider: 'python-kma-api',
+      valid_at: '2026-07-30T12:00:00+09:00',
+      value_number: 21,
+      unit: '℃',
+    },
+  ];
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
+  const items = screen.getAllByTestId('weather-summary-metric').map((el) => el.textContent);
+  expect(items).toEqual(['기온 21℃']);
+});
+
+it.each([
+  [0, '강수형태 없음'],
+  [1, '강수형태 비'],
+  [2, '강수형태 비/눈'],
+  [3, '강수형태 눈'],
+  [4, '강수형태 소나기'],
+] as const)('기상청 PTY 코드 %s는 강수형태 설명으로 표시한다', (code, text) => {
+  const cards = weatherCards();
+  cards[CARD_KEY].metrics = [
+    {
+      metric_key: 'PTY',
+      metric_name: '강수형태',
+      forecast_style: 'short',
+      provider: 'python-kma-api',
+      valid_at: '2026-07-30T09:00:00+09:00',
+      value_number: code,
+      unit: 'code',
+    },
+  ];
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
+  expect(screen.getAllByTestId('weather-summary-metric').map((el) => el.textContent)).toEqual([
+    text,
+  ]);
+});
+
+it('같은 물리량은 제공자와 무관하게 같은 한국어 라벨과 단위 기호로 표시한다', () => {
+  const cards = weatherCards();
+  const metric = (key: string, name: string | null, value: number, unit: string) => ({
+    metric_key: key,
+    metric_name: name,
+    forecast_style: 'short',
+    provider: 'python-kma-api',
+    valid_at: '2026-07-30T09:00:00+09:00',
+    value_number: value,
+    unit,
+  });
+  cards[CARD_KEY].metrics = [
+    metric('SKY', '하늘상태', 1, 'code'),
+    metric('VEC', '풍향', 270, 'deg'),
+    metric('REH', '상대습도', 60, '%'),
+  ];
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
+  const summary = screen.getByTestId('trip-weather-summary');
+  expect(summary).toHaveTextContent('하늘 맑음');
+  expect(summary).not.toHaveTextContent('하늘상태');
+  expect(summary).toHaveTextContent('습도 60%');
+  expect(summary).toHaveTextContent('풍향 270°');
+  expect(summary).not.toHaveTextContent('deg');
+});

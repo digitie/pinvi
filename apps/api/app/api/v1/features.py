@@ -102,6 +102,11 @@ FEATURE_SUGGESTION_DAILY_LIMIT = 20
 DECIMAL_6 = Decimal("0.000001")
 # ADR-056: price 마커도 기본 뷰포트에 포함(주유소/휴게소 가격 등 일반 표시).
 _DEFAULT_INBOUNDS_KINDS: list[FeatureKind] = ["place", "event", "notice", "price"]
+# #635 도형 요청 상한. 웹은 줌 14 이상 한 화면과 limit 100을 보낸다
+# (4K 화면·기울임 60°에서도 0.5° 안팎이라 1.0°는 여유가 있다).
+# Map은 도형을 bbox로 자르지 않으므로 범위와 건수를 서버에서 직접 묶는다.
+GEOMETRY_MAX_SPAN_DEG = 1.0
+GEOMETRY_MAX_ITEMS = 200
 _DEFAULT_NEARBY_KINDS: list[FeatureKind] = ["place"]
 
 
@@ -415,6 +420,23 @@ async def features_in_bounds(
             },
         )
     bbox_obj = parse_bbox(bbox)
+    if include_geometry and (
+        bbox_obj.lng_max - bbox_obj.lng_min > GEOMETRY_MAX_SPAN_DEG
+        or bbox_obj.lat_max - bbox_obj.lat_min > GEOMETRY_MAX_SPAN_DEG
+    ):
+        # zoom은 호출자가 고르는 값이라 줌 검사만으로는 전국 도형 요청을 막지 못한다.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": (
+                    f"경로·영역은 가로·세로 {GEOMETRY_MAX_SPAN_DEG}° 이하 범위에서 조회합니다."
+                ),
+            },
+        )
+    # 도형 건수는 잘라서 묶는다(기본 limit 500을 거절하지 않는다).
+    # 넘친 건은 Map의 truncated로 드러난다.
+    max_items = min(limit, GEOMETRY_MAX_ITEMS) if include_geometry else limit
     with _map_kor_travel_map_errors():
         data = await client.features_in_bounds(
             min_lon=bbox_obj.lng_min,
@@ -425,7 +447,7 @@ async def features_in_bounds(
             category=category,
             zoom=zoom,
             cluster_unit=cluster_unit,
-            max_items=limit,
+            max_items=max_items,
             include_geometry=include_geometry,
         )
     labels = await get_category_labels(client)

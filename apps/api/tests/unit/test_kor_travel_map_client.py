@@ -168,6 +168,26 @@ async def test_get_feature_404_returns_none() -> None:
     await client.aclose()
 
 
+@pytest.mark.parametrize("method", ["get_feature", "get_public_beach", "get_public_festival"])
+async def test_feature_id_is_one_escaped_path_segment(method: str) -> None:
+    # 라우터가 %3F·%23을 디코드해 넘기므로 그대로 붙이면 Map에 query/경로를 덧붙일 수 있다.
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(404, json={"error": {"code": "FEATURE_NOT_FOUND"}})
+
+    client = _client(handler)
+    assert await getattr(client, method)("x?kind=foo#y/z") is None
+    assert len(seen) == 1
+    assert seen[0].url.query == b""
+    assert seen[0].url.raw_path.endswith(b"/x%3Fkind%3Dfoo%23y%2Fz")
+    for dot in (".", ".."):
+        assert await getattr(client, method)(dot) is None
+    assert len(seen) == 1
+    await client.aclose()
+
+
 async def test_get_feature_returns_data() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"data": {"feature_id": "f_x", "name": "광안리"}})

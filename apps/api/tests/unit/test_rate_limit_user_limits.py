@@ -78,6 +78,18 @@ def test_config_rejects_non_positive_strict_integer(value: Any) -> None:
         Settings(_env_file=None, **{FIELD: {USER: value}})
 
 
+@pytest.mark.parametrize("value", [6001, 1_000_000_000])
+def test_config_rejects_effectively_unlimited_cap(value: int) -> None:
+    # 설정 하나로 무제한 우회(#653이 없애려던 `allowed`)가 되돌아오지 않도록 상한을 둔다.
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **{FIELD: {USER: value}})
+
+
+def test_config_accepts_cap_at_ceiling() -> None:
+    config = Settings(_env_file=None, **{FIELD: {USER: 6000}})
+    assert getattr(config, FIELD) == {USER: 6000}
+
+
 @pytest.mark.parametrize(
     "key", ["not-a-uuid", USER.replace("-", ""), "00000000-0000-0000-0000-000000000A01"]
 )

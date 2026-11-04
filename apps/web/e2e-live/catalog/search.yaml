@@ -320,7 +320,7 @@
   cleanup: [읽기 전용]
   automation: scripted
   spec: specs/search/search-geometry.live.spec.ts#SRCH-023
-  notes: "#635 구현. 근처 point 검색 fixture를 환경변수로 명시한다. 원래 nullable coord와 geometry kind를 유지하며 토글·목록·상세를 검증한다. WSL 실제 WebGL 검증과 운영 실행을 구분한다."
+  notes: "#635 구현. 근처 point 기본값 '설악산국립공원'(운영 Map 줌 15 화면에 '설악산_대청봉' route 여럿, 2026-11-05 확인) — PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY로 바꾼다. anchor 이름을 담은 point feature 행으로 이동한다."
 
 - id: SRCH-024
   title: 북한산 경로 — 근처 point 범위의 복수 선·토글 OFF
@@ -333,7 +333,7 @@
   cleanup: [읽기 전용]
   automation: scripted
   spec: specs/search/search-geometry.live.spec.ts#SRCH-024
-  notes: "#635 구현. 근처 point 검색 fixture를 환경변수로 명시한다. 원래 nullable coord와 geometry kind를 유지하며 토글·목록·상세를 검증한다. WSL 실제 WebGL 검증과 운영 실행을 구분한다."
+  notes: "#635 구현. 근처 point 기본값 '북한산성'(운영 Map 줌 15 화면에 '북한산_백운대' route 여럿, 2026-11-05 확인) — PINVI_E2E_GEOMETRY_BUKHAN_ANCHOR_QUERY로 바꾼다."
 
 - id: SRCH-025
   title: 국가유산 — '소수서원' → 라벨 국가유산/사적
@@ -382,9 +382,9 @@
   steps: [근처 point 검색·선택 → area 토글, 설악산 area 실제 canvas hit 클릭, 목록 선택 → 카메라 이동 완료 → 상세]
   expected: [area kind·면 geometry 보존, 원래 fit zoom14 미만인 큰 fixture, 이동 완료 후 zoom14 이상·동일 popup ID·상세 유지]
   cleanup: [읽기 전용]
-  automation: scripted
+  automation: blocked
   spec: specs/search/search-geometry.live.spec.ts#SRCH-028
-  notes: "#635 구현. 근처 point 검색 fixture를 환경변수로 명시한다. 원래 nullable coord와 geometry kind를 유지하며 토글·목록·상세를 검증한다. WSL 실제 WebGL 검증과 운영 실행을 구분한다."
+  notes: "#635 spec은 있으나 데이터 blocked — 운영 Map에 area kind feature가 0건(2026-11-05 전국 in-bounds kind=area 0; KNPS 국립공원 경계 미적재). 적재 뒤 PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY를 주고 scripted로 되돌린다."
 
 - id: SRCH-029
   title: 수목원 — '국립수목원' → 라벨 수목원

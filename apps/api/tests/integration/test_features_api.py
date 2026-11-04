@@ -388,3 +388,72 @@ async def test_geometry_cannot_be_requested_below_detail_zoom(
         _clear()
     assert response.status_code == 422
     assert "in_bounds" not in fake.calls
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        # 전국 bbox — zoom은 호출자가 고르는 값이라 14를 보내도 서버가 범위를 직접 막아야 한다.
+        "bbox=124,33,132,39&zoom=14&kinds=route&include_geometry=true",
+        "bbox=127,37.5,128.1,37.6&zoom=14&kinds=route&include_geometry=true",
+        "bbox=127,37.5,127.1,38.6&zoom=14&kinds=area&include_geometry=true",
+    ],
+)
+async def test_geometry_request_is_bounded_server_side(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    query: str,
+) -> None:
+    fake = _FakeKorTravelMapClient()
+    _override(fake)
+    try:
+        response = await client.get(
+            f"/features/in-bounds?{query}", cookies=auth_cookies(verified_user[0])
+        )
+    finally:
+        _clear()
+    assert response.status_code == 422, response.text
+    assert "in_bounds" not in fake.calls
+
+
+async def test_point_request_keeps_wide_bbox_and_large_limit(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+) -> None:
+    fake = _FakeKorTravelMapClient()
+    _override(fake)
+    try:
+        response = await client.get(
+            "/features/in-bounds?bbox=124,33,132,39&zoom=7&limit=2000",
+            cookies=auth_cookies(verified_user[0]),
+        )
+    finally:
+        _clear()
+    assert response.status_code == 200, response.text
+    assert fake.calls["in_bounds"]["max_items"] == 2000
+
+
+@pytest.mark.parametrize(
+    ("limit", "expected"), [("", 200), ("&limit=2000", 200), ("&limit=100", 100)]
+)
+async def test_geometry_item_count_is_clamped(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    limit: str,
+    expected: int,
+) -> None:
+    fake = _FakeKorTravelMapClient()
+    _override(fake)
+    try:
+        response = await client.get(
+            "/features/in-bounds?bbox=127,37.5,127.1,37.6&zoom=14&kinds=route"
+            f"&include_geometry=true{limit}",
+            cookies=auth_cookies(verified_user[0]),
+        )
+    finally:
+        _clear()
+    assert response.status_code == 200, response.text
+    assert fake.calls["in_bounds"]["max_items"] == expected

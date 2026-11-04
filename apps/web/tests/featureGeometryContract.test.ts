@@ -101,3 +101,25 @@ it.each([
 ])('잘못된 도형을 예외 누출 없이 거부한다: %j', (geometry) => {
   expect(FeatureGeometrySchema.safeParse(geometry).success).toBe(false);
 });
+
+it('도형 하나가 잘못돼도 응답 전체를 거부하지 않고 그 도형만 비운다', () => {
+  const item = (feature_id: string, geometry: unknown) => ({
+    feature_id,
+    kind: 'route',
+    name: feature_id,
+    coord: null,
+    marker_color: 'P-01',
+    marker_icon: 'route',
+    geometry,
+  });
+  const parsed = FeaturesInBoundsResponseSchema.parse({
+    ...emptyBounds,
+    items: [
+      item('route:good', geometries[0]),
+      item('route:bad', { type: 'LineString', coordinates: [[127, 37.5]] }),
+    ],
+  });
+  expect(parsed.items.map((x) => x.feature_id)).toEqual(['route:good', 'route:bad']);
+  expect(parsed.items[0]!.geometry).toEqual(geometries[0]);
+  expect(parsed.items[1]!.geometry).toBeNull();
+});
