@@ -330,8 +330,9 @@ async def logout(
     response: Response,
     db: DbSession,
     pinvi_refresh: Annotated[str | None, Cookie(alias="pinvi_refresh")] = None,
+    pinvi_access: Annotated[str | None, Cookie(alias="pinvi_access")] = None,
 ) -> Response:
-    await revoke_user_session(db, refresh_token=pinvi_refresh)
+    await revoke_user_session(db, refresh_token=pinvi_refresh, access_token=pinvi_access)
     clear_session_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

@@ -1,4 +1,5 @@
 import { ApiClient } from '@pinvi/api-client';
+import { safeLoginReturnTo } from '@/lib/loginReturnTo';
 
 /**
  * 클라이언트용 API 인스턴스. cookie 기반 인증이므로 token getter 불필요.
@@ -6,7 +7,8 @@ import { ApiClient } from '@pinvi/api-client';
 /** 세션을 되살릴 수 없을 때(갱신 실패 뒤에도 401) 로그인 화면으로 보낸다. */
 export function redirectToLogin(): void {
   if (typeof window !== 'undefined') {
-    const next = window.location.pathname + window.location.search + window.location.hash;
+    // 복귀 경로에서 공유·저장소 토큰과 비밀 query를 지운다(#671) — `/login?next=`는 로그·Referer로 퍼진다.
+    const next = safeLoginReturnTo(window.location.pathname + window.location.search + window.location.hash);
     window.location.href = '/login?next=' + encodeURIComponent(next);
   }
 }

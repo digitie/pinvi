@@ -7,11 +7,16 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.security import create_access_token, generate_opaque_token
+from app.core.security import (
+    InvalidTokenError,
+    create_access_token,
+    decode_access_token,
+    generate_opaque_token,
+)
 from app.core.time import utc_now
 from app.models.session import UserSession
 from app.models.user import User
@@ -158,15 +163,55 @@ async def revoke_active_user_sessions(
     )
 
 
-async def revoke_user_session(db: AsyncSession, *, refresh_token: str | None) -> None:
-    if not refresh_token:
-        return
-    await db.execute(
-        update(UserSession)
-        .where(
-            UserSession.session_token_hash == hash_session_token(refresh_token),
-            UserSession.revoked_at.is_(None),
+def _access_token_subject(access_token: str | None) -> uuid.UUID | None:
+    """서명·만료가 유효한 access JWT의 사용자 id. 아니면 None(로그아웃은 예외를 던지지 않는다)."""
+    if not access_token:
+        return None
+    try:
+        payload = decode_access_token(access_token)
+    except InvalidTokenError:
+        return None
+    if payload.get("typ") != "access" or not isinstance(payload.get("sub"), str):
+        return None
+    try:
+        return uuid.UUID(payload["sub"])
+    except ValueError:
+        return None
+
+
+async def revoke_user_session(
+    db: AsyncSession,
+    *,
+    refresh_token: str | None,
+    access_token: str | None = None,
+) -> None:
+    """로그아웃 — refresh session을 폐기하고 그 사용자의 access JWT도 무효로 만든다(#672).
+
+    access JWT는 stateless라 refresh session 폐기만으로는 만료(기본 10분)까지 살아 있다 — 로그아웃
+    응답의 cookie 삭제가 반영되기 전에 나간 요청이나 cookie 밖으로 복사된 토큰이 `/auth/me` 200을
+    받았다. 그래서 `access_token_version`을 올린다(관리자 세션 폐기와 같은 장치). 같은 사용자의
+    다른 기기 access JWT도 무효가 되지만 refresh session은 살아 있어 다음 요청에서 한 번 갱신된다.
+    """
+    user_ids: set[uuid.UUID] = set()
+    if refresh_token:
+        session_user_id = await db.scalar(
+            update(UserSession)
+            .where(
+                UserSession.session_token_hash == hash_session_token(refresh_token),
+                UserSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=utc_now())
+            .returning(UserSession.user_id)
         )
-        .values(revoked_at=utc_now())
-    )
+        if session_user_id is not None:
+            user_ids.add(session_user_id)
+    access_user_id = _access_token_subject(access_token)
+    if access_user_id is not None:
+        user_ids.add(access_user_id)
+    if user_ids:
+        await db.execute(
+            update(User)
+            .where(User.user_id.in_(user_ids))
+            .values(access_token_version=func.coalesce(User.access_token_version, 0) + 1)
+        )
     await db.commit()

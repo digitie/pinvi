@@ -69,6 +69,14 @@ _PATH_TOKEN_RE = re.compile(
     r"(?P<prefix>/trips/[^/?\s\"'<>#\\]+/shared/|/storage/(?:uploads|downloads)/)"
     rf"(?P<token>[^/?{_VALUE_END}]+)"
 )
+# 웹 공유 화면 `/shared/{tripId}/{token}` — 접근 로그·`next=`·OAuth `return_to`에 실린다(#671).
+# `/`가 `%2F`(이중 `%252F`)로 인코딩된 꼴(`/login?next=%2Fshared%2F…`)도 잡는다. API 꼴
+# `/trips/{id}/shared/{token}/…`은 위 규칙이 먼저 `***`로 바꾸므로 id 자리가 `***`이면 건너뛴다.
+_SLASH = "(?:/|%2[Ff]|%252[Ff])"
+_WEB_SHARED_RE = re.compile(
+    rf"(?P<prefix>{_SLASH}shared{_SLASH}(?!\*\*\*)[^/?%{_VALUE_END}]+{_SLASH})"
+    rf"(?P<token>[^/?%{_VALUE_END}]+)"
+)
 # OAuth callback의 `code`·`state`(callback path에서만 — `code=`는 다른 곳에서 지역 코드 등이다).
 _OAUTH_CALLBACK_RE = re.compile(
     rf"(?P<path>/oauth/[^/?{_VALUE_END}]+/callback/?\?)(?P<query>[^\s\"'<>#\\]*)"
@@ -113,7 +121,7 @@ def _replace_oauth_callback(match: re.Match[str]) -> str:
 def redact_secrets(text: str) -> str:
     """자유 텍스트(로그 줄·예외 메시지·URL)에서 비밀값을 가린다.
 
-    가리는 것: 비밀 이름의 query·kwargs 값, path 토큰(Telegram `/bot…/`, 공유 링크, 저장소 토큰),
+    가리는 것: 비밀 이름의 query·kwargs 값, path 토큰(Telegram `/bot…/`, 공유 링크 API·웹 화면, 저장소 토큰),
     `/bot/` 밖 Telegram token, OAuth callback의 code·state, URL userinfo password,
     `Authorization: Bearer|Basic|Token …`.
 
@@ -126,6 +134,7 @@ def redact_secrets(text: str) -> str:
         return text
     text = _TELEGRAM_BOT_PATH_RE.sub(rf"/bot\1:{REDACTED}", text)
     text = _PATH_TOKEN_RE.sub(rf"\g<prefix>{REDACTED}", text)
+    text = _WEB_SHARED_RE.sub(rf"\g<prefix>{REDACTED}", text)
     text = _TELEGRAM_TOKEN_RE.sub(rf"\g<id>\g<sep>{REDACTED}", text)
     text = _OAUTH_CALLBACK_RE.sub(_replace_oauth_callback, text)
     text = _USERINFO_RE.sub(rf"\g<prefix>:{REDACTED}@", text)
