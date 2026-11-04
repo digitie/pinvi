@@ -175,11 +175,13 @@ export type AttachmentLibraryPage = z.infer<typeof AttachmentLibraryPageSchema>;
 export const StorageRetentionStatusSchema = z.object({
   retention_days: z.number().int().positive(),
   expired_trips: z.number().int().nonnegative(),
+  held_attachments: z.number().int().nonnegative().default(0),
   eligible_attachments: z.number().int().nonnegative(),
+  protected_uploads: z.number().int().nonnegative().default(0),
   expired_uploads: z.number().int().nonnegative(),
   pending_objects: z.number().int().nonnegative(),
   in_progress_objects: z.number().int().nonnegative(),
-  errors: z.array(z.object({ code: z.string(), count: z.number().int().nonnegative() })),
+  errors: z.array(z.object({ code: z.string(), count: z.number().int().nonnegative(), phase: z.enum(['delete','verify']).default('delete') })),
   can_execute: z.boolean(),
 });
 export const StorageRetentionExecuteSchema = z.object({
@@ -189,9 +191,12 @@ export const StorageRetentionExecuteSchema = z.object({
 export const StorageRetentionResultSchema = z.object({
   expired_trips_started: z.number().int().nonnegative(),
   retired_references: z.number().int().nonnegative(),
+  objects_verified: z.number().int().nonnegative().default(0),
+  verification_failed: z.number().int().nonnegative().default(0),
   objects_deleted: z.number().int().nonnegative(),
   objects_failed: z.number().int().nonnegative(),
   trips_deleted: z.number().int().nonnegative(),
+  trip_cleanup_errors: z.array(z.string()).default([]),
   status: StorageRetentionStatusSchema,
 });
 export type StorageRetentionStatus = z.infer<typeof StorageRetentionStatusSchema>;

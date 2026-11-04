@@ -692,7 +692,7 @@ export const adminApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(StorageRetentionExecuteSchema.parse(body)),
       schema: StorageRetentionResultSchema,
-      timeoutMs: 60_000,
+      timeoutMs: 180_000,
     }),
 
   executeRetention: (body: AdminRetentionExecuteBody) =>

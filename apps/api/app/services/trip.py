@@ -29,7 +29,7 @@ from app.services.hash_chain import sha256_hex
 from app.services.rustfs_storage import InvalidStorageRefError, validate_attachment_storage_ref
 from app.services.storage_lifecycle import (
     TRASH_RETENTION_DAYS,
-    assert_objects_writable,
+    assert_copy_sources_writable,
     claim_attachment_upload,
 )
 from app.services.storage_policy import (
@@ -1362,7 +1362,7 @@ async def _copy_trip_attachments(
         except AttachmentQuotaError as exc:
             raise TripAttachmentQuotaError(str(exc)) from exc
     try:
-        await assert_objects_writable(db, [(row.bucket, row.storage_key) for row in attachments])
+        await assert_copy_sources_writable(db, attachments)
     except InvalidStorageRefError as exc:
         raise TripAttachmentStorageRefError(str(exc)) from exc
     for attachment in attachments:

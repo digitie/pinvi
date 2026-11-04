@@ -125,3 +125,16 @@ async def lock_restorable_attachment(db: AsyncSession, attachment_id: uuid.UUID)
     if row.trip_id is not None and row.trip_id != parent_trip:
         raise InvalidStorageRefError("첨부 대상이 변경되었습니다.")
     return row
+
+
+async def assert_copy_sources_writable(db: AsyncSession, attachments: list[CuratedPlanAttachment]) -> None:
+    await assert_objects_writable(db, [(row.bucket, row.storage_key) for row in attachments])
+    ids = {row.attachment_id for row in attachments}
+    if not ids:
+        return
+    current = list(await db.scalars(select(CuratedPlanAttachment.attachment_id).where(
+        CuratedPlanAttachment.attachment_id.in_(ids),
+        CuratedPlanAttachment.deleted_at.is_(None), CuratedPlanAttachment.purged_at.is_(None),
+    ).order_by(CuratedPlanAttachment.attachment_id).with_for_update(read=True, key_share=True)))
+    if len(current) != len(ids):
+        raise InvalidStorageRefError("복사할 파일이 변경되었거나 정리되었습니다. 다시 불러와 주세요.")

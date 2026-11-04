@@ -1,4 +1,5 @@
 """#667: 실제 PostgreSQL 수명·공유 참조·영속 삭제 재시도."""
+
 from __future__ import annotations
 
 import uuid
@@ -19,8 +20,11 @@ pytestmark = pytest.mark.asyncio
 
 
 async def _file(client, cookies, user_id, trip):
-    r = await client.post(f"/trips/{trip}/attachments", cookies=cookies,
-                          json=_attachment_payload(user_id, byte_size=60))
+    r = await client.post(
+        f"/trips/{trip}/attachments",
+        cookies=cookies,
+        json=_attachment_payload(user_id, byte_size=60),
+    )
     assert r.status_code == 201, r.text
     return r.json()["data"]
 
@@ -33,8 +37,10 @@ async def _trash(session_factory, trip_id, days):
         await db.commit()
 
 
-@pytest.mark.parametrize("days,status", [(29,200),(30,410),(31,410)])
-async def test_restore_has_thirty_day_deadline(client, verified_user, auth_cookies, session_factory, days, status):
+@pytest.mark.parametrize("days,status", [(29, 200), (30, 410), (31, 410)])
+async def test_restore_has_thirty_day_deadline(
+    client, verified_user, auth_cookies, session_factory, days, status
+):
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
     trip = await _make_trip(client, cookies)
@@ -49,25 +55,27 @@ async def test_delete_is_after_tombstone_commit_and_then_releases_charge(
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
     trip = await _make_trip(client, cookies)
-    file = await _file(client,cookies,user_id,trip)
-    removed = await client.delete(f"/trips/{trip}/attachments/{file['attachment_id']}", cookies=cookies)
+    file = await _file(client, cookies, user_id, trip)
+    removed = await client.delete(
+        f"/trips/{trip}/attachments/{file['attachment_id']}", cookies=cookies
+    )
     assert removed.status_code == 204
     calls = []
 
-    async def delete(bucket,key):
+    async def delete(bucket, key):
         async with session_factory() as observer:
-            row = await observer.get(AttachmentGcObject,(bucket,key))
+            row = await observer.get(AttachmentGcObject, (bucket, key))
             assert row is not None and row.deleted_at is None
-            assert await attachment_bytes_for_user(observer,user_id=uuid.UUID(user_id)) == 60
+            assert await attachment_bytes_for_user(observer, user_id=uuid.UUID(user_id)) == 60
         calls.append(key)
 
-    monkeypatch.setattr(gc,"delete_attachment_object",delete)
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
     async with session_factory() as db:
         result = await gc.execute_attachment_retention(db)
     assert result["objects_deleted"] == 1 and len(calls) == 1
     async with session_factory() as db:
-        assert await attachment_bytes_for_user(db,user_id=uuid.UUID(user_id)) == 0
-        row = await db.get(CuratedPlanAttachment,uuid.UUID(file["attachment_id"]))
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 0
+        row = await db.get(CuratedPlanAttachment, uuid.UUID(file["attachment_id"]))
         assert row.purged_at is not None
 
 
@@ -76,29 +84,33 @@ async def test_failed_object_delete_is_durable_and_retryable(
 ):
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
-    trip = await _make_trip(client,cookies)
-    file = await _file(client,cookies,user_id,trip)
-    await client.delete(f"/trips/{trip}/attachments/{file['attachment_id']}",cookies=cookies)
+    trip = await _make_trip(client, cookies)
+    file = await _file(client, cookies, user_id, trip)
+    await client.delete(f"/trips/{trip}/attachments/{file['attachment_id']}", cookies=cookies)
 
-    async def failed(bucket,key):
-        raise ClientError({"Error":{"Code":"AccessDenied","Message":"private never expose"}}, "DeleteObject")
-    monkeypatch.setattr(gc,"delete_attachment_object",failed)
+    async def failed(bucket, key):
+        raise ClientError(
+            {"Error": {"Code": "AccessDenied", "Message": "private never expose"}}, "DeleteObject"
+        )
+
+    monkeypatch.setattr(gc, "delete_attachment_object", failed)
     async with session_factory() as db:
         result = await gc.execute_attachment_retention(db)
         assert result["objects_failed"] == 1
-        assert await attachment_bytes_for_user(db,user_id=uuid.UUID(user_id)) == 60
-        row = await db.get(AttachmentGcObject,(file["bucket"],file["storage_key"]))
-        assert row.last_error_code == "AccessDenied" and row.attempts == 1
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 60
+        row = await db.get(AttachmentGcObject, (file["bucket"], file["storage_key"]))
+        assert row.last_error_code == "AccessDenied:DeleteObject" and row.attempts == 1
 
-    async def success(bucket,key):
+    async def success(bucket, key):
         return None
-    monkeypatch.setattr(gc,"delete_attachment_object",success)
+
+    monkeypatch.setattr(gc, "delete_attachment_object", success)
     async with session_factory() as db:
         result = await gc.execute_attachment_retention(db)
         assert result["objects_deleted"] == 1
-        row = await db.get(AttachmentGcObject,(file["bucket"],file["storage_key"]))
+        row = await db.get(AttachmentGcObject, (file["bucket"], file["storage_key"]))
         assert row.attempts == 2 and row.last_error_code is None
-        assert await attachment_bytes_for_user(db,user_id=uuid.UUID(user_id)) == 0
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 0
 
 
 async def test_expired_source_purge_preserves_live_copy_object(
@@ -106,133 +118,169 @@ async def test_expired_source_purge_preserves_live_copy_object(
 ):
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
-    trip = await _make_trip(client,cookies)
-    await _file(client,cookies,user_id,trip)
-    copy = await client.post(f"/trips/{trip}/copy",json={"scope":"all"},cookies=cookies)
+    trip = await _make_trip(client, cookies)
+    await _file(client, cookies, user_id, trip)
+    copy = await client.post(f"/trips/{trip}/copy", json={"scope": "all"}, cookies=cookies)
     assert copy.status_code == 201, copy.text
     other = copy.json()["data"]["trip"]["trip_id"]
-    await _trash(session_factory,trip,31)
+    await _trash(session_factory, trip, 31)
     calls = []
 
-    async def delete(bucket,key):
+    async def delete(bucket, key):
         calls.append(key)
-    monkeypatch.setattr(gc,"delete_attachment_object",delete)
+
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
     async with session_factory() as db:
         result = await gc.execute_attachment_retention(db)
         assert result["trips_deleted"] == 1 and calls == []
-        assert await db.get(Trip,uuid.UUID(trip)) is None
-        assert await attachment_bytes_for_user(db,user_id=uuid.UUID(user_id)) == 60
-    await _trash(session_factory,other,31)
+        assert await db.get(Trip, uuid.UUID(trip)) is None
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 60
+    await _trash(session_factory, other, 31)
     async with session_factory() as db:
         result = await gc.execute_attachment_retention(db)
         assert result["trips_deleted"] == 1 and len(calls) == 1
-        assert await attachment_bytes_for_user(db,user_id=uuid.UUID(user_id)) == 0
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 0
 
 
-async def _upload_url(client,cookies,size=60):
-    result = await client.post("/storage/upload-urls", cookies=cookies, json={
-        "purpose":"trip_attachment","filename":"retained.jpg","content_type":"image/jpeg","content_length":size,
-    })
+async def _upload_url(client, cookies, size=60):
+    result = await client.post(
+        "/storage/upload-urls",
+        cookies=cookies,
+        json={
+            "purpose": "trip_attachment",
+            "filename": "retained.jpg",
+            "content_type": "image/jpeg",
+            "content_length": size,
+        },
+    )
     assert result.status_code == 200, result.text
     return result.json()["data"]
 
 
-async def _put(client,url,size=60):
+async def _put(client, url, size=60):
     from urllib.parse import urlsplit
-    return await client.put(urlsplit(url).path,content=b"x"*size,headers={"content-type":"image/jpeg"})
+
+    return await client.put(
+        urlsplit(url).path, content=b"x" * size, headers={"content-type": "image/jpeg"}
+    )
 
 
 async def test_upload_reservation_transfers_once_and_failed_registration_keeps_charge(
-    client,verified_user,auth_cookies,session_factory,monkeypatch
+    client, verified_user, auth_cookies, session_factory, monkeypatch
 ):
     from app.api.v1 import storage
     from app.models.storage_lifecycle import AttachmentUploadIntent
     from app.models.user import User
-    user_id,_ = verified_user
-    cookies=auth_cookies(user_id)
-    trip=await _make_trip(client,cookies)
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
     async with session_factory() as db:
-        user=await db.get(User,uuid.UUID(user_id))
-        user.user_attachment_quota_bytes_override=100
-        user.trip_attachment_quota_bytes_override=50
+        user = await db.get(User, uuid.UUID(user_id))
+        user.user_attachment_quota_bytes_override = 100
+        user.trip_attachment_quota_bytes_override = 50
         await db.commit()
-    up=await _upload_url(client,cookies)
-    blocked=await client.post("/storage/upload-urls",cookies=cookies,json={
-        "purpose":"trip_attachment","filename":"second.jpg","content_type":"image/jpeg","content_length":50,
-    })
-    assert blocked.status_code==409,blocked.text
-    monkeypatch.setattr(storage,"put_storage_object",lambda **kwargs:None)
-    assert (await _put(client,up["upload_url"])).status_code==204
-    payload={**_attachment_payload(user_id,byte_size=60),"bucket":up["bucket"],"storage_key":up["storage_key"]}
-    bad=await client.post(f"/trips/{trip}/attachments",json=payload,cookies=cookies)
-    assert bad.status_code==409,bad.text
+    up = await _upload_url(client, cookies)
+    blocked = await client.post(
+        "/storage/upload-urls",
+        cookies=cookies,
+        json={
+            "purpose": "trip_attachment",
+            "filename": "second.jpg",
+            "content_type": "image/jpeg",
+            "content_length": 50,
+        },
+    )
+    assert blocked.status_code == 409, blocked.text
+    monkeypatch.setattr(storage, "put_storage_object", lambda **kwargs: None)
+    assert (await _put(client, up["upload_url"])).status_code == 204
+    payload = {
+        **_attachment_payload(user_id, byte_size=60),
+        "bucket": up["bucket"],
+        "storage_key": up["storage_key"],
+    }
+    bad = await client.post(f"/trips/{trip}/attachments", json=payload, cookies=cookies)
+    assert bad.status_code == 409, bad.text
     async with session_factory() as db:
-        intent=await db.get(AttachmentUploadIntent,(up["bucket"],up["storage_key"]))
+        intent = await db.get(AttachmentUploadIntent, (up["bucket"], up["storage_key"]))
         assert intent.registered_at is None
-        assert await attachment_bytes_for_user(db,user_id=uuid.UUID(user_id))==60
-        user=await db.get(User,uuid.UUID(user_id))
-        user.trip_attachment_quota_bytes_override=100
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 60
+        user = await db.get(User, uuid.UUID(user_id))
+        user.trip_attachment_quota_bytes_override = 100
         await db.commit()
-    good=await client.post(f"/trips/{trip}/attachments",json=payload,cookies=cookies)
-    assert good.status_code==201,good.text
-    assert (await _put(client,up["upload_url"])).status_code==422
+    good = await client.post(f"/trips/{trip}/attachments", json=payload, cookies=cookies)
+    assert good.status_code == 201, good.text
+    assert (await _put(client, up["upload_url"])).status_code == 422
     async with session_factory() as db:
-        assert await attachment_bytes_for_user(db,user_id=uuid.UUID(user_id))==60
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 60
 
 
 async def test_expired_unregistered_upload_is_collected_and_late_reference_denied(
-    client,verified_user,auth_cookies,session_factory,monkeypatch
+    client, verified_user, auth_cookies, session_factory, monkeypatch
 ):
     from app.models.storage_lifecycle import AttachmentUploadIntent
-    user_id,_=verified_user
-    cookies=auth_cookies(user_id)
-    trip=await _make_trip(client,cookies)
-    up=await _upload_url(client,cookies)
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    up = await _upload_url(client, cookies)
     async with session_factory() as db:
-        intent=await db.get(AttachmentUploadIntent,(up["bucket"],up["storage_key"]))
-        intent.expires_at=datetime.now(UTC)-timedelta(seconds=1)
+        intent = await db.get(AttachmentUploadIntent, (up["bucket"], up["storage_key"]))
+        intent.expires_at = datetime.now(UTC) - timedelta(seconds=1)
         await db.commit()
-    calls=[]
-    async def delete(bucket,key): calls.append(key)
-    monkeypatch.setattr(gc,"delete_attachment_object",delete)
+    calls = []
+
+    async def delete(bucket, key):
+        calls.append(key)
+
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
     async with session_factory() as db:
-        result=await gc.execute_attachment_retention(db)
-        assert result["objects_deleted"]==1 and calls==[up["storage_key"]]
-        assert await attachment_bytes_for_user(db,user_id=uuid.UUID(user_id))==0
-    payload={**_attachment_payload(user_id,byte_size=60),"bucket":up["bucket"],"storage_key":up["storage_key"]}
-    late=await client.post(f"/trips/{trip}/attachments",cookies=cookies,json=payload)
-    assert late.status_code==422,late.text
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_deleted"] == 1 and calls == [up["storage_key"]]
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 0
+    payload = {
+        **_attachment_payload(user_id, byte_size=60),
+        "bucket": up["bucket"],
+        "storage_key": up["storage_key"],
+    }
+    late = await client.post(f"/trips/{trip}/attachments", cookies=cookies, json=payload)
+    assert late.status_code == 422, late.text
 
 
-@pytest.mark.parametrize("kind",["trip","attachment"])
+@pytest.mark.parametrize("kind", ["trip", "attachment"])
 async def test_moderation_cannot_restore_purge_started_target(
-    client,verified_user,auth_cookies,session_factory,monkeypatch,kind
+    client, verified_user, auth_cookies, session_factory, monkeypatch, kind
 ):
     from app.models.moderation import ContentReport
     from app.services.moderation import ContentReportTransitionError, _restore_target
-    user_id,_=verified_user
-    cookies=auth_cookies(user_id)
-    trip=await _make_trip(client,cookies)
-    file=await _file(client,cookies,user_id,trip)
-    if kind=="trip":
-        await _trash(session_factory,trip,31)
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    file = await _file(client, cookies, user_id, trip)
+    if kind == "trip":
+        await _trash(session_factory, trip, 31)
         async with session_factory() as db:
-            await gc._stage(db,datetime.now(UTC),20)
-        target_id=uuid.UUID(trip)
+            await gc._stage(db, datetime.now(UTC), 20)
+        target_id = uuid.UUID(trip)
     else:
-        await client.delete(f"/trips/{trip}/attachments/{file['attachment_id']}",cookies=cookies)
+        await client.delete(f"/trips/{trip}/attachments/{file['attachment_id']}", cookies=cookies)
         async with session_factory() as db:
-            await gc._stage(db,datetime.now(UTC),20)
-        target_id=uuid.UUID(file["attachment_id"])
-    report=ContentReport(target_type=kind,target_id=target_id,target_snapshot={"status":"draft","visibility":"public"})
+            await gc._stage(db, datetime.now(UTC), 20)
+        target_id = uuid.UUID(file["attachment_id"])
+    report = ContentReport(
+        target_type=kind,
+        target_id=target_id,
+        target_snapshot={"status": "draft", "visibility": "public"},
+    )
     async with session_factory() as db:
         with pytest.raises(ContentReportTransitionError):
-            await _restore_target(db,report)
+            await _restore_target(db, report)
         await db.rollback()
 
 
 async def test_cancelled_put_keeps_object_lock_until_actual_write_finishes(
-    client,verified_user,auth_cookies,session_factory,monkeypatch
+    client, verified_user, auth_cookies, session_factory, monkeypatch
 ):
     import asyncio
     import threading
@@ -240,37 +288,500 @@ async def test_cancelled_put_keeps_object_lock_until_actual_write_finishes(
     from app.api.v1 import storage
     from app.models.storage_lifecycle import AttachmentUploadIntent
 
-    user_id,_=verified_user
-    cookies=auth_cookies(user_id)
-    up=await _upload_url(client,cookies)
-    async with session_factory() as db:
-        row=await db.get(AttachmentUploadIntent,(up["bucket"],up["storage_key"]))
-        row.expires_at=datetime.now(UTC)-timedelta(seconds=1)
-        await db.commit()
-    started=threading.Event()
-    finish=threading.Event()
-    objects={}
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    up = await _upload_url(client, cookies)
+    started, finish = threading.Event(), threading.Event()
+    objects = {}
+
     def slow_put(**kwargs):
         started.set()
         assert finish.wait(10)
-        objects[up["storage_key"]]=kwargs["body"]
-    async def delete(bucket,key): objects.pop(key,None)
-    monkeypatch.setattr(storage,"put_storage_object",slow_put)
-    monkeypatch.setattr(gc,"delete_attachment_object",delete)
-    put=asyncio.create_task(_put(client,up["upload_url"]))
+        objects[up["storage_key"]] = kwargs["body"]
+
+    async def delete(bucket, key):
+        objects.pop(key, None)
+
+    monkeypatch.setattr(storage, "put_storage_object", slow_put)
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
+    put = asyncio.create_task(_put(client, up["upload_url"]))
     try:
-        assert await asyncio.to_thread(started.wait,10)
+        assert await asyncio.to_thread(started.wait, 10)
+        async with session_factory() as db:
+            row = await db.get(AttachmentUploadIntent, (up["bucket"], up["storage_key"]))
+            row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+            row.write_started_at = datetime.now(UTC) - timedelta(minutes=31)
+            await db.commit()
         put.cancel()
         await asyncio.sleep(0.05)
         assert not put.done()
         async with session_factory() as db:
-            result=await gc.execute_attachment_retention(db)
-            assert result["objects_deleted"]==0
-            assert await db.get(AttachmentGcObject,(up["bucket"],up["storage_key"])) is None
+            result = await gc.execute_attachment_retention(db)
+            assert result["objects_deleted"] == 0
+            assert await db.get(AttachmentGcObject, (up["bucket"], up["storage_key"])) is None
     finally:
         finish.set()
     with pytest.raises(asyncio.CancelledError):
         await put
     async with session_factory() as db:
-        result=await gc.execute_attachment_retention(db)
-        assert result["objects_deleted"]==1 and not objects
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_deleted"] == 1 and not objects
+
+
+async def test_one_shot_put_start_survives_crash_before_network(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    from app.api.v1 import storage
+    from app.models.storage_lifecycle import AttachmentUploadIntent
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    up = await _upload_url(client, cookies)
+    guard = storage.assert_objects_writable
+    calls = 0
+    sent = []
+
+    async def interrupt(db, objects):
+        nonlocal calls
+        await guard(db, objects)
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("fixture process stopped after durable start")
+
+    monkeypatch.setattr(storage, "assert_objects_writable", interrupt)
+    monkeypatch.setattr(storage, "put_storage_object", lambda **kw: sent.append(kw))
+    first = await _put(client, up["upload_url"])
+    assert first.status_code == 503 and not sent
+    monkeypatch.setattr(storage, "assert_objects_writable", guard)
+    second = await _put(client, up["upload_url"])
+    assert second.status_code == 422 and second.json()["error"]["code"] == "UPLOAD_ALREADY_STARTED"
+    async with session_factory() as db:
+        intent = await db.get(AttachmentUploadIntent, (up["bucket"], up["storage_key"]))
+        assert intent.write_started_at is not None and intent.uploaded_bytes is None
+
+
+async def test_lost_completion_cannot_register_and_late_bytes_are_recollected(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.api.v1 import storage
+    from app.models.storage_lifecycle import AttachmentUploadIntent
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    up = await _upload_url(client, cookies)
+    objects = {}
+    monkeypatch.setattr(
+        storage, "put_storage_object", lambda **kw: objects.update({up["storage_key"]: kw["body"]})
+    )
+    real_commit = AsyncSession.commit
+    calls = 0
+
+    async def fail_completion(db):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("fixture completion record lost")
+        await real_commit(db)
+
+    monkeypatch.setattr(AsyncSession, "commit", fail_completion)
+    result = await _put(client, up["upload_url"])
+    assert result.status_code == 503 and up["storage_key"] in objects
+    monkeypatch.setattr(AsyncSession, "commit", real_commit)
+    payload = {
+        **_attachment_payload(user_id, byte_size=60),
+        "bucket": up["bucket"],
+        "storage_key": up["storage_key"],
+    }
+    refused = await client.post(f"/trips/{trip}/attachments", cookies=cookies, json=payload)
+    assert refused.status_code == 422, refused.text
+    async with session_factory() as db:
+        intent = await db.get(AttachmentUploadIntent, (up["bucket"], up["storage_key"]))
+        intent.expires_at = datetime.now(UTC) - timedelta(minutes=31)
+        intent.write_started_at = datetime.now(UTC) - timedelta(minutes=31)
+        await db.commit()
+
+    async def delete(bucket, key):
+        objects.pop(key, None)
+
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
+    async with session_factory() as db:
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_deleted"] == 1 and not objects
+    objects[up["storage_key"]] = b"late old server write"
+    async with session_factory() as db:
+        row = await db.get(AttachmentGcObject, (up["bucket"], up["storage_key"]))
+        row.last_verified_at = datetime.now(UTC) - timedelta(hours=2)
+        await db.commit()
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_verified"] == 1 and not objects
+    refused = await client.post(f"/trips/{trip}/attachments", cookies=cookies, json=payload)
+    assert refused.status_code == 422
+
+
+async def test_same_key_concurrent_put_sends_once(client, verified_user, auth_cookies, monkeypatch):
+    import asyncio
+    import threading
+
+    from app.api.v1 import storage
+
+    user_id, _ = verified_user
+    up = await _upload_url(client, auth_cookies(user_id))
+    started, finish = threading.Event(), threading.Event()
+    sent = []
+
+    def put(**kwargs):
+        sent.append(kwargs["body"])
+        started.set()
+        assert finish.wait(10)
+
+    monkeypatch.setattr(storage, "put_storage_object", put)
+    first = asyncio.create_task(_put(client, up["upload_url"]))
+    try:
+        assert await asyncio.to_thread(started.wait, 10)
+        second = asyncio.create_task(_put(client, up["upload_url"]))
+        await asyncio.sleep(0.05)
+    finally:
+        finish.set()
+    a, b = await asyncio.gather(first, second)
+    assert a.status_code == 204 and b.status_code == 422 and len(sent) == 1
+
+
+async def test_admin_full_copy_maps_tombstone_to_conflict_and_rolls_back(
+    client, verified_user, auth_cookies, session_factory
+):
+    from sqlalchemy import func, select
+
+    from app.models.user import User
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    file = await _file(client, cookies, user_id, trip)
+    async with session_factory() as db:
+        user = await db.get(User, uuid.UUID(user_id))
+        user.roles = ["user", "admin"]
+        db.add(AttachmentGcObject(bucket=file["bucket"], storage_key=file["storage_key"]))
+        await db.commit()
+        before = await db.scalar(select(func.count()).select_from(Trip))
+    result = await client.post(
+        f"/admin/trips/{trip}/copy",
+        cookies=cookies,
+        json={
+            "scope": "all",
+            "access_reason": "GC tombstone conflict verification",
+        },
+    )
+    assert result.status_code == 409, result.text
+    async with session_factory() as db:
+        assert await db.scalar(select(func.count()).select_from(Trip)) == before
+
+
+async def test_moderation_hold_survives_appeal_review_reject_until_restore(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    from app.models.moderation import ContentReport
+    from app.schemas.moderation import ContentModerationActionRequest, ContentReportAppealRequest
+    from app.services.moderation import appeal_content_report, moderate_content_report
+
+    user_id, _ = verified_user
+    uid = uuid.UUID(user_id)
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    file = await _file(client, cookies, user_id, trip)
+    async with session_factory() as db:
+        report = ContentReport(
+            target_type="attachment",
+            target_id=uuid.UUID(file["attachment_id"]),
+            target_trip_id=uuid.UUID(trip),
+            target_owner_user_id=uid,
+            reporter_user_id=uid,
+            reason_code="other",
+            reason_text="retain reversible moderation",
+            status="reviewing",
+        )
+        db.add(report)
+        await db.commit()
+        report_id = report.report_id
+    body = ContentModerationActionRequest(
+        access_reason="retention regression", resolution_summary="review fixture"
+    )
+    async with session_factory() as db:
+        await moderate_content_report(
+            db, report_id=report_id, actor_user_id=uid, action="hide", body=body
+        )
+        await db.commit()
+    deleted = []
+
+    async def delete(bucket, key):
+        deleted.append(key)
+
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
+
+    async def check_hold():
+        async with session_factory() as db:
+            result = await gc.execute_attachment_retention(db)
+            assert result["objects_deleted"] == 0 and result["status"]["held_attachments"] == 1
+            assert await attachment_bytes_for_user(db, user_id=uid) == 60
+
+    await check_hold()
+    async with session_factory() as db:
+        await appeal_content_report(
+            db,
+            report_id=report_id,
+            actor_user_id=uid,
+            body=ContentReportAppealRequest(appeal_reason="please restore"),
+        )
+        await db.commit()
+    await check_hold()
+    for action in ["review", "reject"]:
+        async with session_factory() as db:
+            await moderate_content_report(
+                db, report_id=report_id, actor_user_id=uid, action=action, body=body
+            )
+            await db.commit()
+        await check_hold()
+    async with session_factory() as db:
+        await appeal_content_report(
+            db,
+            report_id=report_id,
+            actor_user_id=uid,
+            body=ContentReportAppealRequest(appeal_reason="please restore again"),
+        )
+        await moderate_content_report(
+            db, report_id=report_id, actor_user_id=uid, action="restore", body=body
+        )
+        await db.commit()
+        row = await db.get(CuratedPlanAttachment, uuid.UUID(file["attachment_id"]))
+        assert row.deleted_at is None and not row.moderation_hold
+    assert not deleted
+    await client.delete(f"/trips/{trip}/attachments/{file['attachment_id']}", cookies=cookies)
+    async with session_factory() as db:
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_deleted"] == 1 and len(deleted) == 1
+
+
+async def test_busy_report_fk_cleanup_is_retryable_and_preserves_lock_timeout(
+    client, verified_user, auth_cookies, session_factory
+):
+    from sqlalchemy import select, text
+
+    from app.models.moderation import ContentReport
+
+    user_id, _ = verified_user
+    trip = await _make_trip(client, auth_cookies(user_id))
+    await _trash(session_factory, trip, 31)
+    async with session_factory() as db:
+        report = ContentReport(
+            target_type="trip",
+            target_id=uuid.UUID(trip),
+            target_trip_id=uuid.UUID(trip),
+            reason_code="other",
+            reason_text="busy report",
+            status="received",
+        )
+        db.add(report)
+        await db.commit()
+        rid = report.report_id
+    async with session_factory() as held:
+        await held.scalar(
+            select(ContentReport).where(ContentReport.report_id == rid).with_for_update()
+        )
+        async with session_factory() as db:
+            prior = await db.scalar(text("SHOW lock_timeout"))
+            result = await gc.execute_attachment_retention(db)
+            assert result["trips_deleted"] == 0 and result["trip_cleanup_errors"] == ["TRIP_BUSY"]
+            assert await db.scalar(text("SHOW lock_timeout")) == prior
+        await held.rollback()
+    async with session_factory() as db:
+        result = await gc.execute_attachment_retention(db)
+        assert result["trips_deleted"] == 1
+        report = await db.get(ContentReport, rid)
+        assert report is not None and report.target_trip_id is None
+
+
+async def test_expired_lease_old_failure_cannot_overwrite_new_success(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    import asyncio
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    file = await _file(client, cookies, user_id, trip)
+    await client.delete(f"/trips/{trip}/attachments/{file['attachment_id']}", cookies=cookies)
+    ready, release = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    async def delete(bucket, key):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            ready.set()
+            await release.wait()
+            raise ClientError({"Error": {"Code": "AccessDenied"}}, "DeleteObject")
+
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
+
+    async def first_run():
+        async with session_factory() as db:
+            return await gc.execute_attachment_retention(db)
+
+    first = asyncio.create_task(first_run())
+    try:
+        await asyncio.wait_for(ready.wait(), 10)
+        async with session_factory() as db:
+            row = await db.get(AttachmentGcObject, (file["bucket"], file["storage_key"]))
+            row.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+            await db.commit()
+        async with session_factory() as db:
+            second = await gc.execute_attachment_retention(db)
+            assert second["objects_deleted"] == 1
+    finally:
+        release.set()
+    await asyncio.wait_for(first, 10)
+    async with session_factory() as db:
+        row = await db.get(AttachmentGcObject, (file["bucket"], file["storage_key"]))
+        assert row.deleted_at is not None and row.attempts == 2 and row.last_error_code is None
+
+
+async def test_shared_source_disappearing_before_copy_fence_is_clean_conflict(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    import asyncio
+
+    from app.services import trip as service
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    source = await _make_trip(client, cookies)
+    await _file(client, cookies, user_id, source)
+    live = await client.post(f"/trips/{source}/copy", json={"scope": "all"}, cookies=cookies)
+    assert live.status_code == 201
+    ready, release = asyncio.Event(), asyncio.Event()
+    real = service.assert_copy_sources_writable
+
+    async def paused(db, attachments):
+        ready.set()
+        await release.wait()
+        await real(db, attachments)
+
+    monkeypatch.setattr(service, "assert_copy_sources_writable", paused)
+    pending = asyncio.create_task(
+        client.post(f"/trips/{source}/copy", json={"scope": "all"}, cookies=cookies)
+    )
+    try:
+        await asyncio.wait_for(ready.wait(), 10)
+        await _trash(session_factory, source, 31)
+        async with session_factory() as db:
+            result = await gc.execute_attachment_retention(db)
+            assert result["trips_deleted"] == 1 and result["objects_deleted"] == 0
+    finally:
+        release.set()
+    response = await asyncio.wait_for(pending, 10)
+    assert response.status_code == 422, response.text
+    async with session_factory() as db:
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 60
+
+
+async def test_notice_and_trip_copy_take_shared_object_set_in_global_order(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    import asyncio
+    import contextvars
+
+    from sqlalchemy import select
+
+    from app.models.curated_plan import CuratedPlanPoi
+    from app.services import notice_plan, storage_lifecycle, trip
+    from tests.integration.test_admin_trips_api import _create_user
+    from tests.integration.test_notice_plan_copy import _admin_id, _seed_plan
+
+    user_id, _ = verified_user
+    plan_id = await _seed_plan(session_factory)
+    admin = await _admin_id(session_factory)
+    other = await _create_user(session_factory, email="other-copy@example.com")
+    other_source = await _make_trip(client, auth_cookies(str(other)))
+    keys = ["shared/z.png", "shared/a.png"]
+    async with session_factory() as db:
+        pois = list(
+            await db.scalars(
+                select(CuratedPlanPoi)
+                .where(CuratedPlanPoi.curated_plan_id == plan_id)
+                .order_by(CuratedPlanPoi.day_index, CuratedPlanPoi.sort_order)
+            )
+        )
+        for poi, key in zip(pois[:len(keys)], keys, strict=True):
+            for kwargs in [
+                {"curated_poi_id": poi.curated_poi_id, "uploaded_by_user_id": admin},
+                {"trip_id": uuid.UUID(other_source), "uploaded_by_user_id": other},
+            ]:
+                db.add(
+                    CuratedPlanAttachment(
+                        bucket="pinvi-media",
+                        storage_key=key,
+                        byte_size=1,
+                        original_filename="shared.png",
+                        content_type="image/png",
+                        **kwargs,
+                    )
+                )
+        await db.commit()
+    label = contextvars.ContextVar("copy_label", default="")
+    real_lock = storage_lifecycle.lock_object
+    seq = {"notice": [], "trip": []}
+    ready = asyncio.Event()
+    other_ready = asyncio.Event()
+    release = asyncio.Event()
+
+    async def lock(db, bucket, key, *, try_only=False):
+        result = await real_lock(db, bucket, key, try_only=try_only)
+        who = label.get()
+        if who:
+            seq[who].append(key)
+            if who == "notice" and len(seq[who]) == 1:
+                ready.set()
+                await release.wait()
+            if who == "trip" and len(seq[who]) == 1:
+                other_ready.set()
+        return result
+
+    monkeypatch.setattr(storage_lifecycle, "lock_object", lock)
+    for module, who in [(notice_plan, "notice"), (trip, "trip")]:
+        real = module.assert_copy_sources_writable
+
+        async def wrapped(db, attachments, real=real, who=who):
+            token = label.set(who)
+            try:
+                await real(db, attachments)
+            finally:
+                label.reset(token)
+
+        monkeypatch.setattr(module, "assert_copy_sources_writable", wrapped)
+    notice = asyncio.create_task(
+        client.post(
+            f"/notice-plans/{plan_id}/copy",
+            json={"trip_title": "ordered"},
+            cookies=auth_cookies(user_id),
+        )
+    )
+    try:
+        await asyncio.wait_for(ready.wait(), 10)
+        public = asyncio.create_task(
+            client.post(
+                f"/trips/{other_source}/copy",
+                json={"scope": "all"},
+                cookies=auth_cookies(str(other)),
+            )
+        )
+        if seq["notice"][0] != sorted(keys)[0]:
+            await asyncio.wait_for(other_ready.wait(), 10)
+        else:
+            await asyncio.sleep(0.05)
+    finally:
+        release.set()
+    results = await asyncio.wait_for(asyncio.gather(notice, public), 10)
+    assert [r.status_code for r in results] == [201, 201], [r.text for r in results]
+    assert seq["notice"] == seq["trip"] == sorted(keys)

@@ -22,6 +22,21 @@ def _boundary(check: str) -> None:
 def upgrade() -> None:
     op.add_column("trips", sa.Column("purge_started_at", sa.DateTime(timezone=True)), schema="app")
     op.add_column("curated_plan_attachments", sa.Column("purged_at", sa.DateTime(timezone=True)), schema="app")
+    op.add_column("curated_plan_attachments", sa.Column("moderation_hold", sa.Boolean(), nullable=False, server_default=sa.text("false")), schema="app")
+    op.execute("""
+        UPDATE app.curated_plan_attachments AS attachment SET moderation_hold = true
+        WHERE attachment.deleted_at IS NOT NULL AND EXISTS (
+            SELECT 1 FROM app.content_reports AS report
+            JOIN app.content_moderation_actions AS hidden ON hidden.report_id = report.report_id
+            WHERE report.target_type = 'attachment' AND report.target_id = attachment.attachment_id
+              AND report.status <> 'restored' AND hidden.action IN ('hide', 'takedown')
+              AND NOT EXISTS (
+                SELECT 1 FROM app.content_moderation_actions AS restored
+                WHERE restored.report_id = report.report_id AND restored.action = 'restore'
+                  AND restored.created_at > hidden.created_at
+              )
+        )
+    """)
     op.create_table(
         "attachment_upload_intents",
         sa.Column("bucket", sa.String(80), primary_key=True),
@@ -30,6 +45,8 @@ def upgrade() -> None:
         sa.Column("byte_size", sa.BigInteger(), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("uploaded_bytes", sa.BigInteger()),
+        sa.Column("write_token", postgresql.UUID(as_uuid=True)),
+        sa.Column("write_started_at", sa.DateTime(timezone=True)),
         sa.Column("registered_at", sa.DateTime(timezone=True)),
         sa.Column("purged_at", sa.DateTime(timezone=True)),
         sa.CheckConstraint("byte_size > 0", name="intent_size_positive"),
@@ -43,6 +60,7 @@ def upgrade() -> None:
         sa.Column("storage_key", sa.String(1024), primary_key=True),
         sa.Column("queued_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.Column("deleted_at", sa.DateTime(timezone=True)),
+        sa.Column("last_verified_at", sa.DateTime(timezone=True)),
         sa.Column("attempts", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("lease_token", postgresql.UUID(as_uuid=True)),
         sa.Column("lease_expires_at", sa.DateTime(timezone=True)),
@@ -61,5 +79,6 @@ def downgrade() -> None:
         op.drop_index("ix_attachment_retained_" + suffix, table_name="curated_plan_attachments", schema="app")
     op.drop_table("attachment_gc_objects", schema="app")
     op.drop_table("attachment_upload_intents", schema="app")
+    op.drop_column("curated_plan_attachments", "moderation_hold", schema="app")
     op.drop_column("curated_plan_attachments", "purged_at", schema="app")
     op.drop_column("trips", "purge_started_at", schema="app")

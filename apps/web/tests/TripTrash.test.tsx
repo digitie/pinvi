@@ -55,3 +55,12 @@ describe('휴지통', () => {
     expect(screen.getByText('복원할 여행')).toBeInTheDocument();
   });
 });
+
+
+it('보관 기한이 지난 여행의 복원 버튼을 비활성화하고 이유를 표시한다', async () => {
+  api.listPage.mockResolvedValue({ ...page, items: [{ ...trip, can_restore: false, trash_expires_at: '2026-11-01T00:00:00Z' }] });
+  render(<TripTrash />);
+  expect(await screen.findByRole('button', { name: '복원할 여행 복원' })).toBeDisabled();
+  expect(screen.getByText(/복원 불가/)).toBeInTheDocument();
+  expect(api.restore).not.toHaveBeenCalled();
+});
