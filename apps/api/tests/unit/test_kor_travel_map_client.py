@@ -168,9 +168,7 @@ async def test_get_feature_404_returns_none() -> None:
     await client.aclose()
 
 
-@pytest.mark.parametrize(
-    "method", ["get_feature", "get_public_beach", "get_public_festival"]
-)
+@pytest.mark.parametrize("method", ["get_feature", "get_public_beach", "get_public_festival"])
 async def test_feature_id_is_one_escaped_path_segment(method: str) -> None:
     # 라우터가 %3F·%23을 디코드해 넘기므로 그대로 붙이면 Map에 query/경로를 덧붙일 수 있다.
     seen: list[httpx.Request] = []

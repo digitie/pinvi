@@ -397,7 +397,6 @@ async def test_geometry_cannot_be_requested_below_detail_zoom(
         "bbox=124,33,132,39&zoom=14&kinds=route&include_geometry=true",
         "bbox=127,37.5,127.6,37.6&zoom=14&kinds=route&include_geometry=true",
         "bbox=127,37.5,127.1,38.1&zoom=14&kinds=area&include_geometry=true",
-        "bbox=127,37.5,127.1,37.6&zoom=14&kinds=route&include_geometry=true&limit=2000",
     ],
 )
 async def test_geometry_request_is_bounded_server_side(
@@ -434,3 +433,25 @@ async def test_point_request_keeps_wide_bbox_and_large_limit(
         _clear()
     assert response.status_code == 200, response.text
     assert fake.calls["in_bounds"]["max_items"] == 2000
+
+
+@pytest.mark.parametrize(("limit", "expected"), [("", 200), ("&limit=2000", 200), ("&limit=100", 100)])
+async def test_geometry_item_count_is_clamped(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    limit: str,
+    expected: int,
+) -> None:
+    fake = _FakeKorTravelMapClient()
+    _override(fake)
+    try:
+        response = await client.get(
+            "/features/in-bounds?bbox=127,37.5,127.1,37.6&zoom=14&kinds=route"
+            f"&include_geometry=true{limit}",
+            cookies=auth_cookies(verified_user[0]),
+        )
+    finally:
+        _clear()
+    assert response.status_code == 200, response.text
+    assert fake.calls["in_bounds"]["max_items"] == expected

@@ -420,8 +420,7 @@ async def features_in_bounds(
         )
     bbox_obj = parse_bbox(bbox)
     if include_geometry and (
-        limit > GEOMETRY_MAX_ITEMS
-        or bbox_obj.lng_max - bbox_obj.lng_min > GEOMETRY_MAX_SPAN_DEG
+        bbox_obj.lng_max - bbox_obj.lng_min > GEOMETRY_MAX_SPAN_DEG
         or bbox_obj.lat_max - bbox_obj.lat_min > GEOMETRY_MAX_SPAN_DEG
     ):
         # zoom은 호출자가 고르는 값이라 줌 검사만으로는 전국 도형 요청을 막지 못한다.
@@ -430,11 +429,13 @@ async def features_in_bounds(
             detail={
                 "code": "VALIDATION_ERROR",
                 "message": (
-                    f"경로·영역은 가로·세로 {GEOMETRY_MAX_SPAN_DEG}° 이하 범위에서 "
-                    f"{GEOMETRY_MAX_ITEMS}건까지 조회합니다."
+                    f"경로·영역은 가로·세로 {GEOMETRY_MAX_SPAN_DEG}° 이하 범위에서 조회합니다."
                 ),
             },
         )
+    # 도형 건수는 잘라서 묶는다(기본 limit 500을 거절하지 않는다).
+    # 넘친 건은 Map의 truncated로 드러난다.
+    max_items = min(limit, GEOMETRY_MAX_ITEMS) if include_geometry else limit
     with _map_kor_travel_map_errors():
         data = await client.features_in_bounds(
             min_lon=bbox_obj.lng_min,
@@ -445,7 +446,7 @@ async def features_in_bounds(
             category=category,
             zoom=zoom,
             cluster_unit=cluster_unit,
-            max_items=limit,
+            max_items=max_items,
             include_geometry=include_geometry,
         )
     labels = await get_category_labels(client)

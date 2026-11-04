@@ -1013,9 +1013,7 @@ class Settings(BaseSettings):
     # 상한(le)은 설정 하나로 사실상 무제한 우회가 되돌아오는 것을 막는다(분당 6000 = 초당 100).
     pinvi_rate_limit_user_limit_overrides: dict[
         str, Annotated[StrictInt, Field(gt=0, le=6000)]
-    ] = Field(
-        default_factory=dict
-    )
+    ] = Field(default_factory=dict)
 
     @field_validator("pinvi_rate_limit_user_limit_overrides")
     @classmethod
