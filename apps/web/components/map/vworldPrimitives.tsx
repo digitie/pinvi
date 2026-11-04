@@ -12,6 +12,8 @@ import type {
   MapContextMenuProps,
   PinMarkerProps,
   PopupProps,
+  RouteLineProps,
+  PolygonAreaProps,
   UserLocationMarkerProps,
   VWorldMapFallbackInfo,
   VWorldMapViewProps,
@@ -111,5 +113,15 @@ export const WeatherMarker = dynamic<WeatherMarkerProps>(
 
 export const MapContextMenu = dynamic<MapContextMenuProps>(
   () => import('vworld-map-web').then((module) => module.MapContextMenu),
+  { ssr: false },
+);
+
+export const RouteLine = dynamic<RouteLineProps>(
+  () => import('vworld-map-web').then((module) => module.RouteLine),
+  { ssr: false },
+);
+
+export const PolygonArea = dynamic<PolygonAreaProps>(
+  () => import('vworld-map-web').then((module) => module.PolygonArea),
   { ssr: false },
 );

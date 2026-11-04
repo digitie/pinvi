@@ -1,5 +1,19 @@
 ## 2026-11-04 — Map #1447 병합·소비자 provenance 동기화
 
+## 2026-11-04 — #635 지도 UI와 비동기·선택 경계 보완
+
+- 탐색·소유자 여행 지도에 공통 경로·영역 토글/레이어/목록/상세 popup을 연결했다. 공유 지도에서는 비활성 정책을 유지한다.
+- 늦은 응답·같은 범위 캐시·OFF/낮은 zoom/category/숨김 경계를 검증했다. 원래 coord와 모든 part/ring을 보존한다.
+- 초기 독립 리뷰의 겹침 클릭 중복 선택, 큰 bounds focus 후 popup 소실, popup 롱프레스의 장소 추가 문제를 수정하고 회귀 테스트를 추가했다.
+- WSL 웹 관련 43개와 타입·lint를 통과했다(lint 기존 경고 5개). 실제 HTTP/WebGL UI와 최종 2인 리뷰·CI는 아직 진행 전이다.
+
+- Map #1447을 7ee94fb로 일반 병합했다. exact b778c097의 독립 리뷰 두 명과 최종 CI 전체를 확인했다. CI 단위/lint 3,643개·API 1,600개·Dagster 920개, PG 1,622개를 통과했다.
+- 세 OpenAPI profile은 검토된 바이트와 동일하다. Pinvi의 service/admin 실행 revision을 실제 Map 병합 커밋으로 맞췄고 capability generation과 M05 기존 attestation/체크섬은 보존했다.
+- 소비자 계약 318개 통과·조건부 9개 skip, 독립 설치 wheel의 packaged JSON·SHA·runtime revision·capability 대조를 통과했다.
+- 이 커밋은 provenance/테스트 핀/문서만 바꾸며 제품은 679ca7a와 같다. 그 제품의 전체 WSL API 2,740개·웹 282개·실제 지연 UI 10항목 및 두 독립 리뷰를 완료했다.
+- 최종 Docker 설치 검증·두 exact HEAD 리뷰·CI를 마친 뒤 #662를 병합하고 최신 #643/#1444를 갱신한다. 운영 접속·배포·검증은 하지 않는다.
+
+
 - Map #1447을 7ee94fb로 일반 병합했다. exact b778c097의 독립 리뷰 두 명과 최종 CI 전체를 확인했다. CI 단위/lint 3,643개·API 1,600개·Dagster 920개, PG 1,622개를 통과했다.
 - 세 OpenAPI profile은 검토된 바이트와 동일하다. Pinvi의 service/admin 실행 revision을 실제 Map 병합 커밋으로 맞췄고 capability generation과 M05 기존 attestation/체크섬은 보존했다.
 - 소비자 계약 318개 통과·조건부 9개 skip, 독립 설치 wheel의 packaged JSON·SHA·runtime revision·capability 대조를 통과했다.
