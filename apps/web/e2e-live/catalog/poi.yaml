@@ -1,0 +1,588 @@
+# AREA: poi — 없던 곳 POI 추가(my-POI / manual) + 첨부 파일
+# PinVi main a07257e7 기준. UI 문자열·testid 출처는 README.md 참조.
+# 공통 전제: 모든 케이스는 helpers.createTrip 으로 '[e2e] POI …' 여행(날짜 지정 → 일자 자동 생성)을 만들고
+#            afterEach 에서 첨부 → 여행 순으로 삭제한다. POI 첨부(trip_id=NULL)는 여행 삭제 후에도
+#            /files 에 남으므로(uploaded_by 필터) 반드시 명시 삭제한다.
+
+- id: POI-001
+  title: 지도 우클릭으로 없던 곳 POI 생성 — 주소 자동 조회·이름 입력·일정/지도 반영
+  priority: P1
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - env: VWorld 타일 로드 가능(maplibregl-canvas 렌더), geo reverse 응답 가능
+  data_sources: [geo]
+  steps:
+    - '[e2e] POI 수동' 여행(2026-11-05~06) 생성 → 상세 진입 → 1일차 탭 선택
+    - 지도 캔버스 중앙 우클릭 → 'POI 생성' 다이얼로그
+    - 주소 칸이 '주소 확인 중…' → 실제 주소 문자열로 바뀔 때까지 대기(aria-busy 해제)
+    - 이름을 '[e2e] 수동 장소 <ts>' 로 바꿈 → '생성'
+  expected:
+    - 다이얼로그 닫힘, 1일차 목록(trip-poi-list)에 '[e2e] 수동 장소' 행 1개
+    - 지도 마커 범례(trip-map-marker-style)에 같은 제목 1개, data-feature-resolution-state="not_linked", data-marker-color="P-08", data-marker-icon="marker"
+    - 지도 통계 '장소 1곳', 일자 배지 '1곳'
+    - POST /trips/{id}/pois 본문: feature_id=null, custom_marker_color=P-08, feature_snapshot.source='manual', address_label 존재
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-create.live.spec.ts#POI-001
+
+- id: POI-002
+  title: (모바일) 지도 롱프레스로 POI 생성
+  priority: P1
+  tags: [mobile, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - env: 390x844 + hasTouch 프로젝트
+  data_sources: [geo]
+  steps:
+    - 여행 생성 → 상세(모바일은 지도 우선, 패널 닫힘) → '패널 열기' → 1일차 선택 → '패널 닫기'
+    - 지도 중앙에 touchstart 650ms 이상 유지 후 touchend
+    - 'POI 생성' 다이얼로그에서 이름 '[e2e] 롱프레스 <ts>' → 생성
+  expected:
+    - 다이얼로그 노출(주소 자동 조회), 생성 후 마커 범례 1개·통계 '장소 1곳'
+    - 롱프레스 중 10px 이상 이동하면 다이얼로그가 뜨지 않는다(보조 단언)
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-create.live.spec.ts#POI-002
+  notes: Playwright touchscreen.tap은 홀드가 없어 page.evaluate 로 TouchEvent 를 직접 dispatch 한다.
+
+- id: POI-003
+  title: 이름을 비우면 역지오코딩 주소가 POI 제목이 된다
+  priority: P2
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo]
+  steps:
+    - 여행 생성 → 1일차 → 지도 우클릭 → 주소 조회 완료 대기
+    - 이름 입력칸을 완전히 비운 뒤 '생성'
+  expected:
+    - POI 제목 == 다이얼로그에 표시된 주소 문자열(manual-poi-address 텍스트)
+    - 지도 마커 범례 텍스트도 같은 주소
+  cleanup:
+    - 장소 삭제 → 여행 삭제(POI 제목에 [e2e] 접두가 없으므로 같은 테스트 안에서 반드시 삭제)
+  automation: scripted
+  spec: specs/poi/poi-create.live.spec.ts#POI-003
+
+- id: POI-004
+  title: 주소 결과가 없는 지점(해상)에서는 이름이 필수
+  priority: P2
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 서해 해상 좌표(예: 125.9E, 36.2N) 반경 200m 에 geo 후보 없음
+  data_sources: [geo]
+  steps:
+    - 여행 생성 → 1일차 → 지도를 서해 해상으로 이동 → 우클릭
+    - 주소 칸 '주소 결과 없음' 확인 → 이름 비운 채 '생성'
+    - '이름을 입력하세요.' 확인 → 이름 '[e2e] 해상' → 생성
+  expected:
+    - 빈 이름 + 주소 없음 → 오류 '이름을 입력하세요.' 와 포커스가 이름 칸
+    - 이름 입력 후 생성 성공, snapshot 에 address 없음
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: manual
+  notes: Playwright 로 지도를 특정 좌표까지 정확히 패닝할 공개 핸들이 없다(maplibre 인스턴스 비노출). 지도 drag 로 근사 가능하나 flaky — 수동.
+
+- id: POI-005
+  title: 대한민국 범위 밖 좌표는 POI 생성 거부
+  priority: P3
+  tags: [desktop, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 여행 생성 → 1일차 → 지도를 축소/이동해 일본 열도 위에서 우클릭
+  expected:
+    - 다이얼로그가 뜨지 않음(TripMapView.coordFromClientPoint 가 null) 또는 배너 '대한민국 범위 좌표만 추가할 수 있습니다.'
+  cleanup:
+    - 여행 삭제
+  automation: manual
+  notes: 지도 축소·이동 정밀 제어 불가 — 수동.
+
+- id: POI-006
+  title: 일자를 선택하지 않은 상태의 우클릭은 '일자를 먼저 선택해주세요.'
+  priority: P2
+  tags: [desktop, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 날짜 없이 만든 여행(일자 0개)
+  data_sources: []
+  steps:
+    - 날짜 없는 '[e2e] POI 무일자' 여행 생성 → 상세 → 지도 우클릭
+  expected:
+    - 지도 검색 상자 자리에 '선택된 일자가 없습니다.'
+    - 우클릭 시 다이얼로그 없이 '일자를 먼저 선택해주세요.' 배너(poi-mutation-error)
+  cleanup:
+    - 여행 삭제
+  automation: manual
+  notes: helpers.createTrip 이 start/end 를 필수로 받는지에 따라 scripted 전환 가능(README '열린 질문').
+
+- id: POI-007
+  title: 검색 결과 없음 → 지도 우클릭으로 POI 생성(없는 장소 경로)
+  priority: P1
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo, map:search, kakao, naver]
+  steps:
+    - 여행 생성 → 1일차 → 지도 검색 상자에 '[e2e]zq없는장소x9' 입력
+    - 역할 alert '검색 결과가 없습니다.' 확인(결과 목록 없음)
+    - 지도 우클릭 → 'POI 생성' → 이름 '[e2e] 없던 곳 <ts>' → 생성
+  expected:
+    - 검색 UI 에는 '추가' 대안 버튼이 없고 alert 만 표시된다(현 UI 계약)
+    - 생성 뒤 목록·마커 1개
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-search-add.live.spec.ts#POI-007
+  notes: 검색은 feature+address+my_poi+kakao+naver 통합(apps/api/app/api/v1/search.py). 외부 provider 가 degraded 여도 alert 문구는 같다.
+
+- id: POI-008
+  title: 주소 검색 결과 pick → manual POI 로 저장
+  priority: P1
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: geo 주소 검색이 '세종대로 110' 에 '주소' 행을 돌려줌
+  data_sources: [geo]
+  steps:
+    - 여행 생성 → 1일차 → 지도 검색 '세종대로 110' → '주소' 배지 행(map-search-result-address) 클릭
+  expected:
+    - POST /trips/{id}/pois 본문 source='manual', feature_id=null, external_ref=null
+    - 목록 행 제목이 검색 행의 도로명 주소, 마커 범례 data-feature-resolution-state="not_linked"
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-search-add.live.spec.ts#POI-008
+
+- id: POI-009
+  title: my-POI 와 Map feature 의 구분 — 범례 속성·마커 스타일
+  priority: P1
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map 에 '안동하회마을' feature(heritage/folk village)
+  data_sources: [geo, map:heritage]
+  steps:
+    - 여행 생성 → 1일차 → 검색 '안동하회마을' → '장소' 배지 행 클릭(feature)
+    - 지도 중앙에서 120px 오른쪽 우클릭 → 'POI 생성' 이름 '[e2e] 수동 비교' → 생성
+  expected:
+    - feature 마커 범례: data-feature-resolution-state ∈ {found, unverified}, data-marker-category 비어있지 않음
+    - manual 마커 범례: data-feature-resolution-state="not_linked", data-marker-color="P-08", data-marker-icon="marker", data-marker-category=""
+    - 목록에서 manual 행에는 CloudOff/AlertTriangle 아이콘 없음(not_linked 는 알림 없음)
+  cleanup:
+    - 두 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-search-add.live.spec.ts#POI-009
+
+- id: POI-010
+  title: my-POI 선택 팝업에는 '상세보기'·홈페이지·카테고리가 없다
+  priority: P2
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo]
+  steps:
+    - 여행 생성 → 1일차 → 우클릭 생성 '[e2e] 팝업' → 목록 행 클릭(선택)
+  expected:
+    - 지도 Popup 에 제목만 표시, 'trip-map-detail-open'(상세보기) 버튼 없음
+    - 목록 행에 전화/홈페이지 링크 없음(my-POI 는 feature 카드가 없다)
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-create.live.spec.ts#POI-010
+
+- id: POI-011
+  title: my-POI 편집 — 메모·예산·링크 저장
+  priority: P1
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo]
+  steps:
+    - 여행 생성 → 1일차 → 우클릭 생성 '[e2e] 편집' → 행의 '마커 편집'
+    - 메모 '[e2e] memo', 예산 12000, 링크 https://example.com/e2e → '저장'
+  expected:
+    - 편집기(poi-editor) 닫힘, 행에 '[e2e] memo' 와 '예산 12000 KRW'
+    - PATCH /trips/{id}/pois/{poi} 에 If-Match 헤더, 응답 version 2
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-create.live.spec.ts#POI-011
+
+- id: POI-012
+  title: my-POI 삭제 — 목록·지도·통계에서 제거
+  priority: P1
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo]
+  steps:
+    - 여행 생성 → 1일차 → 우클릭 생성 '[e2e] 삭제' → 행의 '장소 삭제'
+  expected:
+    - 확인 다이얼로그 없이 즉시 삭제(현 UI), 목록 비움, 마커 범례 0개, 통계 '장소 0곳', 일자 배지 '0곳'
+    - DELETE /trips/{id}/pois/{poi} 204
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-create.live.spec.ts#POI-012
+
+- id: POI-013
+  title: my-POI 마커 색 변경이 지도 범례에 반영
+  priority: P2
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo]
+  steps:
+    - 여행 생성 → 1일차 → 우클릭 생성 → '마커 편집' → 색 '노랑'(P-03) 선택 → 저장
+  expected:
+    - 마커 범례 data-marker-color="P-03", data-marker-hex="#FDD835"
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-create.live.spec.ts#POI-013
+
+- id: POI-014
+  title: 카카오 검색 결과 pick → source=kakao POI + 안내 문구
+  priority: P2
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - env: kakao 검색 키 설정(degraded_sources 에 kakao 없음)
+    - decision: admin 이 auto-fire 된 feature-request 를 reject 해도 행이 남는다 — 남겨도 되는지 결정 필요
+  data_sources: [kakao]
+  steps:
+    - 여행 생성 → 1일차 → 검색 '스타벅스 안동' → '카카오' 배지 행 클릭
+  expected:
+    - POST /pois 본문 source='kakao', external_ref.provider='kakao', category/marker 는 null(ADR-054 §5.1)
+    - 상태 문구 '카카오 장소를 추가했어요. 상세 정보는 준비되는 대로 표시됩니다.'
+  cleanup:
+    - 장소 삭제 → 여행 삭제 → (admin) feature-requests 에서 해당 요청 reject
+  automation: blocked
+  notes: 서버가 feature-request 를 자동 생성한다(apps/api/app/api/v1/pois.py _auto_fire_feature_request). admin API 는 approve/reject 만 있고 삭제가 없어 prod 에 '[e2e]' 요청 행이 영구히 남는다. 소유자 결정 전까지 blocked.
+
+- id: POI-015
+  title: 네이버 검색 결과 pick → source=naver POI
+  priority: P3
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - env: naver 검색 키 설정
+  data_sources: [naver]
+  steps:
+    - POI-014 와 동일, '네이버 검색' 배지 행
+  expected:
+    - source='naver', 문구 '네이버 장소를 추가했어요. …'
+  cleanup:
+    - POI-014 와 동일
+  automation: blocked
+  notes: POI-014 와 같은 이유(feature-request 잔존).
+
+- id: POI-016
+  title: feature 상세의 '카카오·네이버에서 더 보기'는 표시 전용 — POI 를 만들지 않는다
+  priority: P2
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map 에 '경주 불국사'(heritage/temple) feature 가 검색·뷰포트에 있음
+  data_sources: [map:heritage, kakao, naver]
+  steps:
+    - 여행 생성 → 1일차 → 검색 '불국사' feature 행 클릭(1곳 추가, 지도 이동)
+    - 지도 feature 마커(.trip-map-feature-marker) 하나 클릭 → 팝업 '상세보기'
+    - 상세 모달에서 '카카오·네이버에서 더 보기' 클릭
+  expected:
+    - enrichment 행 또는 '일부 외부 정보를 불러오지 못했습니다.' 중 하나가 표시
+    - 그 사이 POST /trips/{id}/pois 요청 없음, 일자 배지 '1곳' 유지
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-search-add.live.spec.ts#POI-016
+  notes: 뷰포트 안 feature 마커가 0개면 test.skip(데이터 의존).
+
+- id: POI-017
+  title: 같은 Map 장소를 같은 일자에 두 번 추가 — 중복 허용
+  priority: P1
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map 에 '안동하회마을' feature
+  data_sources: [map:heritage]
+  steps:
+    - 여행 생성 → 1일차 → 검색 '안동하회마을' feature 행 클릭 ×2
+  expected:
+    - 목록 행 2개(같은 제목), 일자 배지 '2곳', 통계 '장소 2곳'(서버·UI 모두 dedup 없음)
+  cleanup:
+    - 두 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-search-add.live.spec.ts#POI-017
+
+- id: POI-018
+  title: 같은 장소를 1일차·2일차에 각각 추가
+  priority: P2
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map 에 '고씨굴'(영월, cave/tourist) feature
+  data_sources: [map:tourist]
+  steps:
+    - 2일 여행 생성 → 1일차 선택 → 검색 '고씨굴' 추가 → 2일차 탭 선택 → 검색 '고씨굴' 추가
+  expected:
+    - 1일차 배지 '1곳', 2일차 배지 '1곳', 통계 '장소 2곳'(두 일자 모두 표시 체크 상태), '2일 표시'
+  cleanup:
+    - 두 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-search-add.live.spec.ts#POI-018
+
+- id: POI-019
+  title: 내 my-POI 가 통합 검색에 '내 여행' 배지로 나온다
+  priority: P2
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo, map:search]
+  steps:
+    - 여행 생성 → 1일차 → 우클릭 생성 '[e2e] 내장소 <ts>'
+    - 검색 상자에 '[e2e] 내장소 <ts>' 입력
+  expected:
+    - map-search-result-my_poi 행 1개 이상, 배지 '내 여행'
+    - 행 클릭 시 manual 사본이 일자에 추가(배지 '2곳')
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-search-add.live.spec.ts#POI-019
+  notes: _search_my_pois 는 소유 여행의 feature_snapshot.name ilike(apps/api/app/api/v1/search.py:64).
+
+- id: POI-020
+  title: 여행 단위 첨부 — 이미지 업로드·목록·다운로드·삭제
+  priority: P1
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - env: RustFS 정상, /storage/upload-urls 발급 가능
+  data_sources: [storage]
+  steps:
+    - 여행 생성 → 상세 → '파일' 탭 → 마지막 '첨부' 섹션의 파일 입력에 '[e2e]-trip-<ts>.jpg'(image/jpeg) 선택
+    - 행 '다운로드' → window.open URL 캡처 → 행 '삭제'
+  expected:
+    - PUT /storage/uploads/{token} 204 후 POST /trips/{id}/attachments 201
+    - 목록 행에 파일명과 'image/jpeg · 4 B'
+    - 다운로드 URL 이 /storage/downloads/ 경로이며 127.0.0.1/localhost 아님
+    - 삭제 후 행 0개, '파일 없음'
+  cleanup:
+    - 파일 삭제(테스트 내) → 여행 삭제 → /files 에 '[e2e]' 잔여 없음
+  automation: scripted
+  spec: specs/poi/poi-files.live.spec.ts#POI-020
+
+- id: POI-021
+  title: 일자 단위 첨부 — PDF 업로드 후 /files 에 '날짜' 범위로 표시
+  priority: P1
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [storage]
+  steps:
+    - 여행 생성 → 1일차 선택 → 일정 패널의 '1일차 파일' 섹션 입력에 '[e2e]-day-<ts>.pdf'(application/pdf)
+    - /files 이동
+  expected:
+    - 일정 패널 '1일차 파일' 목록에 행, 'application/pdf'
+    - /files 행: 파일명 · '날짜 · [e2e] 여행 제목'
+  cleanup:
+    - /files 에서 삭제(확인 다이얼로그 '삭제') → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-files.live.spec.ts#POI-021
+
+- id: POI-022
+  title: 장소(my-POI) 단위 첨부 — 인라인 '장소 파일' 업로드, /files 에 '장소' 범위
+  priority: P1
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo, storage]
+  steps:
+    - 여행 생성 → 1일차 → 우클릭 생성 '[e2e] 파일장소' → 행 아래 '장소 파일' 입력에 '[e2e]-poi-<ts>.png'
+    - /files 이동
+  expected:
+    - '장소 파일' 목록에 행
+    - /files 행: '장소 · [e2e] 파일장소'(POI 첨부는 trip_id=NULL 이라 poi_label 로 표기)
+  cleanup:
+    - /files 에서 삭제 → 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-files.live.spec.ts#POI-022
+  notes: 여행을 먼저 지워도 POI 첨부는 uploaded_by 조건으로 /files 에 남는다(storage_policy.list_user_file_library) — 반드시 명시 삭제.
+
+- id: POI-023
+  title: 허용되지 않는 형식(text/plain)은 클라이언트에서 거부, 요청 없음
+  priority: P1
+  tags: [desktop, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [storage]
+  steps:
+    - 여행 생성 → '파일' 탭 → 'blocked.txt'(text/plain) 선택
+  expected:
+    - alert '업로드 가능한 파일 형식은 GIF, JPG, MP4, PDF, PNG, WEBP입니다.'
+    - /storage/upload-urls 요청 0건
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-files.live.spec.ts#POI-023
+
+- id: POI-024
+  title: 개별 파일 크기 한도 초과는 서버 422 FILE_TOO_LARGE
+  priority: P2
+  tags: [desktop, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 기본 attachment_max_upload_bytes 10 MiB(관리자 설정·사용자 override 로 바뀔 수 있음)
+  data_sources: [storage]
+  steps:
+    - 여행 생성 → '파일' 탭 → 10 MiB + 1 byte image/jpeg 선택
+  expected:
+    - alert 에 '최대' 와 'bytes'
+    - PUT /storage/uploads/ 요청 0건(upload-urls 단계에서 거부)
+  cleanup:
+    - (한도가 올라가 업로드된 경우) 행 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-files.live.spec.ts#POI-024
+
+- id: POI-025
+  title: 업로드/다운로드 토큰이 콘솔·DOM 에 노출되지 않는다
+  priority: P1
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [storage]
+  steps:
+    - 콘솔 메시지 수집 시작 → 여행 생성 → '파일' 탭 → 이미지 업로드 → 다운로드 클릭
+  expected:
+    - 콘솔 메시지 어디에도 '/storage/uploads/', '/storage/downloads/', 'X-Amz-' 없음
+    - document.body.innerText 에 '/storage/' 없음
+    - 네트워크로는 PUT /storage/uploads/{token} 1건, token 길이 > 40
+  cleanup:
+    - 파일 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-files.live.spec.ts#POI-025
+
+- id: POI-026
+  title: (모바일) 패널 열기 → 파일 탭 → 업로드·삭제
+  priority: P2
+  tags: [mobile, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [storage]
+  steps:
+    - 여행 생성 → 상세(패널 숨김) → '패널 열기' → '파일' 탭 → 마지막 첨부 입력에 jpg
+  expected:
+    - 패널 열기 전 trip-detail-panel hidden, 지도 높이 > 520px
+    - 행 노출 후 삭제 → 0개
+  cleanup:
+    - 파일 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-files.live.spec.ts#POI-026
+
+- id: POI-027
+  title: 정리 스윕 — '[e2e]' 파일·여행 잔여 0
+  priority: P1
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [storage]
+  steps:
+    - /files 에서 파일명 '[e2e]' 행을 모두 삭제(확인 다이얼로그)
+    - helpers.deleteAllE2eTrips
+  expected:
+    - /files 목록에 '[e2e]' 포함 행 0개
+    - 여행 목록에 '[e2e]' 0개
+  cleanup:
+    - 자체가 정리
+  automation: scripted
+  spec: specs/poi/poi-cleanup.live.spec.ts#POI-027
+  notes: 실행 순서 마지막(파일명 알파벳 순으로 poi-cleanup 이 뒤에 오도록 유지). /files 는 최근 100개만 보여주므로 루프 반복.
+
+- id: POI-028
+  title: 첨부 목록 토글과 빈 상태
+  priority: P2
+  tags: [desktop, poi, a11y]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 여행 생성 → 1일차 → '1일차 파일 목록 열기' 버튼 클릭
+  expected:
+    - aria-expanded false→true, 목록 영역에 '파일 없음'
+    - 다시 클릭하면 접힘
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-files.live.spec.ts#POI-028
+
+- id: POI-029
+  title: 대상당 첨부 개수 한도(기본 30) 초과 시 ATTACHMENT_LIMIT_EXCEEDED
+  priority: P3
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - env: pinvi_max_attachments_per_target=30
+  data_sources: [storage]
+  steps:
+    - 여행 첨부 31개 업로드
+  expected:
+    - 31번째에 alert '첨부는 대상당 최대 30개까지 등록할 수 있습니다.'
+  cleanup:
+    - 31개 삭제 → 여행 삭제
+  automation: manual
+  notes: 31회 presign+PUT 은 3분 예산을 넘긴다 — 수동/야간 전용.
+
+- id: POI-030
+  title: POI 삭제 후 그 장소 첨부가 /files 에 남는지 관찰
+  priority: P2
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo, storage]
+  steps:
+    - 우클릭 생성 → 장소 파일 업로드 → 장소 삭제(soft delete) → /files
+  expected:
+    - 관찰 항목: soft_delete_poi 는 행을 남기므로 첨부가 /files 에 계속 보일 가능성(storage_policy 필터는 deleted_at 미검사). 기대값은 소유자 결정 필요.
+  cleanup:
+    - /files 에서 파일 삭제 → 여행 삭제
+  automation: manual
+  notes: 기대값 미정(버그 후보). README '열린 질문' 참조.
+
+- id: POI-031
+  title: POI 생성 다이얼로그 접근성 — 초기 포커스·Esc 닫기
+  priority: P3
+  tags: [desktop, poi, a11y]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo]
+  steps:
+    - 여행 생성 → 1일차 → 우클릭 → 다이얼로그에서 document.activeElement 확인 → Escape
+  expected:
+    - 초기 포커스가 '이름' 입력(id=manual-poi-title)
+    - Escape 로 닫히고 POST /pois 없음
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-create.live.spec.ts#POI-031
+
+- id: POI-032
+  title: 기존 POI 마커 우클릭은 생성이 아니라 편집기를 연다
+  priority: P3
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo]
+  steps:
+    - 우클릭 생성(지도가 그 POI 로 flyTo, 줌 13) → 지도 중앙(마커 위) 우클릭
+  expected:
+    - poi-editor 표시, manual-poi-dialog 없음
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-create.live.spec.ts#POI-032
+  notes: 마커가 정확히 중앙에 있지 않으면 생성 다이얼로그가 열린다 — 그 경우 soft-fail 로 skip 처리.

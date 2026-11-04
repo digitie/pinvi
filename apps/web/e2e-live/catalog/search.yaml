@@ -1,0 +1,730 @@
+# AREA: search (SRCH) — place search + POI detail card + explore map, PinVi prod live.
+# Schema: see ../SPEC.md. UI text/selectors cited from PinVi apps/web (see README.md §Sources).
+# Category family labels: kor-travel-map src/kortravelmap/category/_definitions.py (leaf names such as
+# 한옥·민속마을 / 커피전문점 / 주차장 are what PinVi shows via `category_label`).
+#
+# Facts that shape the assertions (PinVi #614/#615, worktrees pinvi-claude-search / pinvi-claude-bias):
+# - GET /search?q&limit=8&bbox=lng_min,lat_min,lng_max,lat_max — bbox is an ORDER-ONLY bias: features inside
+#   the bbox are pulled to the front, at most limit//2 (=4), rest keep Map order. Trip page: bbox = trip POI
+#   extent + 0.25°; /map: bbox = current viewport (2-decimal). Never sent to Kakao/Naver.
+# - feature rows have no address; secondary line = category_label. address rows = geo v2 address.full.
+# - detail card: `-category` shows category_label (leaf), subtitle = `category_label · address_line`.
+
+# ───────────────────────── A. basic search (explore map search box, read-only) ─────────────────────────
+- id: SRCH-001
+  title: 탐색 지도에서 2글자 검색('설악') → 8초 내 결과 목록 + 소스 배지
+  priority: P1
+  tags: [desktop, mobile, search, perf]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 설악산 features (national park / hiking trail)
+  data_sources: [map:park, map:hiking-trail, geo]
+  steps:
+    - 로그인 → /map → '장소·주소 검색' 입력란에 '설악' 입력
+    - GET /search?q=설악 응답 대기(요청에 limit=8, bbox=화면 범위)
+  expected:
+    - 8초 이내 결과 ul 표시, 각 행에 이름 + 배지('장소'|'주소'|'내 여행'|'카카오'|'네이버 검색')
+    - 응답 시간을 test annotation에 기록(soft < 8000ms)
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-001
+
+- id: SRCH-002
+  title: 정확한 이름 '안동하회마을' 검색 → '장소' 배지 행이 첫 번째, 둘째 줄은 카테고리 라벨
+  priority: P1
+  tags: [desktop, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을 (heritage / 한옥·민속마을)
+  data_sources: [map:heritage]
+  steps:
+    - /map → '안동하회마을' 입력 → 결과 대기
+  expected:
+    - 첫 행 배지 '장소', 이름에 '하회마을' 포함
+    - "둘째 줄(category_label)이 있으면 8자리 코드가 아님(^\\d{8}$ 불일치)"
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-002
+
+- id: SRCH-003
+  title: 1글자 입력('설')은 검색을 발화하지 않는다(MIN_CHARS=2)
+  priority: P2
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: []
+  steps:
+    - /map → '설' 입력 → 1초 대기
+  expected:
+    - GET /search 요청 없음, 결과 목록·alert 없음
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-003
+
+- id: SRCH-004
+  title: 전체 주소 질의(geo v2) → '주소' 배지 행
+  priority: P2
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user), env: kor-travel-geo v2 reachable from PinVi API (3s budget)]
+  data_sources: [geo]
+  steps:
+    - /map → '경북 안동시 풍천면 하회종가길 40' 입력
+  expected:
+    - degraded_sources에 'addresses'가 없으면 source=address 행 ≥1 → UI에 '주소' 배지 행(이름=address.full)
+    - degraded면 annotation으로 기록하고 soft fail
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-004
+  notes: '#650 — 전체 도로명 주소(시·도 약칭) 주소 행 0건. test.fail(#650).'
+
+- id: SRCH-005
+  title: 도로명 부분 주소('하회종가길') → 주소 또는 장소 행
+  priority: P3
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [geo, map:heritage]
+  steps: ["/map → '하회종가길' 입력"]
+  expected: [결과 ≥1, 행 중 하나는 '주소' 배지(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-005
+
+- id: SRCH-006
+  title: 부분/오타 질의 '하회마' → trigram으로 안동하회마을 매칭
+  priority: P2
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:heritage]
+  steps: ["/map → '하회마' 입력"]
+  expected: ['장소' 배지 행 중 이름에 '하회마을' 포함 행 존재]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-006
+
+- id: SRCH-007
+  title: 무의미 질의 'zzqqxxw' → '검색 결과가 없습니다.' alert
+  priority: P2
+  tags: [desktop, mobile, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map, geo, kakao, naver]
+  steps: ["/map → 'zzqqxxw' 입력"]
+  expected: ["p[role=alert] 텍스트 '검색 결과가 없습니다.' 또는 결과 0건", 결과 ul 없음]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-007
+
+- id: SRCH-008
+  title: 앞뒤 공백 질의('  고씨굴  ')는 trim 되어 검색된다
+  priority: P3
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:tourism]
+  steps: ["/map → '  고씨굴  ' 입력"]
+  expected: [요청 q='고씨굴', 결과 ≥1]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-008
+
+- id: SRCH-009
+  title: Enter는 디바운스를 건너뛰고 즉시 검색한다
+  priority: P3
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:heritage]
+  steps: ["/map → '소수서원' 입력 직후 Enter"]
+  expected: [GET /search 응답, 결과 ≥1, 페이지 이동 없음(form submit 방지)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-009
+
+- id: SRCH-010
+  title: 121자 질의 → 서버 422를 alert로 표시, 앱 크래시 없음
+  priority: P3
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: []
+  steps: ["/map → 'ㄱ'×121 입력"]
+  expected: [응답 status 422 또는 200, "role=alert 표시('검색에 실패했습니다.'/서버 메시지/'검색 결과가 없습니다.')", 헤딩 '탐색 지도' 유지]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-010
+
+- id: SRCH-011
+  title: 결과 상한 — 페이지네이션/'더 보기' 없음, 소스별 limit 8
+  priority: P3
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:cafe, kakao, naver]
+  steps: ["/map → '카페' 입력"]
+  expected:
+    - 요청 limit=8, source=feature 행 ≤8, address ≤8, my_poi ≤10, kakao ≤8, naver ≤5
+    - "'더 보기' 버튼 없음(현 UI에 페이지네이션 없음 — cursor 페이지네이션은 Map API에만 존재)"
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-011
+  notes: 'pagination/more'는 PinVi UI에 없음(MapSearchBox limit:8 고정). 사실로 기록.
+
+- id: SRCH-012
+  title: 결과 선택 → 입력/목록 초기화, 지도 이동, 팝업에 '상세보기'
+  priority: P1
+  tags: [desktop, mobile, search, poi]
+  preconditions: [account: test@test.com (user), env: VWorld key set on prod]
+  data_sources: [map:heritage]
+  steps: ["/map → '안동하회마을' → 첫 '장소' 행 클릭"]
+  expected: [입력란 비워짐, 결과 ul 사라짐, 팝업에 이름 + 'feature-map-detail-open' 버튼('상세보기')]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-basic.live.spec.ts#SRCH-012
+
+# ───────────────────────── B. region bias (#615) — in-trip search (mutating) ─────────────────────────
+- id: SRCH-013
+  title: 여행 장소 범위 안 결과가 먼저 온다 — 안동 여행에서 '카페' 검색
+  priority: P1
+  tags: [desktop, search, mutating]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동 cafes; 안동하회마을 feature
+    - env: PinVi ≥ #615 (bbox bias) deployed
+  data_sources: [map:cafe, map:heritage]
+  steps:
+    - "'[e2e] SRCH-013' 여행 생성 → 1일차에 '안동하회마을' 추가(trip bias bbox = POI extent ± 0.25°)"
+    - 지도 검색창(trip-map-place-search)에 '카페' 입력 → GET /search 요청의 bbox 파라미터와 응답 JSON 확보
+  expected:
+    - bbox 파라미터가 안동하회마을 좌표(약 128.52, 36.54)를 포함
+    - feature 행 중 bbox 안 좌표 행이 1개 이상이면 feature 행의 선두 min(4, 안쪽 수)개가 모두 bbox 안(soft)
+  cleanup: [생성한 여행 삭제]
+  automation: scripted
+  spec: specs/search/search-region.live.spec.ts#SRCH-013
+
+- id: SRCH-014
+  title: 지역 밖 정확 일치('성산일출봉')는 bias 아래서도 살아남는다(필터 아님)
+  priority: P1
+  tags: [desktop, search, mutating]
+  preconditions: [account: test@test.com (user), data: Map has 제주 성산일출봉]
+  data_sources: [map:tourism, map:heritage]
+  steps: ["'[e2e] SRCH-014' 여행(안동하회마을 1곳) → 지도 검색 '성산일출봉'"]
+  expected: ["'장소' 행에 이름 '성산일출봉' 포함 행 존재, 그 좌표는 bbox 밖(제주)"]
+  cleanup: [생성한 여행 삭제]
+  automation: scripted
+  spec: specs/search/search-region.live.spec.ts#SRCH-014
+
+- id: SRCH-015
+  title: 지역 안 결과는 limit//2(=4)까지만 앞으로 — 지역 밖 결과가 뒤에 남는다
+  priority: P2
+  tags: [desktop, search, mutating]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:food]
+  steps: ["'[e2e] SRCH-015' 여행(안동하회마을 1곳) → 지도 검색 '찜닭'"]
+  expected:
+    - feature 행 ≥5이고 bbox 안 행 ≥5이면 5번째 행부터는 Map 원래 순서(안/밖 혼재 허용) — 즉 '선두 연속 안쪽 행' 수가 정확히 4가 아니어도 4 이상(soft)
+    - bbox 밖 행이 응답에 있으면 UI에도 남아 있음(필터 아님)
+  cleanup: [생성한 여행 삭제]
+  automation: scripted
+  spec: specs/search/search-region.live.spec.ts#SRCH-015
+
+- id: SRCH-016
+  title: 장소 없는 여행에서는 지도 화면 bbox로 편향(여행 범위 → 화면 순서)
+  priority: P3
+  tags: [desktop, search, mutating]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:cafe]
+  steps: [POI 없는 여행 생성 → 지도 검색 '카페' → 요청 bbox 파라미터 확인]
+  expected: [bbox = 현재 여행 지도 화면(전국 기본 시점, 2자리) 또는 없음]
+  cleanup: [생성한 여행 삭제]
+  automation: manual
+  notes: POI가 없을 때 TripMapView 초기 시점이 전국(127.5,36.5)이라 bbox가 한국 전체로 clamp되어 편향 효과가 없다 — 요청 파라미터 수동 확인만.
+
+- id: SRCH-017
+  title: 검색 결과를 일자에 추가 → POI 목록 반영
+  priority: P1
+  tags: [desktop, search, poi, mutating]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:heritage]
+  steps: ["'[e2e] SRCH-017' 여행 → searchAndAddPlace(1, '소수서원')"]
+  expected: [trip-poi-list에 '소수서원' 행, 여행 지도 region에 '장소 1곳'(soft)]
+  cleanup: [생성한 여행 삭제]
+  automation: scripted
+  spec: specs/search/search-region.live.spec.ts#SRCH-017
+
+- id: SRCH-018
+  title: 내 여행 POI가 '내 여행' 배지로 검색된다(my_poi)
+  priority: P2
+  tags: [desktop, search, mutating]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:heritage, pinvi:my_poi]
+  steps: ["'[e2e] SRCH-018' 여행 → '도산서원' 추가 → /map에서 '도산서원' 검색"]
+  expected: ["'내 여행' 배지 행 존재(map-search-result-my_poi), 응답 행의 trip_title이 '[e2e] SRCH-018'"]
+  cleanup: [생성한 여행 삭제]
+  automation: scripted
+  spec: specs/search/search-region.live.spec.ts#SRCH-018
+
+# ───────────────────────── C. sources by category family ─────────────────────────
+- id: SRCH-019
+  title: 숙박·호텔 — '롯데호텔' 검색 → 상세 카테고리 라벨 호텔/숙박
+  priority: P2
+  tags: [desktop, search, poi]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:lodging, kakao, naver]
+  steps: ["/map → '롯데호텔' → 첫 '장소' 행 → 상세보기"]
+  expected: [feature 행 ≥1(없으면 kakao/naver 행만 확인 후 pass), 상세 -category에 '호텔'|'숙박'|'리조트'(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-sources.live.spec.ts#SRCH-019
+  notes: 'kor-travel-map#1438 — 카테고리 오분류. test.fail.'
+
+- id: SRCH-020
+  title: 숙박·캠핑장 — '오토캠핑장' → 카테고리 라벨 캠핑
+  priority: P2
+  tags: [desktop, search, poi]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:lodging-camping]
+  steps: ["/map → '오토캠핑장' → 첫 '장소' 행 → 상세보기"]
+  expected: [상세 -category에 '캠핑'|'글램핑'|'카라반'(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-sources.live.spec.ts#SRCH-020
+  notes: 'kor-travel-map#1438 — 카테고리 오분류. test.fail.'
+
+- id: SRCH-021
+  title: 음식점 — '안동찜닭' → feature 또는 kakao/naver 행
+  priority: P2
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:food, kakao, naver]
+  steps: ["/map → '안동찜닭'"]
+  expected: [결과 ≥1, feature 행 있으면 상세 -category에 '한식'|'음식점'|'식음'(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-sources.live.spec.ts#SRCH-021
+
+- id: SRCH-022
+  title: 카페 — '카페' → 카테고리 라벨 카페/커피전문점
+  priority: P2
+  tags: [desktop, search, poi]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:cafe]
+  steps: ["/map → '카페' → 첫 '장소' 행 → 상세보기"]
+  expected: [상세 -category에 '카페'|'커피'|'디저트'|'베이커리'(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-sources.live.spec.ts#SRCH-022
+  notes: 'kor-travel-map#1438 — 카테고리 오분류. test.fail.'
+
+- id: SRCH-023
+  title: 등산로 — '대청봉' → 설악산 대청봉 코스(route kind) 검색·상세
+  priority: P1
+  tags: [desktop, search, poi]
+  preconditions: [account: test@test.com (user), data: Map 등산로(route kind) loaded for 설악산, env: PinVi renders route kind]
+  data_sources: [map:hiking-trail]
+  steps: ["/map → '대청봉' → 이름에 '대청봉' 포함 '장소' 행 → 상세보기"]
+  expected: [행 존재, 상세 -category에 '트레킹'|'둘레길'(soft), 지도에 코스 표시]
+  cleanup: [읽기 전용]
+  automation: blocked
+  notes: PinVi `/features/in-bounds`는 place/event/notice/price kind만 적재하고 등산로(route kind)는 지도에 렌더하지 않는다(coordinator 2026-11-03). 검색에 route 행이 섞여 나와도 선택 후 지도·상세(GenericDetailCard)가 계약 밖이라 UI 단언이 불가. PinVi가 route kind를 렌더하면 SRCH-025 패턴으로 스크립트화.
+
+- id: SRCH-024
+  title: 등산로 — '북한산' 코스 다수 노출
+  priority: P3
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user), env: PinVi renders route kind]
+  data_sources: [map:hiking-trail, map:park]
+  steps: ["/map → '북한산'"]
+  expected: ["'장소' 행 ≥2, 이름에 '북한산' 포함"]
+  cleanup: [읽기 전용]
+  automation: blocked
+  notes: SRCH-023과 같은 사유(route kind 미렌더).
+
+- id: SRCH-025
+  title: 국가유산 — '소수서원' → 라벨 국가유산/사적
+  priority: P1
+  tags: [desktop, search, poi]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:heritage]
+  steps: ["/map → '소수서원' → 첫 '장소' 행 → 상세보기"]
+  expected: [첫 feature 행 이름 '소수서원' 포함, -category에 '국가유산'|'사적'|'기념물'|'전통사찰'|'관광'(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-sources.live.spec.ts#SRCH-025
+  notes: '/map 은 화면(서울) bbox 로 순서 편향(#615) — 정확 일치가 1번째일 필요는 없고 결과에 있어야 한다(2026-11-03 수정).'
+
+- id: SRCH-026
+  title: 국가유산 — '도산서원'
+  priority: P3
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:heritage]
+  steps: ["/map → '도산서원'"]
+  expected: [feature 행 첫 번째 이름 '도산서원' 포함(주차장 '도산서원 주차장'은 아래, SRCH-051)]
+  cleanup: [읽기 전용]
+  automation: manual
+  notes: SRCH-018이 같은 데이터를 쓴다(자동). 중복이라 수동 스팟체크만.
+
+- id: SRCH-027
+  title: 축제/행사 — '축제' → kind=event 상세에 기간(period) 표시
+  priority: P2
+  tags: [desktop, search, poi]
+  preconditions: [account: test@test.com (user), data: Map has active events]
+  data_sources: [map:festival]
+  steps: ["/map → '축제' → 첫 '장소' 행 → 상세보기"]
+  expected: [feature-detail-card-body data-kind ∈ {event, place}; event면 '-period' 또는 '-venue' 행(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-sources.live.spec.ts#SRCH-027
+  notes: 'kor-travel-map#1439 — event 기간·장소 없음. test.fail.'
+
+- id: SRCH-028
+  title: 국립공원 — '설악산국립공원'(area kind) → 라벨 국립공원/자연경관
+  priority: P2
+  tags: [desktop, search, poi]
+  preconditions: [account: test@test.com (user), env: PinVi renders area kind]
+  data_sources: [map:park]
+  steps: ["/map → '설악산국립공원' → 첫 '장소' 행 → 상세보기"]
+  expected: [-category에 '국립공원'|'자연경관'(soft), 지도에 공원 경계 표시]
+  cleanup: [읽기 전용]
+  automation: blocked
+  notes: 국립공원 경계는 Map `area` kind — PinVi in-bounds가 적재하지 않고 지도에 렌더하지 않는다(coordinator 2026-11-03). 국립공원 '장소' point(탐방안내소 등)는 SRCH-025 패턴으로 커버 가능하나 공원 자체는 아님.
+
+- id: SRCH-029
+  title: 수목원 — '국립수목원' → 라벨 수목원
+  priority: P3
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:arboretum]
+  steps: ["/map → '국립수목원' → 상세보기"]
+  expected: [-category에 '수목원']
+  cleanup: [읽기 전용]
+  automation: manual
+  notes: ADR-034 8단계(휴양림/수목원) 적재 여부 미확인 — 적재 확인 후 SRCH-028 패턴으로 스크립트화.
+
+- id: SRCH-030
+  title: 휴양림 — '자연휴양림' → 라벨 휴양림
+  priority: P3
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:recreation-forest]
+  steps: ["/map → '자연휴양림' → 상세보기"]
+  expected: [-category에 '휴양림']
+  cleanup: [읽기 전용]
+  automation: manual
+  notes: SRCH-029와 같은 사유.
+
+- id: SRCH-031
+  title: 박물관/미술관 — '국립중앙박물관' → 라벨 박물관/문화시설
+  priority: P2
+  tags: [desktop, search, poi]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:museum, kakao, naver]
+  steps: ["/map → '국립중앙박물관' → 첫 '장소' 행 → 상세보기"]
+  expected: [feature 행 있으면 -category에 '박물관'|'문화시설'|'미술관'(soft); 없으면 kakao/naver 행 ≥1]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-sources.live.spec.ts#SRCH-031
+
+- id: SRCH-032
+  title: 휴게소 — '휴게소' → 라벨 휴게소/교통
+  priority: P3
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:rest-area]
+  steps: ["/map → '휴게소' → 상세보기"]
+  expected: [-category에 '휴게소' 또는 '교통']
+  cleanup: [읽기 전용]
+  automation: manual
+  notes: 휴게소 feature 이름이 '○○휴게소(방향)' 형태라 첫 행 선택이 안정적이지 않음 — 수동.
+
+- id: SRCH-033
+  title: 공항/역 — '김포공항' → 라벨 공항/교통
+  priority: P2
+  tags: [desktop, search, poi]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:airport, transport]
+  steps: ["/map → '김포공항' → 첫 '장소' 행 → 상세보기"]
+  expected: [feature 행 있으면 -category에 '공항'|'교통'(soft); 없으면 kakao/naver 행]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-sources.live.spec.ts#SRCH-033
+  notes: 'Map 검색에 공항 feature 가 없다(공항은 교통 레이어) — 공항 이름 행이 없으면 skip(data absent).'
+
+- id: SRCH-034
+  title: 카카오/네이버 fallback — 희소 질의에 외부 행 + back-link
+  priority: P1
+  tags: [desktop, mobile, search]
+  preconditions: [account: test@test.com (user), env: KAKAO/NAVER keys set; internal threshold K=5 counts feature+my_poi only]
+  data_sources: [kakao, naver]
+  steps: ["/map → '스타벅스 안동옥동점'"]
+  expected:
+    - 내부 장소 결과(feature+my_poi) <5면 kakao/naver 행(map-search-result-kakao|naver) ≥1, 배지 '카카오'/'네이버 검색'
+    - back-link a[target=_blank][rel~=noopener] aria-label '카카오에서 열기'/'네이버 검색에서 열기'
+    - degraded_sources에 kakao/naver가 있으면 그 소스 행 0건으로 일관
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-sources.live.spec.ts#SRCH-034
+
+# ───────────────────────── D. detail card ─────────────────────────
+- id: SRCH-035
+  title: 상세 카드 핵심 필드 — 제목, 카테고리 라벨(코드 아님), 전체 주소, 3초 예산
+  priority: P1
+  tags: [desktop, mobile, poi, perf]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:heritage]
+  steps: ["/map → '안동하회마을' → 첫 '장소' 행 → '상세보기'"]
+  expected:
+    - feature-detail-modal-title = 장소명, 카드 본문 data-kind=place
+    - "-category 텍스트가 8자리 코드(^\\d{8}$)가 아니고 Map 카탈로그 잎 이름 사전(README §Labels)에 있음(soft)"
+    - "-address 텍스트에 시/도 토큰('경상북도'|'경북'|'안동') 포함"
+    - 모달 부제 = '카테고리 · 주소'
+    - 상세보기 클릭→본문 표시 시간 기록, soft < 3000ms
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/poi-detail.live.spec.ts#SRCH-035
+  notes: '서울 편향으로 같은 이름의 서울 식당이 먼저 나올 수 있어 정확 이름 행을 고른다(2026-11-03).'
+
+- id: SRCH-036
+  title: 전화/영업시간/홈페이지 행은 값이 있을 때만, 홈페이지는 새 창 링크
+  priority: P2
+  tags: [desktop, poi]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:museum, map:heritage]
+  steps: ["/map → '국립중앙박물관'(feature 없으면 '안동하회마을') → 상세보기"]
+  expected:
+    - detail-card 응답 phone/business_hours/homepage_url 각각 non-null ⇔ 해당 행 표시
+    - 홈페이지 a[href^=http][target=_blank] 텍스트 '홈페이지'
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/poi-detail.live.spec.ts#SRCH-036
+
+- id: SRCH-037
+  title: '카카오·네이버에서 더 보기' → attribution + '지도에서 보기' 또는 '일치하는 외부 정보 없음'
+  priority: P2
+  tags: [desktop, poi]
+  preconditions: [account: test@test.com (user), env: KAKAO/NAVER keys set]
+  data_sources: [kakao, naver, map:heritage]
+  steps: ["/map → '안동하회마을' → 상세보기 → '카카오·네이버에서 더 보기'"]
+  expected:
+    - GET /features/{id}/detail-card?providers=kakao,naver 응답
+    - enrichment 행 '카카오', '네이버 검색' 각각 data-matched ∈ {true,false}; matched면 '지도에서 보기' 링크(target=_blank)
+    - degraded_providers 있으면 '일부 외부 정보를 불러오지 못했습니다.' 표시
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/poi-detail.live.spec.ts#SRCH-037
+
+- id: SRCH-038
+  title: 상세 모달 닫기 — × 버튼과 Escape
+  priority: P2
+  tags: [desktop, mobile, poi, a11y]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:heritage]
+  steps: [상세 모달 열기 → feature-detail-modal-close 클릭 → 다시 열기 → Escape]
+  expected: [두 경우 모두 모달 사라짐]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/poi-detail.live.spec.ts#SRCH-038
+
+- id: SRCH-039
+  title: 모바일 상세 시트 — 390px에서 bottom-sheet로 뷰포트 안에 표시
+  priority: P2
+  tags: [mobile, poi]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:heritage]
+  steps: [모바일 프로젝트에서 /map → '안동하회마을' 선택 → 상세보기]
+  expected: [모달 bounding box 폭 ≤ 뷰포트 폭, 하단이 뷰포트 안(soft), 본문 표시]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/poi-detail.live.spec.ts#SRCH-039
+
+- id: SRCH-040
+  title: 'unverified'(저장된 정보 · 최신 상태 확인 실패) 상태 표시
+  priority: P3
+  tags: [desktop, poi]
+  preconditions: [env: Map API outage or proxy that returns 503 for /v1/features/batch]
+  data_sources: [map]
+  steps: [여행 POI 목록 로드 중 Map batch 실패]
+  expected: ["POI 행에 CloudOff 아이콘 aria-label '저장된 정보 · 최신 상태 확인 실패'"]
+  cleanup: []
+  automation: blocked
+  notes: prod에서 Map 장애를 유발할 수 없음. 격리 스택 + 프록시 하네스(apps/web/e2e/trip-feature-resolution-live-mutating.live.ts)에서만 재현 가능.
+
+- id: SRCH-041
+  title: 이미지/요금/설명 표시
+  priority: P3
+  tags: [desktop, poi]
+  preconditions: []
+  data_sources: [map]
+  steps: [상세 카드에서 이미지/요금/설명 확인]
+  expected: [해당 없음]
+  cleanup: []
+  automation: blocked
+  notes: 현 detail-card 계약(apps/api/app/schemas/feature.py PlaceDetailCard = phone/business_hours/homepage_url + 공통)에 images/fees/description 필드가 없다. 계약 확장 후 추가.
+
+# ───────────────────────── E. explore map (/map) ─────────────────────────
+- id: SRCH-042
+  title: 탐색 지도 진입 시 in-bounds 조회, 드래그 이동 후 재조회
+  priority: P1
+  tags: [desktop, mobile, nearby]
+  preconditions: [account: test@test.com (user), env: VWorld key set]
+  data_sources: [map:in-bounds]
+  steps: [/map → GET /features/in-bounds 응답 대기 → 캔버스 드래그 → 새 in-bounds 응답]
+  expected: [두 응답 모두 200, 두 번째 bbox ≠ 첫 bbox, 로딩 status 사라짐, 마커 legend ≥1(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/explore-map.live.spec.ts#SRCH-042
+
+- id: SRCH-043
+  title: 줌 아웃 → 클러스터, 줌 인 → 개별 feature 마커
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions: [account: test@test.com (user), env: VWorld key set]
+  data_sources: [map:in-bounds]
+  steps: [/map → 휠로 줌 아웃 → legend 확인 → 휠로 줌 인 → legend 확인]
+  expected: [줌 아웃 후 data-marker-source=cluster ≥1(soft), 줌 인 후 data-kind=feature ≥1(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/explore-map.live.spec.ts#SRCH-043
+
+- id: SRCH-044
+  title: 마커 클릭 → 팝업 카드(이름·카테고리·주소·상세보기)
+  priority: P1
+  tags: [desktop, nearby, poi]
+  preconditions: [account: test@test.com (user), env: VWorld key set, helper clickFeatureMarker]
+  data_sources: [map:in-bounds]
+  steps: [/map → 줌 인 → legend에서 feature 제목 하나 → 해당 마커 클릭]
+  expected: [팝업에 제목, '상세보기' 버튼, 카테고리/주소 텍스트(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/explore-map.live.spec.ts#SRCH-044
+
+- id: SRCH-045
+  title: 모바일 마커 탭 → 상세 시트가 바로 열린다(탭한 장소)
+  priority: P2
+  tags: [mobile, nearby, poi]
+  preconditions: [account: test@test.com (user), env: VWorld key set, helper clickFeatureMarker]
+  data_sources: [map:in-bounds]
+  steps: [모바일 /map → 줌 인 → 마커 탭]
+  expected: [feature-detail-modal 이 바로 열리고 제목이 탭한 핀의 이름, 팝업 선택은 시트 아래에 남는다(handlePointClick 설계)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/explore-map.live.spec.ts#SRCH-045
+
+- id: SRCH-046
+  title: 지도 높이가 컨테이너를 채운다(#619) — 데스크톱/모바일
+  priority: P2
+  tags: [desktop, mobile]
+  preconditions: [account: test@test.com (user)]
+  data_sources: []
+  steps: [/map → feature-map / .maplibregl-canvas bounding box 측정]
+  expected: [canvas 높이 ≥360, canvas 높이 ≥ feature-map 높이의 85%(360px에서 멈추지 않음), feature-map 높이 ≥ 뷰포트 높이 50%, 하단이 뷰포트 밖으로 넘치지 않음]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/explore-map.live.spec.ts#SRCH-046
+
+- id: SRCH-047
+  title: 빈 범위 — 바다로 이동 시 '이 범위에 표시할 장소가 없습니다'
+  priority: P3
+  tags: [desktop, nearby]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:in-bounds]
+  steps: [/map → 동해 먼바다로 드래그]
+  expected: ["feature-map-empty 텍스트 '이 범위에 표시할 장소가 없습니다 — 지도를 움직여 보세요.'"]
+  cleanup: [읽기 전용]
+  automation: manual
+  notes: 프로그램적으로 먼바다로 이동할 공개 API(center 파라미터)가 없음. 드래그 반복은 flaky.
+
+- id: SRCH-048
+  title: 범위 안 이벤트/공지 마커 → 상세 카드 kind별 필드
+  priority: P2
+  tags: [desktop, nearby, poi]
+  preconditions: [account: test@test.com (user), helper clickFeatureMarker]
+  data_sources: [map:festival, map:notice]
+  steps: [/map → in-bounds 응답 items에서 kind∈{event,notice} 찾기 → 마커 클릭 → 상세보기]
+  expected: [해당 kind가 있으면 data-kind=event|notice 본문에 '-period' 또는 '-notice-body'(soft); 없으면 skip 기록]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/explore-map.live.spec.ts#SRCH-048
+
+# ───────────────────────── F. ranking rules (Map #1436) ─────────────────────────
+# All cases first zoom /map to national scale so the viewport bias bbox covers Korea and the response
+# preserves Map's own order (regional cap takes the first 4 of Map order; rest keeps order).
+- id: SRCH-049
+  title: '하회마을' → 안동하회마을이 첫 feature 행
+  priority: P1
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user), env: Map ≥ #1436 ranking deployed, viewport zoomed to national scale]
+  data_sources: [map:heritage]
+  steps: ["/map → 전국 줌 → '하회마을'"]
+  expected: ["첫 '장소' 행 이름이 '안동하회마을' 또는 '안동 하회마을'(공백 무시)"]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-ranking.live.spec.ts#SRCH-049
+
+- id: SRCH-050
+  title: 별칭 '고씨동굴' → 영월 고씨굴이 첫 feature 행
+  priority: P1
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user), env: Map alias map has 고씨동굴→고씨굴]
+  data_sources: [map:tourism]
+  steps: ["/map → 전국 줌 → '고씨동굴'"]
+  expected: ["첫 '장소' 행 이름에 '고씨굴' 포함, 상세 주소에 '영월'(soft)"]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-ranking.live.spec.ts#SRCH-050
+
+- id: SRCH-051
+  title: 주차장은 '○○ 주차장'으로 명소 아래에 온다
+  priority: P2
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:parking, map:heritage]
+  steps: ["/map → 전국 줌 → '하회마을' 및 '도산서원'"]
+  expected: [이름에 '주차장' 포함 feature 행이 있으면 그 index > 명소 index(soft), 이름이 '… 주차장' 형태(soft), 라벨 '주차장'(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-ranking.live.spec.ts#SRCH-051
+
+- id: SRCH-052
+  title: 카테고리 우선순위 — 관광 > 숙박 > 식음 > 기타
+  priority: P2
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:tourism, map:lodging, map:food]
+  steps: ["/map → 전국 줌 → '안동' → GET /search 응답 JSON의 feature 행 category(코드) 순서 검사"]
+  expected: [tier1 가중치(01 관광=0, 03 숙박=1, 02 식음=2, 기타=3, 07 의료=4)가 비감소(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-ranking.live.spec.ts#SRCH-052
+
+- id: SRCH-053
+  title: 병원은 마지막
+  priority: P2
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:medical, map:tourism]
+  steps: ["/map → 전국 줌 → '안동' 및 '서울' → 응답 JSON에서 의료(07) 행 위치"]
+  expected: [의료 행이 있으면 그 이후에 비의료 feature 행 없음(soft)]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-ranking.live.spec.ts#SRCH-053
+
+- id: SRCH-054
+  title: 역 정확 일치 — '서울역'은 '서울역'이 첫 행(서울역사박물관 등 아님)
+  priority: P2
+  tags: [desktop, search]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map:station, transport]
+  steps: ["/map → 전국 줌 → '서울역'"]
+  expected: ["첫 '장소' 행 이름이 '서울역'으로 시작하고 '박물관' 미포함(soft)"]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-ranking.live.spec.ts#SRCH-054
+
+# ───────────────────────── G. performance sweep ─────────────────────────
+- id: SRCH-055
+  title: 2글자 검색 성능 스윕('설악','부산','제주') < 8s, 상세 카드 < 3s(기록·soft)
+  priority: P2
+  tags: [desktop, search, perf]
+  preconditions: [account: test@test.com (user)]
+  data_sources: [map, geo, kakao, naver]
+  steps: [/map → 세 질의 순차 검색, 마지막 질의 첫 feature 행 → 상세보기]
+  expected: [각 검색 elapsed를 annotation 기록, soft < 8000ms; 상세 soft < 3000ms]
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/search/search-perf.live.spec.ts#SRCH-055
+  notes: soft 기록은 예산 2배까지 통과; 상세 카드가 6 s 를 넘으면 #663 재현으로 런타임 test.fail.

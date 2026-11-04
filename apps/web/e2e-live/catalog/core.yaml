@@ -1,0 +1,519 @@
+# CORE — auth/session · map interaction · mobile UX · resilience · a11y · perf · i18n
+# Target: PinVi prod (origin/main b1cef056 or newer). 31 cases, 30 scripted (CORE-005 manual).
+# Selectors verified against origin/main unless a case says `selector unverified against origin/main`.
+
+- id: CORE-001
+  title: 로그인 — 하이드레이션 전 클릭이 입력을 지우지 않고 제출된다(#619)
+  priority: P1
+  tags: [desktop, mobile, auth]
+  preconditions:
+    - account: test@test.com (user), env PINVI_E2E_USER_EMAIL/PASSWORD
+  data_sources: []
+  steps:
+    - /login 진입 → 제출 버튼이 활성화될 때까지 대기(서버 HTML은 disabled, hydration 후 enabled)
+    - 이메일·비밀번호 입력 → '로그인' 클릭
+  expected:
+    - URL /trips, h1 '여행' 표시
+    - 콘솔에 hydration mismatch 오류 없음
+    - 네이티브 폼 제출(입력 초기화·/login 재로드) 없음
+  cleanup: [없음(세션만)]
+  automation: scripted
+  spec: specs/core/core-auth-session.live.spec.ts#CORE-001
+  notes: origin/main login/page.tsx useHydrated(useSyncExternalStore)로 pre-hydration 클릭 방지.
+
+- id: CORE-002
+  title: 잘못된 비밀번호 — '이메일 또는 비밀번호가 올바르지 않습니다.' 알림, URL 유지, 쿠키 미발급
+  priority: P1
+  tags: [desktop, mobile, auth]
+  preconditions:
+    - account: test@test.com 이메일(비밀번호는 무작위 오답)
+  data_sources: []
+  steps:
+    - /login → 올바른 이메일 + 틀린 비밀번호 → 제출
+  expected:
+    - data-testid=login-error(role=alert) 텍스트 정확 일치
+    - URL /login 유지, 이메일 값 유지
+    - pinvi_refresh 쿠키 없음
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-auth-session.live.spec.ts#CORE-002
+  notes: API AUTH_INVALID_CREDENTIALS(401) → 고정 문구(login/page.tsx).
+
+- id: CORE-003
+  title: 로그아웃 뒤 보호 페이지 접근은 /login으로 간다
+  priority: P1
+  tags: [desktop, auth]
+  preconditions:
+    - account: test@test.com
+  data_sources: []
+  steps:
+    - 로그인 → POST {API}/auth/logout (credentials include) → /trips 이동
+  expected:
+    - logout 204, pinvi_refresh 쿠키 삭제
+    - /trips 진입 시 401 → window.location '/login'
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-auth-session.live.spec.ts#CORE-003
+  notes: 사용자 UI에 로그아웃 버튼이 없다(admin 로그인 페이지에만 logout). API 경로로 검증 — open question.
+
+- id: CORE-004
+  title: access 만료(10분) 뒤 자동 갱신 — 쿠키 삭제 시뮬레이션(#612)
+  priority: P1
+  tags: [desktop, mobile, auth]
+  preconditions:
+    - account: test@test.com
+    - env: access TTL 10분(pinvi_access_token_minutes), refresh 7일
+  data_sources: []
+  steps:
+    - 로그인 → context.clearCookies({name:'pinvi_access'}) → /trips 이동
+  expected:
+    - POST /auth/refresh 200 발생
+    - /login으로 튕기지 않고 목록(또는 빈 상태) 표시
+    - pinvi_access 쿠키 재발급
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-auth-session.live.spec.ts#CORE-004
+  notes: 실제 11분 대기는 CORE-005. client.ts fetchWithSessionRefresh(single-flight, 1회 재시도).
+
+- id: CORE-005
+  title: 실제 11분 유휴 뒤 첫 조작에서 세션이 유지된다(#612)
+  priority: P2
+  tags: [desktop, auth]
+  preconditions:
+    - account: test@test.com
+  data_sources: []
+  steps:
+    - 로그인 → /trips/{id} 열어 둔 채 11분 방치(탭 활성 유지)
+    - 일자 탭 클릭 또는 새로고침
+  expected:
+    - /auth/refresh 1회 200, 화면 유지, 실시간 상태 '연결됨' 복귀
+  cleanup: [없음]
+  automation: manual
+  notes: 케이스 시간 제한(3분) 초과 — 수동 또는 별도 장기 잡. WS 재인증도 같은 single-flight 사용.
+
+- id: CORE-006
+  title: 두 탭 동시 갱신 조정(Web Locks) — 어느 탭도 로그아웃되지 않는다
+  priority: P2
+  tags: [desktop, auth]
+  preconditions:
+    - account: test@test.com
+  data_sources: []
+  steps:
+    - 같은 컨텍스트에 탭 2개 로그인 상태 → pinvi_access 삭제 → 두 탭 동시 이동(/trips, /map)
+  expected:
+    - 두 탭 모두 /login 아님, refresh 응답 중 401 없음, pinvi_refresh 유지
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-auth-session.live.spec.ts#CORE-006
+  notes: refresh token 회전 — 직렬화 실패 시 늦은 401이 두 쿠키를 지운다(client.ts navigator.locks).
+
+- id: CORE-007
+  title: 비로그인 딥링크 /trips/{id} → 로그인 → 원래 여행으로 복귀
+  priority: P2
+  tags: [desktop, auth, mutating]
+  preconditions:
+    - account: test@test.com
+  data_sources: []
+  steps:
+    - "[e2e] 여행 생성 → 새 컨텍스트에서 /trips/{id} 진입 → /login → 로그인"
+  expected:
+    - (의도) /trips/{id}로 복귀
+    - (현재) /trips로 착지 — expected-fail
+  cleanup: [생성한 여행 삭제]
+  automation: scripted
+  spec: specs/core/core-auth-session.live.spec.ts#CORE-007
+  notes: test.fail — login/page.tsx는 router.push('/trips') 고정, onUnauthorized도 next 파라미터 없음. 구현 여부 open question.
+
+- id: CORE-008
+  title: 비로그인 보호 페이지(/trips,/map,/files,/settings) 접근은 /login
+  priority: P1
+  tags: [desktop, mobile, auth]
+  preconditions: []
+  data_sources: []
+  steps:
+    - 새 컨텍스트에서 각 경로 진입
+  expected:
+    - 모두 /login으로 리디렉션
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-auth-session.live.spec.ts#CORE-008
+  notes: 미들웨어 없음 — 클라이언트 401 → onUnauthorized.
+
+- id: CORE-009
+  title: 두 계정 세션 격리 — test2는 test의 [e2e] 여행을 목록·딥링크로 볼 수 없다
+  priority: P2
+  tags: [desktop, auth, mutating]
+  preconditions:
+    - account: test@test.com + test2@test.com (PINVI_E2E_USER2_*)
+  data_sources: []
+  steps:
+    - test로 [e2e] 여행 생성 → 다른 컨텍스트 test2 로그인 → 목록 확인 → /trips/{id} 진입
+  expected:
+    - test2 목록에 해당 제목 없음, 상세는 trip-detail-error(403/404)
+  cleanup: [test 계정에서 여행 삭제]
+  automation: scripted
+  spec: specs/core/core-auth-session.live.spec.ts#CORE-009
+  notes: USER2 env 없으면 skip.
+
+- id: CORE-010
+  title: 탐색 지도 첫 렌더 마커(#613) — 상호작용 없이 핀/클러스터가 그려진다
+  priority: P1
+  tags: [desktop, mobile, poi]
+  preconditions:
+    - account: test@test.com
+    - data: 서울 기본 viewport에 Map feature 존재(기본 center 서울)
+  data_sources: [map:*]
+  steps:
+    - /map 진입 → 캔버스 → /features/in-bounds 200 대기
+  expected:
+    - .maplibregl-marker[role=button] ≥1, legend feature-map-marker-style ≥1
+    - feature-map-empty/error 없음
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-map.live.spec.ts#CORE-010
+  notes: Playwright 기본 권한 prompt → 자동 센터링 skip → 서울 기본 중심.
+
+- id: CORE-011
+  title: 여행 지도 첫 렌더 핀(#613) — 새로고침 직후 두 핀이 즉시 보인다
+  priority: P1
+  tags: [desktop, mobile, mutating, poi, search]
+  preconditions:
+    - account: test@test.com
+    - data: Map에 '영월 고씨굴'(관광지/동굴), '안동하회마을'(국가유산) 검색 가능
+  data_sources: [map:heritage, map:tourist, geo]
+  steps:
+    - "[e2e] 여행 생성(11/05–11/08) → 1일차에 고씨굴·하회마을 추가 → 새로고침"
+  expected:
+    - .trip-map-marker 2개가 캔버스 직후 표시, 통계칩 '장소 2곳', legend 2개
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-map.live.spec.ts#CORE-011
+  notes: vworld-map-web ClusterLayer가 지나간 load를 기다리던 결함(#613 재vendor) 회귀 방지.
+
+- id: CORE-012
+  title: fitBounds가 검색 카드·교통 패널·통계칩 아래에 핀을 숨기지 않는다(#619) — desktop+mobile
+  priority: P1
+  tags: [desktop, mobile, mutating, poi]
+  preconditions:
+    - account: test@test.com
+    - data: 북쪽 핀 고씨굴 / 남쪽 핀 하회마을
+  data_sources: [map:heritage, map:tourist, transport:status]
+  steps:
+    - CORE-011 여행 진입 → 핀 2개·교통 상태 수신 대기(1.5s)
+    - 핀·검색카드·교통패널·통계칩 boundingBox 비교
+  expected:
+    - 모든 핀이 지도 surface 안, 검색카드/교통패널과 겹치지 않음
+    - 데스크톱: 통계칩과도 겹치지 않음(모바일 통계칩은 CORE-021)
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-map.live.spec.ts#CORE-012
+  notes: mapFitPadding.ts(fit anchor=검색 입력 줄, data-map-fit-panel) 기준.
+
+- id: CORE-013
+  title: 마커 선택/해제 — 데스크톱 팝업, 모바일 상세 시트 직행
+  priority: P1
+  tags: [desktop, mobile, poi]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:*]
+  steps:
+    - /map → 첫 feature 마커 클릭/탭 → 닫기
+  expected:
+    - 데스크톱: .maplibregl-popup 제목, legend data-marker-selected=true 1개, 마커 data-selected=true → 닫기 후 0
+    - 모바일: feature-detail-modal(aria-modal) → close 후 사라짐
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-map.live.spec.ts#CORE-013
+  notes: ADR-056 모바일 직행.
+
+- id: CORE-014
+  title: 줌 컨트롤 — 축척 막대(m/px)가 ×2 줄었다 돌아온다
+  priority: P2
+  tags: [desktop, poi]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:*]
+  steps:
+    - /map → .maplibregl-ctrl-scale 의 m/px 기록 → zoom-in 클릭 → zoom-out 클릭
+  expected:
+    - zoom-in 후 m/px 가 1/2(1.6~2.4배), zoom-out 후 다시 2배, 오류 배너 없음
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-map.live.spec.ts#CORE-014
+  notes: 모바일 skip(여행 지도는 navigation 숨김). `map-center-state[data-zoom]` 은 요청 카메라라 컨트롤 줌을 따르지 않아 축척 막대로 잰다(in-bounds 는 viewport 캐시로 재요청이 없을 수 있음).
+
+- id: CORE-015
+  title: 내 위치 버튼 — 권한/동의 없이도 동의 다이얼로그 또는 안내 문구, 오류 없음
+  priority: P3
+  tags: [desktop, mobile]
+  preconditions:
+    - account: test@test.com(위치 동의 상태 불문)
+  data_sources: []
+  steps:
+    - /map → map-my-location 클릭
+  expected:
+    - role=dialog(동의) 또는 안내 문구 중 하나 표시, 버튼이 다시 활성
+    - 동의 다이얼로그는 Escape로 취소(동의 데이터 변경 금지)
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-map.live.spec.ts#CORE-015
+  notes: 실제 측위 경로는 동의 변경이 필요해 검증하지 않는다.
+
+- id: CORE-016
+  title: 타일 로드 — VWorld WMTS 200, 디코드/worker/WebGL 오류·tile-error 이벤트 없음
+  priority: P1
+  tags: [desktop, mobile]
+  preconditions:
+    - account: test@test.com
+    - env: VWorld 키 유효(만료 시 전부 4xx — 운영 이슈로 분류)
+  data_sources: [vworld]
+  steps:
+    - /map → api.vworld.kr/req/wmts 응답 집계, 콘솔·vworld-tile-error 수집
+  expected:
+    - 200 타일 ≥1, 비200 타일 0, 디코드/worker 오류 0
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-map.live.spec.ts#CORE-016
+  notes: vworld:// 프로토콜이 https로 재작성해 fetch — response 이벤트로 관측 가능.
+
+- id: CORE-017
+  title: maplibre worker — /maplibre/maplibre-gl-worker.mjs JS 서빙 + module worker 실기동(#613)
+  priority: P1
+  tags: [desktop, mobile]
+  preconditions: []
+  data_sources: []
+  steps:
+    - GET /maplibre/maplibre-gl-worker.mjs → /map에서 new Worker(type module)
+  expected:
+    - 200·javascript MIME·>1KB, 'loaded', 콘솔 'Worker failed' 없음
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-map.live.spec.ts#CORE-017
+  notes: origin/main e2e/maplibre-worker.e2e.ts를 live로 옮김.
+
+- id: CORE-018
+  title: VWorld attribution '공간정보 오픈플랫폼 브이월드' 노출
+  priority: P2
+  tags: [desktop, mobile]
+  preconditions:
+    - account: test@test.com
+  data_sources: [vworld]
+  steps:
+    - /map → .maplibregl-ctrl-attrib (compact면 토글)
+  expected:
+    - attrib-inner에 문구 포함
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-map.live.spec.ts#CORE-018
+  notes: 문구 출처 vworld-map-core vworldStyle.js VWORLD_ATTRIBUTION.
+
+- id: CORE-019
+  title: 모바일 상세 바텀시트 — 본문 스크롤, 배경 스크롤 잠금, Escape/닫기/배경 탭 닫힘
+  priority: P1
+  tags: [mobile, poi]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:*]
+  steps:
+    - /map(390x844) → 마커 탭 → 시트 검사 → 3가지 닫기
+  expected:
+    - role=dialog, body overflow clip, 시트가 뷰포트 안, 본문 스크롤 가능하면 scrollTop>0
+    - 닫힌 뒤 overflow 해제
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-mobile.live.spec.ts#CORE-019
+  notes: Dialog variant=sheet + useModalDialog.
+
+- id: CORE-020
+  title: 모바일 일자 패널 열기/일자 전환/닫기(스와이프 미구현 → 버튼 경로)
+  priority: P2
+  tags: [mobile, mutating]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage, map:tourist]
+  steps:
+    - "[e2e] 여행(2일) → '패널 열기' → 드로어 '2일차 추가' → 2일차 탭 → '패널 닫기'"
+  expected:
+    - aria-expanded 전환, 2일차 aria-selected=true, 패널 hidden
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-mobile.live.spec.ts#CORE-020
+  notes: TripDetail.tsx에 패널 스와이프 핸들러 없음(open question — 요구사항인지).
+
+- id: CORE-021
+  title: 모바일 통계 칩 vs 남쪽 핀 겹침(#623 known)
+  priority: P2
+  tags: [mobile, mutating, poi]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage, map:tourist]
+  steps:
+    - 2핀 여행 진입 → 가장 남쪽 핀 bbox vs trip-map-stats bbox
+  expected:
+    - (의도) 겹치지 않음 — 현재 expected-fail
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-mobile.live.spec.ts#CORE-021
+  notes: test.fail. fitPadding은 위쪽만 보정, 아래 통계칩(bottom-16)은 미반영.
+
+- id: CORE-022
+  title: 오버레이 키보드 Tab 순서 — 검색창이 캔버스/마커보다 먼저 포커스
+  priority: P2
+  tags: [mobile, a11y]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage]
+  steps:
+    - 여행 상세 → '여행 목록' 링크에서 Tab 반복
+  expected:
+    - "'장소·주소 검색' 입력이 .maplibregl-canvas/마커보다 먼저"
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-mobile.live.spec.ts#CORE-022
+  notes: TripMapView 오버레이를 DOM에서 지도보다 먼저 둔다(#613 리뷰).
+
+- id: CORE-023
+  title: 상세 카드가 날씨 지연과 무관하게 3초 안에 뜬다(#622, detail-card 경로)
+  priority: P1
+  tags: [desktop, mobile, weather, poi]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:*, weather:map-rest]
+  steps:
+    - /map → 마커 선택 → 상세보기(모바일 직행) → feature-detail-card-body 시간 측정, weather 응답 시간 기록
+  expected:
+    - 카드 < 3000ms, data-kind ∈ place/event/notice/price
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-resilience.live.spec.ts#CORE-023
+  notes: detail-card는 useFeatureDetailCard로 날씨와 독립.
+
+- id: CORE-024
+  title: 마커 팝업 상세 텍스트가 날씨 응답을 기다리지 않는다(#622, 팝업 경로)
+  priority: P2
+  tags: [desktop, weather, poi]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:*, weather:map-rest]
+  steps:
+    - /map → 마커 클릭 → '상세 불러오는 중…' 소멸 시간 vs /features/{id}/weather 응답 시간
+  expected:
+    - (의도) 상세 < 3s, 날씨보다 먼저 — 현재 expected-fail
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-resilience.live.spec.ts#CORE-024
+  notes: '#622 로 분리 로드가 반영됐다 — 2026-11-03 prod 실행에서 팝업 상세 11 ms 로 통과, expected-fail 해제.'
+
+- id: CORE-025
+  title: 선택 변경 시 이전 상세 요청 폐기 — stale 카드/팝업 없음
+  priority: P1
+  tags: [desktop, mobile, poi]
+  preconditions:
+    - account: test@test.com
+    - data: viewport에 feature 핀 2개 이상
+  data_sources: [map:*]
+  steps:
+    - A 클릭 직후 B 클릭 → 2.5s 뒤에도 B 내용
+  expected:
+    - 팝업/시트 제목 = B, A 문구 없음, selected 1개
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-resilience.live.spec.ts#CORE-025
+  notes: useFeatureDetailCard AbortController / FeatureMapView active 플래그.
+
+- id: CORE-026
+  title: 빠른 pan 중 in-bounds 요청 취소·대체 — 로딩 종료·오류 없음
+  priority: P3
+  tags: [desktop, poi]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:*]
+  steps:
+    - /map → 드래그 4회 연속 → 로딩 사라짐 대기
+  expected:
+    - feature-map-loading 0, error 0; 요청 수·abort 수 기록
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-resilience.live.spec.ts#CORE-026
+  notes: abort 수는 기록만(네트워크 속도 의존).
+
+- id: CORE-027
+  title: 랜드마크 — lang=ko, main/h1 1개, 셸 nav aria-label, aria-current
+  priority: P1
+  tags: [desktop, mobile, a11y]
+  preconditions:
+    - account: test@test.com
+  data_sources: []
+  steps:
+    - /login(banner·contentinfo·main#main) → /trips, /map
+  expected:
+    - 데스크톱 nav '사용자 메뉴' + aria-current=page 1개 / 모바일 nav '주요 메뉴'
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-a11y-perf.live.spec.ts#CORE-027
+  notes: AppShell main에는 id가 없다(skip link 없음) — open question.
+
+- id: CORE-028
+  title: 주요 컨트롤 포커스 가시성 — 로그인 제출, 내 위치, 상단 nav
+  priority: P2
+  tags: [desktop, mobile, a11y]
+  preconditions:
+    - account: test@test.com
+  data_sources: []
+  steps:
+    - 키보드로 포커스 이동 후 :focus-visible + computed outline 확인
+  expected:
+    - outline-style ≠ none, width > 0
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-a11y-perf.live.spec.ts#CORE-028
+  notes: globals.css .focus-ring = focus-visible:outline-2.
+
+- id: CORE-029
+  title: axe-core critical 위반 0 — /login, /trips, /map
+  priority: P2
+  tags: [desktop, mobile, a11y]
+  preconditions:
+    - env: "@axe-core/playwright 설치(현재 apps/web devDependencies에 없음)"
+  data_sources: []
+  steps:
+    - 각 페이지 로드 후 AxeBuilder.analyze
+  expected:
+    - critical=0 (serious는 기록)
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-a11y-perf.live.spec.ts#CORE-029
+  notes: 패키지 없으면 skip 메시지 — 수동 대체는 Chrome axe 확장.
+
+- id: CORE-030
+  title: perf 스모크 — 여행 목록 TTI, 여행 상세(첫 핀), 탐색 지도(첫 마커) 기록
+  priority: P2
+  tags: [desktop, mobile, perf, mutating]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage]
+  steps:
+    - "[e2e] 여행+장소 1 → 세 화면 timed → annotations + JSON attach"
+  expected:
+    - soft 5s(annotate), hard 30s
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-a11y-perf.live.spec.ts#CORE-030
+  notes: 수치만 기록, 임계는 합의 뒤 조정.
+
+- id: CORE-031
+  title: 한국어 날짜 '2026년 11월 5일', 24h 시각, km 거리 포맷
+  priority: P2
+  tags: [desktop, mobile, mutating, search]
+  preconditions:
+    - account: test@test.com
+    - data: "'소수서원', '도산서원'(국가유산) 검색 가능"
+  data_sources: [map:heritage, geo]
+  steps:
+    - "[e2e] 여행(11/05–11/08) → 목록 카드·상단 패널·일자 탭 날짜 → 일출/일몰 → 동선 최적화 미리보기 km"
+  expected:
+    - "'2026년 11월 5일 - 2026년 11월 8일', 일출/일몰 HH:MM(24h) 또는 pending 문구, 'NN.Nkm'"
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-i18n.live.spec.ts#CORE-031
+  notes: TripDayOptimize 트리거 selector unverified against origin/main(soft). TripPoiList.formatTime은 hour12 미지정 → ko-KR 기본(오전/오후 가능) — open question.

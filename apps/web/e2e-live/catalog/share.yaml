@@ -1,0 +1,618 @@
+# AREA: share (SHR) — 일정 공유 · 동행 · 댓글 · 복사 · 실시간 표시기 · 보안 네거티브
+# 35 cases / scripted 30 / blocked 4 / manual 1
+# 공통 전제: account test@test.com(user), 두 번째 신원 = 일반 사용자 test2@test.com(PINVI_E2E_USER2_EMAIL/PASSWORD),
+# 모든 여행은 '[e2e] SHR …' 제목으로 생성·삭제. 셀렉터는 origin/main b1cef056 기준으로 재검증(README).
+
+- id: SHR-001
+  title: 공유 링크 생성 — 1회성 URL 배너와 목록 상태(활성·무기한)
+  priority: P1
+  tags: [desktop, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 여행 목록 → '[e2e] SHR 001 …' 2026-11-20~21 생성 → 상세 진입
+    - 작업 탭 '공유' → 권한 '보기 전용' → '링크 만들기'
+  expected:
+    - data-testid=new-share-url 배너에 '링크가 생성됐습니다. 이 주소는 지금만 표시됩니다.' + <code>{origin}/shared/{tripId}/{token}
+    - "'열기' 링크 href = /shared/{tripId}/{token}, '링크 복사' 버튼 존재"
+    - "share-link-list 1건: '보기 전용' · '활성' · '만료 무기한' · '철회' 버튼"
+  cleanup:
+    - 생성한 여행 삭제(afterEach, 공유 링크는 CASCADE)
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-001
+
+- id: SHR-002
+  title: 로그아웃 컨텍스트에서 공유 페이지 읽기 전용 렌더링(지도·일자·장소)
+  priority: P1
+  tags: [desktop, mutating, share, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map에 안동하회마을 feature(heritage)
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 2일 여행 생성 → 1일차에 '안동하회마을' 검색 후 추가 → '공유' 탭 → 링크 생성
+    - 새 브라우저 컨텍스트(쿠키 없음)로 /shared/{tripId}/{token} 열기
+  expected:
+    - GET /trips/{id}/shared/{token} 200, 로그인 리다이렉트 없음
+    - "'공유된 여행 · 읽기 전용' 문구, h1=여행 제목, 일자 선택 탭 2개(1일차 선택됨)"
+    - region '여행 지도'에 canvas 렌더, aside '장소 목록'(trip-poi-list)에 안동하회마을
+    - "'마커 편집'/'장소 삭제'/'링크 만들기'/'공유' 탭/댓글 섹션 없음, 마스트헤드에 '로그인'·'시작하기'"
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-002
+
+- id: SHR-003
+  title: 공유 링크 철회 — 목록 '철회' 상태, 철회된 링크는 404 안내
+  priority: P1
+  tags: [desktop, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 여행 생성 → 공유 링크 생성 → 목록의 '철회'(aria-label 공유 링크 철회) 클릭
+    - 새 컨텍스트로 해당 링크 열기
+  expected:
+    - 목록 항목 상태 '철회', 철회 버튼 사라짐
+    - "공유 API 404; shared-error: h1 '공유 링크를 열 수 없어요', alert에 '공유 토큰을 찾을 수 없습니다', '홈으로'·'로그인' 링크"
+    - 여행 제목이 화면에 없음
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-003
+
+- id: SHR-004
+  title: 철회 후 재생성 — 새 링크는 열리고 옛 링크는 계속 404
+  priority: P1
+  tags: [desktop, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 링크 A 생성 → 철회 → 링크 B 생성
+    - 새 컨텍스트로 B, 그다음 A 열기
+  expected:
+    - B token ≠ A token, 목록 2건(활성 1·철회 1), 철회 버튼 1개
+    - B 200 + 읽기 전용 뷰, A 404 + 오류 안내
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-004
+
+- id: SHR-005
+  title: 과거 만료일로 만든 링크 — 목록 '만료', 열면 404
+  priority: P2
+  tags: [desktop, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - "'만료일(선택)'에 2026-01-01 입력 → '링크 만들기'"
+    - 새 컨텍스트로 열기
+  expected:
+    - 목록 항목 '만료' 상태, 만료일 표시(2026…), 철회 버튼 없음
+    - 공유 API 404 + '공유 토큰을 찾을 수 없습니다'
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-005
+  notes: 서버가 과거 expires_at를 거부하지 않는다(ShareLinkCreate 검증 없음) — 거부로 바뀌면 케이스를 '422 검증'으로 갱신.
+
+- id: SHR-006
+  title: "'편집 가능'·'댓글 가능' 링크도 공유 페이지는 읽기 전용"
+  priority: P2
+  tags: [desktop, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 권한 '편집 가능'·'댓글 가능'으로 링크 2개 생성 → 각각 새 컨텍스트로 열기
+  expected:
+    - 목록에 '편집 가능'·'댓글 가능' 라벨
+    - 두 링크 모두 200, 읽기 전용 골격, 댓글 입력/편집 버튼 없음
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-006
+  notes: SharedTripView는 visibility를 렌더에 쓰지 않는다 — 'comment/edit'는 현재 라벨만 다르다(제품 결정 필요, README 참조).
+
+- id: SHR-007
+  title: 배너의 '열기'는 새 탭에서 공유 페이지를 연다
+  priority: P2
+  tags: [desktop, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 링크 생성 → 배너 '열기' 클릭(target=_blank)
+  expected:
+    - 새 페이지 URL pathname = /shared/{tripId}/{token}, 읽기 전용 뷰
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-007
+
+- id: SHR-008
+  title: "'링크 복사'는 표시된 URL을 클립보드에 넣는다"
+  priority: P2
+  tags: [desktop, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+    - env: Chromium clipboard-read/write 권한 부여 가능
+  data_sources: []
+  steps:
+    - 링크 생성 → '링크 복사' → navigator.clipboard.readText()
+  expected:
+    - 클립보드 == 배너 <code> URL
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-008
+
+- id: SHR-009
+  title: 공유 페이지에서 토큰은 페이지 URL·공유 API 호출 밖으로 새지 않는다(URL/Referer/본문)
+  priority: P1
+  tags: [desktop, mutating, share, auth]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [map:tiles]
+  steps:
+    - 링크 생성 → 새 컨텍스트에서 요청 전부 기록하며 공유 페이지 열기 → 지도 idle까지 대기
+  expected:
+    - token을 포함한 요청 URL은 (a) 웹 host의 /shared/{id}/{token}(RSC 포함) (b) /trips/{id}/shared/{token} API 둘뿐
+    - cross-origin(타일 등) 요청의 Referer에 token 없음(기본 strict-origin-when-cross-origin)
+    - body innerText에 token 원문 없음
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-security.live.spec.ts#SHR-009
+  notes: 실패 메시지는 token을 <token>으로 가린다(redact).
+
+- id: SHR-010
+  title: 소유자 화면 — WebSocket URL에 token 쿼리 없음, 공유 토큰은 요청 URL에 안 실림
+  priority: P1
+  tags: [desktop, mutating, share, auth]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - websocket/request 이벤트 기록 → 상세 진입(연결됨) → 공유 링크 생성
+  expected:
+    - /ws/trips/{id} 소켓 1개 이상, URL에 token=·pinvi_access 없음(쿠키 인증)
+    - 생성 뒤 발생한 모든 요청 URL에 공유 token 없음; share-link-list에도 token 텍스트 없음
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-security.live.spec.ts#SHR-010
+
+- id: SHR-011
+  title: 공유 페이지의 날씨·일출/일몰은 중립 텍스트만(깨진 값 없음)
+  priority: P2
+  tags: [desktop, mutating, share, weather, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map에 설악산 feature(park/hiking)
+  data_sources: [map:park, weather:map-rest]
+  steps:
+    - 1일 여행 + '설악산' 추가 → 링크 생성 → 새 컨텍스트로 열기
+  expected:
+    - 장소별 trip-weather-summary 또는 trip-weather-status 1개 이상; status 문구는 5개 고정 문장 중 하나
+    - trip-day-header 표시; trip-day-rise-set는 '일출 HH:MM'/'일몰 HH:MM' 또는 '일출·일몰 준비 중'/'일출·일몰 정보 없음'(readOnly, origin/main) 또는 미표시; '…추가하면…' 편집 지시 문구 없음
+    - aside/header 텍스트에 undefined/NaN/[object/null 없음
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-011
+
+- id: SHR-012
+  title: 공유 페이지 일자 탭 전환(2일차 장소만 표시)
+  priority: P2
+  tags: [desktop, mutating, share, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map/geo에 서울역(transit) 검색 결과
+  data_sources: [map:transit, geo]
+  steps:
+    - 2일 여행, 2일차에 '서울역' 추가 → 링크 → 새 컨텍스트 → '2일차' 탭 → '1일차' 탭
+  expected:
+    - 탭 2개, 클릭한 탭 aria-selected=true/다른 탭 false
+    - 2일차 선택 시 목록에 서울역, 1일차로 돌아가면 사라짐
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-012
+
+- id: SHR-013
+  title: 공유 페이지 모바일(390x844) — 세로 스택, 가로 스크롤 없음, 44px 탭
+  priority: P1
+  tags: [mobile, mutating, share, poi, a11y]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map에 소수서원 feature(heritage)
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 여행+소수서원 → 링크 → 390x844 새 컨텍스트로 열기
+  expected:
+    - 읽기 전용 골격 + 장소 목록에 소수서원
+    - "'장소 목록' aside가 '여행 지도' region 아래(y ≥ map bottom), scrollWidth-innerWidth ≤ 1"
+    - "'1일차' 탭 높이 ≥ 44px"
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-mobile.live.spec.ts#SHR-013
+
+- id: SHR-014
+  title: 모바일 드로어('패널 열기')에서 공유 링크 만들기
+  priority: P2
+  tags: [mobile, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 390x844로 상세 진입 → '패널 열기' → '공유' 탭 → '링크 만들기' → '패널 닫기'
+  expected:
+    - 드로어 열기 전 '공유' 탭 비가시, 열면 trip-detail-panel + 실시간 상태 표시
+    - 배너 생성, 목록 '활성'; 닫으면 패널 숨김
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-mobile.live.spec.ts#SHR-014
+
+- id: SHR-015
+  title: 다른 여행 id + 토큰 조합 / 잘못된 토큰 → 404
+  priority: P2
+  tags: [desktop, mutating, share, auth]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 여행 A·B 생성, A의 링크 생성 → /shared/{B}/{tokenA} → /shared/{A}/not-a-real-token
+  expected:
+    - 둘 다 API 404 + '공유 토큰을 찾을 수 없습니다', B 제목 노출 없음
+  cleanup:
+    - 여행 A·B 삭제
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-015
+
+- id: SHR-016
+  title: 삭제(soft delete)된 여행의 공유 링크 → '여행을 찾을 수 없습니다'
+  priority: P1
+  tags: [desktop, mutating, share, auth]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 링크 생성 → 헤더 '삭제' → '삭제 확인'(trip-delete-confirm) → /trips 복귀 → 새 컨텍스트로 링크 열기
+  expected:
+    - API 404; alert에 '여행을 찾을 수 없습니다'(토큰은 살아 있지만 trip.deleted_at)
+    - 제목 미노출
+  cleanup:
+    - 이미 삭제됨(afterEach deleteTrip는 404 허용)
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-016
+
+- id: SHR-017
+  title: 존재하지 않는 여행 id → 404 안내, 비로그인 /trips/{id} → 로그인 이동
+  priority: P1
+  tags: [desktop, mutating, auth]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 로그인 상태로 /trips/00000000-0000-4000-8000-00000000e2e0
+    - 새 컨텍스트(비로그인)로 /trips/{내 여행 id}
+  expected:
+    - trip-detail-error '여행을 찾을 수 없습니다' + '여행 목록' 링크
+    - 비로그인은 /login으로 이동(login-form 표시), 제목 미노출
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-security.live.spec.ts#SHR-017
+
+- id: SHR-018
+  title: 다른 사용자(test2)의 여행 id로 접근 → 403 권한 안내
+  priority: P1
+  tags: [desktop, mutating, auth]
+  preconditions:
+    - account: test@test.com (user) + test2@test.com (PINVI_E2E_USER2_EMAIL/PASSWORD)
+  data_sources: []
+  steps:
+    - test2 컨텍스트로 '[e2e] SHR 018-user2 …' 생성 → user가 /trips/{otherTripId}
+    - user 세션으로 GET {apiBase}/trips/{id}/comments (apiBase는 페이지의 첫 /trips 또는 /auth/me fetch에서 유도)
+  expected:
+    - trip-detail-error '이 여행에 대한 권한이 없습니다', 지도·제목 미노출
+    - comments API — PINVI_E2E_API_URL 설정 시 403 엄격, 아니면 401/403/404 중 하나(200 금지)
+  cleanup:
+    - test2가 자기 여행 삭제
+  automation: scripted
+  spec: specs/share/share-security.live.spec.ts#SHR-018
+
+- id: SHR-019
+  title: 댓글 작성 → 목록 표시 → 삭제
+  priority: P1
+  tags: [desktop, mobile, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - "'댓글' 탭 → textarea '댓글 입력'에 '[e2e] SHR-019 …' → '작성' → 항목의 '댓글 삭제'"
+  expected:
+    - 처음 '아직 댓글이 없습니다.'; 작성 후 trip-comment-list 1건 + 타임스탬프(ko-KR short), 입력창 비워짐
+    - 삭제 후 빈 상태 문구, 목록 사라짐
+  cleanup:
+    - 댓글 삭제 + 여행 삭제
+  automation: scripted
+  spec: specs/share/comments.live.spec.ts#SHR-019
+
+- id: SHR-020
+  title: 댓글 입력 검증 — 공백만이면 '작성' 비활성, maxlength 2000
+  priority: P2
+  tags: [desktop, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 빈 값/공백 3칸/2001자 입력
+  expected:
+    - "빈 값·공백: '작성' disabled; textarea maxlength=2000, 입력값 ≤ 2000자; 댓글 생성 안 됨"
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/comments.live.spec.ts#SHR-020
+
+- id: SHR-021
+  title: 댓글 수정(편집)
+  priority: P3
+  tags: [desktop, share]
+  preconditions:
+    - 기능 부재 — 웹 UI에 편집 버튼 없음, API에 PATCH /trips/{id}/comments/{cid} 없음
+  data_sources: []
+  steps:
+    - (없음)
+  expected:
+    - (없음)
+  cleanup:
+    - (없음)
+  automation: blocked
+  notes: 제품 결정 필요 — 댓글 편집을 지원할지. 지원 시 TripComments.tsx + trips.py에 추가 후 케이스 작성.
+
+- id: SHR-022
+  title: 일자/장소 대상 댓글(target_type=day/poi)
+  priority: P3
+  tags: [desktop, share]
+  preconditions:
+    - API는 target_type/target_id/day_index를 받지만(TripCommentCreate) 웹 UI는 target_type='trip'만 보낸다
+  data_sources: []
+  steps:
+    - (없음)
+  expected:
+    - (없음)
+  cleanup:
+    - (없음)
+  automation: blocked
+  notes: UI 노출이 없어 브라우저 케이스 불가. API-only 검증은 범위 밖.
+
+- id: SHR-023
+  title: 실시간 표시기 '실시간 연결됨 · 접속 N명'
+  priority: P1
+  tags: [desktop, mobile, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 상세 진입(모바일은 드로어 열기) → trip-realtime-status 확인 → 같은 계정 두 번째 컨텍스트 진입
+  expected:
+    - "'실시간 연결됨' + /접속 \\d+명/, /ws/trips/{id} 소켓 생성, '다시 연결' 버튼 없음"
+    - 두 번째 컨텍스트도 '연결됨', 첫 화면 상태 유지
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/realtime-copy.live.spec.ts#SHR-023
+  notes: 같은 user_id 두 탭은 presence map 키가 같아 N은 1 또는 0일 수 있어 정확한 수는 단언하지 않는다.
+
+- id: SHR-024
+  title: 동행(test2)이 쓴 댓글은 소유자의 댓글 탭 재진입 시 보인다
+  priority: P2
+  tags: [desktop, mutating, share]
+  preconditions:
+    - account: test@test.com (user) + test2@test.com (보기 전용 동행으로 초대)
+  data_sources: []
+  steps:
+    - "소유자가 test2를 '보기 전용'으로 초대 → 양쪽 상세 '댓글' 탭 → test2가 작성 → 소유자: '일정' 탭 → '댓글' 탭"
+  expected:
+    - viewer도 댓글 작성 가능(읽기 권한이면 POST 허용); 소유자 목록에 test2 댓글 표시 → test2가 삭제 → 빈 상태
+  cleanup:
+    - 댓글 삭제(test2) + 동행 제거 + 여행 삭제
+  automation: scripted
+  spec: specs/share/comments.live.spec.ts#SHR-024
+  notes: TripComments는 realtime 이벤트(comment.created)로 자동 갱신되지 않는다(자체 fetch) — 발견사항, README 참조.
+
+- id: SHR-025
+  title: 기존 사용자(test2) 초대 → '참여' 상태·역할 라벨 → 제거
+  priority: P1
+  tags: [desktop, mutating, share]
+  preconditions:
+    - account: test@test.com (user); PINVI_E2E_USER2_EMAIL(초대 대상, 가입된 일반 사용자)
+  data_sources: []
+  steps:
+    - "'동행' 탭 → 이메일=test2, 권한 '편집자' → '초대' → 목록 확인 → '동반자 제거'"
+  expected:
+    - 초기 '동반자 (0)', '초대' disabled, 권한 옵션 [편집자, 보기 전용, 공동 소유자]
+    - "초대 후 1건: '편집자' · '참여'(joined_at 즉시), '동반자 (1)', 탭 배지 1, 이메일 입력 비워짐"
+    - 제거 후 목록 사라짐·'동반자 (0)'
+  cleanup:
+    - 동행 제거 + 여행 삭제
+  automation: scripted
+  spec: specs/share/companions.live.spec.ts#SHR-025
+  notes: 초대는 test2 주소로 초대 메일·Telegram outbox를 enqueue한다(소유자 승인). 목록에 이메일이 보이므로 스크린샷 생략.
+
+- id: SHR-026
+  title: 초대 검증 — 본인 이메일 409, 중복(대소문자 무시) 409
+  priority: P2
+  tags: [desktop, mutating, share]
+  preconditions:
+    - PINVI_E2E_USER_EMAIL, PINVI_E2E_USER2_EMAIL
+  data_sources: []
+  steps:
+    - 본인 이메일 초대 → test2 초대 → test2 대문자 재초대
+  expected:
+    - "'여행 소유자는 동반자로 초대할 수 없습니다' / '이미 초대된 동반자입니다' alert, 목록은 1건 유지"
+  cleanup:
+    - 동행 제거 + 여행 삭제
+  automation: scripted
+  spec: specs/share/companions.live.spec.ts#SHR-026
+
+- id: SHR-027
+  title: 미가입 이메일 초대 → '초대됨'(대기) 상태
+  priority: P2
+  tags: [desktop, mutating, share, telegram]
+  preconditions:
+    - env: PINVI_E2E_COMPANION_EMAIL — 미가입 sink 주소(초대 메일이 실제 발송됨). 없으면 skip
+  data_sources: []
+  steps:
+    - 이메일=sink, 권한 '보기 전용' → '초대' → 제거
+  expected:
+    - 목록 1건 '초대됨' · '보기 전용'; 제거 후 사라짐
+  cleanup:
+    - 동행 제거 + 여행 삭제
+  automation: blocked
+  spec: specs/share/companions.live.spec.ts#SHR-027
+  notes: invite_companion이 enqueue_trip_invite_email로 실제 메일을 보낸다 — 제3자 주소 금지. 운영자가 sink 주소를 env로 주면 spec이 자동 활성화된다.
+
+- id: SHR-028
+  title: 보기 전용 동행 — 열람 가능, 편집·공유 링크 생성 거부, 관리 정보 비노출
+  priority: P1
+  tags: [desktop, mutating, share, auth]
+  preconditions:
+    - test2@test.com (PINVI_E2E_USER2_EMAIL/PASSWORD)
+  data_sources: []
+  steps:
+    - "소유자: 링크 1개 생성, test2를 '보기 전용'으로 초대"
+    - "test2: 상세 진입 → '공유' 탭 → '링크 만들기' → '편집' → 제목 변경 → 저장 → '동행' 탭"
+  expected:
+    - test2 상세 로드·실시간 연결됨; share-link-list 비어 있음(include_management=False)
+    - "'링크 만들기' → alert '여행 소유자만 수행할 수 있습니다'; 편집 저장 → alert '이 여행을 편집할 권한이 없습니다', 제목 불변"
+    - test2의 동행 목록에 이메일(PII) 미표시
+  cleanup:
+    - 동행 제거 + 여행 삭제
+  automation: scripted
+  spec: specs/share/companions.live.spec.ts#SHR-028
+
+- id: SHR-029
+  title: 편집자 동행 — 제목 편집 성공(소유자 화면 realtime 반영), 공유 링크·초대는 소유자 전용
+  priority: P2
+  tags: [desktop, mutating, share, auth]
+  preconditions:
+    - test2 두 번째 신원
+  data_sources: []
+  steps:
+    - test2를 '편집자'로 초대 → test2가 '편집'으로 제목 변경 → '공유' 링크 생성 시도 → '동행' 초대 시도
+  expected:
+    - test2·소유자 양쪽 h1에 새 제목(소유자는 trip.updated 이벤트로 갱신)
+    - 링크 생성/초대 모두 '여행 소유자만 수행할 수 있습니다'
+  cleanup:
+    - 동행 제거 + 여행 삭제
+  automation: scripted
+  spec: specs/share/companions.live.spec.ts#SHR-029
+
+- id: SHR-030
+  title: 열람 중인 동행을 제거하면 그 화면은 권한 오류로 전환된다
+  priority: P2
+  tags: [desktop, mutating, share, auth]
+  preconditions:
+    - test2 두 번째 신원
+  data_sources: []
+  steps:
+    - test2(보기 전용) 상세 열어 둠 → 소유자가 '동반자 제거' → test2 화면 관찰 → 새로고침
+  expected:
+    - 20초 내 trip-detail-error 또는 trip-realtime-permission-lost 표시
+    - 새로고침 후 '이 여행에 대한 권한이 없습니다'
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/companions.live.spec.ts#SHR-030
+
+- id: SHR-031
+  title: 여행 복사 — '<제목> copy' 초안, 일자·장소 복제, 공유 링크·동행은 미복제
+  priority: P2
+  tags: [desktop, mutating, share, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map에 경주 불국사 feature(heritage)
+  data_sources: [map:heritage]
+  steps:
+    - 2일 여행 + 1일차 '경주 불국사' → 헤더 '복사' → 새 상세로 이동 → '공유'·'동행' 탭 → 원본 재방문
+  expected:
+    - URL이 새 trip id, h1 '<제목> copy', 상태 '초안', '2일 · 1개 장소', 일자 목록에 불국사
+    - 복사본 share-link-list/companion-list 없음; 원본 '2일 · 1개 장소' 유지
+  cleanup:
+    - 원본·복사본 모두 삭제
+  automation: scripted
+  spec: specs/share/realtime-copy.live.spec.ts#SHR-031
+
+- id: SHR-032
+  title: 인쇄/내보내기(PDF·ICS)
+  priority: P3
+  tags: [desktop, share]
+  preconditions:
+    - 기능 부재 — apps/web에 window.print/내보내기 UI 없음(관리자 category-mapping '내보내기'는 무관)
+  data_sources: []
+  steps:
+    - (없음)
+  expected:
+    - (없음)
+  cleanup:
+    - (없음)
+  automation: blocked
+  notes: 제품 결정 필요. 브라우저 기본 인쇄(Ctrl+P)의 공유 페이지 레이아웃은 수동 검토 후보.
+
+- id: SHR-033
+  title: 동행(test2)의 댓글 — 작성자에게만 삭제 버튼(소유자·동행 양쪽 화면)
+  priority: P2
+  tags: [desktop, mutating, share]
+  preconditions:
+    - test2 두 번째 신원
+  data_sources: []
+  steps:
+    - test2(편집자) 초대 → test2가 댓글 작성 → 소유자도 댓글 작성 → 양쪽 '댓글' 탭 비교 → 각자 자기 댓글 삭제
+  expected:
+    - 소유자 목록 2건, '댓글 삭제' 버튼 1개(자기 댓글에만, test2 댓글엔 없음 — canDeleteComment=작성자만)
+    - test2 목록도 자기 댓글에만 버튼 1개; 각자 삭제 후 빈 상태
+  cleanup:
+    - 댓글 삭제 + 동행 제거 + 여행 삭제
+  automation: scripted
+  spec: specs/share/comments.live.spec.ts#SHR-033
+  notes: API(delete_comment)는 소유자 삭제도 허용하나 UI는 숨긴다 — UI/API 불일치 발견사항.
+
+- id: SHR-034
+  title: 공유 페이지 접근성 수동 점검(헤딩 순서·tablist 레이블·포커스 링·공개 chrome)
+  priority: P3
+  tags: [desktop, mobile, share, a11y]
+  preconditions:
+    - 임의의 활성 공유 링크
+  data_sources: []
+  steps:
+    - 키보드만으로 마스트헤드 → 일자 탭 → 장소 목록 순회, 스크린리더로 '공유된 여행 · 읽기 전용' 낭독 확인
+  expected:
+    - tablist aria-label '일자 선택', tab aria-selected 동기화, region/complementary 레이블, 44px 타깃
+  cleanup:
+    - (읽기 전용)
+  automation: manual
+  notes: axe 자동 스캔은 a11y 영역 작성자와 중복 가능 — 공유 페이지 한정으로 수동 유지.
+
+- id: SHR-035
+  title: 권한별 링크 3개 — 목록 라벨·활성 상태·권한 옵션 집합
+  priority: P2
+  tags: [desktop, mutating, share]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: []
+  steps:
+    - 보기 전용·댓글 가능·편집 가능 링크를 차례로 생성
+  expected:
+    - 목록 3건, 각 라벨 1건씩 '활성' + 철회 버튼; 권한 select 옵션 텍스트 [보기 전용, 댓글 가능, 편집 가능]
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/share/share-links.live.spec.ts#SHR-035

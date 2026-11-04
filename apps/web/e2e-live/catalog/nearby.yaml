@@ -1,0 +1,706 @@
+# NEAR — nearby / transport information around trip places and on the explore map.
+# PinVi main b1cef056 (PR #619, 2026-11-03). 41 cases: 35 scripted, 2 manual, 4 blocked.
+# Prod facts assumed: PINVI_KOR_TRAVEL_MAP_TRANSPORT_ENABLED=true, all four layers available
+# (handoff 2026-10-26: fuel/rest/incident/airport). Explore map default = 서울시청, zoom 12.
+
+- id: NEAR-001
+  title: 탐색 지도 교통 정보 패널 — 4개 칩(주유소·휴게소·교통 돌발·공항) 순서·초기 꺼짐·요청 없음
+  priority: P1
+  tags: [desktop, mobile, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - env: prod /transport/status enabled=true
+  data_sources: [transport:status]
+  steps:
+    - 로그인 → '지도' → /map
+    - /transport/status 응답 대기, 패널 '교통 정보' 표시 확인
+  expected:
+    - role=group '교통 정보 레이어' 안 버튼 텍스트가 정확히 [주유소, 휴게소, 교통 돌발, 공항] 순
+    - 모든 칩 aria-pressed=false, 레이어 상태 줄·마커 legend 없음
+    - 칩을 켜기 전 markers-in-bounds 요청 0건
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-001
+
+- id: NEAR-002
+  title: 휴게소 칩 켜기(서울 zoom 9) — 요청 layers=rest_area·limit=200, 'N곳 · n분 전 갱신' 줄, legend 마커 수 일치
+  priority: P1
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map transport.rest_areas 적재(215곳)
+  data_sources: [transport:rest-area]
+  steps:
+    - /map → 키보드 '-' 3회로 zoom 9
+    - "'휴게소' 클릭"
+  expected:
+    - markers-in-bounds 요청 1건, layers=rest_area, zoom≥8, limit=200
+    - status ok면 상태 줄 data-status=ok, '{items.length}곳', 신선도 '(방금|n분 전|n시간 전|n일 전) 갱신'
+    - legend transport-marker[data-layer=rest_area] 개수 = coord 있는 items 수, 1 이상(경기권 고속도로)
+    - status unavailable이면 '일시적으로 불러올 수 없음' + data-reason
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-002
+
+- id: NEAR-003
+  title: 주유소 줌 문턱 — zoom 10에서 '확대하면 보여요'·요청 없음, zoom 12에서 요청·마커
+  priority: P1
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map transport.fuel_stations 적재
+  data_sources: [transport:gas]
+  steps:
+    - /map → zoom 10 → '주유소' 클릭
+    - zoom 12로 확대
+  expected:
+    - "zoom 10: 칩 aria-pressed=true, 상태 줄 '확대하면 보여요', fuel_station 포함 요청 없음(1초 관찰)"
+    - "zoom 12: layers에 fuel_station 포함된 요청, 상태 줄에서 안내 사라지고 'N곳'(서울 도심 N>0) 또는 unavailable 문구"
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-003
+
+- id: NEAR-004
+  title: 주유소 마커 → 상세 대화상자(유종별 가격·상표·편의·신선도·출처)
+  priority: P1
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 서울역 주변 주유소 ≥1
+  data_sources: [transport:gas, geo]
+  steps:
+    - /map → 검색 '서울역' 첫 결과 선택(zoom 15) → '주유소' 켜기
+    - legend 제목으로 개별 마커(.maplibregl-marker[aria-label]) 클릭
+  expected:
+    - GET /transport/fuel-stations/{id} 200, transport-detail-body 표시, error 없음
+    - 제목=마커 제목, 부제 '주유소'
+    - transport-fuel-prices에 '…원' 또는 '판매 안 함' 행(없으면 '가격 정보가 없습니다.')
+    - "footer transport-detail-freshness '… 갱신', '출처: 한국석유공사·한국도로공사·한국공항공사(kor-travel-map 경유)'"
+    - "'일정에 추가'·'상세보기' 버튼 없음"
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/transport-detail.live.spec.ts#NEAR-004
+
+- id: NEAR-005
+  title: "'가격 추이 보기' — 30일 이력 표 또는 비오류 unavailable 안내"
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - env: 가격 이력은 upstream(transport→Map)에서 현재 꺼져 있음(coordinator 2026-11-03) → prod 기대 분기는 unavailable/disabled
+  data_sources: [transport:gas]
+  steps:
+    - NEAR-004처럼 주유소 상세 열기 → '가격 추이 보기'
+  expected:
+    - GET …/price-history?days=30 200 (unavailable은 오류가 아님 — docs/api/transport.md)
+    - "현재 prod: status=unavailable → transport-price-history-unavailable, data-reason=응답 reason(예 disabled), 문구 '가격 추이는 아직 제공되지 않습니다.'"
+    - reason이 upstream_timeout/upstream_unavailable이면 '잠시 후 다시 시도해 주세요'
+    - 이력이 켜지면 status=available & items>0 → transport-price-history에 '원' 행(같은 스크립트가 분기)
+    - "'가격 추이를 불러오지 못했습니다.' 없음"
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/transport-detail.live.spec.ts#NEAR-005
+
+- id: NEAR-006
+  title: 휴게소 상세 — 노선·방향, 편의(주유소/LPG 충전/전기차 충전 있음·없음), 휴게소 유가 블록·'유가' 신선도
+  priority: P1
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 서울 zoom 9 뷰포트 안 휴게소
+  data_sources: [transport:rest-area]
+  steps:
+    - /map zoom 9 → '휴게소' → 개별 마커 클릭
+  expected:
+    - GET /transport/rest-areas/{id} 200, 제목·부제 '휴게소'
+    - 응답 route_name 있으면 본문에 표시
+    - has_gas_station/has_lpg_station/has_ev_charger가 null이 아니면 dt '주유소'/'LPG 충전'/'전기차 충전' + dd '있음'|'없음'
+    - fuel_prices 있으면 '휘발유'·'경유' 행, fuel_price_freshness 있으면 footer '유가 … 갱신'
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/transport-detail.live.spec.ts#NEAR-006
+  notes: EV 충전 정보는 휴게소 상세의 플래그로만 노출된다(NEAR-032 참조).
+
+- id: NEAR-007
+  title: 교통 돌발(zoom 7) — '이 지역 교통 돌발 N건' 헤더, 최대 5행, legend 수 = 응답 수
+  priority: P1
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map transport.highway_incidents(KREX 활성 사건, 0건일 수 있음)
+  data_sources: [transport:incident]
+  steps:
+    - /map → zoom 7 → '교통 돌발'
+  expected:
+    - 상태 줄이 알려진 형태(N곳|불러올 수 없음|확대)
+    - "items>0: transport-incident-list '이 지역 교통 돌발 {N}건', 버튼 수 = min(5, N), 각 행 높이 ≥44px"
+    - "items=0: 목록 없음, 상태 줄 '0곳'"
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-007
+
+- id: NEAR-008
+  title: 돌발 목록 행 클릭 → 상세(유형·처리 상태·노선·위치·발생·내용)·신선도, 닫으면 목록 유지
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 활성 돌발 ≥1 (없으면 skip 기록)
+  data_sources: [transport:incident]
+  steps:
+    - NEAR-007 → 첫 행 클릭
+  expected:
+    - GET /transport/highway-incidents/{id} 200, 행 텍스트에 응답 title 포함
+    - 부제 '교통 돌발', 응답에 값이 있는 필드마다 dt(유형/처리 상태/노선/위치/발생/내용) 표시
+    - footer 신선도 '… 갱신'; Escape로 닫힌 뒤 목록 그대로
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/transport-detail.live.spec.ts#NEAR-008
+
+- id: NEAR-009
+  title: 공항(zoom 6, 전국) — 공항 ≥5, 상세에 영문명·IATA 3자 코드
+  priority: P1
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map transport.airports(krairport 운영 공항 15)
+  data_sources: [transport:airport]
+  steps:
+    - /map → zoom 6 → '공항' → 개별 마커 클릭
+  expected:
+    - 응답 items ≥5, legend 마커 수 = coord 있는 items
+    - 상세 부제 '공항', dt '영문명'·'코드', iata_code /^[A-Z]{3}$/ 본문에 표시
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/transport-detail.live.spec.ts#NEAR-009
+
+- id: NEAR-010
+  title: 레이어 끄기 — 마커·상태 줄 즉시 제거, 추가 요청 없음
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:airport]
+  steps:
+    - /map zoom 6 → '공항' 켜기 → 다시 클릭
+  expected:
+    - aria-pressed=false, legend airport 0, 상태 줄 없음
+    - 마지막 레이어를 끌 때 markers-in-bounds 요청 0건(0.8초 관찰)
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-010
+
+- id: NEAR-011
+  title: 두 레이어(공항+휴게소) — 한 요청에 layers 표시 순서(rest_area,airport), 상태 줄 둘
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:rest-area, transport:airport]
+  steps:
+    - /map zoom 8 → '공항' → '휴게소'
+  expected:
+    - 두 번째 토글 요청 layers=rest_area,airport(META 순서), 응답 layers 두 개
+    - 두 상태 줄 모두 알려진 형태
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-011
+
+- id: NEAR-012
+  title: 지도 이동(moveend) → 같은 zoom·다른 bbox로 재조회
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:rest-area]
+  steps:
+    - /map zoom 9 → '휴게소' → 키보드 → 4회(동쪽 400px 이동)
+  expected:
+    - 새 요청 zoom 동일, bbox lng_min이 이전보다 큼
+    - 상태 줄 갱신
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-012
+
+- id: NEAR-013
+  title: 잘림 표시 — 응답 truncated=true일 때만 '일부만 표시 — 확대하세요'
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 서울 zoom 11 주유소 밀집(limit 200 초과 가능)
+  data_sources: [transport:gas]
+  steps:
+    - /map zoom 11 → '주유소'
+  expected:
+    - truncated=true ↔ 상태 줄에 잘림 문구, items ≤200
+    - truncated=false ↔ 문구 없음
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-013
+
+- id: NEAR-014
+  title: 신선도 라벨·'오래된 정보' 배지가 응답 freshness(age_seconds·stale)를 그대로 반영
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:airport, transport:incident, transport:rest-area]
+  steps:
+    - /map zoom 7 → 공항·교통 돌발·휴게소 켜기
+  expected:
+    - ok 레이어마다 상태 줄에 '(방금|n분 전|n시간 전|n일 전) 갱신'
+    - freshness.stale=true ↔ '오래된 정보' 표시
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-014
+
+- id: NEAR-015
+  title: /transport/status 기준 unavailable 레이어도 칩은 보이고 켜면 사유와 함께 강등, 오류 배너 없음
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:status]
+  steps:
+    - /map 진입, status 응답 읽기 → available=false 레이어 모두 켜기
+  expected:
+    - enabled=true, 칩 4개 모두 표시
+    - available=false 레이어는 '일시적으로 불러올 수 없음'
+    - feature-map-error 없음, feature-map 정상
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-015
+  notes: 모든 레이어가 available이면 '4칩 표시·강등 없음'만 단언한다(현재 prod 기대값). status 본문은 annotation으로 남긴다.
+
+- id: NEAR-016
+  title: soft-fail 보장 — 4개 레이어 모두 켜도 장소 마커·장소 검색은 그대로 동작
+  priority: P1
+  tags: [desktop, nearby, search]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:gas, transport:rest-area, transport:incident, transport:airport, map:place, geo]
+  steps:
+    - /map(zoom 8) → 칩 4개 전부 켜기 → '서울역' 검색 후 선택
+  expected:
+    - /features/in-bounds 200, feature-map-marker-style ≥1, feature-map-error 없음
+    - 4개 상태 줄 모두 알려진 형태
+    - 검색 선택 후 입력란 비워지고 지도 이동
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-016
+
+- id: NEAR-017
+  title: transport 상세에는 POI 연결이 없다(일정에 추가·상세보기·feature 모달·외부 링크 없음) — ADR-076 D7
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:airport]
+  steps:
+    - /map zoom 6 → '공항' → 마커 클릭
+  expected:
+    - 대화상자 안에 '일정에 추가'·'상세보기' 버튼 없음, feature-detail-card-body 없음, 카카오/네이버 링크 없음
+    - feature-detail-modal 열리지 않음
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/transport-detail.live.spec.ts#NEAR-017
+
+- id: NEAR-018
+  title: 다른 마커를 열면 내용이 바뀌고, Escape로 닫아도 마커는 남는다
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 개별 렌더되는 공항 마커 ≥2
+  data_sources: [transport:airport]
+  steps:
+    - /map zoom 6 → '공항' → 마커 A 클릭 → 닫기 → 마커 B 클릭
+  expected:
+    - 두 번째 대화상자 제목 = B, A 포함하지 않음
+    - 닫은 뒤 legend airport 마커 유지
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/transport-detail.live.spec.ts#NEAR-018
+
+- id: NEAR-019
+  title: 비로그인 /map → /login으로 이동, 패널 없음, markers 요청 없음
+  priority: P1
+  tags: [desktop, mobile, auth, nearby]
+  preconditions:
+    - env: 쿠키 없음
+  data_sources: [transport:status]
+  steps:
+    - 쿠키 삭제 → /map
+  expected:
+    - URL /login
+    - transport-layer-controls 없음, markers-in-bounds 요청 0건
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-019
+
+- id: NEAR-020
+  title: 모바일(390px) 패널이 검색창 아래에 쌓이고(80vw 이하) 입력란·칩이 눌린다
+  priority: P1
+  tags: [mobile, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:airport]
+  steps:
+    - 390x844 /map → 입력란 왼쪽 (12,12) 클릭 → '공항'
+  expected:
+    - 검색 박스·패널 박스 겹침 없음, 패널 y ≥ 검색 하단, 패널 너비 ≤ 312px
+    - 입력란 포커스됨, 공항 요청·상태 줄
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-020
+
+- id: NEAR-021
+  title: 모바일 돌발 행 탭 → 풀스크린 시트, 닫힘
+  priority: P2
+  tags: [mobile, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 활성 돌발 ≥1 (없으면 skip 기록)
+  data_sources: [transport:incident]
+  steps:
+    - 390 /map zoom 7 → '교통 돌발' → 첫 행 탭
+  expected:
+    - transport-detail 폭 ≥ 351px, '교통 돌발' 포함, Escape로 닫힘
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-021
+
+- id: NEAR-022
+  title: 여행 지도 — 교통 패널이 장소 검색창 아래 한 스택에 있고 덮지 않는다(#613), 결과가 펼쳐지면 내려간다
+  priority: P1
+  tags: [desktop, mobile, mutating, nearby, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: "'[e2e] NEAR trip' 11/05–11/08, 1일차 영월 고씨굴·소수서원·도산서원·안동하회마을"
+  data_sources: [map:cave, map:heritage, transport:status, geo]
+  steps:
+    - /trips/{id} → trip-map-overlay-stack 안 trip-map-place-search·transport-layer-controls 확인
+    - 입력란 (12,12) 클릭 → '안동' 입력
+  expected:
+    - 두 박스 겹침 없음, 패널 y ≥ 검색 하단, 입력란 포커스
+    - 결과 펼친 뒤 패널 y 증가, 여전히 겹침 없음
+  cleanup:
+    - afterAll에서 여행 삭제 + '[e2e]' 여행 sweep
+  automation: scripted
+  spec: specs/nearby/trip-map.live.spec.ts#NEAR-022
+
+- id: NEAR-023
+  title: 여행 지도 첫 렌더 — 핀 4개 모두 그려지고, 북쪽 핀(고씨굴)이 검색 입력 줄·교통 패널에 가리지 않는다(#619)
+  priority: P1
+  tags: [desktop, mobile, mutating, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: NEAR-022와 같은 여행
+  data_sources: [map:cave, map:heritage]
+  steps:
+    - /trips/{id} 진입(지도 조작 없이) → 타일 idle 대기
+  expected:
+    - trip-map-stats '장소 4곳', trip-map-marker-style 4, .trip-map-marker 4(첫 렌더)
+    - 각 핀 box.y ≥ [data-map-fit-anchor] 하단 − 2px
+    - 각 핀 box가 transport-layer-controls box와 겹치지 않음
+  cleanup:
+    - afterAll 여행 삭제
+  automation: scripted
+  spec: specs/nearby/trip-map.live.spec.ts#NEAR-023
+
+- id: NEAR-024
+  title: 여행 지도의 주변 정보는 여행 장소에 맞춘 뷰포트 기준(서울 기본값 아님)
+  priority: P2
+  tags: [desktop, mobile, mutating, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: NEAR-022와 같은 여행
+  data_sources: [transport:incident, transport:rest-area]
+  steps:
+    - /trips/{id} → '교통 돌발' → '휴게소'
+  expected:
+    - 요청 bbox가 128.4–128.95E, 36.5–37.25N을 포함, 서울시청(126.978,37.5665)은 포함하지 않음
+    - 휴게소 ok면 'N곳' N>0(중앙고속도로)
+  cleanup:
+    - afterAll 여행 삭제
+  automation: scripted
+  spec: specs/nearby/trip-map.live.spec.ts#NEAR-024
+
+- id: NEAR-025
+  title: POI 핀 선택 → flyTo → 켜 둔 레이어 재조회(같은 zoom, 북쪽으로 이동한 bbox)
+  priority: P2
+  tags: [desktop, mobile, mutating, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: NEAR-022와 같은 여행
+  data_sources: [transport:incident, map:cave]
+  steps:
+    - /trips/{id} → '교통 돌발' → 고씨굴 핀 클릭
+  expected:
+    - 새 요청 zoom 동일, bbox 중심 위도 증가
+  cleanup:
+    - afterAll 여행 삭제
+  automation: scripted
+  spec: specs/nearby/trip-map.live.spec.ts#NEAR-025
+
+- id: NEAR-026
+  title: 장소 없는 새 여행 — 전국 기본 시점(zoom 7)에서 공항 ≥5, 주유소는 '확대하면 보여요'
+  priority: P2
+  tags: [desktop, mobile, mutating, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:airport, transport:gas]
+  steps:
+    - "'[e2e] NEAR empty' 생성 → /trips/{id} → '공항' → '주유소'"
+  expected:
+    - "'장소 0곳', 공항 요청 zoom ≤7, items ≥5"
+    - 주유소 상태 줄 '확대하면 보여요', fuel_station 요청 없음
+  cleanup:
+    - finally에서 여행 삭제
+  automation: scripted
+  spec: specs/nearby/trip-map.live.spec.ts#NEAR-026
+
+- id: NEAR-027
+  title: 공유 여행 화면(비로그인)에는 교통 패널이 없고 /transport 요청도 없다
+  priority: P2
+  tags: [desktop, mutating, share, nearby]
+  preconditions:
+    - account: test@test.com (user) — 링크 생성용
+    - helper: createShareLink(page, tripId)
+  data_sources: [map:heritage, transport:status]
+  steps:
+    - 여행 생성 + 안동하회마을 추가 → 공유 링크 생성 → 새 익명 페이지로 열기
+  expected:
+    - 지도·핀 1개 표시, transport-layer-controls 없음, /login 이동 없음, /transport/* 요청 0건
+  cleanup:
+    - 여행 삭제(공유 링크도 함께 소멸) + sweep
+  automation: scripted
+  spec: specs/nearby/trip-shared.live.spec.ts#NEAR-027
+
+- id: NEAR-028
+  title: 모바일 여행 지도 오버레이 스택 — max-height·세로 스크롤, 돌발 목록이 펼쳐져도 지도 밖으로 안 나감
+  priority: P2
+  tags: [mobile, mutating, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: NEAR-022와 같은 여행
+  data_sources: [transport:incident]
+  steps:
+    - 390 /trips/{id} → '교통 돌발'
+  expected:
+    - 스택 overflow-y:auto, 스택 하단 ≤ trip-map-surface 하단(전·후)
+    - 패널 너비 ≤ 스택의 70%
+  cleanup:
+    - afterAll 여행 삭제
+  automation: scripted
+  spec: specs/nearby/trip-map.live.spec.ts#NEAR-028
+
+- id: NEAR-029
+  title: 모바일 여행 지도 — 내비게이션 컨트롤 없음, 칩 토글·마커 탭 시트 동작
+  priority: P3
+  tags: [mobile, mutating, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: NEAR-022와 같은 여행; 뷰포트 안 공항(예천 미운영이면 skip 기록)
+  data_sources: [transport:airport]
+  steps:
+    - 390 /trips/{id} → '공항' → 마커 탭
+  expected:
+    - .maplibregl-ctrl-zoom-in 없음, 상태 줄 정상, 시트 부제 '공항'
+  cleanup:
+    - afterAll 여행 삭제
+  automation: scripted
+  spec: specs/nearby/trip-map.live.spec.ts#NEAR-029
+
+- id: NEAR-030
+  title: 주차장은 Map feature로 노출 — '주차장' 검색 결과(장소 배지)·상세 카드 카테고리 '주차장'
+  priority: P2
+  tags: [desktop, nearby, search, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map 전국주차장표준데이터(06010000) 적재, 서울 뷰포트 편향
+  data_sources: [map:parking, geo]
+  steps:
+    - /map → '주차장' 입력 → map-search-result-feature 중 '주차장' 포함 행 클릭 → 팝업 '상세보기'
+  expected:
+    - feature 결과 ≥1 그리고 '주차장' 포함 행 존재
+    - feature-detail-card-body data-kind=place, …-category에 '주차'
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/nearby-features-api.live.spec.ts#NEAR-030
+  notes: 2026-11-02 prod e2e에서 '주차장 이름'이 Map 작업으로 넘어갔다 — 이름 형식('○○ 주차장')은 단언하지 않고 포함 여부만 본다.
+  # 2026-11-03 prod: kor-travel-map#1438 — 주차장 feature 가 관광으로 분류(동작대교 주차장). test.fail.
+
+- id: NEAR-031
+  title: 공중화장실(KNPS 05060000)이 국립공원(설악산) 주변 feature로 보이는지
+  priority: P3
+  tags: [desktop, nearby, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: KNPS 편의시설 적재 여부 미확인
+  data_sources: [map:toilet, geo]
+  steps:
+    - /map → '설악산' 검색 선택 → zoom 13~14로 조정 → '화장실' 검색(화면 편향) 또는 마커 아이콘 'toilet' 확인
+  expected:
+    - 화장실 feature 결과/마커가 있으면 상세 카테고리 '공중화장실'
+    - 없으면 데이터 공백으로 기록(결함 아님)
+  cleanup: []
+  automation: manual
+  notes: Map `providers/knps.py`가 05060000을 만들지만 prod 적재량·위치를 확인하지 못해 자동 단언을 걸지 않는다.
+
+- id: NEAR-032
+  title: 전기차 충전소 주변 정보
+  priority: P3
+  tags: [desktop, nearby]
+  preconditions:
+    - data: 없음 — Map 카테고리/PinVi 레이어에 EV 충전소가 없다
+  data_sources: []
+  steps:
+    - (해당 UI 없음)
+  expected:
+    - 휴게소 상세의 '전기차 충전 있음/없음' 플래그만 존재(NEAR-006)
+  cleanup: []
+  automation: blocked
+  notes: Map `category/_definitions.py`에 EV 충전 카테고리가 없고 PinVi transport 레이어는 4종뿐. 제품 피드백 — 환경부 급속충전기 데이터 provider 또는 휴게소 플래그의 지도 필터가 필요.
+
+- id: NEAR-033
+  title: 패널의 휴게소·주유소를 일정에 추가하는 결합 흐름
+  priority: P2
+  tags: [desktop, nearby, poi]
+  preconditions:
+    - data: 없음
+  data_sources: [transport:rest-area, transport:gas]
+  steps:
+    - (해당 UI 없음 — NEAR-017이 부재를 자동 단언)
+  expected:
+    - 지원하지 않음
+  cleanup: []
+  automation: blocked
+  notes: 설계상 차단(ADR-076 D7, docs/execplan/map-transport-integration.md §1 범위 밖) — transport feature_id는 make_feature_id 문자열로 Map PG UUID와 다른 이름공간이라 POI 추가 경로에 넣을 수 없다. 지원하려면 Map이 transport place를 PG feature(UUID)로도 제공하거나 PinVi가 좌표 기반 수동 POI로 변환해야 한다.
+
+- id: NEAR-034
+  title: transport 느림/503 — 레이어별 강등만 되고 지도·여행 화면은 안 깨진다
+  priority: P2
+  tags: [desktop, mobile, nearby]
+  preconditions:
+    - env: 운영자가 Map transport state(Valkey 12704) 정지 또는 transport_state_* schedule 중단으로 NOT_LOADED/STORE_UNAVAILABLE 유도
+  data_sources: [transport:status]
+  steps:
+    - 장애 유도 후 /map·/trips/{id} 진입 → 칩 켜기 → 상세 열기
+  expected:
+    - status·markers는 200, 레이어 상태 '일시적으로 불러올 수 없음' + data-reason(STORE_UNAVAILABLE 등)
+    - 상세는 '교통 정보를 일시적으로 불러올 수 없습니다.'(503), 가격 추이는 '잠시 후 다시 시도'
+    - 장소 마커·검색·여행 일정 정상
+  cleanup:
+    - 장애 원복, status 레이어 available 확인
+  automation: blocked
+  notes: prod에서 route mock 금지(#618)이고 장애를 자동으로 유도할 권한이 테스트에 없다. 코드 경로는 PinVi `services/transport_layers.py`(3초 기한·레이어별 강등)·web `useTransportLayers.ts` catch 분기. 운영 점검 창에서 수동 실행 권장.
+
+- id: NEAR-035
+  title: 존재하지 않는 transport id → 404 TRANSPORT_FEATURE_NOT_FOUND(4종 경로), 잘못된 id 형식 4xx
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user) — 브라우저 세션 쿠키로 page.request 호출
+  data_sources: [transport:gas, transport:rest-area, transport:incident, transport:airport]
+  steps:
+    - /map에서 status 요청 URL로 API origin 유도 → GET /transport/{path}/e2e-does-not-exist ×4
+  expected:
+    - 404, 본문에 TRANSPORT_FEATURE_NOT_FOUND; 'bad id!'는 400/404/422
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/nearby-features-api.live.spec.ts#NEAR-035
+
+- id: NEAR-036
+  title: markers-in-bounds 검증 오류(layers/bbox/zoom)는 4xx, 국외 bbox는 200 빈 ok, status 200
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:status, transport:airport]
+  steps:
+    - page.request로 layers=bogus / bbox=not-a-bbox / zoom=99 / 도쿄 bbox 호출
+  expected:
+    - 400 VALIDATION_ERROR ×2, zoom 400|422, 도쿄 bbox 200·layers[0].items=[]·status≠disabled
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/nearby-features-api.live.spec.ts#NEAR-036
+
+- id: NEAR-037
+  title: 신선도 문구가 시간에 따라 갱신된다(30초 tick)
+  priority: P3
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:airport]
+  steps:
+    - /map → '공항' → 상태 줄 문구 기록 → 2분 대기 → 비교
+  expected:
+    - "'방금 갱신' → 'n분 전 갱신' 또는 분 값 증가(응답 age_seconds + 경과)"
+  cleanup: []
+  automation: manual
+  notes: "고정 대기 2분이 필요해 자동 스위트에서 뺐다(규칙: 고정 sleep 지양)."
+
+- id: NEAR-038
+  title: 칩 접근성 — group 이름, 키보드 Space/Enter 토글, 44px 터치 타깃
+  priority: P2
+  tags: [desktop, mobile, a11y, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:airport]
+  steps:
+    - /map → 공항 칩 focus → Space → Enter
+  expected:
+    - role=group aria-label '교통 정보 레이어'; Space로 on(요청 발생), Enter로 off; 칩 높이 ≥44px
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-038
+
+- id: NEAR-039
+  title: 우클릭 '여기서 주변 보기' → zoom 15로 이동 후 켜 둔 레이어 재조회
+  priority: P3
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:gas]
+  steps:
+    - /map → '주유소' → 캔버스 중앙 우클릭 → '여기서 주변 보기'
+  expected:
+    - 요청 zoom=15, layers에 fuel_station, 상태 줄 정상
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-039
+
+- id: NEAR-040
+  title: legend 마커 수 = 응답 items 중 coord 있는 수(레이어별), 마커 속성 형식(feature_id·icon·color)
+  priority: P2
+  tags: [desktop, nearby]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [transport:rest-area, transport:airport, transport:incident]
+  steps:
+    - /map zoom 8 → 휴게소·공항·교통 돌발
+  expected:
+    - 레이어마다 legend 수 일치, data-feature-id /^[A-Za-z0-9_-]{1,128}$/, data-marker-icon·color 비어 있지 않음
+  cleanup: []
+  automation: scripted
+  spec: specs/nearby/explore-panel.live.spec.ts#NEAR-040
+
+- id: NEAR-041
+  title: 선택 장소 기준 반경(radius)·거리(distance) 주변 조회와 거리 표시
+  priority: P2
+  tags: [desktop, mobile, nearby]
+  preconditions:
+    - data: 없음 — PinVi는 bbox(viewport) 조회만 노출한다
+  data_sources: [transport:gas, transport:rest-area]
+  steps:
+    - (해당 UI 없음 — 장소 선택 시 '반경 N km 안 주유소' 같은 조회·정렬·거리 라벨이 없다)
+  expected:
+    - 지원하지 않음. 지금 '주변'의 정의는 지도 화면(bbox)이며, 여행 지도에서는 POI에 맞춘 뷰포트가 곧 여행 주변(NEAR-024/025가 그 동작을 단언)
+  cleanup: []
+  automation: blocked
+  notes: >-
+    docs/execplan/map-transport-integration.md §1이 Map의 lon/lat/radius_m 근처 조회의 PinVi 노출을 범위에서 뺐다.
+    Map item의 선택 필드 distance_m(packages/schemas/src/transport.ts ItemBase)은 UI 어디에도 그려지지 않는다.
+    지원하려면 PinVi API에 /transport/nearby(lon,lat,radius_m) 투영과 상세/목록의 거리 라벨이 필요하다.

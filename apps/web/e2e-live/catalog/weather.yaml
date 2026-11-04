@@ -1,0 +1,546 @@
+# AREA: weather (WX) — PinVi prod live e2e, weather + sunrise/sunset
+# Source of UI text/selectors: PinVi main 620b6046 (2026-11-02). See README.md §Sources.
+# Dates below are RELATIVE to "today (KST)"; specs compute them at runtime (D = today).
+
+- id: WX-001
+  title: 오늘~모레 여행 1일차 '날짜 날씨'에 현재·예보(초단기/단기) 그룹 표시
+  priority: P1
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을 feature (heritage)
+    - env: PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED=true (weather via Map REST); KMA ultra_short/short datasets loaded
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 여행 목록 → '새 여행' → 제목 '[e2e] WX-001 …', 날짜 D~D+2 → 저장
+    - 1일차에 '안동하회마을' 검색 → 첫 결과 추가 → 새로고침
+    - 1일차 탭 선택 → '날짜 날씨' 섹션 확인
+  expected:
+    - GET /trips/{id} 의 days[0].weather_by_feature_id[feature] 가 state=found
+    - 1일차 섹션 data-testid=trip-weather-summary, 그룹 '현재' 또는 '예보' 표시(둘 다면 soft 통과)
+    - '날씨 서비스를 일시적으로 사용할 수 없습니다.' 미표시
+  cleanup:
+    - 생성한 여행 삭제 → 목록에서 사라짐 확인 (afterEach, 실패 시에도)
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-001
+  notes: 첫 POI 기준으로 '날짜 날씨'가 뜬다(TripDetail.tsx day.pois[0]).
+
+- id: WX-002
+  title: 3~10일 뒤 여행 일자에 중기(mid) 예보 그룹 표시
+  priority: P1
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 소수서원 feature (heritage)
+    - env: Map mid forecast dataset loaded
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 여행 생성 D+4~D+6, 1일차에 '소수서원' 추가 → 새로고침 → 1일차 탭
+  expected:
+    - state=found, '예보' 그룹 표시, 항목에 기온/최저/최고/하늘/강수 중 하나 포함
+    - '현재' 그룹은 없어야 함(관측값은 오늘 날짜에만 슬라이스됨)
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-002
+  notes: 중기예보는 TMN/TMX/SKY 축. 정확한 metric key는 단언하지 않는다(데이터 drift).
+
+- id: WX-003
+  title: 10일 넘게 남은 일자는 '이 날짜의 날씨 정보가 없습니다.'(no_data), unavailable 아님
+  priority: P1
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 고씨굴 feature (영월, 동굴/관광지)
+  data_sources: [map:attraction, weather:map-rest]
+  steps:
+    - 여행 생성 D+15~D+16, 1일차에 '고씨굴' 추가 → 새로고침 → 1일차 탭
+  expected:
+    - JSON state ∈ {found, no_data} (unavailable 금지)
+    - UI data-testid=trip-weather-status 텍스트 '이 날짜의 날씨 정보가 없습니다.'
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-003
+  notes: PinVi에는 '예보 범위 밖' 전용 문구가 없다 — no_data 문구가 정본(TripWeatherSummary.tsx).
+
+- id: WX-004
+  title: 지난 날짜 여행은 Map 세 구간 요약('시간대별')으로 표시
+  priority: P2
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 도산서원 feature (heritage)
+    - env: PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED=true and daily_summaries dataset loaded (14일 보존)
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 여행 생성 D-5~D-4, 1일차에 '도산서원' 추가 → 새로고침 → 1일차 탭
+  expected:
+    - PINVI_E2E_WEATHER_VIA_MAP=1 이면 summary에 '시간대별' 그룹(아침/점심/저녁 '최저~최고°C')
+    - 아니면(직접 경로) no_data 문구 허용; 어느 경우든 unavailable 금지
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-004
+  notes: kor-travel-weather.md §9.2 — 지난 일자는 daily_summaries만, 직접 경로는 보존 2일이라 no_data.
+  # 2026-11-03 prod: kor-travel-map#1440 — 과거 일자 no_data(daily_summaries 없음). test.fail.
+
+- id: WX-005
+  title: 같은 일자 서울역+성산일출봉 — 장소별 '장소 날씨' 카드가 서로 다르고 '날짜 날씨'는 첫 장소와 일치
+  priority: P2
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 서울역(교통/역), 성산일출봉(자연유산/공원)
+  data_sources: [map:transit, map:park, weather:map-rest]
+  steps:
+    - 여행 생성 D~D+1, 1일차에 '서울역' 추가, 이어서 '성산일출봉' 추가 → 새로고침 → 1일차
+  expected:
+    - 두 POI의 card_key가 다르다(다른 location)
+    - 각 POI 행의 '장소 날씨' 섹션이 존재하고 JSON 상태와 일치
+    - '날짜 날씨' 텍스트 == 첫 POI(서울역) '장소 날씨' 텍스트
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-005
+
+- id: WX-006
+  title: 바다 지역(제주 성산일출봉) 기온·습도·강수확률 값 범위 타당성
+  priority: P2
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 성산일출봉 feature
+  data_sources: [map:park, weather:map-rest]
+  steps:
+    - 여행 생성 D~D+1, 1일차 '성산일출봉' 추가 → 새로고침 → 1일차
+  expected:
+    - 카드 metrics 중 기온(deg_c/℃, T1H/TMP/TMN/TMX/TEMP) 전부 -30~45
+    - 습도(REH/HUMIDITY) 0~100, 강수확률(POP/PRECIP_PROB) 0~100
+    - UI 텍스트에 보이는 °C 값도 같은 범위
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-006
+  notes: UI는 그룹당 2개 항목만 보여주므로(toGroup slice 2) 범위 검사는 JSON 카드 전체로 한다.
+
+- id: WX-007
+  title: 산악(설악산) 장소 날씨 — found/no_data 만 허용, 기온 범위 타당
+  priority: P2
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 설악산(국립공원/등산로) feature
+  data_sources: [map:hiking-trail, map:park, weather:map-rest]
+  steps:
+    - 여행 생성 D~D+1, 1일차 '설악산' 추가 → 새로고침 → 1일차
+  expected:
+    - state ∈ {found, no_data}; found면 summary, 기온 -30~45
+    - unavailable 금지
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-007
+  notes: 산악기상(산림청) provider 라벨 '산림청'이 보이면 annotation으로 기록.
+
+- id: WX-008
+  title: 섬(울릉도) 장소 날씨 — 해석 실패 시 no_data, unavailable 아님
+  priority: P2
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has an 울릉 feature (검색 '울릉도', 이름에 '울릉' 포함)
+  data_sources: [map:any, weather:map-rest]
+  steps:
+    - 여행 생성 D~D+1, 1일차 '울릉도' 검색 → 이름에 '울릉' 포함 첫 결과 추가 → 새로고침
+  expected:
+    - state ∈ {found, no_data}; UI 문구 일치
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-008
+  notes: 검색 결과가 없으면 test.skip(사유 기록). 100km 안에 location이 없으면 no_data가 정상.
+
+- id: WX-009
+  title: 날씨 그룹마다 출처(provider) 라벨이 괄호로 표시되고 title에 '출처:'가 있다
+  priority: P2
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 여행 생성 D~D+1, 1일차 '안동하회마을' 추가 → 새로고침 → 1일차
+  expected:
+    - summary 각 그룹 끝에 '(기상청)' 등 괄호 라벨, span[title^='출처: ']
+    - 라벨은 weatherProviderLabels.ts 표 또는 원문 provider 문자열
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-009
+
+- id: WX-010
+  title: 새 여행 빈 일자 pending_coord 안내 → 장소 추가 직후 pending_fetch '준비 중'
+  priority: P1
+  tags: [desktop, mobile, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 고씨굴
+  data_sources: [map:attraction, kasi]
+  steps:
+    - 여행 생성 D+1~D+2 → 1일차 탭 → 일출·일몰 행 확인
+    - 1일차 '고씨굴' 추가 → 새로고침 → 1일차, 2일차 확인
+  expected:
+    - 추가 전 1일차 trip-day-rise-set-pending[data-rise-set-status=pending_coord] 텍스트 '좌표가 있는 장소를 추가하면 일출·일몰을 표시합니다'
+    - 추가 후 1일차 pending_fetch '일출·일몰 준비 중' (ETL이 이미 돌았다면 success 행 허용 — 그 경우 NOAA ±5분)
+    - 2일차는 여전히 pending_coord 문구
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-sunrise.live.spec.ts#WX-010
+  notes: 문구는 #615(TripDayHeader.tsx risePendingMessage). ETL은 */20분 주기(schedules.py).
+
+- id: WX-011
+  title: 시드 여행 일출·일몰이 NOAA 계산과 ±5분 (영월·제주·설악산·서울·울릉도)
+  priority: P1
+  tags: [desktop, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 시드 여행 '[e2e-seed] weather-sun' (제목은 PINVI_E2E_SEED_SUN_TRIP) — 실행 30분 이상 전에 만들어 두고 일자마다 좌표 있는 장소 1개(1일차 영월 고씨굴, 2일차 제주 성산일출봉, 3일차 설악산, 4일차 서울역, 5일차 울릉도). 삭제 금지.
+  data_sources: [map:attraction, map:park, map:hiking-trail, map:transit, kasi]
+  steps:
+    - 여행 목록에서 시드 여행 열기 → GET /trips/{id} 캡처
+    - 일자마다 탭 클릭 → trip-day-rise-set '일출 HH:MM' '일몰 HH:MM' 파싱
+    - 그 일자 POI 좌표(centroid)로 NOAA 일출/일몰(KST) 계산
+  expected:
+    - status=success 인 일자 ≥ 1 (아니면 시드가 낡음 → 실패)
+    - 각 일자 |UI − NOAA| ≤ 5분 (일출·일몰 각각)
+  cleanup:
+    - 없음(읽기 전용)
+  automation: scripted
+  spec: specs/weather/weather-sunrise.live.spec.ts#WX-011
+  notes: 기준 좌표는 그 일자 POI centroid(trip_day_rise_set.py resolve_day_reference) — 일자당 1곳이면 그 장소. 시드 없으면 skip(사유 기록).
+
+- id: WX-012
+  title: 일출·일몰 '기준' 라벨은 그 일자 가장 먼저 추가된 장소 이름
+  priority: P2
+  tags: [desktop, weather]
+  preconditions:
+    - data: WX-011 시드 여행
+  data_sources: [kasi]
+  steps:
+    - 시드 여행 열기 → success 일자의 '{name} 기준' 텍스트와 JSON pois(created_at 오름차순) 첫 장소 비교
+  expected:
+    - rise_set_reference == 첫 POI 이름, UI에 '{name} 기준' 표시
+  cleanup:
+    - 없음
+  automation: scripted
+  spec: specs/weather/weather-sunrise.live.spec.ts#WX-012
+
+- id: WX-013
+  title: 날짜 미정 여행은 pending_date 안내 '날짜를 정하면 일출·일몰을 표시합니다'
+  priority: P2
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [kasi]
+  steps:
+    - '새 여행' 폼에서 시작/종료 날짜를 비우고 저장(초안) → 1일차에 장소 추가 → 일출·일몰 행
+  expected:
+    - trip-day-rise-set-pending[data-rise-set-status=pending_date] 문구
+  cleanup:
+    - 생성한 여행 삭제
+  automation: manual
+  notes: createTrip 헬퍼가 start/end를 필수로 받아 날짜 없는 초안을 만들 수 없다. 헬퍼에 optional 날짜가 생기면 scripted로 전환(README 참고).
+
+- id: WX-014
+  title: 공유 읽기 전용 뷰 — 중립 일출·일몰 문구와 장소 날씨 표시
+  priority: P2
+  tags: [desktop, mutating, share, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+  data_sources: [map:heritage, weather:map-rest, kasi]
+  steps:
+    - 여행 생성 D~D+1, 1일차 '안동하회마을' 추가
+    - '공유' 탭 → '링크 만들기' → new-share-url의 '열기' 링크 href 획득
+    - 로그아웃 상태의 새 컨텍스트로 /shared/{tripId}/{token} 열기
+  expected:
+    - '공유된 여행 · 읽기 전용' 표시
+    - 1일차: 장소 목록의 '장소 날씨' 섹션 존재(summary/status), 일출·일몰은 '일출·일몰 준비 중'(pending_fetch) 또는 success 행
+    - 2일차 탭: '일출·일몰 정보 없음' (pending_coord 의 readOnly 문구) — 편집 지시 문구 없음
+  cleanup:
+    - 생성한 여행 삭제(공유 링크 포함)
+  automation: scripted
+  spec: specs/weather/weather-share-mobile.live.spec.ts#WX-014
+
+- id: WX-015
+  title: 모바일(390x844) 일자 날씨 compact 렌더, 가로 스크롤 없음
+  priority: P2
+  tags: [mobile, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 모바일 프로젝트에서 여행 생성 D~D+1, 1일차 '안동하회마을' 추가 → 1일차
+  expected:
+    - '날짜 날씨' 섹션 표시(summary 또는 status), 페이지 scrollWidth ≤ viewport+1
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-share-mobile.live.spec.ts#WX-015
+
+- id: WX-016
+  title: 탐색 지도 POI 팝업에 '현재 기온 N°C' (서울역)
+  priority: P2
+  tags: [desktop, poi, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 서울역 feature
+  data_sources: [map:transit, weather:map-rest]
+  steps:
+    - /map → 검색 '서울역' → map-search-result-feature 첫 행 클릭
+    - GET /features/{id}/weather 응답 대기
+  expected:
+    - 응답 200, 팝업에 장소 이름·'상세보기' 버튼
+    - 카드 metrics에 기온이 있으면 팝업에 '현재 기온 N°C' (N: -30~45); 없으면 annotation 기록(실패 아님)
+  cleanup:
+    - 없음
+  automation: scripted
+  spec: specs/weather/weather-poi-map.live.spec.ts#WX-016
+  notes: FeatureMapView.tsx currentTempC — 단위 ℃/°C 또는 key temp/기온/T1H/TMP.
+
+- id: WX-017
+  title: 탐색 지도 weather marker 레이어(플래그) — 팝업 '현재 기온'·'출처:'
+  priority: P3
+  tags: [desktop, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - env: pinvi_kor_travel_weather_map_markers_enabled=true (운영 값 미확인)
+  data_sources: [weather:map-rest]
+  steps:
+    - /map → 줌인 버튼 4회(zoom ≥ 8) → GET /weather/markers-in-bounds 대기
+  expected:
+    - items>0: feature-map-weather-marker ≥ 1, 클릭 시 '현재 기온 N°C', '출처:'
+    - zoom<8 또는 플래그 off 면 항상 빈 목록(docs/api/weather.md §2.1)
+  cleanup:
+    - 없음
+  automation: blocked
+  notes: 운영에서 pinvi_kor_travel_weather_map_markers_enabled 가 off 다(코디네이터 2026-11-03) — 켜지면 scripted 로 전환(셀렉터 feature-map-weather-marker / 팝업 '현재 기온'·'출처:' 는 FeatureMapView.tsx 에 이미 있음).
+
+- id: WX-018
+  title: 관리자 Weather Values 페이지 읽기 전용 — 표 또는 '값 없음', 오류 없음
+  priority: P2
+  tags: [desktop, admin, weather]
+  preconditions:
+    - account: PinVi admin (PINVI_E2E_ADMIN_*)
+    - data: Map has 안동하회마을
+  data_sources: [map:heritage, weather:direct]
+  steps:
+    - /admin/features → 검색 '안동하회마을' → 첫 행 → 'weather-values' 링크
+    - GET /admin/features/{id}/weather-values 응답 대기
+  expected:
+    - 제목 'Weather Values', admin-feature-subpage 표시, admin-feature-tab-error 없음
+    - 행(admin-feature-weather-row-*) ≥ 1 또는 'weather 값이 없습니다.'
+    - 쓰기 요청(POST/PUT/PATCH/DELETE) 0건
+  cleanup:
+    - 없음
+  automation: scripted
+  spec: specs/weather/weather-admin.live.spec.ts#WX-018
+  notes: Admin weather-values는 플래그와 무관하게 kor-travel-weather 직접(§9 표).
+  # 2026-11-03 prod: #648 — admin 한국어 검색이 간헐 503. helper 재시도(3회), 끝내 503 이면 #648 로 실패.
+
+- id: WX-019
+  title: 관리자 Weather Values 새로고침 버튼은 재조회만 한다
+  priority: P3
+  tags: [desktop, admin, weather]
+  preconditions:
+    - account: PinVi admin
+  data_sources: [weather:direct]
+  steps:
+    - WX-018 페이지에서 admin-feature-weather-refresh 클릭
+  expected:
+    - 새 GET 응답 200, 표 상태 유지(행 수 0 또는 ≥1), 쓰기 요청 없음
+  cleanup:
+    - 없음
+  automation: scripted
+  spec: specs/weather/weather-admin.live.spec.ts#WX-019
+
+- id: WX-020
+  title: 4일·4장소 여행 상세 로드(날씨 포함) < 6초 (soft)
+  priority: P2
+  tags: [desktop, perf, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 고씨굴·소수서원·도산서원·안동하회마을
+  data_sources: [map:attraction, map:heritage, weather:map-rest]
+  steps:
+    - 여행 생성 D~D+3, 일자마다 1곳 추가 → 새 탭 이동으로 /trips/{id} 로드 시간 측정
+  expected:
+    - GET /trips/{id} 응답까지, 그리고 1일차 '날짜 날씨' 표시까지 각각 ms 기록(annotation)
+    - expect.soft(< 6000ms)
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-resilience.live.spec.ts#WX-020
+  notes: 2026-11-02 live e2e에서 trip view 10~13s 관측(#621) — 회귀 지표.
+
+- id: WX-021
+  title: 신선도(stale) — Map이 stale로 표시해도 PinVi는 렌더하고 unavailable이 아니다
+  priority: P2
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 여행 생성 D~D+1, 1일차 '안동하회마을' 추가 → JSON 캡처
+  expected:
+    - weather_cards[*].is_stale 는 boolean(현재 구현은 항상 false), latest_at 존재
+    - state=found 이면 UI는 summary 또는 no_data 문구이지 unavailable 아님
+    - latest_at 이 48시간 이내(soft) — 값 나이를 annotation 기록
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-resilience.live.spec.ts#WX-021
+  notes: Map freshness.stale 은 PinVi 공개 응답에 투영되지 않는다(weather_card.py is_stale=False). Map 측 stale 유도는 WX-024.
+
+- id: WX-022
+  title: 강등 관찰 — unavailable 이 있으면 문구만 바뀌고 페이지는 깨지지 않는다
+  priority: P2
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 고씨굴·성산일출봉
+  data_sources: [map:attraction, map:park, weather:map-rest]
+  steps:
+    - 여행 생성 D~D+1, 1일차 고씨굴, 2일차 성산일출봉 → 상태 집계
+  expected:
+    - pageerror 0건, trip-detail-error 없음
+    - 모든 (day, feature) 에 대해 UI 문구가 JSON state와 일치
+    - expect.soft(unavailable 개수 == 0) — 개수는 annotation
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-resilience.live.spec.ts#WX-022
+
+- id: WX-023
+  title: Map 데이터셋 not_loaded 유도 시 trip 날씨는 unavailable 문구, 500 없음
+  priority: P3
+  tags: [desktop, weather]
+  preconditions:
+    - env: Map Dagster weather_state_* job 을 멈추거나 Valkey 세대를 비울 수 있는 권한(운영 변경)
+  data_sources: [weather:map-rest]
+  steps:
+    - (운영자) 한 데이터셋을 not_loaded 로 만든 뒤 WX-001 여행을 연다
+  expected:
+    - 그 부분이 빠진 카드 또는 '날씨 서비스를 일시적으로 사용할 수 없습니다.' — 500/빈 화면 없음
+  cleanup:
+    - 데이터셋 재적재
+  automation: blocked
+  notes: prod 에서 데이터셋을 고의로 비울 수 없다(소유자 결정 필요). 계약은 kor-travel-weather.md §9.3 표.
+
+- id: WX-024
+  title: Map freshness.stale=true 인 위치도 PinVi 카드가 그대로 렌더
+  priority: P3
+  tags: [desktop, weather]
+  preconditions:
+    - env: Map service token 으로 GET /v1/service/weather/status 를 읽을 수 있어야 stale 데이터셋을 고를 수 있다
+  data_sources: [weather:map-rest]
+  steps:
+    - Map status 에서 stale=true 데이터셋·위치를 고른다 → 그 위치 근처 장소로 여행 생성 → 카드 확인
+  expected:
+    - summary 표시, unavailable 아님
+  cleanup:
+    - 생성한 여행 삭제
+  automation: blocked
+  notes: e2e 환경에 Map service token 이 없다. 토큰 없이 stale 위치를 고를 방법이 없음.
+
+- id: WX-025
+  title: 특보(advisory)가 있으면 날짜 날씨에 등급/이름이 보인다 (조건부)
+  priority: P3
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: 서울역·성산일출봉(특보 빈도 높은 해안)
+  data_sources: [map:transit, map:park, weather:direct]
+  steps:
+    - 여행 생성 D~D+1 (서울역·성산일출봉) → JSON 카드에서 forecast_style=advisory metric 탐색
+  expected:
+    - advisory 없음: annotation '특보 없음' (통과)
+    - advisory 있음: 해당 POI '장소 날씨' summary 텍스트에 severity 또는 metric 이름 포함 (soft)
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-resilience.live.spec.ts#WX-025
+  notes: 특보는 플래그와 무관하게 kor-travel-weather /markers alerts (weather_map_state.fetch_alerts).
+
+- id: WX-026
+  title: 일자 날짜 override 변경 후 날씨·일출이 새 날짜 기준으로 재계산
+  priority: P3
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [weather:map-rest, kasi]
+  steps:
+    - 여행 D~D+1, 1일차 장소 추가 → 일자 편집(TripDayControls)으로 1일차 date 를 D+12 로 변경
+  expected:
+    - 1일차 '날짜 날씨' no_data 문구로 바뀜, 일출·일몰 행이 pending_fetch 로 되돌아감(stale 재조회)
+  cleanup:
+    - 생성한 여행 삭제
+  automation: manual
+  notes: 일자 날짜 편집 UI 셀렉터가 이 영역 범위 밖(trip 영역) — 그 영역 헬퍼가 생기면 scripted 전환.
+
+- id: WX-027
+  title: 장소 전부 삭제 시 '날짜 날씨' 섹션이 사라지고 일출·일몰이 pending_coord 로 돌아간다
+  priority: P3
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 고씨굴
+  data_sources: [map:attraction, weather:map-rest, kasi]
+  steps:
+    - 여행 D~D+1, 1일차 고씨굴 추가 → 새로고침 → 행의 '장소 삭제' → 새로고침
+  expected:
+    - 1일차 '날짜 날씨' 섹션 0개, trip-day-rise-set-pending[data-rise-set-status=pending_coord]
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-027
+
+- id: WX-028
+  title: 14일 여행 — 1·8일차 found, 12·14일차 no_data, unavailable 없음
+  priority: P3
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 여행 D~D+13, 1·8·12·14일차에 '안동하회마을' 추가 → 각 탭 확인
+  expected:
+    - 1일차 summary(현재/예보), 8일차 summary(예보) [soft], 12·14일차 no_data 문구
+    - 어느 일자도 unavailable 아님
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-028
+
+- id: WX-029
+  title: 접근성 — 날씨 섹션 aria-label, 아이콘 aria-hidden, 일출·일몰 아이콘 aria-hidden
+  priority: P3
+  tags: [desktop, a11y, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 여행 D~D+1, 1일차 안동하회마을 → 1일차
+  expected:
+    - section[aria-label='날짜 날씨'], li 안 section[aria-label='장소 날씨']
+    - 그 안의 svg 는 모두 aria-hidden=true
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-trip-days.live.spec.ts#WX-029

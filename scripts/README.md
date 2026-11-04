@@ -22,6 +22,8 @@
 | `ops-node-doctor.sh`        | 운영 노드 공통 사전 점검(비밀값 출력 없음)                                                                 | 6      |
 | `n150-docker-doctor.sh`     | N150 운영 노드 사전 점검 wrapper                                                                           | 6      |
 | `n150-playwright-runner.sh` | N150에서 공식 Playwright Docker image로 live/mock e2e 실행                                                 | 6      |
+| `n150-live-catalog.sh`      | 운영 웹 대상 live e2e 카탈로그(`apps/web/e2e-live`) 실행 — root-only env 파일, 날짜별 결과 디렉터리, 영역별 요약 | ops    |
+| `live-catalog-summary.mjs`  | live 카탈로그 `results.json` → 영역×프로젝트 pass/fail/skip 표                                              | ops    |
 | `odroid-docker-doctor.sh`   | 퇴역된 Odroid 경로를 fail-closed로 거부                                                                      | 6      |
 | `remote-docker-python.sh`   | WSL에서 SSH 원격 Docker 컨테이너에 Python stdin 전달(중첩 quote 회피)                                      | ops    |
 
