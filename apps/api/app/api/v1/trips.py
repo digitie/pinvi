@@ -935,6 +935,8 @@ async def update_shared_trip(
             expected_version=if_match,
             patch=body.model_dump(exclude_unset=True),
         )
+    except TripNotFoundError as exc:
+        _raise_trip_http(exc)
     except TripVersionConflictError as exc:
         raise HTTPException(
             status_code=409, detail={"code": exc.code, "message": str(exc)}

@@ -19,7 +19,7 @@ test.describe.serial('ADM features', () => {
   test('ADM-015 + ADM-016 search 안동하회마을, state badges and detail inspector', async ({ page }) => {
     await page.goto('/admin/features');
     await page.getByTestId('admin-features-search').fill(PLACE);
-    await searchAdminFeatures(page); // #648: retries intermittent 503s, fails with the issue number otherwise
+    await searchAdminFeatures(page); // #648 (fixed by #660): Korean q must answer < 500
 
     const row = page.locator('[data-testid^="admin-features-row-"]').filter({ hasText: PLACE }).first();
     await expect(row).toBeVisible({ timeout: 30_000 });

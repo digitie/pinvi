@@ -27,3 +27,25 @@ def test_oauth_return_to_preserves_app_url(path: str) -> None:
 def test_oauth_return_to_rejects_external_or_control_path(path: str) -> None:
     with pytest.raises(ValidationError):
         OAuthStartRequest(return_to=path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/a/..//evil.example",
+        "/a/%2E%2E//evil.example",
+        "/trips/./x",
+        "/trips//x",
+        "/" + "a" * 255,
+    ],
+)
+def test_oauth_return_to_rejects_dot_segments_and_overlong_storage(path: str) -> None:
+    # 저장 컬럼은 varchar(255)이고, 점 세그먼트는 브라우저가 `//host`로 정규화할 수 있다.
+    with pytest.raises(ValidationError):
+        OAuthStartRequest(return_to=path)
+
+
+def test_oauth_return_to_accepts_column_sized_path() -> None:
+    path = "/" + "a" * 254
+    assert OAuthStartRequest(return_to=path).return_to == path
+    assert OAuthStartRequest(return_to="/trips?q=a//b#x//y").return_to == "/trips?q=a//b#x//y"

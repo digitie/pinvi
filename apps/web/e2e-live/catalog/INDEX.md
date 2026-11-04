@@ -34,7 +34,7 @@ Spec files: 54.
 | TRIP-008 | trip | 잘못된 날짜 — 시작일만 입력하면 둘 다 입력하라는 오류 | P2 | desktop, mobile | scripted | `specs/trip/trip-create.live.spec.ts#TRIP-008` |
 | TRIP-009 | trip | 제목 없이 저장 — '여행 제목을 입력하세요.' 오류, 포커스 복귀 | P3 | desktop, mobile, a11y | scripted | `specs/trip/trip-create.live.spec.ts#TRIP-009` |
 | TRIP-010 | trip | 장소가 있는 상태에서 기간 축소/확장 — 기간 벗어남 배지와 일자 추가 상한 | P1 | desktop, mobile, mutating, search | scripted | `specs/trip/trip-create.live.spec.ts#TRIP-010` |
-| TRIP-011 | trip | 편집 다이얼로그에서 종료일 < 시작일 — 422 로 거부, 다이얼로그에 날짜 오류 안내 | P3 | desktop, mobile, mutating | scripted | `specs/trip/trip-create.live.spec.ts#TRIP-011` |
+| TRIP-011 | trip | 편집 다이얼로그에서 종료일 < 시작일 — 종료일 필드 안내로 거부, API도 422 | P3 | desktop, mobile, mutating | scripted | `specs/trip/trip-create.live.spec.ts#TRIP-011` |
 | TRIP-012 | trip | 도시 서울 1박2일 — 경복궁·국립중앙박물관·남산공원·서울역 적재 | P1 | desktop, mutating, search, poi | scripted | `specs/trip/trip-styles.live.spec.ts#TRIP-012` |
 | TRIP-013 | trip | 도시 부산 1박2일 — 부산역·해운대해수욕장·감천문화마을·호텔(lodging) | P2 | desktop, mutating, search, poi | scripted | `specs/trip/trip-styles.live.spec.ts#TRIP-013` |
 | TRIP-014 | trip | 바다 강릉 1박2일 — 경포해변·안목해변 카페(cafe)·정동진·횟집(food) | P2 | desktop, mutating, search, poi | scripted | `specs/trip/trip-styles.live.spec.ts#TRIP-014` |
@@ -66,7 +66,7 @@ Spec files: 54.
 | TRIP-040 | trip | 동선 최적화 미리보기 문구 관찰 — 거리 표기와 경고 라인 형태 기록 | P3 | desktop, mutating, search | scripted | `specs/trip/trip-optimize.live.spec.ts#TRIP-040` |
 | TRIP-041 | trip | 목록 정렬 — 시작일 오름차순, 같은 날짜는 제목(한글 collator) 순, 날짜 없는 여행은 맨 뒤 | P2 | desktop, mobile, mutating | scripted | `specs/trip/trip-list.live.spec.ts#TRIP-041` |
 | TRIP-042 | trip | 초안 배지 — 생성 직후 '초안', 상태를 예정으로 바꾸면 배지와 헤더 카운트가 바뀐다 | P2 | desktop, mobile, mutating | scripted | `specs/trip/trip-list.live.spec.ts#TRIP-042` |
-| TRIP-043 | trip | 여행 삭제 — 확인 2단계, 목록에서 사라지고 상세 URL은 오류, 되돌리기 없음 | P1 | desktop, mobile, mutating, search | scripted | `specs/trip/trip-list.live.spec.ts#TRIP-043` |
+| TRIP-043 | trip | 여행 삭제 → 휴지통 → 복원 — 목록·상세에서 사라졌다가 초안으로 장소와 함께 돌아온다 | P1 | desktop, mobile, mutating, search | scripted | `specs/trip/trip-list.live.spec.ts#TRIP-043` |
 | TRIP-044 | trip | 버킷 전환 — 예정/지난 여행 필터가 aria-pressed로 바뀌고 카드 집합이 분리된다 | P2 | desktop, mobile, mutating, a11y | scripted | `specs/trip/trip-list.live.spec.ts#TRIP-044` |
 | TRIP-045 | trip | 대시보드 지도 — 카드의 '지도 장소 N개'와 지도 칩이 상세 장소 수와 일치 | P3 | desktop, mutating, search | scripted | `specs/trip/trip-list.live.spec.ts#TRIP-045` |
 | TRIP-046 | trip | 10분 넘는 편집 세션 — 토큰 갱신 후에도 로그인 유지, 변경 저장 성공 | P2 | desktop, mutating, auth, perf | scripted | `specs/trip/trip-session.live.spec.ts#TRIP-046` |
@@ -210,8 +210,8 @@ Spec files: 54.
 | SHR-002 | share | 로그아웃 컨텍스트에서 공유 페이지 읽기 전용 렌더링(지도·일자·장소) | P1 | desktop, mutating, share, poi | scripted | `specs/share/share-links.live.spec.ts#SHR-002` |
 | SHR-003 | share | 공유 링크 철회 — 목록 '철회' 상태, 철회된 링크는 404 안내 | P1 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-003` |
 | SHR-004 | share | 철회 후 재생성 — 새 링크는 열리고 옛 링크는 계속 404 | P1 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-004` |
-| SHR-005 | share | 과거 만료일로 만든 링크 — 목록 '만료', 열면 404 | P2 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-005` |
-| SHR-006 | share | '편집 가능'·'댓글 가능' 링크도 공유 페이지는 읽기 전용 | P2 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-006` |
+| SHR-005 | share | 과거 만료일 — 링크를 만들지 않고 안내, API도 422 | P2 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-005` |
+| SHR-006 | share | '댓글 가능'·'편집 가능' 링크 — 권한대로 댓글·여행 정보 편집이 열린다 | P2 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-006` |
 | SHR-007 | share | 배너의 '열기'는 새 탭에서 공유 페이지를 연다 | P2 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-007` |
 | SHR-008 | share | '링크 복사'는 표시된 URL을 클립보드에 넣는다 | P2 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-008` |
 | SHR-009 | share | 공유 페이지에서 토큰은 페이지 URL·공유 API 호출 밖으로 새지 않는다(URL/Referer/본문) | P1 | desktop, mutating, share, auth | scripted | `specs/share/share-security.live.spec.ts#SHR-009` |
@@ -229,7 +229,7 @@ Spec files: 54.
 | SHR-021 | share | 댓글 수정(편집) | P3 | desktop, share | blocked |  |
 | SHR-022 | share | 일자/장소 대상 댓글(target_type=day/poi) | P3 | desktop, share | blocked |  |
 | SHR-023 | share | 실시간 표시기 '실시간 연결됨 · 접속 N명' | P1 | desktop, mobile, mutating, share | scripted | `specs/share/realtime-copy.live.spec.ts#SHR-023` |
-| SHR-024 | share | 동행(test2)이 쓴 댓글은 소유자의 댓글 탭 재진입 시 보인다 | P2 | desktop, mutating, share | scripted | `specs/share/comments.live.spec.ts#SHR-024` |
+| SHR-024 | share | 동행(test2)이 쓴 댓글이 소유자의 열린 댓글 탭에 실시간으로 나타난다 | P2 | desktop, mutating, share | scripted | `specs/share/comments.live.spec.ts#SHR-024` |
 | SHR-025 | share | 기존 사용자(test2) 초대 → '참여' 상태·역할 라벨 → 제거 | P1 | desktop, mutating, share | scripted | `specs/share/companions.live.spec.ts#SHR-025` |
 | SHR-026 | share | 초대 검증 — 본인 이메일 409, 중복(대소문자 무시) 409 | P2 | desktop, mutating, share | scripted | `specs/share/companions.live.spec.ts#SHR-026` |
 | SHR-027 | share | 미가입 이메일 초대 → '초대됨'(대기) 상태 | P2 | desktop, mutating, share, telegram | blocked | `specs/share/companions.live.spec.ts#SHR-027` |
@@ -238,7 +238,7 @@ Spec files: 54.
 | SHR-030 | share | 열람 중인 동행을 제거하면 그 화면은 권한 오류로 전환된다 | P2 | desktop, mutating, share, auth | scripted | `specs/share/companions.live.spec.ts#SHR-030` |
 | SHR-031 | share | 여행 복사 — '<제목> copy' 초안, 일자·장소 복제, 공유 링크·동행은 미복제 | P2 | desktop, mutating, share, poi | scripted | `specs/share/realtime-copy.live.spec.ts#SHR-031` |
 | SHR-032 | share | 인쇄/내보내기(PDF·ICS) | P3 | desktop, share | blocked |  |
-| SHR-033 | share | 동행(test2)의 댓글 — 작성자에게만 삭제 버튼(소유자·동행 양쪽 화면) | P2 | desktop, mutating, share | scripted | `specs/share/comments.live.spec.ts#SHR-033` |
+| SHR-033 | share | 동행(test2)의 댓글 — 작성자와 여행 소유자에게 삭제 버튼 | P2 | desktop, mutating, share | scripted | `specs/share/comments.live.spec.ts#SHR-033` |
 | SHR-034 | share | 공유 페이지 접근성 수동 점검(헤딩 순서·tablist 레이블·포커스 링·공개 chrome) | P3 | desktop, mobile, share, a11y | manual |  |
 | SHR-035 | share | 권한별 링크 3개 — 목록 라벨·활성 상태·권한 옵션 집합 | P2 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-035` |
 | POI-001 | poi | 지도 우클릭으로 없던 곳 POI 생성 — 주소 자동 조회·이름 입력·일정/지도 반영 | P1 | desktop, mutating, poi | scripted | `specs/poi/poi-create.live.spec.ts#POI-001` |

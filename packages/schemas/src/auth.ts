@@ -142,7 +142,8 @@ export type OAuthProvidersResponse = z.infer<typeof OAuthProvidersResponseSchema
 export const OAuthStartRequestSchema = z.object({
   return_to: z
     .string()
-    .max(2048)
+    // 서버 `oauth_login_states.return_to_path` varchar(255).
+    .max(255)
     .regex(/^\/(?!\/)[^\s\\]*$/)
     .default('/'),
   mode: z.enum(['login', 'link']).default('login'),

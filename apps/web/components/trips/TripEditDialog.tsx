@@ -2,7 +2,14 @@
 
 import { useRef, useState } from 'react';
 import type { TripResponse, TripStatus, TripUpdate, TripVisibility } from '@pinvi/schemas';
-import { STATUS_LABEL, VISIBILITY_LABEL, buildTripUpdate, type TripEditForm } from '@pinvi/domain';
+import {
+  STATUS_LABEL,
+  VISIBILITY_LABEL,
+  buildTripUpdate,
+  validateTripDateRange,
+  type TripDateRangeError,
+  type TripEditForm,
+} from '@pinvi/domain';
 import { FormField } from '@/components/forms/FormField';
 import { FormSelect } from '@/components/forms/FormSelect';
 import { Button } from '@/components/ui/Button';
@@ -41,7 +48,25 @@ export function TripEditDialog({
     status: trip.status,
   });
 
-  const update = (patch: Partial<TripEditForm>) => setForm((prev) => ({ ...prev, ...patch }));
+  const [dateError, setDateError] = useState<TripDateRangeError | null>(null);
+  const update = (patch: Partial<TripEditForm>) => {
+    if ('startDate' in patch || 'endDate' in patch) setDateError(null);
+    setForm((prev) => ({ ...prev, ...patch }));
+  };
+  // #624: 날짜 오류는 서버 왕복 전에 해당 날짜 필드에 붙인다. PATCH는 null 날짜를 '유지'로 다루므로
+  // 이미 정한 기간을 비우는 입력도 여기서 막는다(저장 성공처럼 보이고 아무것도 바뀌지 않던 문제).
+  const save = () => {
+    const rangeError =
+      validateTripDateRange(form.startDate, form.endDate) ??
+      (trip.start_date && !form.startDate.trim() && !form.endDate.trim()
+        ? { field: 'startDate' as const, message: '이미 정한 여행 기간은 비울 수 없습니다. 다른 날짜로 바꿔 주세요.' }
+        : null);
+    if (rangeError) {
+      setDateError(rangeError);
+      return;
+    }
+    onSave(buildTripUpdate(form));
+  };
 
   return (
     <Dialog
@@ -63,7 +88,7 @@ export function TripEditDialog({
             취소
           </Button>
           <Button
-            onClick={() => onSave(buildTripUpdate(form))}
+            onClick={save}
             disabled={!form.title.trim()}
             loading={saving}
             data-testid="trip-edit-save"
@@ -98,6 +123,7 @@ export function TripEditDialog({
             type="date"
             labelClassName={DIALOG_LABEL}
             value={form.startDate}
+            error={dateError?.field === 'startDate' ? dateError.message : undefined}
             onChange={(event) => update({ startDate: event.target.value })}
           />
           <FormField
@@ -106,6 +132,7 @@ export function TripEditDialog({
             type="date"
             labelClassName={DIALOG_LABEL}
             value={form.endDate}
+            error={dateError?.field === 'endDate' ? dateError.message : undefined}
             onChange={(event) => update({ endDate: event.target.value })}
           />
         </div>

@@ -1545,3 +1545,39 @@ async def test_dedup_verdict_retries_preserve_command_key_and_write_realm() -> N
         assert keys == ["11111111-1111-4111-8111-111111111111"] * 2
     finally:
         await client.aclose()
+
+
+async def test_revision_get_keeps_user_supplied_feature_id_in_one_path_segment() -> None:
+    """제안의 target_feature_id(사용자 입력)는 Map 관리 경로를 벗어나면 안 된다(#659 리뷰)."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.raw_path.decode())
+        return httpx.Response(200, headers={"ETag": '"3"'}, json={"data": {}})
+
+    client = _client(handler)
+    assert await client.get_feature_revision_etag("x/../../../v1/ops/secret?a=") == '"3"'
+    assert seen == ["/v1/admin/features/x%2F..%2F..%2F..%2Fv1%2Fops%2Fsecret%3Fa%3D/revision"]
+    for dot in (".", ".."):
+        with pytest.raises(KorTravelMapBadRequest):
+            await client.get_feature_revision_etag(dot)
+    assert len(seen) == 1
+    await client.aclose()
+
+
+async def test_decide_dedup_review_keeps_review_id_in_one_path_segment() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.raw_path.decode())
+        return httpx.Response(404, json={"code": "RESOURCE_NOT_FOUND"})
+
+    client = _client(handler)
+    with pytest.raises(KorTravelMapError):
+        await client.decide_dedup_review(
+            "a/../../x",
+            decision="rejected",
+            idempotency_key="11111111-1111-4111-8111-111111111111",
+        )
+    assert seen and all(p == "/v1/admin/features/dedup-reviews/a%2F..%2F..%2Fx" for p in seen)
+    await client.aclose()

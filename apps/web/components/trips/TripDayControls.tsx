@@ -319,7 +319,7 @@ function DaySettingsDialog({
           placeholder={`${dayIndex}일차`}
         />
         <FormTextArea id="trip-day-note-input" label="일자 메모" labelClassName={DIALOG_LABEL}
-          value={note} onChange={(event) => onNoteChange(event.target.value)} disabled={busy} rows={3} />
+          value={note} onChange={(event) => onNoteChange(event.target.value)} disabled={busy} rows={3} maxLength={2000} />
         <FormField
           id="trip-day-date-input"
           label="날짜"

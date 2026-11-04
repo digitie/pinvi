@@ -1,15 +1,15 @@
 {
   "map": {
     "admin": {
-      "openapi_sha256": "0ea72954952f831adb679c45a48a7d217a82c2c8a288655dfeb17ab3e5ea0df1",
+      "openapi_sha256": "43df297363745e3c618b0c757caa2e61b3218a5ae8cde4939c9c8938420d97c6",
       "runtime_operation_contract_sha256": "14f5e6dcc3827542529fe483585d295da68dc65bd4e79a3bf8a24b343286ebd0",
-      "source_canonical_sha256": "100eb4bd731e52e86277f1a36ec3fa190a26cf34763d279d5a2b49d74ffe86f1",
+      "source_canonical_sha256": "ec0c8e5e94bbb8522914d327137ab999cf3891bd1f6c2831ee33016d5b19683e",
       "source_operation_contract_sha256": "14f5e6dcc3827542529fe483585d295da68dc65bd4e79a3bf8a24b343286ebd0"
     },
     "full": {
-      "openapi_sha256": "0ea72954952f831adb679c45a48a7d217a82c2c8a288655dfeb17ab3e5ea0df1",
+      "openapi_sha256": "43df297363745e3c618b0c757caa2e61b3218a5ae8cde4939c9c8938420d97c6",
       "runtime_operation_contract_sha256": "14f5e6dcc3827542529fe483585d295da68dc65bd4e79a3bf8a24b343286ebd0",
-      "source_canonical_sha256": "100eb4bd731e52e86277f1a36ec3fa190a26cf34763d279d5a2b49d74ffe86f1",
+      "source_canonical_sha256": "ec0c8e5e94bbb8522914d327137ab999cf3891bd1f6c2831ee33016d5b19683e",
       "source_operation_contract_sha256": "14f5e6dcc3827542529fe483585d295da68dc65bd4e79a3bf8a24b343286ebd0"
     },
     "service": {

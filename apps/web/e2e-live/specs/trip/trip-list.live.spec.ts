@@ -1,9 +1,9 @@
 /**
- * TRIP-041 … TRIP-045 — trip list: schedule sorting, draft badge → status change, delete
- * (no undo), bucket counts, dashboard map stats.
+ * TRIP-041 … TRIP-045 — trip list: schedule sorting, draft badge → status change, delete →
+ * trash → restore, bucket counts, dashboard map stats.
  */
 import { expect, test } from '@playwright/test';
-import { createTrip, deleteTrip, loginAsUser, searchAndAddPlace, shot } from '../../helpers/live';
+import { createTrip, deleteTrip, loginAsUser, searchAndAddPlace, shot, tripDayPoiCounts } from '../../helpers/live';
 import {
   bucketButton,
   deleteTripViaUi,
@@ -80,24 +80,50 @@ test('[TRIP-042] 초안 배지 — 생성 직후 "초안", 상태를 예정으�
   await shot(page, 'TRIP-042', 'planned-badge');
 });
 
-test('[TRIP-043] 여행 삭제 — 확인 2단계, 목록에서 사라지고 상세 URL은 오류, 되돌리기 없음', async ({ page }) => {
-  const title = e2eTitle('삭제');
+test('[TRIP-043] 여행 삭제 → 휴지통 → 복원 — 목록·상세에서 사라졌다가 초안으로 장소와 함께 돌아온다', async ({ page }) => {
+  // Owner decision 2026-11-04: trash/restore (#633, shipped in #657) is kept.
+  const title = e2eTitle('삭제복원');
   const { id } = await createTrip(page, { title, start: isoDate(12), end: isoDate(12), region: '안동' });
   created.push(id);
   await gotoTrip(page, id);
   await searchAndAddPlace(page, 1, '안동하회마을', preferFeature); // heritage
+  // make the pre-delete status non-draft so the restore's "초안" is observable
+  await openTripEdit(page);
+  await page.locator('#trip-edit-status').selectOption('planned');
+  await saveTripEdit(page);
+  await expect(page.getByTestId('trip-top-panel')).toContainText('예정');
 
   await deleteTripViaUi(page);
-  created.splice(created.indexOf(id), 1); // already gone; afterEach must not re-delete
   await expect(tripListCard(page, title)).toHaveCount(0);
   await bucketButton(page, '지난 여행').click();
   await expect(tripListCard(page, title)).toHaveCount(0);
-  // no undo affordance anywhere on the dashboard — by design (owner decision, #633 not planned)
-  await expect(page.getByRole('button', { name: /되돌리기|실행 취소/ })).toHaveCount(0);
-
   await page.goto(`/trips/${id}`);
   await expect(page.getByTestId('trip-detail-error')).toBeVisible();
-  await shot(page, 'TRIP-043', 'deleted');
+
+  // 휴지통: the dashboard link opens it and the deleted trip is listed
+  await page.goto('/trips');
+  await page.getByRole('link', { name: '휴지통', exact: true }).click();
+  await expect(page).toHaveURL(/\/trips\/trash$/);
+  await expect(page.getByRole('heading', { level: 1, name: '여행 휴지통' })).toBeVisible();
+  const trashItem = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: title }) });
+  await expect(trashItem).toHaveCount(1);
+  await shot(page, 'TRIP-043', 'trash');
+
+  const restored = page.waitForResponse(
+    (r) => r.request().method() === 'POST' && new URL(r.url()).pathname.endsWith(`/trips/${id}/restore`),
+  );
+  await trashItem.getByRole('button', { name: `${title} 복원` }).click();
+  expect((await restored).status(), 'POST /trips/{id}/restore').toBe(200);
+  await expect(page.getByRole('status').filter({ hasText: `"${title}" 여행을 초안으로 복원했습니다.` })).toBeVisible();
+  await expect(trashItem).toHaveCount(0);
+
+  // back on the dashboard as a draft, with its place
+  await page.goto('/trips');
+  await expect(tripListCard(page, title)).toContainText('초안');
+  expect(await tripDayPoiCounts(page, id), 'places survive trash + restore').toEqual([1]);
+  await gotoTrip(page, id);
+  await expect(page.getByTestId('trip-top-panel')).toContainText('초안');
+  await shot(page, 'TRIP-043', 'restored');
 });
 
 test('[TRIP-044] 버킷 전환 — 예정/지난 여행 필터가 aria-pressed로 바뀌고 카드 집합이 분리된다', async ({ page }) => {

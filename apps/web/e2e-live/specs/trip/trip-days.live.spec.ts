@@ -175,7 +175,6 @@ test('[TRIP-025] 일자 날짜를 여행 기간 밖으로 — 모달 안 필드 
 });
 
 test('[TRIP-026] 일자 날짜 중복 — "이미 N일차에서 쓰는 날짜입니다." 오류', async ({ page }) => {
-  test.fail(true, '#649: duplicate day date is saved (dayUsingDate compares day.date, not effective_date)');
   const start = isoDate(12);
   const { id } = await createTrip(page, { title: e2eTitle('중복날짜'), start, end: isoDate(13) });
   created.push(id);

@@ -284,7 +284,7 @@
     - 없음
   automation: scripted
   spec: specs/admin/admin-features.live.spec.ts#ADM-015
-  notes: '#648 — 한국어 q 검색이 간헐적으로 503 FEATURE_SERVICE_UNAVAILABLE(2026-11-03 같은 실행에서 503·200 모두 관찰). helper 가 3회까지 재시도하고 끝내 503 이면 #648 로 실패한다.'
+  notes: '#648(한국어 q 검색 503) — #660 으로 수정. helper 는 재시도·런타임 test.fail 없이 한 번 검색하고 5xx 면 실패한다.'
 
 - id: ADM-016
   title: Feature 상세 인스펙터(종류·상태·좌표·카운트·탭 링크)
@@ -407,7 +407,7 @@
     - 없음
   automation: scripted
   spec: specs/admin/admin-dedup-integrity-debug.live.spec.ts#ADM-022
-  notes: '#651 — 목록이 항상 422 FORBIDDEN(Map 이 PinVi 요청 거절), 화면은 빈 큐처럼 보인다. test.fail(#651); 필터 전달은 요청 쪽으로 계속 검증.'
+  notes: '#651(목록 422 FORBIDDEN) — #660 으로 수정(Map ops dedup-reviews 읽기). test.fail 제거, GET 200 을 정상 단언하고 필터 전달도 요청 쪽으로 검증.'
 
 - id: ADM-023
   title: Dedup review 필터(q, min_score, status) 가 proxy 쿼리에 그대로 전달
