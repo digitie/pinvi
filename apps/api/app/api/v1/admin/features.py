@@ -19,9 +19,12 @@ from app.clients.kor_travel_map import (
     KorTravelMapPreconditionFailed,
     KorTravelMapRateLimited,
     KorTravelMapUnavailable,
+    OptionalKorTravelMapHttpClientDep,
 )
 from app.clients.kor_travel_map_admin import KorTravelMapAdminClientDep
+from app.clients.kor_travel_map_weather import create_map_weather_client
 from app.clients.kor_travel_weather import OptionalKorTravelWeatherClientDep
+from app.core.config import settings
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.user import User
@@ -291,16 +294,21 @@ async def get_feature_weather_values_endpoint(
     admin_client: KorTravelMapAdminClientDep,
     db: DbSession,
     weather_client: OptionalKorTravelWeatherClientDep,
+    map_client: OptionalKorTravelMapHttpClientDep,
     asof: Annotated[datetime | None, Query()] = None,
 ) -> Envelope[AdminFeatureWeatherValuesResponse]:
-    """비공개 feature도 보이는 최신 weather card를 값 목록으로 투영(ADR-068, T-364/T-365).
+    """관리자 상세 좌표와 사용자와 같은 소스 설정으로 정본 weather 사실을 조회한다.
 
-    `kor-travel-weather`를 쓴다 — 좌표는 admin feature 상세(`get_feature_detail`)에서
-    얻는다(POI 문맥이 없어 T-363의 "feature batch와 완전 분리"는 여기 적용되지 않는다,
-    `admin_weather_values.py` 모듈 docstring). `asof`는 T-362와 같은 축소 규칙(보존
-    지평 밖은 빈 카드)으로 지원한다.
+    Map 모드의 관측·예보는 Map, 특보는 선택적인 직접 weather 경로다. 직접 모드와
+    asof 축소는 기존 계약을 유지한다. Map 원천 dataset provenance는 지어내지 않는다.
     """
-    if weather_client is None:
+    map_mode = settings.pinvi_kor_travel_map_weather_enabled
+    map_weather_client = (
+        create_map_weather_client(map_client)
+        if map_mode and map_client is not None and map_client.has_service_token
+        else None
+    )
+    if (map_mode and map_weather_client is None) or (not map_mode and weather_client is None):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -323,6 +331,8 @@ async def get_feature_weather_values_endpoint(
             lon=lon,
             asof=normalized_asof,
             weather_client=weather_client,
+            map_weather_client=map_weather_client,
+            map_budget_seconds=settings.pinvi_kor_travel_map_weather_request_budget_seconds,
         )
     )
 

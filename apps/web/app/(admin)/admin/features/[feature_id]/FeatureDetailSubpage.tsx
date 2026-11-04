@@ -117,7 +117,7 @@ const sourceColumns: AdminTableColumn<AdminFeatureDetailSource>[] = [
       <div className="min-w-0">
         <div className="break-all font-mono text-xs">{row.source_record_key}</div>
         <div className="text-xs text-muted">
-          {row.provider} / {row.dataset_key}
+          {row.provider} / {row.dataset_key ?? '—'}
         </div>
       </div>
     ),
@@ -219,6 +219,20 @@ const overrideColumns: AdminTableColumn<AdminFeatureDetailOverride>[] = [
   },
 ];
 
+function weatherMetricIdentity(row: AdminFeatureWeatherMetric): string {
+  return JSON.stringify([
+    row.metric_key,
+    row.provider ?? null,
+    row.unit ?? null,
+    row.forecast_style,
+    row.timeline_bucket ?? null,
+    row.valid_at ?? row.observed_at ?? row.issued_at ?? null,
+    row.provider_dataset_id,
+    row.dataset_key,
+    row.known_at,
+  ]);
+}
+
 const weatherColumns: AdminTableColumn<AdminFeatureWeatherMetric>[] = [
   {
     key: 'metric',
@@ -229,6 +243,7 @@ const weatherColumns: AdminTableColumn<AdminFeatureWeatherMetric>[] = [
       <div className="text-xs">
         <div className="font-mono">{row.metric_key}</div>
         <div className="text-muted">{row.metric_name ?? '—'}</div>
+        {row.provider && <div className="text-muted">{row.provider}</div>}
       </div>
     ),
   },
@@ -243,7 +258,7 @@ const weatherColumns: AdminTableColumn<AdminFeatureWeatherMetric>[] = [
         <div>{row.dataset_display_name ?? '—'}</div>
         <div className="font-mono text-muted">
           {row.provider_dataset_id != null ? `#${row.provider_dataset_id} · ` : ''}
-          {row.dataset_key}
+          {row.dataset_key ?? '—'}
         </div>
       </div>
     ),
@@ -354,7 +369,15 @@ function WeatherValuesTab({ featureId }: { featureId: string }) {
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
         <span>asof {formatDateTime(data?.asof)}</span>
         <span>latest {formatDateTime(data?.latest_at)}</span>
-        <span>{data?.is_stale ? 'stale' : 'fresh'}</span>
+        <span data-testid="admin-feature-weather-freshness">
+          {query.isLoading
+            ? '확인 중'
+            : query.isError || !data?.items.length || !data.latest_at
+              ? '판정 불가'
+              : data.is_stale
+                ? '오래된 정보'
+                : '지연 신호 없음'}
+        </span>
         <span>{data?.source_styles.join(', ') || 'source style 없음'}</span>
         <button
           type="button"
@@ -371,28 +394,12 @@ function WeatherValuesTab({ featureId }: { featureId: string }) {
         columns={weatherColumns}
         rows={data?.items ?? []}
         loading={query.isLoading}
-        rowKey={(row) =>
-          JSON.stringify([
-            row.metric_key,
-            row.forecast_style,
-            row.timeline_bucket ?? null,
-            row.valid_at ?? row.observed_at ?? row.issued_at ?? null,
-            row.provider_dataset_id,
-            row.dataset_key,
-            row.known_at,
-          ])
-        }
+        rowKey={weatherMetricIdentity}
         rowTestId={(row) =>
-          `admin-feature-weather-row-${row.metric_key}-${encodeURIComponent(
-            JSON.stringify([
-              row.forecast_style,
-              row.timeline_bucket ?? null,
-              row.valid_at ?? row.observed_at ?? row.issued_at ?? null,
-              row.provider_dataset_id,
-              row.dataset_key,
-              row.known_at,
-            ]),
-          )}`
+          'admin-feature-weather-row-' +
+          row.metric_key +
+          '-' +
+          encodeURIComponent(weatherMetricIdentity(row))
         }
         empty="weather 값이 없습니다."
       />

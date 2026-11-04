@@ -87,12 +87,27 @@ test.describe('weather · trip days', () => {
 
     const article = await openDay(page, 1);
     const section = daySection(article);
-    const kind = await expectWeatherConsistent(section, res, day1.weather_cards, day1.effective_date!);
+    const kind = await expectWeatherConsistent(
+      section,
+      res,
+      day1.weather_cards,
+      day1.effective_date!,
+    );
     expect(kind).toBe('summary');
     await expect(section).toContainText(TEXT.group.forecast);
     await expect(section).not.toContainText(TEXT.group.current);
-    await expect.soft(section).toContainText(/기온|최저|최고|하늘|강수/);
-    const styles = new Set(metricsForDate(day1.weather_cards[cardKeyOf(res)]!, day1.effective_date!).map((m) => m.forecast_style));
+    await expect
+      .soft(
+        section,
+        '원천 핵심 지표가 없으면 upstream 자료 공백이며 체감온도를 기온으로 바꾸지 않는다',
+      )
+      .toContainText(/기온|최저|최고|하늘|강수/);
+    await expect(section).not.toContainText(/FEELS_LIKE|deg_c/);
+    const styles = new Set(
+      metricsForDate(day1.weather_cards[cardKeyOf(res)]!, day1.effective_date!).map(
+        (m) => m.forecast_style,
+      ),
+    );
     annotate(`D+4 forecast_styles=${[...styles].join(',')}`);
     await shot(page, 'WX-002', 'mid-forecast');
   });

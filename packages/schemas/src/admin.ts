@@ -1697,15 +1697,12 @@ export const AdminFeatureOverridesResponseSchema = z.object({
 export type AdminFeatureOverridesResponse = z.infer<typeof AdminFeatureOverridesResponseSchema>;
 
 /**
- * 공개 weather metric에 Map dataset/knowledge provenance를 보존한 Admin 전용 metric.
- *
- * T-364(P5, ADR-068): `provider_dataset_id`/`dataset_display_name`은 `kor-travel-weather`
- * 소스에 대응물이 없어 nullable로 넓혔다(값을 지어내지 않는다). `dataset_key`는 두
- * 소스 모두 갖고 있어 그대로 required다.
+ * 공개 weather metric의 실제 원천 provenance. 정수 dataset registry는 없으면 null이다.
+ * dataset_key는 직접 weather 원문을 보존하고 Map 상태에 없으면 명시적인 null이다.
  */
 export const AdminFeatureWeatherMetricSchema = WeatherMetricSchema.extend({
   provider_dataset_id: z.number().int().nullable().default(null),
-  dataset_key: z.string(),
+  dataset_key: z.string().nullable(),
   dataset_display_name: z.string().nullable().default(null),
   known_at: Iso8601Schema.nullable().default(null),
 });

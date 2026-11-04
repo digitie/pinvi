@@ -3987,8 +3987,8 @@ ADR-048은 geo v2 `key`를 서버 VWorld key와 같은 값으로 쓰고 geo의 `
 
 1. `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`(기본 false)가 켜지면 단건 weather 카드(`GET /features/{id}/weather`)·trip view
    weather·지도 weather marker(`GET /weather/markers-in-bounds`)의 관측·예보를 Map `/v1/service/weather/*`(service token)로 읽는다.
-   꺼져 있으면 지금처럼 kor-travel-weather를 직접 부르고 **Map weather 표면은 부르지 않는다**. Admin weather-values(provenance
-   필드)는 플래그와 무관하게 직접 경로다.
+   꺼져 있으면 지금처럼 kor-travel-weather를 직접 부르고 **Map weather 표면은 부르지 않는다**.
+   **2026-11-05 #675 보완**: Admin weather-values도 같은 설정을 따른다. 비공개 좌표는 admin 상세로 얻고, Map 상태에 없는 원천 dataset_key는 null로 보존한다. 직접 경로 고정 예외는 해제한다.
 2. 경로별 Map route: 위치 해석 = `GET /nearest`(20 → 50 → 100 km, 해석이 쓰는 부분을 명시) + `GET /locations?near=`, 카드·trip =
    `POST /locations/batch`(해석이 저장한 source 위치 전체, 50곳씩 청크), marker = `GET /locations`(영역 + `include_current=true`).
    위치 집합은 직접 `/resolve`와 같은 규칙(가장 가까운 측정소 + `max(5 km, d + 5 km)` 안의 측정소 아닌 위치 — 측정소는 weather

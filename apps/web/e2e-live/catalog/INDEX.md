@@ -318,7 +318,7 @@ Spec files: 55.
 | ADM-017 | admin | feature 검증 상태 축 필터(lifecycle=retired, publication=suppressed, quality=quarantined) | P2 | desktop, admin | scripted | `specs/admin/admin-features.live.spec.ts#ADM-017` |
 | ADM-018 | admin | Feature sources 서브페이지 — provider/dataset source link 행 | P1 | desktop, admin | scripted | `specs/admin/admin-features.live.spec.ts#ADM-018` |
 | ADM-019 | admin | Feature overrides 서브페이지 렌더(0행 허용) | P3 | desktop, admin | scripted | `specs/admin/admin-features.live.spec.ts#ADM-019` |
-| ADM-020 | admin | Feature weather-values 서브페이지 — 값 행, asof/latest, stale/fresh 플래그 | P1 | desktop, admin, weather | scripted | `specs/admin/admin-features.live.spec.ts#ADM-020` |
+| ADM-020 | admin | Feature weather-values 서브페이지 — 실제 값 행·소스 지연 신호·미확인 상태 | P1 | desktop, admin, weather | scripted | `specs/admin/admin-features.live.spec.ts#ADM-020` |
 | ADM-021 | admin | 좌표 없는 feature 의 weather-values 는 빈 카드('weather 값이 없습니다.') | P3 | desktop, admin, weather | manual |  |
 | ADM-022 | admin | Dedup review 큐 목록과 상세 패널 읽기 전용 확인(판정 제출 금지) | P1 | desktop, admin | scripted | `specs/admin/admin-dedup-integrity-debug.live.spec.ts#ADM-022` |
 | ADM-023 | admin | Dedup review 필터(q, min_score, status) 가 proxy 쿼리에 그대로 전달 | P2 | desktop, admin | scripted | `specs/admin/admin-dedup-integrity-debug.live.spec.ts#ADM-023` |

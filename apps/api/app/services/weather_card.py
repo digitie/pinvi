@@ -100,20 +100,22 @@ def _asof_window(asof: datetime | None, *, now: datetime) -> _AsofWindow:
 async def _fetch_location_values(
     client: KorTravelWeatherClient, location_id: str, *, window: _AsofWindow
 ) -> list[WeatherValueOut]:
+    failed = False
     try:
-        latest, forecast = await asyncio.gather(
-            client.latest(location_id, limit=200),
-            client.forecast(location_id, from_=window.from_, to=window.to, limit=1000),
-        )
-    except KorTravelWeatherError as exc:
+        async with asyncio.TaskGroup() as tasks:
+            latest = tasks.create_task(client.latest(location_id, limit=200))
+            forecast = tasks.create_task(
+                client.forecast(location_id, from_=window.from_, to=window.to, limit=1000)
+            )
+    except* KorTravelWeatherError:
+        failed = True
         # 한 location 실패로 전체를 죽이지 않는다 — 다른 location_id가 있으면 그걸로
         # 채운다. 전부 실패하면 결과가 비어 카드도 비게 된다(장애를 추측해 지어내지
         # 않는다). 빈 카드가 장애 때문인지는 이 로그로 가린다.
-        logger.warning(
-            "weather_card.location_fetch_failed: %s", exc, extra={"location_id": location_id}
-        )
+        logger.warning("weather_card.location_fetch_failed", extra={"location_id": location_id})
+    if failed:
         return []
-    return [*latest, *forecast]
+    return [*latest.result(), *forecast.result()]
 
 
 async def resolve_and_collect_deduped_values(
@@ -305,7 +307,7 @@ async def _collect_via_map(
     return deduped, latest_known
 
 
-async def build_feature_weather_card(
+async def collect_weather_values(
     db: AsyncSession,
     *,
     feature_id: str,
@@ -315,12 +317,8 @@ async def build_feature_weather_card(
     weather_client: KorTravelWeatherClient | None,
     map_weather_client: KorTravelMapWeatherClient | None = None,
     map_budget_seconds: float = 5.0,
-) -> FeatureWeatherCard:
-    """`feature_id`의 좌표로 weather 사실을 모아 `FeatureWeatherCard`를 만든다.
-
-    `map_weather_client`가 있으면(플래그 on) Map 경로, 없으면 kor-travel-weather 직접 경로다 — 직접 경로는
-    `weather_client`가 있어야 한다(라우터가 보장한다).
-    """
+) -> tuple[Sequence[WeatherFact], datetime | None]:
+    """사용자·관리자가 같은 소스 선택·예산·취소 경계로 정본 사실을 읽는다."""
     deduped: Sequence[WeatherFact]
     if map_weather_client is not None:
         deduped, latest_known = await resolve_and_collect_deduped_values_via_map(
@@ -339,6 +337,35 @@ async def build_feature_weather_card(
         deduped, latest_known = await resolve_and_collect_deduped_values(
             db, feature_id=feature_id, lat=lat, lon=lon, asof=asof, weather_client=weather_client
         )
+    return deduped, latest_known
+
+
+async def build_feature_weather_card(
+    db: AsyncSession,
+    *,
+    feature_id: str,
+    lat: float,
+    lon: float,
+    asof: datetime | None,
+    weather_client: KorTravelWeatherClient | None,
+    map_weather_client: KorTravelMapWeatherClient | None = None,
+    map_budget_seconds: float = 5.0,
+) -> FeatureWeatherCard:
+    """`feature_id`의 좌표로 weather 사실을 모아 `FeatureWeatherCard`를 만든다.
+
+    `map_weather_client`가 있으면(플래그 on) Map 경로, 없으면 kor-travel-weather 직접 경로다 — 직접 경로는
+    `weather_client`가 있어야 한다(라우터가 보장한다).
+    """
+    deduped, latest_known = await collect_weather_values(
+        db,
+        feature_id=feature_id,
+        lat=lat,
+        lon=lon,
+        asof=asof,
+        weather_client=weather_client,
+        map_weather_client=map_weather_client,
+        map_budget_seconds=map_budget_seconds,
+    )
     if not deduped:
         return FeatureWeatherCard(feature_id=feature_id, asof=asof)
 

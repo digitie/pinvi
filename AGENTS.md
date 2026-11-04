@@ -445,6 +445,8 @@ Pinvi는 이 서비스의 공개 REST를 **소비만** 한다. 날씨 원천 파
 
 본 저장소의 코드가 위 책임을 침범하지 않는지 모든 PR에서 자가 검토한다.
 
+ADR-077의 Map weather 플래그가 켜지면 관리자 weather-values도 사용자와 같은 Map 관측·예보를 읽고 특보만 직접 조회한다(#675). Map에 없는 원천 dataset_key는 null이며 false 지연 신호를 fresh로 단정하지 않는다.
+
 ## 신규 ADR 작성 시
 
 `docs/decisions.md`에 ADR-NNN 추가. `kor-travel-map`의 ADR과 충돌·연계가
