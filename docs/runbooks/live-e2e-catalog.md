@@ -318,3 +318,13 @@ env 1(SHR-027), 데이터/타이밍 2(SRCH-048 이벤트 없음, POI-032 마커 
   접두만 수동 정리. 접두 없는 데이터는 건드리지 않는다.
 - 러너가 `live UI checkout must be clean` 으로 거부 — 결과 디렉터리가 체크아웃 밖인지, 생성물이
   남지 않았는지 확인한다(`PINVI_E2E_RESULTS_ROOT`).
+
+## 경로·영역 fixture (#635)
+
+- SRCH-023/028은 설악산 도형과 교차하는 point의 검색어를
+  `PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY`로 받는다.
+- SRCH-024는 북한산 경로 둘 이상과 교차하는 point의 검색어를
+  `PINVI_E2E_GEOMETRY_BUKHAN_ANCHOR_QUERY`로 받는다.
+- 설정이 없으면 데이터 전제 미충족으로 skip한다. 설정이 있으면 해당 도형의 존재·kind·geometry·UI를 단언한다.
+- 도형에 없는 coord를 만들지 않는다. point는 카메라 이동용 fixture다.
+- 운영 origin guard는 유지한다. 격리 WSL 실제 HTTP/WebGL 검증은 별도 fixture에서 실행하며 운영 통과로 기록하지 않는다.

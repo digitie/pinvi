@@ -8,7 +8,7 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | area | total | scripted | manual | blocked |
 |---|---:|---:|---:|---:|
 | trip | 57 | 53 | 2 | 2 |
-| search | 55 | 44 | 6 | 5 |
+| search | 55 | 47 | 6 | 2 |
 | nearby | 41 | 35 | 2 | 4 |
 | weather | 29 | 24 | 2 | 3 |
 | share | 35 | 30 | 1 | 4 |
@@ -16,9 +16,9 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | notify | 26 | 18 | 0 | 8 |
 | admin | 40 | 36 | 2 | 2 |
 | core | 31 | 30 | 1 | 0 |
-| **all** | **346** | **295** | **21** | **30** |
+| **all** | **346** | **298** | **21** | **27** |
 
-Spec files: 54.
+Spec files: 55.
 
 ## Cases
 
@@ -103,12 +103,12 @@ Spec files: 54.
 | SRCH-020 | search | 숙박·캠핑장 — '오토캠핑장' → 카테고리 라벨 캠핑 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-020` |
 | SRCH-021 | search | 음식점 — '안동찜닭' → feature 또는 kakao/naver 행 | P2 | desktop, search | scripted | `specs/search/search-sources.live.spec.ts#SRCH-021` |
 | SRCH-022 | search | 카페 — '카페' → 카테고리 라벨 카페/커피전문점 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-022` |
-| SRCH-023 | search | 등산로 — '대청봉' → 설악산 대청봉 코스(route kind) 검색·상세 | P1 | desktop, search, poi | blocked |  |
-| SRCH-024 | search | 등산로 — '북한산' 코스 다수 노출 | P3 | desktop, search | blocked |  |
+| SRCH-023 | search | 등산로 — '대청봉' → 설악산 대청봉 코스(route kind) 검색·상세 | P1 | desktop, search, poi | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-023` |
+| SRCH-024 | search | 등산로 — '북한산' 코스 다수 노출 | P3 | desktop, search | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-024` |
 | SRCH-025 | search | 국가유산 — '소수서원' → 라벨 국가유산/사적 | P1 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-025` |
 | SRCH-026 | search | 국가유산 — '도산서원' | P3 | desktop, search | manual |  |
 | SRCH-027 | search | 축제/행사 — '축제' → kind=event 상세에 기간(period) 표시 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-027` |
-| SRCH-028 | search | 국립공원 — '설악산국립공원'(area kind) → 라벨 국립공원/자연경관 | P2 | desktop, search, poi | blocked |  |
+| SRCH-028 | search | 국립공원 — '설악산국립공원'(area kind) → 라벨 국립공원/자연경관 | P2 | desktop, search, poi | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-028` |
 | SRCH-029 | search | 수목원 — '국립수목원' → 라벨 수목원 | P3 | desktop, search | manual |  |
 | SRCH-030 | search | 휴양림 — '자연휴양림' → 라벨 휴양림 | P3 | desktop, search | manual |  |
 | SRCH-031 | search | 박물관/미술관 — '국립중앙박물관' → 라벨 박물관/문화시설 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-031` |

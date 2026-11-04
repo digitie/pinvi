@@ -432,6 +432,7 @@ export function FeatureMapView({
   const handleMapLoad = useCallback(
     (map: MapLibreMap) => {
       mapRef.current = map;
+      geometryViewportChange(map);
       // `VWorldMap`은 moveend/zoomend만 노출한다. 자동 센터링을 취소해야 하는 것은 "사용자가
       // 직접 만졌는가"이므로 시작 이벤트를 직접 바인딩하고, 핸들러가 `originalEvent` 유무로
       // 사용자 제스처와 프로그램 이동을 가른다(`dragstart`만 사용자 전용이다).
@@ -447,7 +448,13 @@ export function FeatureMapView({
         pendingFetchRef.current = map;
       }
     },
-    [fetchInBounds, fetchWeatherMarkers, markUserInteracted, transportViewportChange],
+    [
+      fetchInBounds,
+      fetchWeatherMarkers,
+      markUserInteracted,
+      transportViewportChange,
+      geometryViewportChange,
+    ],
   );
 
   /** 자동 센터링 결정이 끝났음을 알리고 보류된 in-bounds 조회를 연다. */
@@ -468,9 +475,10 @@ export function FeatureMapView({
     (target: TransportDetailTarget) => {
       setSelected(null);
       setSelectedWeatherMarker(null);
+      clearGeometrySelection();
       openTransportDetailRaw(target);
     },
-    [openTransportDetailRaw],
+    [openTransportDetailRaw, clearGeometrySelection],
   );
 
   const handleViewportChange = useCallback(
