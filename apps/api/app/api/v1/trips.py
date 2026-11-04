@@ -605,6 +605,8 @@ async def copy_trip_endpoint(
             date_shift_days=body.date_shift_days,
             target_trip_id=body.target_trip_id,
         )
+    except TripAttachmentQuotaError as exc:
+        _raise_attachment_quota(exc)
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
     except (TripCopyError, TripDayNotFoundError) as exc:

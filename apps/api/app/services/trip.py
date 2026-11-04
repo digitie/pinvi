@@ -29,7 +29,9 @@ from app.services.hash_chain import sha256_hex
 from app.services.rustfs_storage import InvalidStorageRefError, validate_attachment_storage_ref
 from app.services.storage_policy import (
     AttachmentQuotaError,
+    assert_attachment_capacity,
     assert_attachment_quota,
+    preserve_deleted_day_attachment_charges,
 )
 
 
@@ -606,6 +608,7 @@ async def delete_trip_day(
             f"이 일자에는 POI {poi_count}개가 있습니다. 삭제하면 함께 제거됩니다.",
             poi_count=poi_count,
         )
+    await preserve_deleted_day_attachment_charges(db, trip_id=trip_id, day_index=day_index)
     # FK(trip_id, day_index) ON DELETE CASCADE로 trip_day_pois도 함께 하드 삭제된다.
     await db.delete(day)
     await _bump_trip_version(db, trip_id=trip_id)
@@ -656,7 +659,7 @@ async def copy_trip(
         created_trip = True
     else:
         existing_target_trip = await db.scalar(
-            select(Trip).where(Trip.trip_id == target_trip_id, Trip.deleted_at.is_(None))
+            select(Trip).where(Trip.trip_id == target_trip_id, Trip.deleted_at.is_(None)).with_for_update()
         )
         if existing_target_trip is None:
             raise TripNotFoundError("대상 여행을 찾을 수 없습니다.")
@@ -1301,7 +1304,19 @@ async def _copy_trip_attachments(
         return 0
     filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None), or_(*target_filters)]
     result = await db.execute(select(CuratedPlanAttachment).where(*filters))
-    for attachment in result.scalars():
+    attachments = list(result.scalars())
+    if attachments:
+        actor = await db.get(User, actor_user_id)
+        if actor is None:
+            raise TripNotFoundError("사용자를 찾을 수 없습니다.")
+        try:
+            await assert_attachment_capacity(
+                db, user=actor, trip_id=target_trip_id,
+                additional_bytes=sum(row.byte_size for row in attachments),
+            )
+        except AttachmentQuotaError as exc:
+            raise TripAttachmentQuotaError(str(exc)) from exc
+    for attachment in attachments:
         source_poi_id = attachment.trip_poi_id
         trip_poi_id = (
             poi_id_map[source_poi_id]

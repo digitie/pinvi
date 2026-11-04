@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Literal
 
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -135,6 +136,35 @@ def _active_attachment_parent() -> ColumnElement[bool]:
     )
 
 
+async def preserve_deleted_day_attachment_charges(
+    db: AsyncSession, *, trip_id: uuid.UUID, day_index: int
+) -> None:
+    """일자 CASCADE 전에 보존 파일을 비공개 여행 첨부로 남긴다."""
+    # 관리자 이동이 끝난 행은 원래 일자 집합에서 빠진 뒤여야 한다.
+    await db.flush()
+    now = datetime.now(UTC)
+    poi_ids = select(TripDayPoi.attachment_id).where(
+        TripDayPoi.trip_id == trip_id, TripDayPoi.day_index == day_index
+    )
+    await db.execute(
+        update(CuratedPlanAttachment)
+        .where(
+            or_(
+                (CuratedPlanAttachment.trip_id == trip_id)
+                & (CuratedPlanAttachment.trip_day_index == day_index),
+                CuratedPlanAttachment.trip_poi_id.in_(poi_ids),
+            )
+        )
+        .values(
+            trip_id=trip_id,
+            trip_day_index=None,
+            trip_poi_id=None,
+            deleted_at=func.coalesce(CuratedPlanAttachment.deleted_at, now),
+        )
+        .execution_options(synchronize_session="fetch")
+    )
+
+
 async def attachment_bytes_for_trip(db: AsyncSession, *, trip_id: uuid.UUID) -> int:
     poi_ids = select(TripDayPoi.attachment_id).where(TripDayPoi.trip_id == trip_id)
     total = await db.scalar(
@@ -157,12 +187,12 @@ async def attachment_bytes_for_user(db: AsyncSession, *, user_id: uuid.UUID) -> 
     return int(total or 0)
 
 
-async def assert_attachment_quota(
+async def assert_attachment_capacity(
     db: AsyncSession,
     *,
     user: User,
     trip_id: uuid.UUID,
-    byte_size: int,
+    additional_bytes: int,
 ) -> EffectiveAttachmentQuota:
     # 업로드는 여행 → 사용자 순서로 잠가 총량 검사와 반영을 직렬화한다.
     await db.scalar(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
@@ -177,20 +207,27 @@ async def assert_attachment_quota(
     user = locked_user
     settings_row = await get_storage_settings(db)
     quota = effective_attachment_quota(settings_row, user)
-    if byte_size > quota.max_upload_bytes:
-        raise AttachmentQuotaError(
-            f"개별 파일은 최대 {quota.max_upload_bytes} bytes까지 가능합니다."
-        )
     trip_used = await attachment_bytes_for_trip(db, trip_id=trip_id)
-    if trip_used + byte_size > quota.trip_quota_bytes:
+    if trip_used + additional_bytes > quota.trip_quota_bytes:
         raise AttachmentQuotaError(
             f"여행계획 첨부 총량은 최대 {quota.trip_quota_bytes} bytes까지 가능합니다."
         )
     user_used = await attachment_bytes_for_user(db, user_id=user.user_id)
-    if user_used + byte_size > quota.user_quota_bytes:
+    if user_used + additional_bytes > quota.user_quota_bytes:
         raise AttachmentQuotaError(
             f"사용자 첨부 총량은 최대 {quota.user_quota_bytes} bytes까지 가능합니다."
         )
+    return quota
+
+
+async def assert_attachment_quota(
+    db: AsyncSession, *, user: User, trip_id: uuid.UUID, byte_size: int
+) -> EffectiveAttachmentQuota:
+    quota = await assert_attachment_capacity(
+        db, user=user, trip_id=trip_id, additional_bytes=byte_size
+    )
+    if byte_size > quota.max_upload_bytes:
+        raise AttachmentQuotaError(f"개별 파일은 최대 {quota.max_upload_bytes} bytes까지 가능합니다.")
     return quota
 
 

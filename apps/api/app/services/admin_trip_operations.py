@@ -19,7 +19,8 @@ from app.models.trip_day import TripDay
 from app.models.user import User
 from app.schemas.admin import AdminOperationImpact, AdminOperationPolicyOption, AdminOperationResult
 from app.services import lexorank
-from app.services.trip import TripCopyError, copy_trip
+from app.services.storage_policy import preserve_deleted_day_attachment_charges
+from app.services.trip import TripAttachmentQuotaError, TripCopyError, copy_trip
 
 
 class AdminTripOperationError(Exception):
@@ -161,7 +162,7 @@ async def copy_admin_trip(
             target_trip_id=target_trip_id,
             commit=False,
         )
-    except TripCopyError as exc:
+    except (TripCopyError, TripAttachmentQuotaError) as exc:
         raise AdminTripOperationConflictError(str(exc)) from exc
     await db.flush()
     result = AdminOperationResult(
@@ -311,6 +312,10 @@ async def move_admin_day(
     attachment_policy: Literal["move", "delete"],
     comment_policy: Literal["move", "delete"],
 ) -> OperationState:
+    await db.execute(
+        select(Trip).where(Trip.trip_id.in_([source_trip_id, target_trip_id]))
+        .order_by(Trip.trip_id).with_for_update()
+    )
     source_day = await _get_day(db, trip_id=source_trip_id, day_index=day_index)
     if source_trip_id == target_trip_id and day_index == target_day_index:
         raise AdminTripOperationConflictError("같은 날짜로 이동할 수 없습니다.")
@@ -363,6 +368,9 @@ async def move_admin_day(
         now=now,
         source_poi_ids=source_poi_ids,
     )
+    await preserve_deleted_day_attachment_charges(
+        db, trip_id=source_trip_id, day_index=day_index
+    )
     await db.delete(source_day)
     target_trip.version += 1
     if source_trip_id != target_trip_id:
@@ -389,6 +397,7 @@ async def delete_admin_day(
     trip_id: uuid.UUID,
     day_index: int,
 ) -> OperationState:
+    await db.execute(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
     day = await _get_day(db, trip_id=trip_id, day_index=day_index)
     before = {
         "day": _day_state(day),
@@ -424,6 +433,7 @@ async def delete_admin_day(
         now=now,
         source_poi_ids=[poi.attachment_id for poi in pois],
     )
+    await preserve_deleted_day_attachment_charges(db, trip_id=trip_id, day_index=day_index)
     await db.delete(day)
     trip = await _get_trip(db, trip_id=trip_id)
     trip.version += 1
