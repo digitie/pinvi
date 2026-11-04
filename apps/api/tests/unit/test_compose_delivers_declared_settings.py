@@ -97,6 +97,7 @@ def test_rate_limit_settings_are_deliverable_and_documented() -> None:
         "PINVI_RATE_LIMIT_ENABLED",
         "PINVI_RATE_LIMIT_BACKEND",
         "PINVI_RATE_LIMIT_AUTH_PER_MINUTE",
+        "PINVI_RATE_LIMIT_USER_LIMIT_OVERRIDES",
     }
 
     assert required <= delivered, "app-api environment에 없는 rate limit 설정: " + repr(

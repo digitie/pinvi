@@ -1399,6 +1399,7 @@ address/*`)도 신규 사용하지 않는다 — candidate 중심 v2만.
   - rate-limit 저장소 장애는 기본 fail-closed(`503 SERVICE_UNAVAILABLE`)다.
   - `/health`, `/health/db`, `/metrics`, `/docs`, `/redoc`, `/openapi.json`과 `OPTIONS`는
     rate-limit에서 제외한다.
+- **2026-11-05 #653 보완**: 검증된 사용자 UUID별 양의 상한을 설정으로 네 사용자 정책에 적용한다. 대상의 유효 blocked가 우선하고 allowed도 상한을 우회하지 않는다. 비대상의 기존 선택 의미와 identity/HMAC 산식은 유지한다. 관리자 관측도 같은 한도를 사용한다. 전역 기본값은 바꾸지 않으며 운영 명단은 코드에 고정하지 않는다.
 - **결과**:
   - 운영에서 다중 worker/두 노드가 같은 한도를 공유한다.
   - Redis 없이도 Sprint 6 운영 배포 전 abuse guard를 닫을 수 있다.

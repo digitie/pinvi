@@ -251,6 +251,21 @@ IP key는 기본적으로 socket client IP를 사용한다. Cloudflare Tunnel/re
 `PINVI_RATE_LIMIT_CLIENT_IP_HEADER=CF-Connecting-IP`처럼 명시한다. 저장 bucket key는
 HMAC-SHA256으로 해시되며 원문 IP/email/token은 DB에 저장하지 않는다.
 
+
+### 사용자별 영구 상한(#653)
+
+PINVI_RATE_LIMIT_USER_LIMIT_OVERRIDES는 canonical 사용자 UUID를 양의 정수 상한에 대응시키는 JSON 객체이며 기본값은 빈 객체다. 예시는 다음과 같다(실제 UUID는 로컬 운영 구성에만 둔다).
+
+    PINVI_RATE_LIMIT_USER_LIMIT_OVERRIDES={"00000000-0000-0000-0000-000000000101":600}
+
+bool·문자열 숫자·실수·0·음수·UUID가 아닌 키와 비정규 UUID 표기는 시작 시 거부한다. 검증된 access JWT의 사용자 식별자에만 적용하며 인증 성공을 대신하지 않는다. 네 정책 authenticated_default·feature_search·storage_upload_urls·trip_exports 각각의 독립 한도를 대체한다. 낮은 값도 그대로 적용하며 전체 정책을 합친 하나의 공유 상한이 아니다. 기본 authenticated_default/feature_search60, storage30, export20, 로그인5와 그 밖의 정책은 비대상에게 그대로다.
+
+대상 사용자는 유효한 blocked가 기존 allowed보다 먼저 적용된다(생성 순서 무관). allowed가 있어도 실제 counter를 증가시키고 상한에서429를 반환한다. 차단 해제는 해당 blocked를 정상 rollback하거나 만료시키며, 이미 소진한 counter는 새 window 전까지 유지한다. 비대상 사용자의 기존 최신 활성 override 선택 의미는 유지한다. 429의 limit·Retry-After와 관리자 limit/remaining/초과 집계는 실제 유효 상한이다. 무시된 allowed 행은 원문 metadata를 보존하되 bucket 상태는 observed이며 UI에서 허용 우회 미적용을 안내한다.
+
+기존 identity/HMAC 산식은 유지한다. UUID 설정 membership은 비밀키 회전과 무관하지만 회전하면 counter hash와 기존 DB override hash 연결은 바뀐다. 기존 저장소 장애 정책도 유지하며 기본은 fail-closed다. fail_open을 명시하면 저장소 장애 시 상한을 건너뛸 수 있으므로 무조건적인 상한 보장으로 해석하지 않는다.
+
+운영 Manager는 환경변수를 명시적으로 전달한다. Manager pinvi-api 전달선과 Pinvi fallback Compose 전달선이 모두 있어야 하며 .env 값만 추가해서는 충분하지 않다. 코드 전달선 변경과 운영 UUID 구성·기존 임시6건 해제는 별개다. 실제 운영 활성화·검증은 담당 Claude Code가 수행한다.
+
 ## 9. Webhook
 
 | Path                                       | 발신자                                   | 검증                                                                                                                       |

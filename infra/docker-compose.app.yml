@@ -168,6 +168,7 @@ services:
       # 없었기 때문이다.
       PINVI_RATE_LIMIT_ENABLED: ${PINVI_RATE_LIMIT_ENABLED:-true}
       PINVI_RATE_LIMIT_BACKEND: ${PINVI_RATE_LIMIT_BACKEND:-auto}
+      PINVI_RATE_LIMIT_USER_LIMIT_OVERRIDES: '${PINVI_RATE_LIMIT_USER_LIMIT_OVERRIDES:-{}}'
       PINVI_RATE_LIMIT_AUTH_PER_MINUTE: ${PINVI_RATE_LIMIT_AUTH_PER_MINUTE:-5}
       # user-facing read는 service token 우선, public route만 전용 API key header fallback을 쓴다.
       PINVI_KOR_TRAVEL_MAP_API_BASE_URL: ${PINVI_KOR_TRAVEL_MAP_API_BASE_URL:-http://host.docker.internal:12701}

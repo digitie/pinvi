@@ -1,0 +1,64 @@
+{
+  "ok": true,
+  "fixtureOnly": true,
+  "production_validation": false,
+  "productHttpMocks": false,
+  "tileFixtureOnly": true,
+  "ownedExternalProviderFixture": true,
+  "browser": "156.0.8078.4",
+  "configuredCap": 80,
+  "controlCap": 60,
+  "uDefault": {
+    "passed": 78,
+    "retryAfter": 57
+  },
+  "uFeature": {
+    "passed": 74,
+    "retryAfter": 55
+  },
+  "vDefault": {
+    "passed": 58,
+    "retryAfter": 53
+  },
+  "recoveryWaitMs": 51367,
+  "checks": [
+    "실제 세 계정 로그인·검증된 UUID별 설정",
+    "실제 관리자 API로 로컬 legacy allowed2개 생성",
+    "설정 계정은 두 실제 정책에서60초과 허용 후80상한429·allowed도 우회하지 않음",
+    "실제 UI 검색429와 공개 한도 오류 안내 연결",
+    "비등록 일반 계정 기본60상한·독립 검색 정책 UI 정상",
+    "관리자 실제80상한·카운터·집계·ignored allowed 안내",
+    "실제 관리자 block이 설정 상한·기존 allowed보다 우선",
+    "block 해제 뒤에도 이미 소진한 설정 상한 유지",
+    "실제 다음 fixed window에서 검색200·결과와 오류 안내 복구"
+  ],
+  "scope": "격리 WSL PostGIS·Map·Valkey·Pinvi API·Next.js·Chromium. 제품 HTTP 대체나 dependency override 없이 실제 인증·PostgreSQL 카운터·관리자 override·UI를 검증했다. 외부 검색 제공자와 지도 타일만 소유 fixture다.",
+  "screenshots_inspected": true,
+  "owned_stack_stopped": true,
+  "manager_delivery_pr": "https://github.com/digitie/kor-travel-docker-manager/pull/582",
+  "local_checks": {
+    "api_related": 48,
+    "web_all": 376,
+    "mypy_files": 256,
+    "web_types": true,
+    "web_lint_errors": 0,
+    "existing_web_lint_warnings": 5,
+    "compose_resolved": 3
+  },
+  "limits": [
+    "운영 UUID 구성·기존 allowed6행 변경·배포·prod 검증은 수행하지 않았다. 최종 운영 적용·검증은 Claude Code 담당이다.",
+    "고정 시간창과 기존 fail_open 정책을 유지한다. JWT 비밀키 회전은 UUID 설정을 유지하지만 HMAC counter/override 연결은 바뀐다.",
+    "지도 타일은 빈 로컬 fixture이며 이 범위는 rate limit UI다. 운영 지도 외부 제공자를 검증하지 않았다."
+  ],
+  "source_sha256": {
+    "apps/api/app/core/config.py": "f8ac6f85f9400d8ef842128f6d03757cd0cf51005acbf7f2e483837d5bedcba2",
+    "apps/api/app/middleware/rate_limit.py": "f2058026513c64b57bc87a2238766ff885ff930beaaab88a1fb8a428f763bfca",
+    "apps/api/app/services/admin_rate_limit_abuse.py": "cb20b9e8fdd630b0fd1c7757767d7a933a4e69256ab6753894bac2f74eac48cb",
+    "apps/api/tests/integration/test_admin_abuse_api.py": "59cc89a998f9488ec8060d3da692d0b6e67ab37ef8c15126838945071afe4fbb",
+    "apps/api/tests/unit/test_compose_delivers_declared_settings.py": "1753be48049c87b58dfd4c5a881babbef5b750ba1b05e3e39083bf50e76e3a46",
+    "apps/api/tests/unit/test_rate_limit_user_limits.py": "278e923da653d04ad817eaed36430a8abd3997c9524b42e1ada9ac9225ecd1f8",
+    "apps/web/app/(admin)/admin/abuse/page.tsx": "a0f0ee5248801fbfa4c6ddb9be6104085aecd056d18006d1bd34283ca004aa19",
+    "infra/.env.prod.example": "7c5f01e37165e25b9ac5bd78b92896ac592e866aa30651c3b5674770297fec91",
+    "infra/docker-compose.app.yml": "1a682ede4ba54e650fd62f70d63a814ab1259aef13ed5133ba1190787d170a0d"
+  }
+}

@@ -1,3 +1,17 @@
+## 2026-11-05 — #653 구현·실패 우선/실제 DB 검증
+
+- 초기 설정·상한·Compose 전달19실패/7대조와 PostgreSQL4실패/4대조를 확인했다. canonical UUID→양의 StrictInt 설정은 기본 빈 객체이며 네 사용자 정책의 요청별 유효 limit만 바꾼다.
+- 설정 대상만 blocked를 생성 순서와 무관하게 우선하고 allowed도 counter를 통과한다. 비대상의 최신 활성 override 선택 의미는 유지한다. 관리자 한도·remaining·초과 집계·선택 상태와 ignored allowed 안내도 일치시켰다.
+- 확장 관련48개와 mypy256·웹 타입/lint(기존5경고)를 확인했다. PG의 두 backend 원자성, 동시12요청 중4성공/8거절, revoke 뒤 잔여 상한·revoked 인증 거절, 일반60/로그인5·기타 정책 보존을 포함한다. Compose 실제unset/empty/JSON3경우도 대조했다.
+- 실제 WSL UI9흐름에서80상한 계정의 인증78·feature74추가 성공 후429, 대조 기본60(초기 사용 제외58추가 성공), 실제 검색 오류·관리자80상한과ignored allowed·block/revoke·다음window복구를 확인했다. 상세 증거/화면 확인은 최종 기록에서 정리한다.
+- 운영 Manager 전달선도 별도 소유자 PR로 보완한다. 운영 접근·배포·기존6건 변경은 없으며 실제 UUID 구성과 최종 운영 확인은 Claude Code 담당이다.
+
+## 2026-11-05 — #679 완료·#653 상한 지정형 영구 예외 시작
+
+- PR679를 최종860d5fb 두 독립 리뷰 무차단·전체 CI 후 squash merge했다(1283736). 관련API53·웹376·스키마24·실제 WSL UI8흐름을 통과했다.
+- 최신 #643을 다시 읽고 #673/#675 완료를 반영했다. 남은8개 중 다음은 #653의 UUID 설정 기반 양의 상한이다. 계획은 docs/execplan/issue-653-bounded-user-rate-limits.md다.
+- 운영 임시 allowed6건과 실제 UUID 구성은 여기서 건드리지 않는다. WSL 구현·2인 적대 리뷰·CI·머지 후 다음 범위로 진행하며 최종 운영 확인은 Claude Code가 담당한다.
+
 ## 2026-11-05 — #679 최종 리뷰의 문자열 코드·행 식별 보완
 
 - A는 계약상 유효한 문자열 SKY 코드가 숫자로 남는 P2를, B는 null dataset의 TMP/TEMP 정규화 후 provider 없는 관리자 행 식별 충돌 P2를 발견했다. 각각 실패 우선 회귀로 확인했다.

@@ -18,7 +18,7 @@ import time
 from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
-from typing import Any, Literal, NoReturn, Self, cast
+from typing import Annotated, Any, Literal, NoReturn, Self, cast
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -28,6 +28,7 @@ from pydantic import (
     Field,
     PrivateAttr,
     SecretStr,
+    StrictInt,
     ValidationError,
     field_validator,
     model_validator,
@@ -1008,6 +1009,18 @@ class Settings(BaseSettings):
     pinvi_rate_limit_window_seconds: int = 60
     pinvi_rate_limit_public_per_minute: int = 60
     pinvi_rate_limit_authenticated_per_minute: int = 60
+    # #653: canonical user UUID별 상한. 만료/무제한 우회 없이 네 사용자 정책의 한도를 대체한다.
+    pinvi_rate_limit_user_limit_overrides: dict[str, Annotated[StrictInt, Field(gt=0)]] = Field(
+        default_factory=dict
+    )
+
+    @field_validator("pinvi_rate_limit_user_limit_overrides")
+    @classmethod
+    def _validate_user_rate_limit_keys(cls, value: dict[str, int]) -> dict[str, int]:
+        if any(not _is_canonical_uuid(subject) for subject in value):
+            raise ValueError("PINVI_RATE_LIMIT_USER_LIMIT_OVERRIDES keys must be canonical UUIDs")
+        return value
+
     pinvi_rate_limit_auth_per_minute: int = 5
     pinvi_rate_limit_oauth_per_minute: int = 10
     pinvi_rate_limit_storage_upload_per_minute: int = 30
