@@ -202,6 +202,7 @@ def _summary_from_kor_travel_map(
         marker_color=dto.get("marker_color") or "P-13",
         marker_icon=dto.get("marker_icon") or "marker",
         distance_m=float(distance) if distance is not None else None,
+        geometry=dto.get("geometry"),
     )
 
 
@@ -402,8 +403,17 @@ async def features_in_bounds(
     category: Annotated[str | None, Query()] = None,
     cluster_unit: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=2000)] = 500,
+    include_geometry: Annotated[bool, Query()] = False,
 ) -> Envelope[FeaturesInBoundsResponse]:
     """viewport 내 feature(`items`) + 서버 클러스터(`clusters`). 클러스터링은 kor_travel_map 책임."""
+    if include_geometry and zoom < 14:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": "경로·영역은 줌 14 이상에서 조회합니다.",
+            },
+        )
     bbox_obj = parse_bbox(bbox)
     with _map_kor_travel_map_errors():
         data = await client.features_in_bounds(
@@ -416,6 +426,7 @@ async def features_in_bounds(
             zoom=zoom,
             cluster_unit=cluster_unit,
             max_items=limit,
+            include_geometry=include_geometry,
         )
     labels = await get_category_labels(client)
     items = [
@@ -431,6 +442,7 @@ async def features_in_bounds(
             items=items,
             clusters=clusters,
             cluster_unit=data.get("cluster_unit"),
+            truncated=bool(data.get("truncated", False)),
             zoom=zoom,
             bbox=bbox_obj,
         )

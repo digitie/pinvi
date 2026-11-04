@@ -1,0 +1,34 @@
+# #635 경로·영역 지도 표시
+
+## 범위와 계약
+
+- 최신 #643의 남은 경로·영역 표시를 탐색 지도와 소유자 여행 지도에 연결한다.
+- Map dd0238c의 geometry/truncated HTTP 계약을 보존한다. 원래 coord가 없으면 만들지 않는다.
+- 기본 OFF인 경로/영역 토글과 raw zoom 14 하한을 적용한다. 점 조회와 별도 요청으로 조회한다.
+- 네 종류 선·면, 모든 part와 내부 ring, 기존 팔레트를 유지한다.
+- 공유 지도 showFeatures=false와 숨긴 feature 정책을 유지한다.
+- 장소 추가는 좌표가 있는 기존 경로를 사용한다. 도형 선택은 별도 popup anchor와 상세만 제공한다.
+
+## 구현과 검증 순서
+
+1. API·클라이언트·스키마 geometry 전달과 확대 하한 검증 — e6e1dfb.
+2. 취소/세대/캐시 경계를 가진 공통 hook과 기존 선·면 primitive 연결.
+3. 겹친 layer 클릭당 최상단 하나만 선택, 큰 도형 목록 focus의 확대 하한 유지, popup 제스처 제외.
+4. API/웹 회귀, WSL 실제 Map·Pinvi HTTP와 Chromium WebGL UI 검증.
+5. #664 카탈로그 중 구현 완료된 이슈의 오래된 기대값 갱신. 데이터 의존 분류를 일괄 통과로 바꾸지 않는다.
+6. 독립 리뷰어 2인 검토, 정확한 최종 커밋 CI 성공 후 PR #665 머지.
+
+## 실행 경계
+
+- WSL 전용이며 prod 접근·배포·테스트는 수행하지 않는다. 최종 운영 검증은 Claude Code 담당이다.
+- 실제 Telegram 메시지를 발송하지 않는다.
+- 자격 증명·실제 운영 주소는 커밋하지 않는다.
+
+## WSL 실행 결과
+
+- 웹 전체 333개, 관련 geometry 43개, 타입·lint 통과.
+- 실제 HTTP·worker·WebGL UI 14개 흐름과 renderer 제거 음성 대조 통과.
+- 단일·복수 선/면과 ring은 계약/단위 테스트로 보존하며, DB의 Multi 변형은 실제 API/render에서 확인했다.
+- 최초 viewport 초기화와 transport 상세 전환의 선택 정리, 원래 큰 bounds 이동의 하한을 보완했다.
+- 카탈로그 SRCH-023/024/028은 실제 geometry source/hit/click·이동 완료·상세 HTTP를 검사한다.
+- API 전체2765 통과·12 제외, 공용 스키마23개 통과. 최종 2인 리뷰·최종 SHA CI와 머지는 진행 중이다.

@@ -11,6 +11,14 @@ import type {
   WeatherMarkersInBoundsResponse,
 } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
+import { useFeatureGeometry } from '@/lib/useFeatureGeometry';
+import type { GeometryFeature } from '@/lib/featureGeometry';
+import {
+  FeatureGeometryControls,
+  FeatureGeometryLayers,
+  FeatureGeometryPopup,
+} from '@/components/map/FeatureGeometryLayer';
+
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import { viewportSearchBias } from '@/lib/searchBias';
@@ -296,6 +304,18 @@ export function FeatureMapView({
   // 최소 1회 조회가 끝났는지 — 조회 전에는 "표시할 장소가 없습니다"라고 단언하지 않는다
   // (지도 키 미설정·초기화 실패 시 지도 fallback과 모순되는 문구가 겹쳐 떴다, T-316 리뷰 P2).
   const [loaded, setLoaded] = useState(false);
+  const handleGeometrySelect = useCallback(
+    (feature: GeometryFeature) => {
+      userInteractedRef.current = true;
+      setSelected(null);
+      setSelectedWeatherMarker(null);
+      if (mobileLayout) setDetailFeatureId(feature.feature_id);
+    },
+    [mobileLayout],
+  );
+  const geometry = useFeatureGeometry({ active: true, onSelect: handleGeometrySelect });
+  const { onViewportChange: geometryViewportChange, clearSelection: clearGeometrySelection } =
+    geometry;
 
   const fetchInBounds = useCallback(async (map: MapLibreMap) => {
     const zoom = clampZoom(map.getZoom());
@@ -383,6 +403,7 @@ export function FeatureMapView({
 
   const scheduleFetch = useCallback(
     (map: MapLibreMap) => {
+      geometryViewportChange(map);
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => {
         void fetchInBounds(map);
@@ -390,7 +411,7 @@ export function FeatureMapView({
       }, DEBOUNCE_MS);
       transportViewportChange(map);
     },
-    [fetchInBounds, fetchWeatherMarkers, transportViewportChange],
+    [fetchInBounds, fetchWeatherMarkers, transportViewportChange, geometryViewportChange],
   );
 
   useEffect(() => {
@@ -411,6 +432,7 @@ export function FeatureMapView({
   const handleMapLoad = useCallback(
     (map: MapLibreMap) => {
       mapRef.current = map;
+      geometryViewportChange(map);
       // `VWorldMap`은 moveend/zoomend만 노출한다. 자동 센터링을 취소해야 하는 것은 "사용자가
       // 직접 만졌는가"이므로 시작 이벤트를 직접 바인딩하고, 핸들러가 `originalEvent` 유무로
       // 사용자 제스처와 프로그램 이동을 가른다(`dragstart`만 사용자 전용이다).
@@ -426,7 +448,13 @@ export function FeatureMapView({
         pendingFetchRef.current = map;
       }
     },
-    [fetchInBounds, fetchWeatherMarkers, markUserInteracted, transportViewportChange],
+    [
+      fetchInBounds,
+      fetchWeatherMarkers,
+      markUserInteracted,
+      transportViewportChange,
+      geometryViewportChange,
+    ],
   );
 
   /** 자동 센터링 결정이 끝났음을 알리고 보류된 in-bounds 조회를 연다. */
@@ -447,9 +475,10 @@ export function FeatureMapView({
     (target: TransportDetailTarget) => {
       setSelected(null);
       setSelectedWeatherMarker(null);
+      clearGeometrySelection();
       openTransportDetailRaw(target);
     },
-    [openTransportDetailRaw],
+    [openTransportDetailRaw, clearGeometrySelection],
   );
 
   const handleViewportChange = useCallback(
@@ -499,6 +528,7 @@ export function FeatureMapView({
 
   const handlePointClick = useCallback(
     (point: MapPoint) => {
+      clearGeometrySelection();
       if (point.kind === 'cluster') {
         const map = mapRef.current;
         if (map) flyTo(point.lon, point.lat, Math.min(map.getZoom() + 2, 17));
@@ -513,12 +543,13 @@ export function FeatureMapView({
         setDetailFeatureId(point.featureId);
       }
     },
-    [flyTo, mobileLayout],
+    [flyTo, mobileLayout, clearGeometrySelection],
   );
 
   // 검색 결과(feature/my_poi/address/kakao/naver)로 지도를 이동. feature source면 마커도 선택.
   const handleSearchSelect = useCallback(
     (result: PlaceSearchResult) => {
+      clearGeometrySelection();
       const coord = result.coord;
       if (!coord) return;
       if (result.feature_id != null) {
@@ -547,7 +578,7 @@ export function FeatureMapView({
       }
       flyTo(coord.lon, coord.lat, 15);
     },
-    [flyTo],
+    [flyTo, clearGeometrySelection],
   );
 
   // 사용자가 버튼으로 명시 요청한 경로 — 높은 정확도, 가까운 줌(user-location.md §1 표).
@@ -782,6 +813,7 @@ export function FeatureMapView({
                   {notice}
                 </p>
               )}
+              <FeatureGeometryControls state={geometry} className="mt-1" />
               <TransportLayerControls
                 state={transport}
                 onOpenDetail={openTransportDetail}
@@ -847,6 +879,8 @@ export function FeatureMapView({
               className="h-full w-full"
               unsupportedTileFallback={{ label: 'VWorld tile' }}
             >
+              <FeatureGeometryLayers state={geometry} />
+              <FeatureGeometryPopup state={geometry} onOpenDetail={setDetailFeatureId} />
               <ClusterLayer
                 points={points}
                 radius={48}
@@ -888,6 +922,7 @@ export function FeatureMapView({
                       ariaLabel={weatherPoint.title}
                       simplifyAtZoom={isSelected ? 5 : 20}
                       onClick={() => {
+                        clearGeometrySelection();
                         setSelectedWeatherMarker(weatherPoint);
                         // feature/weather marker 팝업은 동시에 두 개가 뜨면 안 된다(T-368).
                         setSelected(null);
@@ -1084,7 +1119,7 @@ export function FeatureMapView({
       )}
       <FeatureDetailModalController
         featureId={detailFeatureId}
-        fallbackTitle={selected?.title}
+        fallbackTitle={geometry.selection?.feature.name ?? selected?.title}
         onClose={() => setDetailFeatureId(null)}
       />
       <TransportDetailDialog target={transport.detail} onClose={transport.closeDetail} />

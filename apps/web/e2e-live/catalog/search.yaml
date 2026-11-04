@@ -310,28 +310,30 @@
   notes: 'kor-travel-map#1438 — 카테고리 오분류. test.fail.'
 
 - id: SRCH-023
-  title: 등산로 — '대청봉' → 설악산 대청봉 코스(route kind) 검색·상세
+  title: 대청봉 경로 — 근처 point로 이동 후 실제 선 클릭·목록·상세
   priority: P1
   tags: [desktop, search, poi]
   preconditions: [account: test@test.com (user), data: Map 등산로(route kind) loaded for 설악산, env: PinVi renders route kind]
   data_sources: [map:hiking-trail]
-  steps: ["/map → '대청봉' → 이름에 '대청봉' 포함 '장소' 행 → 상세보기"]
-  expected: [행 존재, 상세 -category에 '트레킹'|'둘레길'(soft), 지도에 코스 표시]
+  steps: [근처 point 검색·선택 → route 토글, 대청봉 경로 rendered hit 클릭 → popup, 목록 Enter → 상세]
+  expected: [route kind·선 geometry 보존, 실제 canvas hit와 popup ID 일치, 카메라 이동 완료 후 목록 선택·상세 유지]
   cleanup: [읽기 전용]
-  automation: blocked
-  notes: PinVi `/features/in-bounds`는 place/event/notice/price kind만 적재하고 등산로(route kind)는 지도에 렌더하지 않는다(coordinator 2026-11-03). 검색에 route 행이 섞여 나와도 선택 후 지도·상세(GenericDetailCard)가 계약 밖이라 UI 단언이 불가. PinVi가 route kind를 렌더하면 SRCH-025 패턴으로 스크립트화.
+  automation: scripted
+  spec: specs/search/search-geometry.live.spec.ts#SRCH-023
+  notes: "#635 구현. 근처 point 검색 fixture를 환경변수로 명시한다. 원래 nullable coord와 geometry kind를 유지하며 토글·목록·상세를 검증한다. WSL 실제 WebGL 검증과 운영 실행을 구분한다."
 
 - id: SRCH-024
-  title: 등산로 — '북한산' 코스 다수 노출
+  title: 북한산 경로 — 근처 point 범위의 복수 선·토글 OFF
   priority: P3
   tags: [desktop, search]
   preconditions: [account: test@test.com (user), env: PinVi renders route kind]
   data_sources: [map:hiking-trail, map:park]
-  steps: ["/map → '북한산'"]
-  expected: ["'장소' 행 ≥2, 이름에 '북한산' 포함"]
+  steps: [근처 point 검색·선택 → route 토글, 북한산 route 둘 이상과 실제 canvas hit 확인, 토글 OFF]
+  expected: [북한산 route 둘 이상·모든 part 보존, 실제 선 클릭 popup, OFF 후 source·layer·목록·선택 제거]
   cleanup: [읽기 전용]
-  automation: blocked
-  notes: SRCH-023과 같은 사유(route kind 미렌더).
+  automation: scripted
+  spec: specs/search/search-geometry.live.spec.ts#SRCH-024
+  notes: "#635 구현. 근처 point 검색 fixture를 환경변수로 명시한다. 원래 nullable coord와 geometry kind를 유지하며 토글·목록·상세를 검증한다. WSL 실제 WebGL 검증과 운영 실행을 구분한다."
 
 - id: SRCH-025
   title: 국가유산 — '소수서원' → 라벨 국가유산/사적
@@ -372,16 +374,17 @@
   notes: 'kor-travel-map#1439 해소(Map ad75031a, 2026-11-04 운영 live 통과) — test.fail 제거.'
 
 - id: SRCH-028
-  title: 국립공원 — '설악산국립공원'(area kind) → 라벨 국립공원/자연경관
+  title: 설악산 영역 — 실제 면 클릭·큰 bounds 선택 후 상세 유지
   priority: P2
   tags: [desktop, search, poi]
   preconditions: [account: test@test.com (user), env: PinVi renders area kind]
   data_sources: [map:park]
-  steps: ["/map → '설악산국립공원' → 첫 '장소' 행 → 상세보기"]
-  expected: [-category에 '국립공원'|'자연경관'(soft), 지도에 공원 경계 표시]
+  steps: [근처 point 검색·선택 → area 토글, 설악산 area 실제 canvas hit 클릭, 목록 선택 → 카메라 이동 완료 → 상세]
+  expected: [area kind·면 geometry 보존, 원래 fit zoom14 미만인 큰 fixture, 이동 완료 후 zoom14 이상·동일 popup ID·상세 유지]
   cleanup: [읽기 전용]
-  automation: blocked
-  notes: 국립공원 경계는 Map `area` kind — PinVi in-bounds가 적재하지 않고 지도에 렌더하지 않는다(coordinator 2026-11-03). 국립공원 '장소' point(탐방안내소 등)는 SRCH-025 패턴으로 커버 가능하나 공원 자체는 아님.
+  automation: scripted
+  spec: specs/search/search-geometry.live.spec.ts#SRCH-028
+  notes: "#635 구현. 근처 point 검색 fixture를 환경변수로 명시한다. 원래 nullable coord와 geometry kind를 유지하며 토글·목록·상세를 검증한다. WSL 실제 WebGL 검증과 운영 실행을 구분한다."
 
 - id: SRCH-029
   title: 수목원 — '국립수목원' → 라벨 수목원

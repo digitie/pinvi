@@ -1,5 +1,14 @@
 ## 2026-11-04 (claude) — #643 수정 묶음(#654~#662) 리뷰 보완·live e2e 카탈로그 갱신
 
+## 2026-11-04 — #635 실제 선·면 UI와 카탈로그 보강
+
+- 최신 main8196e21을 통합했다. Map ad75031의 기존 계약·provenance를 보존하고 M05 pair를 재생성했다.
+- 격리 WSL의 실제 Map/PostGIS→Pinvi HTTP→Chromium WebGL 14개 흐름을 통과했다. 배경 raster만 고정했고 제품 HTTP를 mock하지 않았다. 선·면·구멍 hit·null coord·목록 키보드·큰 bounds·공유 차단·390px 모바일 상세를 확인했다.
+- 추적된 catalogue helper를 직접 실행했다. 목록 DOM을 남기고 native layer를 지우면 canvas 단언이 실패한다. 상세는 fallback 제목 대신 정확한 HTTP200·ID/kind·렌더된 본문을 검증한다.
+- 웹 전체333·타입·lint(기존 경고5개)를 통과했다. API 전체2765 통과·12 제외와 공용 스키마23개를 확인했다. 최종 두 리뷰·CI·머지는 별도다.
+- 운영 검증은 하지 않았다. 안전한 증거는 docs/reviews/pinvi-635-geometry-local-live.json에 둔다.
+
+
 - Codex 가 머지한 #654~#662 를 두 독립 적대 리뷰(보안·권한·데이터 / 정확성·UX·계약)로 다시 보고, 직접 확인한 지적만
   한 PR 로 고쳤다. 여행 PATCH 는 잠금 뒤 휴지통 재확인·기간 이동으로 생기는 일자 날짜 중복 422·한국어 날짜 안내,
   휴지통 목록은 bucket 무관, POI 생성·수정·정렬은 잠금 뒤 여행 삭제 재확인, Map admin 경로 id 는 한 세그먼트로 고정,
@@ -14,11 +23,43 @@
 
 ## 2026-11-04 — Map #1447 병합·소비자 provenance 동기화
 
+## 2026-11-04 — #635 지도 UI와 비동기·선택 경계 보완
+
+- 탐색·소유자 여행 지도에 공통 경로·영역 토글/레이어/목록/상세 popup을 연결했다. 공유 지도에서는 비활성 정책을 유지한다.
+- 늦은 응답·같은 범위 캐시·OFF/낮은 zoom/category/숨김 경계를 검증했다. 원래 coord와 모든 part/ring을 보존한다.
+- 초기 독립 리뷰의 겹침 클릭 중복 선택, 큰 bounds focus 후 popup 소실, popup 롱프레스의 장소 추가 문제를 수정하고 회귀 테스트를 추가했다.
+- WSL 웹 관련 43개와 타입·lint를 통과했다(lint 기존 경고 5개). 실제 HTTP/WebGL UI와 최종 2인 리뷰·CI는 아직 진행 전이다.
+
 - Map #1447을 7ee94fb로 일반 병합했다. exact b778c097의 독립 리뷰 두 명과 최종 CI 전체를 확인했다. CI 단위/lint 3,643개·API 1,600개·Dagster 920개, PG 1,622개를 통과했다.
 - 세 OpenAPI profile은 검토된 바이트와 동일하다. Pinvi의 service/admin 실행 revision을 실제 Map 병합 커밋으로 맞췄고 capability generation과 M05 기존 attestation/체크섬은 보존했다.
 - 소비자 계약 318개 통과·조건부 9개 skip, 독립 설치 wheel의 packaged JSON·SHA·runtime revision·capability 대조를 통과했다.
 - 이 커밋은 provenance/테스트 핀/문서만 바꾸며 제품은 679ca7a와 같다. 그 제품의 전체 WSL API 2,740개·웹 282개·실제 지연 UI 10항목 및 두 독립 리뷰를 완료했다.
 - 최종 Docker 설치 검증·두 exact HEAD 리뷰·CI를 마친 뒤 #662를 병합하고 최신 #643/#1444를 갱신한다. 운영 접속·배포·검증은 하지 않는다.
+
+
+- Map #1447을 7ee94fb로 일반 병합했다. exact b778c097의 독립 리뷰 두 명과 최종 CI 전체를 확인했다. CI 단위/lint 3,643개·API 1,600개·Dagster 920개, PG 1,622개를 통과했다.
+- 세 OpenAPI profile은 검토된 바이트와 동일하다. Pinvi의 service/admin 실행 revision을 실제 Map 병합 커밋으로 맞췄고 capability generation과 M05 기존 attestation/체크섬은 보존했다.
+- 소비자 계약 318개 통과·조건부 9개 skip, 독립 설치 wheel의 packaged JSON·SHA·runtime revision·capability 대조를 통과했다.
+- 이 커밋은 provenance/테스트 핀/문서만 바꾸며 제품은 679ca7a와 같다. 그 제품의 전체 WSL API 2,740개·웹 282개·실제 지연 UI 10항목 및 두 독립 리뷰를 완료했다.
+- 최종 Docker 설치 검증·두 exact HEAD 리뷰·CI를 마친 뒤 #662를 병합하고 최신 #643/#1444를 갱신한다. 운영 접속·배포·검증은 하지 않는다.
+
+
+
+## 2026-11-04 — #635 geometry HTTP 계약 연결
+- 수정 전 API6개·웹6개 회귀 실패를 확인했다. geometry와 truncated가 제거되던 투영을 보완하고 include_geometry를 opt-in 전달한다.
+- route/area의 nullable coord는 그대로 유지하고 네 도형·다각형 내부 구멍을 보존한다. Zod는 유한 WGS84 좌표·선 길이·닫힌 ring을 검사하며 잘못된 도형은 예외 누출 없이 거부한다.
+- 낮은 zoom의 geometry 요청은 상류 I/O 전에 422다. 관련 API104개·웹14개와 schema/api-client 타입 검사를 통과했다.
+- 검토·병합된 Map dd0238c의 3 OpenAPI와 provenance를 동기화했다. service/user bytes는 불변이고 admin은 검토된 이벤트 payload 필드만 추가됨을 대조했다. M05 envelope/조건부 키를 유지하며 생성물을 재생성했다.
+- 지도 레이어·선택·토글·오래된 응답 경계와 새 카탈로그 정합을 이어간다. 운영 접근·배포·테스트 없음.
+
+
+## 2026-11-04 — #635 경로·영역 지도 레이어 초안
+- #643 본문·댓글과 Map #1444를 다시 읽었다. Map #1448(dd0238c) 및 SDK #20이 머지됐으며 Map 묶음은 완료됐다.
+- 최신 main7479bbe의 새 live E2E 카탈로그 #664(346건)를 기준으로 작업한다. 완료된 #643 항목의 카탈로그 기대값도 실제 동작 근거에 맞춰 확인한다.
+- 탐색·소유자 여행 지도에 경로/영역 토글을 추가하고 기존 vworld-map-web 선·면 컴포넌트로 LineString/MultiLineString/Polygon/MultiPolygon과 내부 구멍을 보존한다. 기존 팔레트·마커 톤은 유지한다.
+- 원래 map zoom14 이상에서 별도 in-bounds geometry 조회를 사용한다. nullable coord는 유지하며 popup 클릭 위치와 장소 좌표를 구분한다. 숨긴 feature·공유 지도 정책·오래된 비동기 응답 경계를 검증한다.
+- Map dd0238c의 OpenAPI/provenance를 동기화하고 geometry/truncated 계약을 HTTP→API→Zod→UI까지 전달한다. 검색·단건 상세에 없는 geometry 파라미터를 만들지 않는다.
+- 초안 PR 먼저 작성하고 구현 단위로 원격 커밋한다. WSL 실제 API/UI·관련 회귀·전문 적대 리뷰 2인·최종 CI 후 일반 머지한다. prod 접근·배포·검증은 하지 않는다.
 
 ## 2026-11-04 — 상세 카드 최종 WSL 전체 검사·실제 클릭 시간 검증
 

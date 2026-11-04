@@ -484,6 +484,7 @@ class KorTravelMapClient:
         zoom: int | None = None,
         cluster_unit: str | None = None,
         max_items: int | None = None,
+        include_geometry: bool = False,
     ) -> dict[str, Any]:
         """viewport feature + 서버 클러스터. data = {clusters, items}.
 
@@ -496,6 +497,8 @@ class KorTravelMapClient:
             "max_lon": max_lon,
             "max_lat": max_lat,
         }
+        if include_geometry:
+            params["include_geometry"] = True
         if kinds:
             params["kind"] = list(kinds)
         if category is not None:

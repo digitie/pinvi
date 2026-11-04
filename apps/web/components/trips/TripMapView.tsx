@@ -23,6 +23,14 @@ import {
 import { ApiError, featureApi } from '@pinvi/api-client';
 import type { FeatureSummary } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
+import { useFeatureGeometry } from '@/lib/useFeatureGeometry';
+import type { GeometryFeature } from '@/lib/featureGeometry';
+import {
+  FeatureGeometryControls,
+  FeatureGeometryLayers,
+  FeatureGeometryPopup,
+} from '@/components/map/FeatureGeometryLayer';
+
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import {
@@ -196,6 +204,27 @@ export function TripMapView({
   const lastFitPointsRef = useRef<TripMapPoint[] | null>(null);
   const lastFitWithPanelRef = useRef(false);
   const { onViewportChange: transportViewportChange } = transport;
+  const handleGeometrySelect = useCallback(
+    (feature: GeometryFeature) => {
+      userMovedRef.current = true;
+      setSelectedFeature(null);
+      if (mobileLayout) setDetailFeatureId(feature.feature_id);
+    },
+    [mobileLayout],
+  );
+  const geometry = useFeatureGeometry({
+    active: showFeatures,
+    hiddenFeatureIds,
+    onSelect: handleGeometrySelect,
+  });
+  const { onViewportChange: geometryViewportChange, clearSelection: clearGeometrySelection } =
+    geometry;
+  const [previousGeometryPoiId, setPreviousGeometryPoiId] = useState(selectedPoiId);
+  if (previousGeometryPoiId !== selectedPoiId) {
+    setPreviousGeometryPoiId(selectedPoiId);
+    clearGeometrySelection();
+  }
+
   const surfaceClassName =
     chrome === 'flush'
       ? 'relative h-full min-h-[420px] overflow-hidden bg-canvas'
@@ -337,21 +366,29 @@ export function TripMapView({
   const handleLoad = useCallback(
     (map: MapLibreMap) => {
       mapRef.current = map;
+      geometryViewportChange(map);
       fitToPoints(map);
       scheduleFeatureFetch(map);
       transportViewportChange(map);
       reportViewport(map);
     },
-    [fitToPoints, scheduleFeatureFetch, transportViewportChange, reportViewport],
+    [
+      fitToPoints,
+      scheduleFeatureFetch,
+      transportViewportChange,
+      reportViewport,
+      geometryViewportChange,
+    ],
   );
 
   const handleViewportChange = useCallback(
     (map: MapLibreMap) => {
+      geometryViewportChange(map);
       scheduleFeatureFetch(map);
       transportViewportChange(map);
       reportViewport(map);
     },
-    [scheduleFeatureFetch, transportViewportChange, reportViewport],
+    [scheduleFeatureFetch, transportViewportChange, reportViewport, geometryViewportChange],
   );
 
   // POI 목록이 바뀌면 경계 재조정. 교통 패널은 상태 조회 뒤에 나타나므로 보이게 되면 한 번 더
@@ -531,17 +568,29 @@ export function TripMapView({
             data-map-overlay=""
           >
             <div className="pointer-events-auto">{overlayTopLeft}</div>
+            {showFeatures && (
+              <div className="pointer-events-auto mt-2 w-64 max-w-[80%]">
+                <FeatureGeometryControls state={geometry} />
+              </div>
+            )}
             {transport.visible && (
               <div className="pointer-events-auto mt-2 w-64 max-w-[70%]">{transportControls}</div>
             )}
           </div>
         ) : (
-          transport.visible && (
+          (showFeatures || transport.visible) && (
             <div
               className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]"
               data-map-overlay=""
             >
-              <div className="pointer-events-auto">{transportControls}</div>
+              {showFeatures && (
+                <div className="pointer-events-auto">
+                  <FeatureGeometryControls state={geometry} />
+                </div>
+              )}
+              {transport.visible && (
+                <div className="pointer-events-auto mt-2">{transportControls}</div>
+              )}
             </div>
           )
         )}
@@ -579,6 +628,8 @@ export function TripMapView({
           className="h-full min-h-[360px]"
           unsupportedTileFallback={{ label: 'VWorld tile' }}
         >
+          <FeatureGeometryLayers state={geometry} />
+          <FeatureGeometryPopup state={geometry} onOpenDetail={setDetailFeatureId} />
           <ClusterLayer
             points={markerPoints}
             radius={28}
@@ -603,7 +654,10 @@ export function TripMapView({
                   selected={marker.point.poiId === selectedPoiId}
                   highlighted={marker.point.featureResolutionState === 'missing'}
                   ariaLabel={marker.point.title}
-                  onClick={() => onSelectPoi?.(marker.point.poiId)}
+                  onClick={() => {
+                    clearGeometrySelection();
+                    onSelectPoi?.(marker.point.poiId);
+                  }}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     onMarkerContextMenu?.(marker.point.poiId);
@@ -631,6 +685,7 @@ export function TripMapView({
                     title={marker.feature.name}
                     ariaLabel={marker.feature.name}
                     onClick={() => {
+                      clearGeometrySelection();
                       setSelectedFeature(marker.feature);
                       // 모바일: weather 외 feature는 상세 시트를 바로 연다(ADR-056).
                       if (mobileLayout && marker.feature.kind !== 'weather') {
@@ -653,7 +708,7 @@ export function TripMapView({
               }}
             />
           )}
-          {selected && (
+          {selected && !geometry.selection && (
             <Popup lngLat={[selected.lon, selected.lat]} maxWidth="240px" closeButton={false}>
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-ink">{selected.title}</p>
@@ -755,7 +810,7 @@ export function TripMapView({
       </div>
       <FeatureDetailModalController
         featureId={detailFeatureId}
-        fallbackTitle={selectedFeature?.name}
+        fallbackTitle={geometry.selection?.feature.name ?? selectedFeature?.name}
         onClose={() => setDetailFeatureId(null)}
       />
       <TransportDetailDialog target={transport.detail} onClose={transport.closeDetail} />

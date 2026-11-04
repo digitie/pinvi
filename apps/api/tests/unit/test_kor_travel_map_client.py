@@ -963,3 +963,28 @@ def test_deploy_contract_wires_map_user_credentials_to_api_only() -> None:
         ].rsplit("\n", maxsplit=2)
         assert "X-Kor-Travel-Map-Api-Key" in "\n".join(public_key_context)
         assert "query" not in "\n".join(public_key_context).lower()
+
+
+async def test_in_bounds_threads_geometry_opt_in() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"data": {"items": [], "clusters": [], "truncated": True}})
+
+    client = _client(handler)
+    try:
+        data = await client.features_in_bounds(
+            min_lon=127,
+            min_lat=37.5,
+            max_lon=127.1,
+            max_lat=37.6,
+            zoom=14,
+            kinds=["route", "area"],
+            include_geometry=True,
+        )
+    finally:
+        await client.aclose()
+    assert seen[0].url.params["include_geometry"] == "true"
+    assert seen[0].url.params.get_list("kind") == ["route", "area"]
+    assert data["truncated"] is True

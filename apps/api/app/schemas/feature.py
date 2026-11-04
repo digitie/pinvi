@@ -92,6 +92,7 @@ class FeatureSummary(BaseModel):
     # 3축은 admin 표면 전용) 공개 계약에서도 제거했다(T-VN-42). 재도입 방지는
     # `tests/unit/test_feature_schemas.py`의 필드 집합 등호 게이트가 맡는다.
     distance_m: float | None = None  # nearby 응답에만
+    geometry: dict[str, Any] | None = None  # include_geometry로 받은 route/area GeoJSON
 
 
 class FeatureCluster(BaseModel):
@@ -112,6 +113,7 @@ class FeaturesInBoundsResponse(BaseModel):
     items: list[FeatureSummary] = Field(default_factory=list)
     clusters: list[FeatureCluster] = Field(default_factory=list)
     cluster_unit: str | None = None  # sido | sigungu | eupmyeondong | individual
+    truncated: bool = False  # Map max_items에서 잘린 결과임을 보존한다.
     zoom: int
     bbox: BBox
 

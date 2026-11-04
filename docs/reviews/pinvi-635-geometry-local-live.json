@@ -1,0 +1,52 @@
+{
+  "ok": true,
+  "fixtureOnly": true,
+  "production_validation": false,
+  "tileFixtureOnly": true,
+  "httpProductMocks": false,
+  "browser": "156.0.8078.4",
+  "checks": [
+    "기본 OFF 및 확대 하한 아래에서 geometry HTTP 0건",
+    "실제 Map PostGIS→Pinvi HTTP nullable coord·멀티 part·내부 ring 보존",
+    "실제 worker/WebGL line 2개·fill/outline 4개 렌더",
+    "추적된 catalogue helper의 실제 canvas hit·정확한 popup ID",
+    "구멍 내부는 해당 면의 실제 rendered hit에서 제외",
+    "겹친 선/면 실제 캔버스 클릭당 최상단 하나의 popup",
+    "coord 없는 도형 상세 열기·장소 추가 버튼 없음",
+    "큰 도형 키보드 목록 선택 후 zoom14 유지·상세 접근",
+    "raw zoom13.5 축소 즉시 도형·선택 제거",
+    "토글 OFF 실제 source/layer 정리",
+    "음성 대조: DOM 목록을 남기고 renderer layer를 제거하면 canvas 단언 실패",
+    "소유자 여행 지도 실제 선/면과 popup 우클릭의 장소 추가 제외",
+    "익명 공유 지도 토글·도형·인증 feature HTTP 0건",
+    "390px 모바일 실제 선 클릭→자동 상세 sheet HTTP200·kind·본문"
+  ],
+  "pinvi_base_revision": "f0ea99eeafbe9ca2fc82c73aa35549fd40368d6d",
+  "map_source_revision": "dd0238c3f988b03dc02a2deb13e06e5258e85313",
+  "source_sha256": {
+    "apps/web/components/map/FeatureGeometryLayer.tsx": "6354626ab051e33d6bccc16d395a25f7ab0a7f59168a434bec00ab434ca3a993",
+    "apps/web/components/map/FeatureMapView.tsx": "e9995299f238fc1dc0bf737b2b9a3ca5f8ac7735556d4bea98b2331655d936ec",
+    "apps/web/components/map/vworldPrimitives.tsx": "27846402d60825e271308fe050951415935d95f64f31a1dc29c4aaed24003dd2",
+    "apps/web/components/trips/TripMapView.tsx": "e88fdb72080affd40c63366568df684649565a5b82e7970fe8211b6838f269d7",
+    "apps/web/lib/featureGeometry.ts": "9c7c2cef366bed9a51c2ce29d2091e3e90d77f57a9062b949178b920504f56bd",
+    "apps/web/lib/useFeatureGeometry.ts": "a197cbd6089b4ff79a49e399335ac1e9db35b5d0df85f7b6163960e69d755747",
+    "apps/web/e2e-live/helpers/geometry.ts": "827e584b08fd209896a9b728652ade6a70c13c327de366e8477e7777d7e30675",
+    "apps/web/e2e-live/specs/search/search-geometry.live.spec.ts": "07c5e521bb679651b87f88dbc5abdb7236ea4f20e715f820be370d09a901eb39"
+  },
+  "source_note": "기록 시점의 미커밋 회귀 보완 포함. 최종 리뷰는 별도 최종 SHA 기준이다.",
+  "renderer_negative_control": true,
+  "mobile_viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "wsl_tests": {
+    "api_passed": 2765,
+    "api_skipped": 12,
+    "web_passed": 333,
+    "schemas_passed": 23,
+    "web_typecheck": true,
+    "api_client_typecheck": true,
+    "lint_errors": 0,
+    "existing_lint_warnings": 5
+  }
+}

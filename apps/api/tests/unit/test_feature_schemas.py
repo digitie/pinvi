@@ -272,6 +272,7 @@ class TestPublicStatusFieldRemoved:
             "marker_color",
             "marker_icon",
             "distance_m",
+            "geometry",
         }
 
     def test_detail_field_set_is_exact(self) -> None:

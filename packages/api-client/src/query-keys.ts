@@ -27,8 +27,13 @@ export const queryKeys = {
     detail: (planId: string) => ['notice-plans', 'detail', planId] as const,
   },
   features: {
-    inBounds: (params: { bounds: string; zoom: number; kinds: string[] }) =>
-      ['features', 'in-bounds', params] as const,
+    inBounds: (params: {
+      bounds: string;
+      zoom: number;
+      kinds: string[];
+      category?: string;
+      includeGeometry?: boolean;
+    }) => ['features', 'in-bounds', params] as const,
     detail: (featureId: string) => ['features', 'detail', featureId] as const,
     weather: (featureId: string) => ['features', 'weather', featureId] as const,
   },
