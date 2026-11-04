@@ -96,7 +96,15 @@ describe('AdminFeatureWeatherValuesResponseSchema', () => {
     }
   });
 
-  it('still rejects an Admin weather metric missing dataset_key — both sources always have it', () => {
+  it('Map weather가 제공하지 않는 원천 dataset_key는 null로 보존한다', () => {
+    const parsed = AdminFeatureWeatherValuesResponseSchema.parse({
+      ...response,
+      items: [{ ...response.items[0], dataset_key: null }],
+    });
+    expect(parsed.items[0]!.dataset_key).toBeNull();
+  });
+
+  it('still requires explicit dataset_key, including null when the source does not provide it', () => {
     const metric = { ...response.items[0] };
     delete (metric as Partial<typeof metric>).dataset_key;
 

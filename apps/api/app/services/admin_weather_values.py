@@ -1,25 +1,15 @@
-"""Admin weather-values — `kor-travel-weather` 소스 조립 (T-364/P5, ADR-068).
+"""관리자 weather-values — 사용자 카드와 같은 설정의 소스에서 정본 사실을 조립한다.
 
-`GET /admin/features/{id}/weather-values`의 새 경로. T-362(`weather_card.py`)와 같은
-`resolve_and_collect_deduped_values` pipeline을 공유하되, 투영 대상이 공개
-`WeatherMetric`이 아니라 provenance를 보존하는 `AdminFeatureWeatherMetric`이다.
+ADR-077의 Map 모드이면 관측·예보를 Map 상태로, 특보만 weather 직접으로 읽는다.
+직접 모드는 기존 weather 경로를 유지하며 장애 시 다른 소스로 숨은 fallback하지 않는다.
+공통 collect_weather_values가 예산·해석·dedupe를 소유하고 관리자 투영은 provenance를 보존한다.
 
-**신규 제약(ADR-068 결정 2, 문서화됨)**: `AdminFeatureWeatherMetric`의
-`provider_dataset_id`(int)·`dataset_display_name`(str)은 `kor-travel-map`의 정수
-dataset registry에서 왔고 `kor-travel-weather`에는 대응물이 없다 — 두 필드는 항상
-`None`이다(값을 지어내지 않는다). `dataset_key`는 `WeatherValueOut`에도 있어 그대로
-채운다. `known_at`도 `WeatherValueOut.known_at`(nullable)을 그대로 옮긴다.
+Map에 원천 dataset_key가 없으므로 null이다. 직접 weather 값은 실제 key를 보존한다.
+정수 provider_dataset_id·dataset_display_name도 대응물이 없으면 null이며 known_at은 원문이다.
+is_stale는 실제 선택한 사실의 지연 신호다. false만으로 최신 확인을 뜻하지 않는다.
 
-**`asof` 지원(ADR-068 결정 2 두 번째 예외 재검토)**: 구 `kor_travel_map_admin` 경로는
-`asof` query 자체를 선언하지 않아 항상 422였다(Map Admin 계약이 현재값만 주므로).
-`kor-travel-weather` 기반 transport는 T-362와 동일하게 시점 조회가 가능해, T-362와
-같은 축소 규칙(`weather_card._asof_window` — 대상 서비스 보존 지평 밖은 `no_data`)을
-그대로 적용해 **허용한다**(T-365에서 구 경로·422 거부를 완전히 제거했다).
-
-T-362(단건 사용자 경로)와 마찬가지로 이 endpoint는 POI 문맥이 없는 bare `feature_id`
-하나만 받으므로 좌표를 알 방법이 `kor_travel_map_admin.get_feature_detail`뿐이다 —
-T-363이 도입한 "feature batch와 완전 분리" 원칙은 POI가 있는 trip view에만 성립하고
-여기에는 적용되지 않는다(fallback할 Pinvi 소유 snapshot이 없다).
+좌표는 비공개 feature도 조회할 수 있는 admin 상세에서 얻는다. asof 축소는 사용자
+단건 카드와 같고, 빈 결과는 조회 실패와 무자료를 구별하지 못하므로 UI는 판정 불가로 안내한다.
 """
 
 from __future__ import annotations
@@ -28,18 +18,19 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.kor_travel_weather import KorTravelWeatherClient, WeatherValueOut
+from app.clients.kor_travel_map_weather import KorTravelMapWeatherClient
+from app.clients.kor_travel_weather import KorTravelWeatherClient
 from app.schemas.admin import AdminFeatureWeatherMetric, AdminFeatureWeatherValuesResponse
-from app.services.weather_card import resolve_and_collect_deduped_values
-from app.services.weather_metrics import to_weather_metric
+from app.services.weather_card import collect_weather_values
+from app.services.weather_metrics import WeatherFact, to_weather_metric
 
 
-def _to_admin_weather_metric(value: WeatherValueOut) -> AdminFeatureWeatherMetric:
+def _to_admin_weather_metric(value: WeatherFact) -> AdminFeatureWeatherMetric:
     base = to_weather_metric(value)
     return AdminFeatureWeatherMetric(
         **base.model_dump(),
         provider_dataset_id=None,
-        dataset_key=value.dataset_key,
+        dataset_key=getattr(value, "dataset_key", None),
         dataset_display_name=None,
         known_at=value.known_at,
     )
@@ -52,11 +43,20 @@ async def build_admin_feature_weather_values(
     lat: float,
     lon: float,
     asof: datetime | None,
-    weather_client: KorTravelWeatherClient,
+    weather_client: KorTravelWeatherClient | None,
+    map_weather_client: KorTravelMapWeatherClient | None = None,
+    map_budget_seconds: float = 5.0,
 ) -> AdminFeatureWeatherValuesResponse:
     """`feature_id`의 좌표로 `kor-travel-weather` 사실을 모아 admin weather-values로 투영."""
-    deduped, latest_known = await resolve_and_collect_deduped_values(
-        db, feature_id=feature_id, lat=lat, lon=lon, asof=asof, weather_client=weather_client
+    deduped, latest_known = await collect_weather_values(
+        db,
+        feature_id=feature_id,
+        lat=lat,
+        lon=lon,
+        asof=asof,
+        weather_client=weather_client,
+        map_weather_client=map_weather_client,
+        map_budget_seconds=map_budget_seconds,
     )
     if not deduped:
         return AdminFeatureWeatherValuesResponse(feature_id=feature_id, asof=asof)
@@ -68,7 +68,7 @@ async def build_admin_feature_weather_values(
         feature_id=feature_id,
         asof=asof,
         latest_at=latest_known,
-        is_stale=False,
+        is_stale=any(value.source_stale for value in deduped),
         source_styles=source_styles,
         items=items,
     )

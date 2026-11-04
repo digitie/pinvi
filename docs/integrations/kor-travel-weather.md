@@ -23,7 +23,7 @@ Pinvi 날씨 데이터 소스를 `kor-travel-map`에서 **`kor-travel-weather`**
 > 부분 구현 상태다(T-374 회로차단은 `feat/track2-weather-odroid`).
 > **Map 경유 읽기(2026-10-24, Pinvi ADR-077)**: kor-travel-map이 weather를 Valkey 상태로 다시 내기 시작했다(Map
 > ADR-114 W7 `/v1/service/weather/*` — ADR-105의 PG weather feature와 다른 표면). `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`(기본 off)를
-> 켜면 카드·trip·지도 marker의 관측·예보를 Map에서 읽고, 특보·Admin weather-values만 이 서비스를 직접 부른다 — §9.
+> 켜면 카드·trip·지도 marker의 관측·예보를 Map에서 읽고, 특보만 이 서비스를 직접 부른다. #675 보완으로 Admin weather-values도 같은 설정을 따른다 — §9.
 
 ---
 
@@ -1022,7 +1022,7 @@ PinVi #599가 Map `e0131ec1` service OpenAPI를 vendor). 플래그(기본 `false
 | 단건 카드 `GET /features/{id}/weather` | `latest` + `forecast` × source 위치 | Map `POST /locations/batch`(`current`·`forecasts`, `asof` 창) + 특보 `/markers` |
 | trip view weather | `/markers` + `forecast` × source 위치 | Map `POST /locations/batch`(`current`·`forecasts`·지난 일자·오늘이면 `daily_summaries`) + 특보 `/markers` |
 | 지도 marker `GET /weather/markers-in-bounds` | `/nearby`(center+radius) | Map `GET /locations`(bbox ∩ 국내 범위, `include_current=true`) |
-| Admin weather-values | 직접 | **직접 그대로**(provenance 필드 `dataset_key`가 Map에 없다) |
+| Admin weather-values | 직접 | **Map 관측·예보 + 직접 특보**(#675, Map에 없는 원천 dataset_key는 null) |
 | 특보 | `/markers`·`latest`의 alert | **직접 그대로** — Map에 특보 데이터셋이 없다(W7 범위 밖) |
 
 ### 9.1 해석 — 직접 `/resolve`와 같은 위치 집합 + 부분별 source (`app/services/weather_map_resolver.py`)
@@ -1137,3 +1137,12 @@ Map의 freshness.stale(SLA 초과)와 source_status=stale(원천의 지연된 �
 운영 후속 담당자는 Map #1446 수정이 실제 모든 요청 처리 인스턴스에 반영된 뒤 Pinvi 소비자를 배포해야 한다. OpenAPI bytes만으로 런타임 코드 반영을 증명할 수 없다. 이 작업에서는 운영 접속·배포·검증을 하지 않으며 최종 운영 확인은 사용자 지시에 따라 Claude Code 담당이다.
 
 Map #1446 병합본은 a69d188d8c78ea573afc6e862f8ec9e0aa423ec0이다. 소비자 service provenance와 예제의 expected source revision은 이 버전으로 결박한다. admin/service/user wire bytes와 capability generation은 그대로이며 과거 receipt·pair source 선언을 새 실행 증거로 바꾸지 않는다. 최종 운영 확인에서는 기존 Map weather 플래그와 Valkey의 과거 요약 적재 상태를 함께 확인해야 한다.
+
+
+## #673/#675 보완 — 요약·관리자 소스·신선도
+
+날짜 요약은 기온·최저/최고·하늘·강수 종류/확률/양을 앞세운 최대8개 대표 사실을 보여준다. 같은 물리량·표시 단위에서 관측은 가장 최신, 예보는 날짜 안 가장 이른 유효 시각을 선택하고, 같은 시각은 서버 provider 우선순위를 따른다. 평균·범위를 계산하지 않는다. 체감온도는 기온이 아니며 1시간 강수량은 기간 강수량과 합치지 않는다. deg_c/deg_f/ug/m3는 표시 기호만 바꾸고 단위 누락을 추측하거나 WEATHER_CODE를 SKY로 변환하지 않는다. 실제로 선택한 사실의 출처만 표시하고 카드 전체 stale 경고는 보존한다. 항목·출처는 모바일에서 줄바꿈한다.
+
+관리자는 사용자와 같은 플래그의 소스를 공통 collect_weather_values로 읽는다. 기존 admin/operator 권한과 비공개 feature의 admin 상세 좌표를 유지하며 숨은 direct fallback은 없다. Map의 원천 dataset_key/정수 registry 정보는 없으므로 null이고 known_at은 실제 값을 보존한다. stale는 선택된 사실의 source_stale에서만 얻는다. 로딩은 확인 중, 실패·빈 결과·최신 메타 부재는 판정 불가, 값과 메타가 있고 false이면 지연 신호 없음으로 표시한다. false만으로 fresh를 단정하지 않는다. 기존 단건 collector는 장애와 무자료를 빈 결과로 축약하므로 관리자도 이를 거짓으로 구별하지 않는다.
+
+직접 경로 latest/forecast는 TaskGroup으로 실패·호출자 취소 때 형제 작업의 cleanup까지 회수한다. source 선택·예산은 관리자와 사용자에 공통이며 좌표 상세 조회 시간까지 포함하는 endpoint 전체 예산은 아니다. WSL 검증만 수행하며 최종 prod 확인은 Claude Code가 담당한다.

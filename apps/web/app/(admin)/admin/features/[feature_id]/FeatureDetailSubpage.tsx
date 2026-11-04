@@ -117,7 +117,7 @@ const sourceColumns: AdminTableColumn<AdminFeatureDetailSource>[] = [
       <div className="min-w-0">
         <div className="break-all font-mono text-xs">{row.source_record_key}</div>
         <div className="text-xs text-muted">
-          {row.provider} / {row.dataset_key}
+          {row.provider} / {row.dataset_key ?? '—'}
         </div>
       </div>
     ),
@@ -243,7 +243,7 @@ const weatherColumns: AdminTableColumn<AdminFeatureWeatherMetric>[] = [
         <div>{row.dataset_display_name ?? '—'}</div>
         <div className="font-mono text-muted">
           {row.provider_dataset_id != null ? `#${row.provider_dataset_id} · ` : ''}
-          {row.dataset_key}
+          {row.dataset_key ?? '—'}
         </div>
       </div>
     ),
@@ -354,7 +354,15 @@ function WeatherValuesTab({ featureId }: { featureId: string }) {
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
         <span>asof {formatDateTime(data?.asof)}</span>
         <span>latest {formatDateTime(data?.latest_at)}</span>
-        <span>{data?.is_stale ? 'stale' : 'fresh'}</span>
+        <span data-testid="admin-feature-weather-freshness">
+          {query.isLoading
+            ? '확인 중'
+            : query.isError || !data?.items.length || !data.latest_at
+              ? '판정 불가'
+              : data.is_stale
+                ? '오래된 정보'
+                : '지연 신호 없음'}
+        </span>
         <span>{data?.source_styles.join(', ') || 'source style 없음'}</span>
         <button
           type="button"

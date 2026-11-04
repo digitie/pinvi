@@ -152,7 +152,8 @@ ADR-073 (`kor-travel-weather` 보존 요구 15일 → 7일, T-367 가드 임계 
 **ADR-076** (지도 교통 정보 레이어는 kor-travel-map `/v1/service/transport/*`로만 읽고 레이어별로 강등 — 플래그
 `PINVI_KOR_TRAVEL_MAP_TRANSPORT_ENABLED` 기본 off, transport `feature_id`는 POI feature UUID와 다른 이름공간).
 **ADR-077** (weather 관측·예보는 Map `/v1/service/weather/*`로 — 플래그 `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`
-기본 off, 특보·Admin weather-values는 kor-travel-weather 직접, 공개 응답 셰입 불변).
+기본 off, 관리자도 같은 Map 관측·예보를 읽고 특보만 kor-travel-weather 직접, 공개 사용자 응답 셰입 불변).
+ADR-077의 Map weather 플래그가 켜지면 관리자 weather-values도 사용자와 같은 Map 관측·예보를 읽고 특보만 직접 조회한다(#675). Map에 없는 원천 dataset_key는 null이며 false 지연 신호를 fresh로 단정하지 않는다.
 다음 신규 = ADR-078. **TDR(Trip Detail Rewrite)** 마스터 계획 = `docs/execplan/trip-detail-rewrite.md`.
 2026-06-06 정합성 감사:
 `docs/audit/2026-06-06-doc-impl-audit.md`.

@@ -10,6 +10,7 @@ admin feature 상세(`get_feature_detail`)로 좌표를 얻고
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -431,3 +432,105 @@ async def test_feature_not_found_maps_404(
         _clear()
 
     assert resp.status_code == 404, resp.text
+
+
+@pytest.mark.parametrize("stale", [False, True])
+async def test_admin_map_mode_uses_same_source_without_direct_client(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+    verified_user: tuple[str, str],
+    monkeypatch: Any,
+    stale: bool,
+) -> None:
+    import uuid
+
+    import httpx
+
+    from app.clients.kor_travel_map import KorTravelMapClient, get_optional_kor_travel_map_client
+    from app.core.config import settings
+    from app.models.user import User
+    from tests import weather_map_fixtures as fx
+
+    async with session_factory() as db:
+        user = await db.get(User, uuid.UUID(verified_user[0]))
+        assert user is not None
+        user.roles = ["user", "admin"]
+        await db.commit()
+    monkeypatch.setattr(settings, "pinvi_kor_travel_map_weather_enabled", True)
+    paths: list[str] = []
+    bundle = fx.kma_bundle()
+    bundle["current"]["freshness"]["stale"] = stale
+    for part in bundle["forecasts"].values():
+        if part and part.get("freshness"):
+            part["freshness"]["stale"] = stale
+
+    def handle(req: httpx.Request) -> httpx.Response:
+        paths.append(req.url.path)
+        assert req.headers.get("X-Kor-Travel-Map-Service-Token") == "fixture-only"
+        if req.url.path.endswith("/nearest"):
+            return httpx.Response(200, json=fx.bundle_body(bundle))
+        if req.url.path.endswith("/locations"):
+            return httpx.Response(200, json=fx.list_body([fx.location()]))
+        if req.url.path.endswith("/locations/batch"):
+            return httpx.Response(200, json=fx.batch_body([bundle]))
+        raise AssertionError(req.url.path)
+
+    admin = _FakeAdminClient()
+    _override(admin, None)
+    async with httpx.AsyncClient(
+        base_url="http://map.test", transport=httpx.MockTransport(handle)
+    ) as transport:
+        map_client = KorTravelMapClient(transport, service_token="fixture-only", max_attempts=1)
+        app.dependency_overrides[get_optional_kor_travel_map_client] = lambda: map_client
+        try:
+            resp = await client.get(
+                "/admin/features/private-feature/weather-values",
+                cookies=auth_cookies(verified_user[0]),
+            )
+        finally:
+            _clear()
+            app.dependency_overrides.pop(get_optional_kor_travel_map_client, None)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["items"]
+    assert data["is_stale"] is stale
+    assert data["latest_at"] is not None
+    assert all(item["dataset_key"] is None for item in data["items"])
+    assert all(item["provider_dataset_id"] is None for item in data["items"])
+    assert all(item["known_at"] is not None for item in data["items"])
+    assert admin.calls == {"detail": "private-feature"}
+    assert "/v1/service/weather/locations/batch" in paths
+
+
+async def test_admin_direct_preserves_selected_source_stale(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+    verified_user: tuple[str, str],
+    monkeypatch: Any,
+) -> None:
+    import uuid
+
+    from app.core.config import settings
+    from app.models.user import User
+
+    async with session_factory() as db:
+        user = await db.get(User, uuid.UUID(verified_user[0]))
+        assert user is not None
+        user.roles = ["user", "admin"]
+        await db.commit()
+    monkeypatch.setattr(settings, "pinvi_kor_travel_map_weather_enabled", False)
+    now = datetime.now(UTC)
+    value = _weather_value(location_id="loc-1", metric_key="TEMP", value_number=12, target_at=now)
+    weather = _FakeWeatherClient(values_by_location={"loc-1": (replace(value, source_stale=True),)})
+    _override(_FakeAdminClient(), weather)
+    try:
+        resp = await client.get(
+            "/admin/features/f-stale/weather-values", cookies=auth_cookies(verified_user[0])
+        )
+    finally:
+        _clear()
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["data"]["is_stale"] is True
+    assert resp.json()["data"]["items"][0]["dataset_key"] == "kma_short_forecast"

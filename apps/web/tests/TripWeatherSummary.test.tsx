@@ -175,9 +175,230 @@ describe('TripWeatherSummary', () => {
 it('오래된 정보는 기온 한 값이 아닌 날씨 카드 전체 경고로 표시한다', () => {
   const cards = weatherCards();
   cards[CARD_KEY].is_stale = true;
-  render(
-    <TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />,
-  );
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
   expect(screen.getByText('오래된 정보 포함')).toBeVisible();
   expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('24℃');
+});
+
+it('중기 요약은 두 제공자의 체감온도보다 실제 기온·하늘·강수 지표를 우선한다', () => {
+  const cards = weatherCards();
+  const metric = (key: string, value: number, provider = 'open_meteo', unit = 'deg_c') => ({
+    metric_key: key,
+    metric_name: null,
+    forecast_style: 'mid',
+    valid_at: '2026-07-30T09:00:00+09:00',
+    provider,
+    value_number: value,
+    unit,
+  });
+  cards[CARD_KEY].metrics = [
+    metric('FEELS_LIKE', 0.3, 'openweathermap'),
+    metric('FEELS_LIKE', -5.4),
+    metric('TMP', 12, 'python-kma-api'),
+    metric('TMN', 8, 'python-kma-api'),
+    metric('TMX', 15, 'python-kma-api'),
+    metric('SKY', 3, 'python-kma-api', 'code'),
+    metric('POP', 40, 'python-kma-api', '%'),
+  ];
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
+  const summary = screen.getByTestId('trip-weather-summary');
+  expect(summary).toHaveTextContent('기온 12°C');
+  expect(summary).toHaveTextContent('최저 8°C');
+  expect(summary).toHaveTextContent('최고 15°C');
+  expect(summary).toHaveTextContent('하늘');
+  expect(summary).toHaveTextContent('강수확률 40%');
+  expect(summary).not.toHaveTextContent('FEELS_LIKE');
+  expect(summary).not.toHaveTextContent('deg_c');
+});
+
+it('체감온도만 있는 원천도 정직한 라벨·단위로 표시하고 실제 기온을 지어내지 않는다', () => {
+  const cards = weatherCards();
+  cards[CARD_KEY].metrics = [
+    {
+      metric_key: 'FEELS_LIKE',
+      metric_name: null,
+      forecast_style: 'mid',
+      valid_at: '2026-07-30T09:00:00+09:00',
+      provider: 'open_meteo',
+      value_number: -5.4,
+      unit: 'deg_c',
+    },
+  ];
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
+  const summary = screen.getByTestId('trip-weather-summary');
+  expect(summary).toHaveTextContent('체감온도 -5.4°C');
+  expect(summary).not.toHaveTextContent('기온');
+  expect(summary).not.toHaveTextContent('FEELS_LIKE');
+});
+
+it('입력 행 순서가 바뀌어도 핵심 지표와 대표 provider 선택은 같다', () => {
+  const cards = weatherCards();
+  cards[CARD_KEY].metrics = [
+    {
+      metric_key: 'FEELS_LIKE',
+      forecast_style: 'mid',
+      valid_at: '2026-07-30T09:00:00+09:00',
+      value_number: -5,
+      unit: 'deg_c',
+      provider: 'open_meteo',
+    },
+    {
+      metric_key: 'TMP',
+      forecast_style: 'mid',
+      valid_at: '2026-07-30T09:00:00+09:00',
+      value_number: 99,
+      unit: 'deg_c',
+      provider: 'open_meteo',
+    },
+    {
+      metric_key: 'TMP',
+      forecast_style: 'mid',
+      valid_at: '2026-07-30T09:00:00+09:00',
+      value_number: 12,
+      unit: 'deg_c',
+      provider: 'python-kma-api',
+    },
+    {
+      metric_key: 'POP',
+      forecast_style: 'mid',
+      valid_at: '2026-07-30T09:00:00+09:00',
+      value_number: 40,
+      unit: '%',
+      provider: 'python-kma-api',
+    },
+  ];
+  const view = render(
+    <TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />,
+  );
+  const first = screen.getAllByTestId('weather-summary-metric').map((el) => el.textContent);
+  expect(first).toEqual(['기온 12°C', '강수확률 40%', '체감온도 -5°C']);
+  const reversed = {
+    [CARD_KEY]: { ...cards[CARD_KEY], metrics: [...cards[CARD_KEY].metrics].reverse() },
+  };
+  view.rerender(
+    <TripWeatherSummary weather={foundWeather()} weatherCards={reversed} date="2026-07-30" />,
+  );
+  expect(screen.getAllByTestId('weather-summary-metric').map((el) => el.textContent)).toEqual(
+    first,
+  );
+});
+
+it('관측은 최신·예보는 가장 이른 대표 시각을 고르며 평균이나 범위를 지어내지 않는다', () => {
+  const cards = weatherCards();
+  const metric = (style: string, hour: string, value: number) => ({
+    metric_key: style === 'observed' ? 'T1H' : 'TMP',
+    forecast_style: style,
+    valid_at: '2026-07-30T' + hour + ':00:00+09:00',
+    value_number: value,
+    unit: 'deg_c',
+  });
+  cards[CARD_KEY].metrics = [
+    metric('observed', '09', 1),
+    metric('observed', '12', 2),
+    metric('mid', '12', 4),
+    metric('mid', '09', 3),
+  ];
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
+  expect(screen.getAllByTestId('weather-summary-metric').map((el) => el.textContent)).toEqual([
+    '기온 2°C',
+    '기온 3°C',
+  ]);
+});
+
+it('서로 다른 단위·시간 누적 강수와 0·빈 설명을 손실 없이 표시한다', () => {
+  const cards = weatherCards();
+  const metric = (key: string, value: number, unit: string | null) => ({
+    metric_key: key,
+    forecast_style: 'short',
+    valid_at: '2026-07-30T09:00:00+09:00',
+    value_number: value,
+    value_text: '',
+    unit,
+  });
+  cards[CARD_KEY].metrics = [
+    metric('TMP', 0, 'deg_c'),
+    metric('TMP', 32, 'deg_f'),
+    metric('RN1', 1, 'mm'),
+    metric('PCP', 2, 'mm'),
+    metric('POP', 0, null),
+    metric('WEATHER_CODE', 800, 'code'),
+    metric('SKY', 3, 'code'),
+  ];
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
+  const summary = screen.getByTestId('trip-weather-summary');
+  expect(summary).toHaveTextContent('기온 0°C');
+  expect(summary).toHaveTextContent('기온 32°F');
+  expect(summary).toHaveTextContent('1시간 강수량 1mm');
+  expect(summary).toHaveTextContent('강수량 2mm');
+  expect(summary).toHaveTextContent('강수확률 0');
+  expect(summary).not.toHaveTextContent('강수확률 0%');
+  expect(summary).toHaveTextContent('날씨 코드 800');
+  expect(summary).toHaveTextContent('하늘 3');
+});
+
+it('미세먼지는 관측·예보가 섞여도 입력 순서와 무관하게 관측을 먼저 고른다', () => {
+  const cards = weatherCards();
+  const metrics = [
+    {
+      metric_key: 'PM10',
+      forecast_style: 'observed',
+      valid_at: '2026-07-30T09:00:00+09:00',
+      value_number: 10,
+      unit: 'ug/m3',
+      provider: 'python-airkorea-api',
+    },
+    {
+      metric_key: 'PM10',
+      forecast_style: 'short',
+      valid_at: '2026-07-30T18:00:00+09:00',
+      value_number: 90,
+      unit: 'ug/m3',
+      provider: 'python-airkorea-api',
+    },
+  ];
+  cards[CARD_KEY].metrics = metrics;
+  const view = render(
+    <TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />,
+  );
+  expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('미세 10μg/m³');
+  view.rerender(
+    <TripWeatherSummary
+      weather={foundWeather()}
+      weatherCards={{ [CARD_KEY]: { ...cards[CARD_KEY], metrics: [...metrics].reverse() } }}
+      date="2026-07-30"
+    />,
+  );
+  expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('미세 10μg/m³');
+  expect(screen.getByTestId('trip-weather-summary')).not.toHaveTextContent('90μg/m³');
+});
+
+it('표시 기호가 없는 code·index·단위 미확인 사실은 서로 병합하지 않는다', () => {
+  const cards = weatherCards();
+  cards[CARD_KEY].metrics = ['code', 'index', null].map((unit, i) => ({
+    metric_key: 'WEATHER_CODE',
+    forecast_style: 'mid',
+    valid_at: '2026-07-30T09:00:00+09:00',
+    value_number: i + 1,
+    unit,
+  }));
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
+  expect(screen.getAllByTestId('weather-summary-metric')).toHaveLength(3);
+});
+
+it.each([0, 2])('이름 없는 현재 RN1도 %smm 실제값을 표시한다', (value) => {
+  const cards = weatherCards();
+  cards[CARD_KEY].metrics = [
+    {
+      metric_key: 'RN1',
+      metric_name: null,
+      forecast_style: 'observed',
+      valid_at: '2026-07-30T09:00:00+09:00',
+      value_number: value,
+      unit: 'mm',
+    },
+  ];
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
+  expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent(
+    '1시간 강수량 ' + value + 'mm',
+  );
 });

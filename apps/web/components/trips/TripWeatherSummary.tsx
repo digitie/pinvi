@@ -6,6 +6,15 @@ import type { TripWeatherCard, TripWeatherResolution, WeatherMetric } from '@pin
 import { providerLabel } from '@/lib/weatherProviderLabels';
 
 const WEATHER_LABELS: Record<string, string> = {
+  TEMP: '기온',
+  T3H: '기온',
+  FEELS_LIKE: '체감온도',
+  HUMIDITY: '습도',
+  WIND_SPEED: '바람',
+  PRECIP_PROB: '강수확률',
+  PRECIP: '강수량',
+  CLOUD_COVER: '운량',
+  WEATHER_CODE: '날씨 코드',
   T1H: '기온',
   TMP: '기온',
   TMN: '최저',
@@ -14,6 +23,7 @@ const WEATHER_LABELS: Record<string, string> = {
   PTY: '강수',
   POP: '강수확률',
   PCP: '강수량',
+  RN1: '1시간 강수량',
   REH: '습도',
   WSD: '바람',
   PM10: '미세',
@@ -24,7 +34,7 @@ const CURRENT_STYLE_RE = /observed|nowcast|current/i;
 const FORECAST_STYLE_RE = /ultra|short|mid|forecast/i;
 const DUST_RE = /pm10|pm25|미세|초미세|dust|air.?quality|cai|khai/i;
 const WEATHER_RE =
-  /temp|기온|T1H|TMP|TMN|TMX|sky|하늘|pty|강수|pop|pcp|reh|습도|wsd|바람|weather|날씨/i;
+  /temp|기온|T1H|TMP|TMN|TMX|sky|하늘|pty|강수|pop|pcp|reh|습도|wsd|바람|weather|날씨|FEELS_LIKE|HUMIDITY|WIND_SPEED|PRECIP|CLOUD_COVER/i;
 const SEOUL_DATE_FORMATTER = new Intl.DateTimeFormat('en', {
   timeZone: 'Asia/Seoul',
   year: 'numeric',
@@ -60,20 +70,105 @@ function metricHaystack(metric: WeatherMetric): string {
 
 function metricLabel(metric: WeatherMetric): string {
   const key = metric.metric_key.toUpperCase();
-  return metric.metric_name ?? WEATHER_LABELS[key] ?? metric.metric_key;
+  return metric.metric_name?.trim() || WEATHER_LABELS[key] || '기타 날씨';
 }
 
 function formatNumber(value: number): string {
   return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
 }
 
+function displayUnit(unit: string | null | undefined): string {
+  if (unit === 'deg_c') return '°C';
+  if (unit === 'deg_f') return '°F';
+  if (unit === 'ug/m3') return 'μg/m³';
+  if (unit === 'code' || unit === 'index') return '';
+  return unit ?? '';
+}
+
+// 같은 물리량의 alias만 묶는다. 체감온도는 실제 기온과 다르고 강수량/확률도 별개다.
+const SUMMARY_ALIAS: Record<string, string> = {
+  T1H: 'TEMP',
+  TMP: 'TEMP',
+  T3H: 'TEMP',
+  PRECIP_PROB: 'POP',
+  PRECIP: 'PCP',
+  HUMIDITY: 'REH',
+  WIND_SPEED: 'WSD',
+};
+const SUMMARY_ORDER = [
+  'TEMP',
+  'TMN',
+  'TMX',
+  'SKY',
+  'PTY',
+  'POP',
+  'PCP',
+  'RN1',
+  'FEELS_LIKE',
+  'CLOUD_COVER',
+  'REH',
+  'WSD',
+  'PM10',
+  'PM25',
+];
+const PROVIDER_ORDER = [
+  'python-kma-api',
+  'python-airkorea-api',
+  'python-khoa-api',
+  'python-krforest-api',
+  'python-krex-api',
+  'openweathermap',
+  'weatherapi',
+  'open_meteo',
+  'wttr_in',
+];
+function rank(order: string[], value: string): number {
+  const index = order.indexOf(value);
+  return index < 0 ? order.length : index;
+}
+function metricInstant(metric: WeatherMetric): number {
+  return Date.parse(
+    metric.effective_at ?? metric.valid_at ?? metric.observed_at ?? metric.valid_from ?? '',
+  );
+}
+function summaryKey(metric: WeatherMetric): string {
+  const key = metric.metric_key.toUpperCase();
+  return SUMMARY_ALIAS[key] ?? key;
+}
+function canonicalUnit(unit: string | null | undefined): string | null {
+  if (unit === 'deg_c' || unit === '°C' || unit === '℃') return 'deg_c';
+  if (unit === 'deg_f' || unit === '°F') return 'deg_f';
+  if (unit === 'ug/m3' || unit === 'μg/m³') return 'ug/m3';
+  return unit ?? null;
+}
+function isWeatherMetric(metric: WeatherMetric): boolean {
+  return (
+    Object.hasOwn(WEATHER_LABELS, metric.metric_key.toUpperCase()) ||
+    WEATHER_RE.test(metricHaystack(metric))
+  );
+}
+function representativeOrder(a: WeatherMetric, b: WeatherMetric): number {
+  // 날짜 안의 대표 시각: 관측은 최신, 예보는 가장 이른 유효 시각. 평균/범위로 합치지 않는다.
+  const aCurrent = CURRENT_STYLE_RE.test(a.forecast_style);
+  const bCurrent = CURRENT_STYLE_RE.test(b.forecast_style);
+  if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
+  const direction = aCurrent ? -1 : 1;
+  return (
+    (metricInstant(a) - metricInstant(b)) * direction ||
+    rank(PROVIDER_ORDER, a.provider ?? '') - rank(PROVIDER_ORDER, b.provider ?? '') ||
+    a.forecast_style.localeCompare(b.forecast_style) ||
+    a.metric_key.localeCompare(b.metric_key) ||
+    (a.value_text ?? String(a.value_number)).localeCompare(b.value_text ?? String(b.value_number))
+  );
+}
+
 function formatMetric(metric: WeatherMetric): string | null {
   const value =
-    metric.value_text ??
+    metric.value_text?.trim() ||
     (metric.value_number != null
-      ? `${formatNumber(metric.value_number)}${metric.unit ? metric.unit : ''}`
-      : null) ??
-    metric.severity ??
+      ? `${formatNumber(metric.value_number)}${displayUnit(metric.unit)}`
+      : null) ||
+    metric.severity ||
     null;
 
   if (!value) return null;
@@ -88,10 +183,21 @@ interface MetricGroup {
 }
 
 function toGroup(metrics: WeatherMetric[]): MetricGroup {
-  const shown = metrics
-    .map((metric) => ({ metric, text: formatMetric(metric) }))
-    .filter((entry): entry is { metric: WeatherMetric; text: string } => entry.text != null)
-    .slice(0, 2);
+  const representatives = new Map<string, WeatherMetric>();
+  for (const metric of [...metrics].sort(representativeOrder)) {
+    // 다른 단위는 변환·병합하지 않는다. 각 단위의 대표 사실을 따로 유지한다.
+    const key = JSON.stringify([summaryKey(metric), canonicalUnit(metric.unit)]);
+    if (!representatives.has(key) && formatMetric(metric) != null) representatives.set(key, metric);
+  }
+  const shown = [...representatives.values()]
+    .sort(
+      (a, b) =>
+        rank(SUMMARY_ORDER, summaryKey(a)) - rank(SUMMARY_ORDER, summaryKey(b)) ||
+        summaryKey(a).localeCompare(summaryKey(b)) ||
+        (canonicalUnit(a.unit) ?? '').localeCompare(canonicalUnit(b.unit) ?? ''),
+    )
+    .map((metric) => ({ metric, text: formatMetric(metric)! }))
+    .slice(0, 8);
   return {
     items: shown.map((entry) => entry.text),
     providers: Array.from(
@@ -152,13 +258,12 @@ function pickMetrics(metrics: WeatherMetric[], date: string) {
   const dust = matched.filter((metric) => DUST_RE.test(metricHaystack(metric)));
   const nonDust = matched.filter((metric) => !DUST_RE.test(metricHaystack(metric)));
   const current = nonDust.filter(
-    (metric) =>
-      CURRENT_STYLE_RE.test(metric.forecast_style) && WEATHER_RE.test(metricHaystack(metric)),
+    (metric) => CURRENT_STYLE_RE.test(metric.forecast_style) && isWeatherMetric(metric),
   );
   const forecast = nonDust.filter(
     (metric) =>
       !CURRENT_STYLE_RE.test(metric.forecast_style) &&
-      (FORECAST_STYLE_RE.test(metric.forecast_style) || WEATHER_RE.test(metricHaystack(metric))),
+      (FORECAST_STYLE_RE.test(metric.forecast_style) || isWeatherMetric(metric)),
   );
 
   return {
@@ -246,14 +351,20 @@ export function TripWeatherSummary({
           return (
             <span
               key={group.key}
-              className="inline-flex max-w-full items-center gap-1 rounded-sm bg-canvas px-2 py-1 text-xs text-body"
+              className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-sm bg-canvas px-2 py-1 text-xs text-body"
             >
               <Icon className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
               <span className="shrink-0 font-semibold text-ink">{group.label}</span>
-              <span className="min-w-0 truncate">{group.items.join(' · ')}</span>
+              <span className="flex min-w-0 flex-wrap gap-x-2 gap-y-1">
+                {group.items.map((item, index) => (
+                  <span key={index} data-testid="weather-summary-metric">
+                    {item}
+                  </span>
+                ))}
+              </span>
               {group.providers.length > 0 && (
                 <span
-                  className="shrink-0 text-muted"
+                  className="min-w-0 break-words text-muted"
                   title={`출처: ${group.providers.join(', ')}`}
                 >
                   ({group.providers.join(', ')})
