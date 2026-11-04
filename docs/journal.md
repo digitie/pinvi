@@ -1,3 +1,10 @@
+## 2026-11-05 — #667 완료·#668 Map 명령 조정 착수
+
+- #667/PR681을 최종35f84c8 두 독립 리뷰 무차단·CI15성공 뒤 squash cb3b2f6로 병합했다. #643 체크를 갱신했다. 운영 접근/배포/시험은 없다.
+- 다음#668의 owner는 Map draft1451이다. 같은 actor/op/key의 기록 없음은 영구 중단으로 확인해야 늦은 요청을 막을 수 있다.
+- Pinvi는 typed 조정/감사·원래 actor/입력/attempt 보존·해제 후 새 키·admin UI를 추가한다. 정보 없는 과거actor와v1 PATCH는 추측해 해제하지 않는다.
+- 계획은 docs/execplan/issue-668-map-command-reconciliation.md. 로컬 paired UI 뒤 Map 먼저, exact merge vendor/소비자 검증 뒤 Pinvi를 머지한다. 운영 최종 적용/시험은 Claude Code 담당이다.
+
 ## 2026-11-05 — #667 최신main 통합 검증 완료
 
 - 통합 SHA72e5375(base18aba13)을 두 독립 전문 리뷰어가 검토했고 잔여P0/P1/P2가 없다. 외부#682 제품 변경과#667 변경을 모두 보존했다.
