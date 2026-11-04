@@ -59,6 +59,7 @@ def _path_segment(value: str) -> str:
         raise KorTravelMapBadRequest("Map 경로 id가 올바르지 않습니다.", code="VALIDATION_ERROR")
     return quote(value, safe="")
 
+
 OpsScope = Literal["ops:read", "ops:cancel"]
 
 _OPS_OBSERVABILITY_READ_PATHS = frozenset(
