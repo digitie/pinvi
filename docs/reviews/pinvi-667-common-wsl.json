@@ -4,26 +4,29 @@
   "live_ui_tested": false,
   "retention_policy_pending": true,
   "local_checks": {
-    "api_related": 72,
+    "api_related": 85,
     "web_all": 376,
     "mypy_files": 256,
     "web_types": true,
     "lint_errors": 0,
-    "existing_lint_warnings": 5
+    "existing_lint_warnings": 5,
+    "api_elapsed_seconds": 79.71
   },
   "negative_controls": [
     "기존 삭제 여행/POI/직접 첨부의 사용자 총량 및 직접 첨부 여행 총량4실패",
     "수정된 일자 fixture에서 실제 CASCADE 과금 소실2실패",
-    "복사/합치기 quota 초과2실패"
+    "복사/합치기 quota 초과2실패",
+    "관리자 일자/POI 부분 복사의 trip/user 총량4실패·허용2대조",
+    "권한 사전 확인 뒤 POI/일자 이동 Event2회귀: 기존201허용을 재현하고 기존 오류 계약422로 거부"
   ],
   "source_sha256": {
     "apps/api/app/api/v1/trips.py": "6f9b2129800d5fcb9bda8e350da35475dc2d340c3e27d0a397f1843aecf308ac",
-    "apps/api/app/services/admin_trip_operations.py": "3c45628b5cc99a0029d02529aaf867b55f6dcba745d340b17b1a0866c5491d0b",
+    "apps/api/app/services/admin_trip_operations.py": "5fab04f04b1cdcb842abd9839f23d8ac5d4f65fbd53547dd45267e591745e408",
     "apps/api/app/services/storage_policy.py": "a15927aa7308697fdc574d28318defdbec78034c126866a0d31f94c0bc1cfb68",
-    "apps/api/app/services/trip.py": "518e1f3572bbd39fe2af9325edfe24a9fc60d2ed4df85f5679005c2002fd0a78",
+    "apps/api/app/services/trip.py": "aa047a1708220bea455877bcbce6e54b3d46d531e000f33a69dff867f85c7c25",
     "apps/api/tests/integration/test_days_trash.py": "43918f124018603c6a5662fa2e71c7c315a28da67d81382a0a086b0f177b1d14",
     "apps/api/tests/integration/test_poi_preservation.py": "44aa928862c23a5477d5df27a548ae17ab02c8e8644a202405a84f4e442c165c",
-    "apps/api/tests/integration/test_retained_attachment_quota.py": "af60494548793e69b83be9cf17c620505ec4aae3da8e74d966c8e1da79d5acb4",
+    "apps/api/tests/integration/test_retained_attachment_quota.py": "964a7db7f2361129049a8b6412075e82264de2fe9325baea8973cbef88289230",
     "apps/web/app/(app)/files/page.tsx": "785c273c1ad66c3558607a0b9c3e98b6bceda1320c3cde753447a35355785571",
     "apps/web/components/trips/TripTrash.tsx": "ccbf725a6db96b8cf4fe926f7c43f7a7c5b7b0778a6aadc455cafc7bc660e793"
   }

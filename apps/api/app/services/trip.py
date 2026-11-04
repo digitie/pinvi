@@ -834,6 +834,35 @@ async def create_attachment(
     quota_trip_id: uuid.UUID | None = None,
     payload: dict[str, Any],
 ) -> CuratedPlanAttachment:
+    # 라우트의 사전 검증 뒤 부모가 이동/삭제될 수 있다. 과금 대상 잠금 뒤 다시 검증한다.
+    if quota_trip_id is None:
+        raise TripAttachmentStorageRefError("첨부 용량을 계산할 여행계획이 필요합니다.")
+    locked_trip = await db.scalar(
+        select(Trip).where(Trip.trip_id == quota_trip_id, Trip.deleted_at.is_(None))
+        .with_for_update().execution_options(populate_existing=True)
+    )
+    if locked_trip is None or (trip_id is not None and trip_id != quota_trip_id):
+        raise TripAttachmentStorageRefError("첨부 대상이 변경되었습니다. 다시 불러와 주세요.")
+    try:
+        await get_trip_for_user_write(db, trip_id=quota_trip_id, user_id=uploaded_by_user_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        raise TripAttachmentStorageRefError("첨부 대상이 변경되었습니다. 다시 불러와 주세요.") from exc
+    if trip_poi_id is not None:
+        parent = await db.scalar(
+            select(TripDayPoi).where(
+                TripDayPoi.attachment_id == trip_poi_id,
+                TripDayPoi.trip_id == quota_trip_id,
+                TripDayPoi.deleted_at.is_(None),
+            ).with_for_update().execution_options(populate_existing=True)
+        )
+        if parent is None:
+            raise TripAttachmentStorageRefError("첨부 대상이 변경되었습니다. 다시 불러와 주세요.")
+    elif trip_day_index is not None:
+        day = await db.scalar(select(TripDay).where(
+            TripDay.trip_id == quota_trip_id, TripDay.day_index == trip_day_index
+        ).with_for_update())
+        if day is None:
+            raise TripAttachmentStorageRefError("첨부 대상이 변경되었습니다. 다시 불러와 주세요.")
     # 대상(trip 또는 POI)당 첨부 개수 상한 — 남용/저장소 비대 방지(T-105).
     limit = settings.pinvi_max_attachments_per_target
     if (
@@ -858,8 +887,6 @@ async def create_attachment(
     )
     if uploader is None:
         raise TripAttachmentStorageRefError("업로드 사용자를 찾을 수 없습니다.")
-    if quota_trip_id is None:
-        raise TripAttachmentStorageRefError("첨부 용량을 계산할 여행계획이 필요합니다.")
     try:
         await assert_attachment_quota(
             db,
