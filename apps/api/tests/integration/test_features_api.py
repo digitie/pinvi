@@ -395,8 +395,8 @@ async def test_geometry_cannot_be_requested_below_detail_zoom(
     [
         # 전국 bbox — zoom은 호출자가 고르는 값이라 14를 보내도 서버가 범위를 직접 막아야 한다.
         "bbox=124,33,132,39&zoom=14&kinds=route&include_geometry=true",
-        "bbox=127,37.5,127.6,37.6&zoom=14&kinds=route&include_geometry=true",
-        "bbox=127,37.5,127.1,38.1&zoom=14&kinds=area&include_geometry=true",
+        "bbox=127,37.5,128.1,37.6&zoom=14&kinds=route&include_geometry=true",
+        "bbox=127,37.5,127.1,38.6&zoom=14&kinds=area&include_geometry=true",
     ],
 )
 async def test_geometry_request_is_bounded_server_side(

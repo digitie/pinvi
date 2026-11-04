@@ -102,9 +102,10 @@ FEATURE_SUGGESTION_DAILY_LIMIT = 20
 DECIMAL_6 = Decimal("0.000001")
 # ADR-056: price 마커도 기본 뷰포트에 포함(주유소/휴게소 가격 등 일반 표시).
 _DEFAULT_INBOUNDS_KINDS: list[FeatureKind] = ["place", "event", "notice", "price"]
-# #635 도형 요청 상한. 웹은 줌 14 이상 한 화면(5K 화면도 0.3° 미만)과 limit 100을 보낸다.
+# #635 도형 요청 상한. 웹은 줌 14 이상 한 화면과 limit 100을 보낸다
+# (4K 화면·기울임 60°에서도 0.5° 안팎이라 1.0°는 여유가 있다).
 # Map은 도형을 bbox로 자르지 않으므로 범위와 건수를 서버에서 직접 묶는다.
-GEOMETRY_MAX_SPAN_DEG = 0.5
+GEOMETRY_MAX_SPAN_DEG = 1.0
 GEOMETRY_MAX_ITEMS = 200
 _DEFAULT_NEARBY_KINDS: list[FeatureKind] = ["place"]
 

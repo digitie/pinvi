@@ -20,11 +20,11 @@ const BUKHAN_ANCHOR = '북한산성';
 async function showGeometry(page: Page, kind: 'route' | 'area', anchor: string) {
   await gotoExplore(page);
   // coord가 없는 도형을 가짜 point로 바꾸지 않는다. 별도 근처 point로 이동한다.
-  // 같은 이름의 경로 행(중심 좌표가 있다)이 아니라 이름이 정확히 같은 point feature로 이동한다.
+  // 경로 행(이름 '설악산_대청봉' 등)이 아니라 anchor 이름을 담은 point feature로 이동한다.
   await searchPickOpenDetail(
     page,
     anchor,
-    (row) => row.source === 'feature' && row.coord != null && row.name === anchor,
+    (row) => row.source === 'feature' && row.coord != null && row.name.includes(anchor),
   );
   await page.keyboard.press('Escape');
   const response = page.waitForResponse((res) => {

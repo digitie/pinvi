@@ -320,7 +320,7 @@
   cleanup: [읽기 전용]
   automation: scripted
   spec: specs/search/search-geometry.live.spec.ts#SRCH-023
-  notes: "#635 구현. 근처 point 기본값 '설악산국립공원'(운영 Map 줌 15 화면에 '설악산_대청봉' route 여럿, 2026-11-05 확인) — PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY로 바꾼다. 이름이 정확히 같은 point feature 행으로 이동한다."
+  notes: "#635 구현. 근처 point 기본값 '설악산국립공원'(운영 Map 줌 15 화면에 '설악산_대청봉' route 여럿, 2026-11-05 확인) — PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY로 바꾼다. anchor 이름을 담은 point feature 행으로 이동한다."
 
 - id: SRCH-024
   title: 북한산 경로 — 근처 point 범위의 복수 선·토글 OFF

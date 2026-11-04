@@ -334,7 +334,7 @@ env 1(SHR-027), 데이터/타이밍 2(SRCH-048 이벤트 없음, POI-032 마커 
 - SRCH-024는 북한산 경로 둘 이상과 교차하는 point의 검색어를
   `PINVI_E2E_GEOMETRY_BUKHAN_ANCHOR_QUERY`로 받는다(기본 `북한산성`).
 - 기본값은 운영 Map 데이터로 확인했다(2026-11-05, 줌 15 화면에 대상 route 여럿). 검색 결과 중
-  이름이 정확히 같은 point feature 행으로 이동한다(같은 이름의 route 행은 고르지 않는다).
+  anchor 이름을 담은 point feature 행으로 이동한다(같은 이름의 route 행은 고르지 않는다).
 - SRCH-028(area)은 `PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY`가 있을 때만 돈다. 운영 Map에 area
   kind가 0건이라 현재 blocked다.
 - 도형에 없는 coord를 만들지 않는다. point는 카메라 이동용 fixture다.
