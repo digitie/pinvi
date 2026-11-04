@@ -549,9 +549,18 @@ export function FeatureMapView({
   // 검색 결과(feature/my_poi/address/kakao/naver)로 지도를 이동. feature source면 마커도 선택.
   const handleSearchSelect = useCallback(
     (result: PlaceSearchResult) => {
+      userInteractedRef.current = true;
       clearGeometrySelection();
       const coord = result.coord;
-      if (!coord) return;
+      if (!coord) {
+        // 위치를 만들지 않고 실제 feature 상세로 연결한다.
+        if (result.feature_id) {
+          setSelected(null);
+          setSelectedWeatherMarker(null);
+          setDetailFeatureId(result.feature_id);
+        }
+        return;
+      }
       if (result.feature_id != null) {
         const style = resolveMarkerStyle({
           upstreamColor: result.marker_color,

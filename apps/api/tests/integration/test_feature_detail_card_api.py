@@ -345,3 +345,224 @@ async def test_detail_card_request_cancellation_is_not_partial_success(
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         _clear()
+
+
+async def test_parallel_enrichment_keeps_fast_second_provider_and_cancels_first(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, monkeypatch: Any
+) -> None:
+    from app.api.v1 import features as module
+
+    monkeypatch.setattr(module, "_DETAIL_CARD_BUDGET_SECONDS", 0.12)
+    started: set[str] = set()
+    cancelled: set[str] = set()
+
+    class SlowKakao:
+        async def search_keyword(self, **kwargs: Any) -> dict[str, Any]:
+            started.add("kakao")
+            try:
+                await asyncio.sleep(10)
+                return {"documents": []}
+            finally:
+                cancelled.add("kakao")
+
+    class FastNaver:
+        async def search_local(self, **kwargs: Any) -> dict[str, Any]:
+            started.add("naver")
+            return {"items": []}
+
+    _override(kakao=SlowKakao(), naver=FastNaver())
+    try:
+        resp = await client.get(
+            "/features/place:1/detail-card?providers=kakao,naver",
+            cookies=auth_cookies(verified_user[0]),
+        )
+        assert resp.status_code == 200
+        card = resp.json()["data"]
+        assert started == {"kakao", "naver"}
+        assert [row["provider"] for row in card["enrichment"]] == ["naver"]
+        assert card["degraded_providers"] == ["kakao"]
+        assert cancelled == {"kakao"}
+    finally:
+        _clear()
+
+
+async def test_parallel_enrichment_starts_both_and_retains_request_order(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, monkeypatch: Any
+) -> None:
+    from app.api.v1 import features as module
+
+    monkeypatch.setattr(module, "_DETAIL_CARD_BUDGET_SECONDS", 0.25)
+    kakao_started, naver_started = asyncio.Event(), asyncio.Event()
+
+    class BarrierKakao:
+        async def search_keyword(self, **kwargs: Any) -> dict[str, Any]:
+            kakao_started.set()
+            await naver_started.wait()
+            return {"documents": []}
+
+    class BarrierNaver:
+        async def search_local(self, **kwargs: Any) -> dict[str, Any]:
+            naver_started.set()
+            await kakao_started.wait()
+            return {"items": []}
+
+    _override(kakao=BarrierKakao(), naver=BarrierNaver())
+    try:
+        resp = await client.get(
+            "/features/place:1/detail-card?providers=naver,kakao",
+            cookies=auth_cookies(verified_user[0]),
+        )
+        assert resp.status_code == 200
+        card = resp.json()["data"]
+        assert [row["provider"] for row in card["enrichment"]] == ["naver", "kakao"]
+        assert card["degraded_providers"] == []
+    finally:
+        _clear()
+
+
+async def test_parallel_enrichment_orders_absent_and_timed_out_providers(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, monkeypatch: Any
+) -> None:
+    from app.api.v1 import features as module
+
+    monkeypatch.setattr(module, "_DETAIL_CARD_BUDGET_SECONDS", 0.08)
+
+    class SlowKakao:
+        async def search_keyword(self, **kwargs: Any) -> dict[str, Any]:
+            await asyncio.sleep(10)
+            return {"documents": []}
+
+    _override(kakao=SlowKakao(), naver=None)
+    try:
+        resp = await client.get(
+            "/features/place:1/detail-card?providers=kakao,naver",
+            cookies=auth_cookies(verified_user[0]),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["degraded_providers"] == ["kakao", "naver"]
+    finally:
+        _clear()
+
+
+async def test_parallel_enrichment_caller_cancellation_cleans_both_tasks(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    ready = {"kakao": asyncio.Event(), "naver": asyncio.Event()}
+    cancelled: set[str] = set()
+
+    async def block(provider: str) -> dict[str, Any]:
+        ready[provider].set()
+        try:
+            await asyncio.sleep(10)
+            return {}
+        finally:
+            await asyncio.sleep(0.01)
+            cancelled.add(provider)
+
+    class BlockingKakao:
+        async def search_keyword(self, **kwargs: Any) -> dict[str, Any]:
+            return await block("kakao")
+
+    class BlockingNaver:
+        async def search_local(self, **kwargs: Any) -> dict[str, Any]:
+            return await block("naver")
+
+    _override(kakao=BlockingKakao(), naver=BlockingNaver())
+    task = asyncio.create_task(
+        client.get(
+            "/features/place:1/detail-card?providers=kakao,naver",
+            cookies=auth_cookies(verified_user[0]),
+        )
+    )
+    try:
+        async with asyncio.timeout(0.5):
+            await ready["kakao"].wait()
+            await ready["naver"].wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert cancelled == {"kakao", "naver"}
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        _clear()
+
+
+@pytest.mark.parametrize("failure", ["invalid_json", "invalid_collection", "projection"])
+async def test_parallel_enrichment_isolates_malformed_optional_provider(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, monkeypatch: Any, failure: str
+) -> None:
+    from app.api.v1 import features as module
+
+    original = module.best_match_enrichment
+
+    def project(provider: str, **kwargs: Any) -> Any:
+        if failure == "projection" and provider == "kakao":
+            raise ValueError("fixture projection failure")
+        return original(provider, **kwargs)
+
+    class MalformedKakao:
+        async def search_keyword(self, **kwargs: Any) -> dict[str, Any]:
+            if failure == "invalid_json":
+                raise ValueError("fixture invalid JSON")
+            return {"documents": 42} if failure == "invalid_collection" else {"documents": []}
+
+    class FastNaver:
+        async def search_local(self, **kwargs: Any) -> dict[str, Any]:
+            return {"items": []}
+
+    monkeypatch.setattr(module, "best_match_enrichment", project)
+    _override(kakao=MalformedKakao(), naver=FastNaver())
+    try:
+        resp = await client.get(
+            "/features/place:1/detail-card?providers=kakao,naver",
+            cookies=auth_cookies(verified_user[0]),
+        )
+        assert resp.status_code == 200
+        card = resp.json()["data"]
+        assert card["name"] == "스타벅스 광안리"
+        assert [row["provider"] for row in card["enrichment"]] == ["naver"]
+        assert card["degraded_providers"] == ["kakao"]
+    finally:
+        _clear()
+
+
+async def test_parallel_enrichment_uses_remaining_whole_card_budget(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, monkeypatch: Any
+) -> None:
+    from app.api.v1 import features as module
+
+    monkeypatch.setattr(module, "_DETAIL_CARD_BUDGET_SECONDS", 0.16)
+    cancelled = asyncio.Event()
+
+    class SlowMap(_FakeMapClient):
+        async def get_feature(self, feature_id: str) -> dict[str, Any] | None:
+            await asyncio.sleep(0.10)
+            return await super().get_feature(feature_id)
+
+    class SlowKakao:
+        async def search_keyword(self, **kwargs: Any) -> dict[str, Any]:
+            try:
+                await asyncio.sleep(0.10)
+                return {"documents": []}
+            finally:
+                cancelled.set()
+
+    class FastNaver:
+        async def search_local(self, **kwargs: Any) -> dict[str, Any]:
+            return {"items": []}
+
+    _override(kakao=SlowKakao(), naver=FastNaver())
+    app.dependency_overrides[get_kor_travel_map_client] = lambda: SlowMap()
+    try:
+        resp = await client.get(
+            "/features/place:1/detail-card?providers=kakao,naver",
+            cookies=auth_cookies(verified_user[0]),
+        )
+        assert resp.status_code == 200
+        card = resp.json()["data"]
+        assert [row["provider"] for row in card["enrichment"]] == ["naver"]
+        assert card["degraded_providers"] == ["kakao"]
+        assert cancelled.is_set()
+    finally:
+        _clear()

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { PlaceSearchResult } from '@pinvi/schemas';
 
 // 통합 검색은 geoApi(apiClient).searchPlaces로 나간다 — 그 한 지점만 스텁한다.
@@ -157,4 +157,63 @@ describe('MapSearchBox', () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(searchPlaces).not.toHaveBeenCalled();
   });
+});
+
+it('검색어가 바뀌면 debounce 전에 이전 결과를 선택할 수 없다', async () => {
+  searchPlaces.mockResolvedValueOnce({
+    results: [makeResult({ name: '서울 이전 결과' })],
+    degraded_sources: [],
+  });
+  render(<MapSearchBox onSelect={vi.fn()} />);
+  const input = screen.getByLabelText('장소·주소 검색');
+  fireEvent.change(input, { target: { value: '서울' } });
+  expect(await screen.findByTestId('map-search-result-feature')).toHaveTextContent(
+    '서울 이전 결과',
+  );
+  fireEvent.change(input, { target: { value: '부산' } });
+  expect(screen.queryByTestId('map-search-result-feature')).not.toBeInTheDocument();
+});
+
+it('취소를 무시한 이전 검색 응답도 새 debounce 구간에 다시 표시하지 않는다', async () => {
+  let resolve!: (value: unknown) => void;
+  searchPlaces.mockReturnValueOnce(
+    new Promise((r) => {
+      resolve = r;
+    }),
+  );
+  render(<MapSearchBox onSelect={vi.fn()} />);
+  const input = screen.getByLabelText('장소·주소 검색');
+  fireEvent.change(input, { target: { value: '서울' } });
+  await vi.waitFor(() => expect(searchPlaces).toHaveBeenCalledOnce());
+  const oldSignal = searchPlaces.mock.calls[0]![1].signal as AbortSignal;
+  fireEvent.change(input, { target: { value: '부산' } });
+  expect(oldSignal.aborted).toBe(true);
+  await act(async () =>
+    resolve({ results: [makeResult({ name: '서울 늦은 결과' })], degraded_sources: [] }),
+  );
+  expect(screen.queryByTestId('map-search-result-feature')).not.toBeInTheDocument();
+});
+
+it('좌표 없는 feature는 상세 선택을 유지하고 실행 경로 없는 행은 비활성화한다', async () => {
+  const detail = makeResult({
+    name: '좌표 없는 실제 feature',
+    feature_id: 'feature:null',
+    coord: null,
+  });
+  const inert = makeResult({
+    name: '위치 없는 외부 행',
+    source: 'kakao',
+    feature_id: null,
+    coord: null,
+  });
+  searchPlaces.mockResolvedValue({ results: [detail, inert], degraded_sources: [] });
+  const onSelect = vi.fn();
+  render(<MapSearchBox onSelect={onSelect} />);
+  fireEvent.change(screen.getByLabelText('장소·주소 검색'), { target: { value: '검색' } });
+  const feature = await screen.findByTestId('map-search-result-feature');
+  expect(feature).toHaveTextContent('상세 보기');
+  expect(feature).toBeEnabled();
+  expect(screen.getByTestId('map-search-result-kakao')).toBeDisabled();
+  fireEvent.click(feature);
+  expect(onSelect).toHaveBeenCalledWith(detail);
 });

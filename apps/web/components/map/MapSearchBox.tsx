@@ -71,7 +71,7 @@ export function MapSearchBox({ onSelect, className, getBias }: MapSearchBoxProps
         { q: term, limit: 8, bbox: getBiasRef.current?.() ?? null },
         { signal: controller.signal },
       );
-      if (searchAbort.current !== controller) return;
+      if (controller.signal.aborted || searchAbort.current !== controller) return;
       setResults(res.results);
       if (res.results.length === 0) setError('검색 결과가 없습니다.');
     } catch (err) {
@@ -82,7 +82,8 @@ export function MapSearchBox({ onSelect, className, getBias }: MapSearchBoxProps
     }
   }, []);
 
-  // 입력이 최소 글자 수 밑으로 떨어진 순간을 렌더 중에 잡아 결과/에러/로딩을 그 자리에서
+  // 검색어가 바뀌면 이전 결과를 즉시 지워 새 debounce 구간에서 다른 장소를 고르지 않게 한다.
+  // 결과/에러/로딩을 렌더 중에
   // 리셋한다(react-hooks/set-state-in-effect: effect 안 동기 setState 금지 — 공식
   // "Adjusting state when a prop changes" 패턴). 디바운스 타이머 예약과 abort는 side effect라
   // 아래 effect에 그대로 둔다.
@@ -90,11 +91,9 @@ export function MapSearchBox({ onSelect, className, getBias }: MapSearchBoxProps
   const [prevTerm, setPrevTerm] = useState(term);
   if (term !== prevTerm) {
     setPrevTerm(term);
-    if (term.length < MIN_CHARS) {
-      setResults([]);
-      setError(null);
-      setLoading(false);
-    }
+    setResults([]);
+    setError(null);
+    setLoading(false);
   }
 
   // 디바운스 자동완성(F3) — 2자 이상 입력 시 250ms 뒤 검색. 입력마다 재요청/직전 요청은 취소.
@@ -106,7 +105,10 @@ export function MapSearchBox({ onSelect, className, getBias }: MapSearchBoxProps
       return;
     }
     const timer = setTimeout(() => void runSearch(term), DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      searchAbort.current?.abort();
+    };
   }, [query, term, runSearch]);
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -161,8 +163,9 @@ export function MapSearchBox({ onSelect, className, getBias }: MapSearchBoxProps
               <li key={resultKey(result, index)} className="flex items-stretch">
                 <button
                   type="button"
+                  disabled={!result.coord && !result.feature_id}
                   onClick={() => handlePick(result)}
-                  className="flex min-w-0 flex-1 items-start gap-2 px-3 py-2 text-left hover:bg-surface-soft"
+                  className="flex min-w-0 flex-1 items-start gap-2 px-3 py-2 text-left hover:bg-surface-soft disabled:cursor-default disabled:opacity-60"
                   data-testid={`map-search-result-${result.source}`}
                 >
                   {meta.icon === 'bookmark' ? (
@@ -179,6 +182,11 @@ export function MapSearchBox({ onSelect, className, getBias }: MapSearchBoxProps
                         {meta.label}
                       </span>
                     </span>
+                    {!result.coord && (
+                      <span className="block text-xs text-muted">
+                        {result.feature_id ? '상세 보기' : '위치 정보 없음'}
+                      </span>
+                    )}
                     {secondary && (
                       <span className="block truncate text-xs text-muted">{secondary}</span>
                     )}
