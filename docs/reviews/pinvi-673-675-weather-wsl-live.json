@@ -11,8 +11,8 @@
     "중기 핵심 지표·인간 라벨/단위·카드 전체 오래됨",
     "390px 실제 여행 패널의 핵심 강수 항목 줄바꿈·화면 범위",
     "직접 weather 호스트 없이 admin Map 조회·null provenance·실제 stale",
-    "실제 관리자 표의 원천 행·오래된 정보 안내",
-    "원천 정상 세대 후 지연 신호 해제·값 보존",
+    "실제 관리자 표의 TMP/TEMP 정규화 alias 2제공자·유일한 행 ID·정렬 후 두 값·오래된 정보 안내",
+    "원천 정상 세대 후 지연 신호 해제·재조회 뒤 두 provider 행·값 보존",
     "실제 좌표 없는 Map feature의 빈 표는 fresh 없이 판정 불가"
   ],
   "map_source": "dd0238c3f988b03dc02a2deb13e06e5258e85313",
@@ -24,7 +24,7 @@
     "api_related": 51,
     "api_admin_final": 12,
     "api_distinct_related": 53,
-    "web_all": 369,
+    "web_all": 376,
     "shared_schemas": 24,
     "mypy_files": 256,
     "web_types": true,
@@ -39,28 +39,31 @@
     "초기 날짜 요약2실패·기존10통과, 관리자 소스/stale3실패·기존7통과를 확인했다.",
     "직접 수집 cleanup은 잘못된 대역 생성자를 고친 뒤 기존 gather에서1실패·1대조 통과, TaskGroup에서2통과했다.",
     "초기 리뷰의 혼합 style 비교·단위 식별·RN1 누락4회귀는 기존 구현에서4실패·15대조 통과, 수정 후 모두 통과했다.",
-    "기상청 SKY 코드 설명4회귀는 기존 숫자 표시에서4실패, 제공자가 다른 코드 미변환 대조는 통과했다."
+    "기상청 SKY 코드 설명4회귀는 기존 숫자 표시에서4실패, 제공자가 다른 코드 미변환 대조는 통과했다.",
+    "최종 리뷰 문자열 SKY4회귀는 기존 숫자 전용 변환에서4실패·26대조 통과, 수정 뒤33화면 회귀를 통과했다.",
+    "nullable dataset의 서로 다른 provider 행 충돌 UI 회귀는 기존 식별자로1실패, provider/unit 공통 식별자로 정렬·재조회 후 두 원문 값이 보존됐다. 최종 화면 회귀34개를 통과했다."
   ],
   "limits": [
     "운영 중기 응답에 핵심 기온·하늘·강수가 있었는지는 조회하지 않았다. 테스트는 명시적인 source facts를 주며 원천이 체감온도만 제공할 때 기온을 지어내지 않는 별도 회귀가 있다.",
     "두 체감온도 제공자는 서로 다른 target 시각으로 주어 서버 dedupe 뒤에도 실제 두 사실이 남게 했다. 동일 key/style/시각이면 기존 서버가 provider 우선순위로 하나만 남긴다.",
     "관리자 빈 결과는 좌표 없는 실제 Map feature로 검증했다. collector의 기존 빈 결과는 장애/무자료를 구별하지 못하므로 판정 불가다.",
     "false 지연 신호는 SLA상 fresh 확인이 아니다. roster나 캐시 지연을 값의 source_stale로 대신하지 않는다.",
-    "WSL 설정에는 별도의 관리자 features-read 시험 principal을 사용했다. 운영 값·접근·배포·테스트는 없으며 최종 prod 검증은 Claude Code 담당이다."
+    "WSL 설정에는 별도의 관리자 features-read 시험 principal을 사용했다. 운영 값·접근·배포·테스트는 없으며 최종 prod 검증은 Claude Code 담당이다.",
+    "최종 fixture는 기상청 SKY를 문자열로 공급한다. 숫자·문자열 코드와 실제 설명·미지 코드·다른 provider 보존은 별도 회귀로 검증했다."
   ],
   "source_sha256": {
     "apps/api/app/api/v1/admin/features.py": "5c22e3379104fd315de9ef327f9ca1cef1183a5029f9a67ef2cb08eaf4a516af",
     "apps/api/app/schemas/admin.py": "8bed719b71d484bb8d0a668be48abdfbc6e04f3e4ac64a5bb30237fc37753a02",
     "apps/api/app/services/admin_weather_values.py": "67c9d8a929e67908085caa8309a696ef6dcc87d334b17938bebf84620f234c91",
     "apps/api/app/services/weather_card.py": "45e07efa55a03de1e320be6fbfba51ecc685680b2e70fcfebda81501336d0507",
-    "apps/api/tests/integration/test_admin_features_weather_cutover.py": "bf3e008584522b4accb42a777aac65ac9b5eada63474b4ffb7b15c36ac4d36f4",
+    "apps/api/tests/integration/test_admin_features_weather_cutover.py": "f68d9abe9eb213359d9d77e321f26430849f093751651ccda507e036f059b2ff",
     "apps/api/tests/unit/test_weather_card_cancellation.py": "d765d567670837ee29060a8d37645fe9b0f2f5b1149d10f63b584d0b5e9bf62b",
-    "apps/web/app/(admin)/admin/features/[feature_id]/FeatureDetailSubpage.tsx": "d21972ed8176f65d7e231b4d2f92fd1b998cf975ef0310afa1b683e080a06bbb",
-    "apps/web/components/trips/TripWeatherSummary.tsx": "1a72b4120013f5058e09c16213a41f7fdcc754029bb103de201fcf6918edf187",
+    "apps/web/app/(admin)/admin/features/[feature_id]/FeatureDetailSubpage.tsx": "9861c9c26247517ef4fa19e3b9ac79e4af63805b3c70fb2d35438afa7f3e727d",
+    "apps/web/components/trips/TripWeatherSummary.tsx": "819ed02c069ba34a45dd666b0dcb2f10e59488ec59f3b19dc89c09fc1b4ec029",
     "apps/web/e2e-live/specs/admin/admin-features.live.spec.ts": "8608317fc75b7e44030b366fbb0511563f3b95d961ed36ac224109214aa0c77e",
     "apps/web/e2e-live/specs/weather/weather-trip-days.live.spec.ts": "9aead6b73ac98545e5eaf569da0dbf27836ac56724c41468d9069c92b4c784db",
-    "apps/web/tests/AdminWeatherValues.test.tsx": "ce24c272d40b3e825f6b98814732dc4be9c6521996162a37504a4a63f048d6be",
-    "apps/web/tests/TripWeatherSummary.test.tsx": "3e2c38e876e8e672d729c09832d34fb328f4cc28ccf15650480751e0fe7942ae",
+    "apps/web/tests/AdminWeatherValues.test.tsx": "781a6611f77ec07a311c16b7ccf59eef1b80aa9a28d33c34477eeee99b7dae88",
+    "apps/web/tests/TripWeatherSummary.test.tsx": "011184707fcbe890c258fa1f6d5061c8974c5ba14d89f6711941426608cbd43e",
     "packages/schemas/src/admin.test.ts": "adf54845c3385808d5eb035282becfe3027adea4c155698c14d96df1cd506d7e",
     "packages/schemas/src/admin.ts": "68c4cb47efae6dd8fdf68b586fc45ba74045989d480614cacb3960b8d3375c05"
   }

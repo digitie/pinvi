@@ -476,6 +476,13 @@ async def test_admin_map_mode_uses_same_source_without_direct_client(
             return httpx.Response(200, json=fx.batch_body([bundle]))
         raise AssertionError(req.url.path)
 
+    short = bundle["forecasts"]["short"]["groups"][0]
+    bundle["forecasts"]["short"]["groups"].append(
+        fx.forecast_group(
+            {"TEMP": [99.0, 99.0, 99.0]}, provider="openweathermap", target_at=short["target_at"]
+        )
+    )
+
     class PrivateAdmin(_FakeAdminClient):
         async def get_feature_detail(self, feature_id: str) -> dict[str, Any]:
             result = await super().get_feature_detail(feature_id)
@@ -505,6 +512,14 @@ async def test_admin_map_mode_uses_same_source_without_direct_client(
     assert all(item["dataset_key"] is None for item in data["items"])
     assert all(item["provider_dataset_id"] is None for item in data["items"])
     assert all(item["known_at"] is not None for item in data["items"])
+    first_target = datetime.fromisoformat(short["target_at"][0])
+    aliases = [
+        row
+        for row in data["items"]
+        if row["metric_key"] == "TMP" and datetime.fromisoformat(row["valid_at"]) == first_target
+    ]
+    assert len(aliases) == 2
+    assert {row["provider"] for row in aliases} == {"python-kma-api", "openweathermap"}
     assert admin.calls == {"detail": "private-feature"}
     assert "/v1/service/weather/locations/batch" in paths
 

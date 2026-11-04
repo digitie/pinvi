@@ -1149,3 +1149,6 @@ Map #1446 병합본은 a69d188d8c78ea573afc6e862f8ec9e0aa423ec0이다. 소비자
 
 
 기상청 provider의 SKY만 [기상자료개방포털 코드표](https://data.kma.go.kr/data/rmt/rmtList.do?code=400&pgmNo=570&tabNo=2)의 설명으로 표시한다(과거 자료 코드도 보존). 다른 provider의 SKY와 WEATHER_CODE는 이 표로 해석하지 않는다. 원천 설명이 있으면 그대로 우선하며 모르는 코드는 추측하지 않는다.
+
+
+최종 리뷰 보완: 알려진 SKY 코드가 숫자 또는 문자열이면 같은 설명을 표시하고 실제 설명·미지 문자열은 원문 우선이다. 관리자 행의 식별자는 provider·단위를 포함해 null dataset의 정규화 alias가 충돌하지 않게 하며 provider도 화면에 표시한다.

@@ -219,6 +219,20 @@ const overrideColumns: AdminTableColumn<AdminFeatureDetailOverride>[] = [
   },
 ];
 
+function weatherMetricIdentity(row: AdminFeatureWeatherMetric): string {
+  return JSON.stringify([
+    row.metric_key,
+    row.provider ?? null,
+    row.unit ?? null,
+    row.forecast_style,
+    row.timeline_bucket ?? null,
+    row.valid_at ?? row.observed_at ?? row.issued_at ?? null,
+    row.provider_dataset_id,
+    row.dataset_key,
+    row.known_at,
+  ]);
+}
+
 const weatherColumns: AdminTableColumn<AdminFeatureWeatherMetric>[] = [
   {
     key: 'metric',
@@ -229,6 +243,7 @@ const weatherColumns: AdminTableColumn<AdminFeatureWeatherMetric>[] = [
       <div className="text-xs">
         <div className="font-mono">{row.metric_key}</div>
         <div className="text-muted">{row.metric_name ?? '—'}</div>
+        {row.provider && <div className="text-muted">{row.provider}</div>}
       </div>
     ),
   },
@@ -379,28 +394,12 @@ function WeatherValuesTab({ featureId }: { featureId: string }) {
         columns={weatherColumns}
         rows={data?.items ?? []}
         loading={query.isLoading}
-        rowKey={(row) =>
-          JSON.stringify([
-            row.metric_key,
-            row.forecast_style,
-            row.timeline_bucket ?? null,
-            row.valid_at ?? row.observed_at ?? row.issued_at ?? null,
-            row.provider_dataset_id,
-            row.dataset_key,
-            row.known_at,
-          ])
-        }
+        rowKey={weatherMetricIdentity}
         rowTestId={(row) =>
-          `admin-feature-weather-row-${row.metric_key}-${encodeURIComponent(
-            JSON.stringify([
-              row.forecast_style,
-              row.timeline_bucket ?? null,
-              row.valid_at ?? row.observed_at ?? row.issued_at ?? null,
-              row.provider_dataset_id,
-              row.dataset_key,
-              row.known_at,
-            ]),
-          )}`
+          'admin-feature-weather-row-' +
+          row.metric_key +
+          '-' +
+          encodeURIComponent(weatherMetricIdentity(row))
         }
         empty="weather 값이 없습니다."
       />

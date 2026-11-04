@@ -440,3 +440,43 @@ it('제공자가 다른 SKY나 WEATHER_CODE는 기상청 코드로 바꾸지 않
   expect(summary).toHaveTextContent('날씨 코드 3');
   expect(summary).not.toHaveTextContent('구름많음');
 });
+
+it.each([
+  ['1', '맑음'],
+  ['2', '구름조금'],
+  ['3', '구름많음'],
+  ['4', '흐림'],
+] as const)('기상청 문자열 SKY 코드 %s도 설명 %s로 표시한다', (code, label) => {
+  const cards = weatherCards();
+  cards[CARD_KEY].metrics = [
+    {
+      metric_key: 'SKY',
+      forecast_style: 'mid',
+      provider: 'python-kma-api',
+      valid_at: '2026-07-30T09:00:00+09:00',
+      value_number: null,
+      value_text: code,
+      unit: 'code',
+    },
+  ];
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
+  expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('하늘 ' + label);
+});
+
+it.each(['원천 설명', '9'])('기상청 SKY의 실제 설명·미등록 문자열 %s는 보존한다', (text) => {
+  const cards = weatherCards();
+  cards[CARD_KEY].metrics = [
+    {
+      metric_key: 'SKY',
+      forecast_style: 'mid',
+      provider: 'python-kma-api',
+      valid_at: '2026-07-30T09:00:00+09:00',
+      value_number: 3,
+      value_text: text,
+      unit: 'code',
+    },
+  ];
+  render(<TripWeatherSummary weather={foundWeather()} weatherCards={cards} date="2026-07-30" />);
+  expect(screen.getByTestId('trip-weather-summary')).toHaveTextContent('하늘 ' + text);
+  expect(screen.getByTestId('trip-weather-summary')).not.toHaveTextContent('구름많음');
+});

@@ -1,3 +1,11 @@
+## 2026-11-05 — #679 최종 리뷰의 문자열 코드·행 식별 보완
+
+- A는 계약상 유효한 문자열 SKY 코드가 숫자로 남는 P2를, B는 null dataset의 TMP/TEMP 정규화 후 provider 없는 관리자 행 식별 충돌 P2를 발견했다. 각각 실패 우선 회귀로 확인했다.
+- 기상청의 알려진 숫자·문자열 SKY만 설명으로 바꾸며 실제 설명·미지 값·다른 provider 코드를 보존한다. 관리자 row key/test ID는 provider·단위를 포함한 공통 식별자를 쓰고 제공자를 표시한다.
+- 실제 WSL fixture도 SKY 문자열과 같은 시각·known_at의 KMA TMP/외부 TEMP를 공급했다. 두 alias 사실이 API에 남고 관리자 ID가 유일하며 정렬·세대 갱신 뒤 두 값이 유지되는8흐름을 확인했다.
+- 웹376·화면34·최종 관리자API12·타입·lint(기존5경고)를 통과했다. 관리자 alias 시각 비교는 Z/+00:00 표현을 같은 datetime으로 비교한다. 최종 증거·소스 지문은 docs/reviews/pinvi-673-675-weather-wsl-live.json에 갱신했다.
+- 운영 접근은 없고 스택은 종료했다. 새 최종 커밋의 전문 리뷰2인·전체 CI 뒤 일반 squash merge한다.
+
 ## 2026-11-05 — #673/#675 최종 WSL 화면 검증
 
 - 실제 Map/PostGIS·Valkey→Pinvi API→Next/Chromium8흐름을 통과했다. 중기 핵심 사실·사람용 단위/기상청 하늘 설명·390px 강수 항목 가시성, 관리자 실제 행/null provenance/선택 사실 stale, 새 정상 세대의 신호 해제, 좌표 없는 feature의 판정 불가를 확인했다.

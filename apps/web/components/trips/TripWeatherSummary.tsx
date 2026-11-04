@@ -171,15 +171,18 @@ const KMA_SKY_LABELS: Record<number, string> = {
   4: '흐림',
 };
 function formatMetric(metric: WeatherMetric): string | null {
+  const text = metric.value_text?.trim();
+  // 원문 설명은 보존한다. 알려진 문자열 코드만 숫자 코드와 같은 표로 해석한다.
+  const skyCode = text ? (/^[1-4]$/.test(text) ? Number(text) : null) : metric.value_number;
   const sky =
     metric.provider === 'python-kma-api' &&
     metric.metric_key.toUpperCase() === 'SKY' &&
-    metric.value_number != null
-      ? KMA_SKY_LABELS[metric.value_number]
+    skyCode != null
+      ? KMA_SKY_LABELS[skyCode]
       : null;
   const value =
-    metric.value_text?.trim() ||
     sky ||
+    text ||
     (metric.value_number != null
       ? `${formatNumber(metric.value_number)}${displayUnit(metric.unit)}`
       : null) ||
