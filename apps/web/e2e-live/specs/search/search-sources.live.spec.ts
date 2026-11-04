@@ -91,7 +91,6 @@ test.describe('SRCH sources by category family (/map)', () => {
 
   test('SRCH-027 축제/행사 kind=event', async ({ page }, ti) => {
     desktopOnly();
-    test.fail(true, 'kor-travel-map#1439: event features have no period/venue');
     const card = await familyCase(page, ti, 'SRCH-027', '축제', /축제|행사|관광|공원|문화/);
     if (!card) return;
     const kind = await modal.body(page).getAttribute('data-kind');

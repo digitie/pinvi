@@ -189,7 +189,7 @@ test.describe.serial('ADM promotion review (desktop)', () => {
     await expect(rejectedRow.first()).toBeVisible({ timeout: 30_000 });
     await rejectedRow.first().getByRole('button', { name: /검토 열기/ }).click();
     const panel = page.getByTestId('admin-fr-review-panel');
-    await expect(panel).toContainText('이미 처리된 제안입니다.');
+    await expect(panel).toContainText('처리 완료된 제안입니다.');
     await expect(page.getByTestId('admin-fr-approve')).toHaveCount(0);
     await expect(page.getByTestId('admin-fr-reject')).toHaveCount(0);
     await page.getByTestId('admin-fr-review-dialog-close').click();

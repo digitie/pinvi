@@ -333,7 +333,7 @@ Spec files: 54.
 | ADM-032 | admin | [e2e] 장소 제안을 관리자 검토 다이얼로그에서 열어 내용 확인, 빈 사유 승인은 클라이언트에서 차단(네트워크 호출 없음) | P1 | desktop, admin, mutating, poi | scripted | `specs/admin/admin-promotion.live.spec.ts#ADM-032` |
 | ADM-033 | admin | 부정: Map 범위(lat ≤ 39.5) 밖 좌표 제안을 승인하면 422 와 명확한 문구, 상태는 그대로 '대기' | P1 | desktop, admin, mutating, poi | scripted | `specs/admin/admin-promotion.live.spec.ts#ADM-033` |
 | ADM-034 | admin | [e2e] 제안 거절(확정 다이얼로그) → 알림·'거절' 탭·사용자측 상태·감사 로그 | P1 | desktop, admin, mutating, poi | scripted | `specs/admin/admin-promotion.live.spec.ts#ADM-034` |
-| ADM-035 | admin | 이미 처리된 제안은 검토 다이얼로그가 '이미 처리된 제안입니다.' 만 보이고 승인/거절 버튼이 없다 | P2 | desktop, admin | scripted | `specs/admin/admin-promotion.live.spec.ts#ADM-035` |
+| ADM-035 | admin | 이미 처리된 제안은 검토 다이얼로그가 '처리 완료된 제안입니다.' 를 보이고 승인/거절 버튼이 없다 | P2 | desktop, admin | scripted | `specs/admin/admin-promotion.live.spec.ts#ADM-035` |
 | ADM-036 | admin | 모바일(390) Feature 제안 카드와 검토 버튼으로 다이얼로그 열기/닫기 | P2 | mobile, admin, mutating, poi, a11y | scripted | `specs/admin/admin-promotion.live.spec.ts#ADM-036` |
 | ADM-037 | admin | 정보 수정(correction) 제안 승인은 변경 필드 1개 이상 필요 | P3 | desktop, admin | manual |  |
 | ADM-038 | admin | Feature 변경 요청 페이지 — Map 이 whole-row change-request 라우트를 제거한 뒤의 동작 기록(알려진 drift) | P2 | desktop, admin | scripted | `specs/admin/admin-features.live.spec.ts#ADM-038` |
