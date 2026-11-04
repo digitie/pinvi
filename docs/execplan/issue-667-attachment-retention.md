@@ -77,3 +77,10 @@ POI 사전 검사 후 관리자 이동과 업로드가 겹치는 Event 회귀2�
 - 실제 WSL Map/PostGIS·Pinvi API·Next/Chromium·RustFS7흐름과 물리 객체3건 대조를 다시 통과했다. 실제 RustFS의 과거 버전2개 삭제/인접 prefix 보존도 확인했다. 소유 스택 종료와 화면3장 확인을 마쳤다. 증거는 docs/reviews/pinvi-667-retention-wsl-live.json이다.
 - HEAD 고정형 서명 검증 중 커밋을 바꿔 발생한1실패는 숨기지 않고 기록했다.3aa504b 고정 재실행에서 단위1969통과9건너뜀을 확인했다.
 - 운영 접근·배포·시험은 없다. 최종 prod 적용·시험은 Claude Code가 담당한다. 정확최종SHA 리뷰·CI 후 일반 squash merge하고#668로 진행한다.
+
+## 2026-11-05 — #667 최신main 통합 검증 완료
+
+- 통합 SHA72e5375(base18aba13)을 두 독립 전문 리뷰어가 검토했고 잔여P0/P1/P2가 없다. 외부#682 제품 변경과#667 변경을 모두 보존했다.
+- 통합 HEAD 고정 재실행: API 단위1975통과9건너뜀(103.49초), 관련API+features155(164.25초), 웹389·스키마24·mypy261·Ruff/format·타입/lint(기존5경고), 실제UI7/RustFS물리3대조 통과. 카탈로그347/자동298·목록592다. main의 SRCH-028 blocked를 보존했다.
+- 강화된M052건은3aa504b에서 실행한 동일 구성요소 증거로 구분했다. 통합에서0103/권한bootstrap/AND검사 코드는 바뀌지 않았다. 증거JSON에 각 범위·source지문을 갱신했다.
+- 최종 증거 커밋의 두 리뷰·전체CI 뒤 일반 squash merge한다. 운영 접근은 없고 최종prod는Claude Code 담당이다.
