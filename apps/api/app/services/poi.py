@@ -39,9 +39,10 @@ async def _lock_active_trip(db: AsyncSession, trip_id: uuid.UUID) -> Trip | None
     권한 확인은 잠금 전에 끝나므로 같은 시각 여행 삭제와 경주하면 휴지통 여행에 쓰기가
     남는다 — 잠금을 잡은 뒤의 `deleted_at`이 정본이다.
     """
-    return await db.scalar(
+    trip: Trip | None = await db.scalar(
         select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)).with_for_update()
     )
+    return trip
 
 
 class PoiError(Exception):

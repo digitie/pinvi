@@ -586,9 +586,7 @@ class KorTravelMapAdminClient:
 
     async def get_feature_revision_etag(self, feature_id: str) -> str:
         """stable revision GET의 canonical ETag를 mutation precondition으로 보존한다."""
-        resp = await self._send(
-            "GET", f"/v1/admin/features/{_path_segment(feature_id)}/revision"
-        )
+        resp = await self._send("GET", f"/v1/admin/features/{_path_segment(feature_id)}/revision")
         self._data(resp)
         entity_tag = cast(str | None, resp.headers.get("ETag"))
         if entity_tag is None or _REVISION_ETAG_PATTERN.fullmatch(entity_tag) is None:

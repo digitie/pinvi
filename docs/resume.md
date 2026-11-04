@@ -1,3 +1,9 @@
+## 2026-11-04 (claude) — #643 수정 묶음 리뷰 보완 PR
+
+- #654~#662 리뷰 지적 수정 + live e2e 카탈로그(TRIP-043 휴지통 복원, 수정 이슈 test.fail 해제) 를 한 PR 로 묶었다.
+- Map admin OpenAPI 재vendor 는 Map 리뷰 PR 머지 뒤 최종 Map SHA 로 같은 PR 에 넣는다(회전 preflight digest 일치).
+- 다음: 배포 뒤 소유자가 live 카탈로그 전체를 실행한다. 남은 expected-fail 은 Map #1438~#1440 뿐이다.
+
 ## 2026-11-04 — Map #1447 병합·소비자 provenance 동기화
 
 - Map #1447을 7ee94fb로 일반 병합했다. exact b778c097의 독립 리뷰 두 명과 최종 CI 전체를 확인했다. CI 단위/lint 3,643개·API 1,600개·Dagster 920개, PG 1,622개를 통과했다.
