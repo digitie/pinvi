@@ -1146,3 +1146,6 @@ Map #1446 병합본은 a69d188d8c78ea573afc6e862f8ec9e0aa423ec0이다. 소비자
 관리자는 사용자와 같은 플래그의 소스를 공통 collect_weather_values로 읽는다. 기존 admin/operator 권한과 비공개 feature의 admin 상세 좌표를 유지하며 숨은 direct fallback은 없다. Map의 원천 dataset_key/정수 registry 정보는 없으므로 null이고 known_at은 실제 값을 보존한다. stale는 선택된 사실의 source_stale에서만 얻는다. 로딩은 확인 중, 실패·빈 결과·최신 메타 부재는 판정 불가, 값과 메타가 있고 false이면 지연 신호 없음으로 표시한다. false만으로 fresh를 단정하지 않는다. 기존 단건 collector는 장애와 무자료를 빈 결과로 축약하므로 관리자도 이를 거짓으로 구별하지 않는다.
 
 직접 경로 latest/forecast는 TaskGroup으로 실패·호출자 취소 때 형제 작업의 cleanup까지 회수한다. source 선택·예산은 관리자와 사용자에 공통이며 좌표 상세 조회 시간까지 포함하는 endpoint 전체 예산은 아니다. WSL 검증만 수행하며 최종 prod 확인은 Claude Code가 담당한다.
+
+
+기상청 provider의 SKY만 [기상자료개방포털 코드표](https://data.kma.go.kr/data/rmt/rmtList.do?code=400&pgmNo=570&tabNo=2)의 설명으로 표시한다(과거 자료 코드도 보존). 다른 provider의 SKY와 WEATHER_CODE는 이 표로 해석하지 않는다. 원천 설명이 있으면 그대로 우선하며 모르는 코드는 추측하지 않는다.

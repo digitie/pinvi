@@ -43,7 +43,7 @@
     - 생성한 여행 삭제
   automation: scripted
   spec: specs/weather/weather-trip-days.live.spec.ts#WX-002
-  notes: 중기예보는 TMN/TMX/SKY 축. 정확한 metric key는 단언하지 않는다(데이터 drift).
+  notes: "#673. 정본의 핵심 기온·하늘·강수 사실을 앞세우며 FEELS_LIKE/deg_c를 원문으로 표시하지 않는다. 원천에 핵심 사실이 없는 경우는 데이터 공백으로 기록하며 체감온도를 기온으로 바꾸지 않는다."
 
 - id: WX-003
   title: 10일 넘게 남은 일자는 '이 날짜의 날씨 정보가 없습니다.'(no_data), unavailable 아님
@@ -397,14 +397,14 @@
   steps:
     - 여행 생성 D~D+1, 1일차 '안동하회마을' 추가 → JSON 캡처
   expected:
-    - weather_cards[*].is_stale 는 boolean(현재 구현은 항상 false), latest_at 존재
+    - weather_cards[*].is_stale 는 선택한 사실의 지연 신호(boolean), latest_at 존재
     - state=found 이면 UI는 summary 또는 no_data 문구이지 unavailable 아님
     - latest_at 이 48시간 이내(soft) — 값 나이를 annotation 기록
   cleanup:
     - 생성한 여행 삭제
   automation: scripted
   spec: specs/weather/weather-resilience.live.spec.ts#WX-021
-  notes: Map freshness.stale 은 PinVi 공개 응답에 투영되지 않는다(weather_card.py is_stale=False). Map 측 stale 유도는 WX-024.
+  notes: "#642/#675. Map freshness.stale은 선택한 사실을 통해 카드 전체에 투영한다. 미확인과 false 신호를 fresh로 단정하지 않는다. 운영 stale 유도는 WX-024, WSL 소유 fixture로 별도 검증한다."
 
 - id: WX-022
   title: 강등 관찰 — unavailable 이 있으면 문구만 바뀌고 페이지는 깨지지 않는다

@@ -476,7 +476,13 @@ async def test_admin_map_mode_uses_same_source_without_direct_client(
             return httpx.Response(200, json=fx.batch_body([bundle]))
         raise AssertionError(req.url.path)
 
-    admin = _FakeAdminClient()
+    class PrivateAdmin(_FakeAdminClient):
+        async def get_feature_detail(self, feature_id: str) -> dict[str, Any]:
+            result = await super().get_feature_detail(feature_id)
+            result["feature"]["publication_state"] = "suppressed"
+            return result
+
+    admin = PrivateAdmin()
     _override(admin, None)
     async with httpx.AsyncClient(
         base_url="http://map.test", transport=httpx.MockTransport(handle)
@@ -534,3 +540,54 @@ async def test_admin_direct_preserves_selected_source_stale(
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"]["is_stale"] is True
     assert resp.json()["data"]["items"][0]["dataset_key"] == "kma_short_forecast"
+
+
+async def test_admin_map_mode_does_not_fallback_without_map_client(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+    verified_user: tuple[str, str],
+    monkeypatch: Any,
+) -> None:
+    import uuid
+
+    from app.clients.kor_travel_map import get_optional_kor_travel_map_client
+    from app.core.config import settings
+    from app.models.user import User
+
+    async with session_factory() as db:
+        user = await db.get(User, uuid.UUID(verified_user[0]))
+        assert user is not None
+        user.roles = ["user", "admin"]
+        await db.commit()
+    monkeypatch.setattr(settings, "pinvi_kor_travel_map_weather_enabled", True)
+    admin = _FakeAdminClient()
+    weather = _FakeWeatherClient()
+    _override(admin, weather)
+    app.dependency_overrides[get_optional_kor_travel_map_client] = lambda: None
+    try:
+        resp = await client.get(
+            "/admin/features/f-no-map/weather-values", cookies=auth_cookies(verified_user[0])
+        )
+    finally:
+        _clear()
+        app.dependency_overrides.pop(get_optional_kor_travel_map_client, None)
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "WEATHER_SERVICE_UNAVAILABLE"
+    assert admin.calls == {}
+    assert weather.calls == {"resolve": [], "latest": [], "forecast": []}
+
+
+async def test_admin_weather_regular_user_remains_hidden(
+    client: Any, auth_cookies: Any, verified_user: tuple[str, str]
+) -> None:
+    admin = _FakeAdminClient()
+    _override(admin, _FakeWeatherClient())
+    try:
+        resp = await client.get(
+            "/admin/features/f-private/weather-values", cookies=auth_cookies(verified_user[0])
+        )
+    finally:
+        _clear()
+    assert resp.status_code == 404
+    assert admin.calls == {}

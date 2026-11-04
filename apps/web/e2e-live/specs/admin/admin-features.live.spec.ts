@@ -94,24 +94,47 @@ test.describe.serial('ADM features', () => {
     await expect(page.getByTestId('admin-feature-tab-error')).toHaveCount(0);
   });
 
-  test('ADM-020 weather-values subpage shows rows and the stale/fresh flag', async ({ page }) => {
+  test('ADM-020 weather-values subpage shows actual rows and source freshness', async ({
+    page,
+  }) => {
     test.skip(!featureId, 'needs ADM-015');
-    const weather = waitForGet(page, new RegExp(`/admin/features/${featureId}/weather-values`), 60_000);
+    const weather = waitForGet(
+      page,
+      new RegExp(`/admin/features/${featureId}/weather-values`),
+      60_000,
+    );
     await page.goto(`/admin/features/${encodeURIComponent(featureId)}/weather-values`);
     const res = await weather;
-    expect(res.status(), 'weather proxy must be up (503 = WEATHER_SERVICE_UNAVAILABLE is a real finding)').toBe(200);
+    expect(
+      res.status(),
+      'weather proxy must be up (503 = WEATHER_SERVICE_UNAVAILABLE is a real finding)',
+    ).toBe(200);
     // Section → SectionCard renders a <div data-slot="card">, not a <section>.
-    const section = page.locator('[data-slot="card"]', { has: page.getByText('weather values', { exact: true }) }).first();
+    const section = page
+      .locator('[data-slot="card"]', { has: page.getByText('weather values', { exact: true }) })
+      .first();
     await expect(section).toContainText('asof');
     await expect(section).toContainText('latest');
-    // textContent joins the flag with the next span ("freshsource style …"), so no trailing \b.
-    await expect(section).toContainText(/\b(fresh|stale)/);
+    const data = (await res.json()).data as {
+      items: Array<{ forecast_style: string }>;
+      is_stale: boolean;
+      latest_at: string | null;
+    };
+    const flag =
+      !data.items.length || !data.latest_at
+        ? '판정 불가'
+        : data.is_stale
+          ? '오래된 정보'
+          : '지연 신호 없음';
+    await expect(page.getByTestId('admin-feature-weather-freshness')).toHaveText(flag);
     const rows = page.locator('[data-testid^="admin-feature-weather-row-"]');
     await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+    await expect(rows).toHaveCount(data.items.length);
     const ids = await rows.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
     expect(new Set(ids).size).toBe(ids.length);
-    await expect(rows.first()).toContainText(/nowcast|short|medium|observation|warning/);
-    const flag = (await section.textContent())?.includes('stale') ? 'stale' : 'fresh';
+    await expect(rows.first()).toContainText(
+      /observed|nowcast|ultra_short|short|mid|advisory|daily_summary/,
+    );
     test.info().annotations.push({ type: 'weather-flag', description: flag });
     await shot(page, 'ADM-020', 'weather-values');
   });

@@ -162,9 +162,24 @@ function representativeOrder(a: WeatherMetric, b: WeatherMetric): number {
   );
 }
 
+// 기상청 자료개방포털의 SKY 코드표. 과거 자료의 2(구름조금)도 보존한다.
+// https://data.kma.go.kr/data/rmt/rmtList.do?code=400&pgmNo=570&tabNo=2
+const KMA_SKY_LABELS: Record<number, string> = {
+  1: '맑음',
+  2: '구름조금',
+  3: '구름많음',
+  4: '흐림',
+};
 function formatMetric(metric: WeatherMetric): string | null {
+  const sky =
+    metric.provider === 'python-kma-api' &&
+    metric.metric_key.toUpperCase() === 'SKY' &&
+    metric.value_number != null
+      ? KMA_SKY_LABELS[metric.value_number]
+      : null;
   const value =
     metric.value_text?.trim() ||
+    sky ||
     (metric.value_number != null
       ? `${formatNumber(metric.value_number)}${displayUnit(metric.unit)}`
       : null) ||

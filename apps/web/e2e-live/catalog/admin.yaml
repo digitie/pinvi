@@ -356,24 +356,24 @@
   spec: specs/admin/admin-features.live.spec.ts#ADM-019
 
 - id: ADM-020
-  title: Feature weather-values 서브페이지 — 값 행, asof/latest, stale/fresh 플래그
+  title: Feature weather-values 서브페이지 — 실제 값 행·소스 지연 신호·미확인 상태
   priority: P1
   tags: [desktop, admin, weather]
   preconditions:
     - ADM-015 의 feature_id(좌표 있음)
-    - kor-travel-weather 가 prod 에서 응답
+    - 설정된 날씨 소스의 관측·예보가 응답(Map 모드이면 Map service, 특보만 직접 weather)
   data_sources: [map:heritage, weather:map-rest]
   steps:
     - /admin/features/<id>/weather-values → GET /admin/features/<id>/weather-values 200 대기
   expected:
-    - 헤더에 'asof', 'latest', 그리고 'fresh' 또는 'stale' 중 하나
+    - 헤더의 지연 신호/미확인 상태가 실제 HTTP items·latest_at·is_stale와 일치한다(fresh 단정 없음)
     - admin-feature-weather-row-<metric>-… 행 1개 이상, 행 testid 중복 없음, 행에 forecast_style(nowcast/short…) 과 dataset 표시
     - WEATHER_SERVICE_UNAVAILABLE(503) 이면 실패로 기록(실제 회귀)
   cleanup:
     - 없음
   automation: scripted
   spec: specs/admin/admin-features.live.spec.ts#ADM-020
-  notes: 느릴 수 있음 — 해당 응답만 60s 대기, 고정 sleep 금지.
+  notes: "#675. 설정된 소스를 읽고 Map에 없는 원천 dataset_key는 null이다. 행 수·신선도 문구를 실제 응답과 대조한다. 빈 값·실패는 판정 불가이며 상세 원인을 지어내지 않는다."
 
 - id: ADM-021
   title: 좌표 없는 feature 의 weather-values 는 빈 카드('weather 값이 없습니다.')
