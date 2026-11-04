@@ -12,14 +12,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.deps import DbSession
 from app.core.rbac import require_role
 from app.models.attachment import CuratedPlanAttachment
+from app.models.storage_lifecycle import AttachmentUploadIntent
 from app.models.user import User
 from app.schemas.envelope import Envelope
 from app.schemas.storage import RustfsObjectList
 from app.services.admin_audit import append_admin_audit
 from app.services.rustfs_admin import delete_object, list_objects
+from app.services.storage_lifecycle import lock_object
 
 router = APIRouter(prefix="/admin/rustfs", tags=["admin"])
 
@@ -66,13 +69,15 @@ async def delete_rustfs_object(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": "VALIDATION_ERROR", "message": "삭제 사유(reason)가 필요합니다."},
         )
+    await lock_object(db, settings.pinvi_rustfs_bucket, key)
     referencing = await db.scalar(
         select(CuratedPlanAttachment.attachment_id).where(
             CuratedPlanAttachment.storage_key == key,
-            CuratedPlanAttachment.deleted_at.is_(None),
+            CuratedPlanAttachment.purged_at.is_(None),
         )
     )
-    if referencing is not None and not force:
+    upload = await db.get(AttachmentUploadIntent, (settings.pinvi_rustfs_bucket, key))
+    if (referencing is not None or (upload is not None and upload.purged_at is None)) and not force:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={

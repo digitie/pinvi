@@ -27,12 +27,16 @@ from app.services import lexorank
 from app.services.email_service import enqueue_trip_invite_email
 from app.services.hash_chain import sha256_hex
 from app.services.rustfs_storage import InvalidStorageRefError, validate_attachment_storage_ref
+from app.services.storage_lifecycle import (
+    TRASH_RETENTION_DAYS,
+    assert_copy_sources_writable,
+    claim_attachment_upload,
+)
 from app.services.storage_policy import (
     AttachmentQuotaError,
+    assert_attachment_capacity,
     assert_attachment_quota,
-    attachment_bytes_for_user,
-    effective_attachment_quota,
-    get_storage_settings,
+    preserve_deleted_day_attachment_charges,
 )
 
 
@@ -100,6 +104,10 @@ class TripAttachmentLimitError(TripError):
 
 class TripAttachmentStorageRefError(TripError):
     code = "INVALID_ATTACHMENT_STORAGE_REF"
+
+
+class TripTrashExpiredError(TripError):
+    code = "TRIP_TRASH_EXPIRED"
 
 
 class TripAttachmentQuotaError(TripError):
@@ -358,50 +366,17 @@ async def restore_trip(db: AsyncSession, *, trip_id: uuid.UUID, owner_user_id: u
         )
         .with_for_update()
     )
-    if trip is None:
+    if trip is None or trip.deleted_at is None:
         raise TripNotFoundError("휴지통에서 여행을 찾을 수 없습니다.")
-    poi_ids = select(TripDayPoi.attachment_id).where(
-        TripDayPoi.trip_id == trip_id, TripDayPoi.deleted_at.is_(None)
-    )
-    uploader_ids = select(CuratedPlanAttachment.uploaded_by_user_id).where(
-        CuratedPlanAttachment.deleted_at.is_(None),
-        or_(
-            CuratedPlanAttachment.trip_id == trip_id, CuratedPlanAttachment.trip_poi_id.in_(poi_ids)
-        ),
-    )
-    # 모든 업로더를 같은 순서로 잠가 서로 다른 여행의 동시 복원도 직렬화한다.
-    uploaders = list(
-        await db.scalars(
-            select(User)
-            .where(or_(User.user_id == owner_user_id, User.user_id.in_(uploader_ids)))
-            .order_by(User.user_id)
-            .with_for_update(key_share=True)
-            .execution_options(populate_existing=True)
-        )
-    )
-    user = next((u for u in uploaders if u.user_id == owner_user_id), None)
-    if user is None:
-        raise TripNotFoundError("사용자를 찾을 수 없습니다.")
+    if trip.purge_started_at is not None or trip.deleted_at <= datetime.now(UTC) - timedelta(
+        days=TRASH_RETENTION_DAYS
+    ):
+        raise TripTrashExpiredError("30일 보관 기한이 지난 여행은 복원할 수 없습니다.")
+    # 휴지통의 첨부도 이미 쿼터에 포함된다. 복원은 추가 저장 공간을 만들지 않는다.
     trip.deleted_at = None
     trip.status = "draft"
     trip.version += 1
-    try:
-        await db.flush()
-        await assert_attachment_quota(db, user=user, trip_id=trip_id, byte_size=0)
-        settings_row = await get_storage_settings(db)
-        for uploader in uploaders:
-            if uploader.user_id == owner_user_id:
-                continue
-            quota = effective_attachment_quota(settings_row, uploader)
-            used = await attachment_bytes_for_user(db, user_id=uploader.user_id)
-            if used > quota.user_quota_bytes:
-                raise AttachmentQuotaError(
-                    "첨부 업로더의 저장 공간 한도를 초과하여 복원할 수 없습니다."
-                )
-        await db.commit()
-    except AttachmentQuotaError as exc:
-        await db.rollback()
-        raise TripAttachmentQuotaError(str(exc)) from exc
+    await db.commit()
     await db.refresh(trip)
     return trip
 
@@ -646,6 +621,7 @@ async def delete_trip_day(
             f"이 일자에는 POI {poi_count}개가 있습니다. 삭제하면 함께 제거됩니다.",
             poi_count=poi_count,
         )
+    await preserve_deleted_day_attachment_charges(db, trip_id=trip_id, day_index=day_index)
     # FK(trip_id, day_index) ON DELETE CASCADE로 trip_day_pois도 함께 하드 삭제된다.
     await db.delete(day)
     await _bump_trip_version(db, trip_id=trip_id)
@@ -696,7 +672,9 @@ async def copy_trip(
         created_trip = True
     else:
         existing_target_trip = await db.scalar(
-            select(Trip).where(Trip.trip_id == target_trip_id, Trip.deleted_at.is_(None))
+            select(Trip)
+            .where(Trip.trip_id == target_trip_id, Trip.deleted_at.is_(None))
+            .with_for_update()
         )
         if existing_target_trip is None:
             raise TripNotFoundError("대상 여행을 찾을 수 없습니다.")
@@ -871,6 +849,44 @@ async def create_attachment(
     quota_trip_id: uuid.UUID | None = None,
     payload: dict[str, Any],
 ) -> CuratedPlanAttachment:
+    # 라우트의 사전 검증 뒤 부모가 이동/삭제될 수 있다. 과금 대상 잠금 뒤 다시 검증한다.
+    if quota_trip_id is None:
+        raise TripAttachmentStorageRefError("첨부 용량을 계산할 여행계획이 필요합니다.")
+    locked_trip = await db.scalar(
+        select(Trip)
+        .where(Trip.trip_id == quota_trip_id, Trip.deleted_at.is_(None))
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_trip is None or (trip_id is not None and trip_id != quota_trip_id):
+        raise TripAttachmentStorageRefError("첨부 대상이 변경되었습니다. 다시 불러와 주세요.")
+    try:
+        await get_trip_for_user_write(db, trip_id=quota_trip_id, user_id=uploaded_by_user_id)
+    except (TripNotFoundError, TripPermissionError) as exc:
+        raise TripAttachmentStorageRefError(
+            "첨부 대상이 변경되었습니다. 다시 불러와 주세요."
+        ) from exc
+    if trip_poi_id is not None:
+        parent = await db.scalar(
+            select(TripDayPoi)
+            .where(
+                TripDayPoi.attachment_id == trip_poi_id,
+                TripDayPoi.trip_id == quota_trip_id,
+                TripDayPoi.deleted_at.is_(None),
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if parent is None:
+            raise TripAttachmentStorageRefError("첨부 대상이 변경되었습니다. 다시 불러와 주세요.")
+    elif trip_day_index is not None:
+        day = await db.scalar(
+            select(TripDay)
+            .where(TripDay.trip_id == quota_trip_id, TripDay.day_index == trip_day_index)
+            .with_for_update()
+        )
+        if day is None:
+            raise TripAttachmentStorageRefError("첨부 대상이 변경되었습니다. 다시 불러와 주세요.")
     # 대상(trip 또는 POI)당 첨부 개수 상한 — 남용/저장소 비대 방지(T-105).
     limit = settings.pinvi_max_attachments_per_target
     if (
@@ -895,8 +911,16 @@ async def create_attachment(
     )
     if uploader is None:
         raise TripAttachmentStorageRefError("업로드 사용자를 찾을 수 없습니다.")
-    if quota_trip_id is None:
-        raise TripAttachmentStorageRefError("첨부 용량을 계산할 여행계획이 필요합니다.")
+    try:
+        await claim_attachment_upload(
+            db,
+            user_id=uploaded_by_user_id,
+            bucket=str(payload["bucket"]),
+            key=str(payload["storage_key"]),
+            byte_size=int(payload["byte_size"]),
+        )
+    except InvalidStorageRefError as exc:
+        raise TripAttachmentStorageRefError(str(exc)) from exc
     try:
         await assert_attachment_quota(
             db,
@@ -1341,7 +1365,25 @@ async def _copy_trip_attachments(
         return 0
     filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None), or_(*target_filters)]
     result = await db.execute(select(CuratedPlanAttachment).where(*filters))
-    for attachment in result.scalars():
+    attachments = list(result.scalars())
+    if attachments:
+        actor = await db.get(User, actor_user_id)
+        if actor is None:
+            raise TripNotFoundError("사용자를 찾을 수 없습니다.")
+        try:
+            await assert_attachment_capacity(
+                db,
+                user=actor,
+                trip_id=target_trip_id,
+                additional_bytes=sum(row.byte_size for row in attachments),
+            )
+        except AttachmentQuotaError as exc:
+            raise TripAttachmentQuotaError(str(exc)) from exc
+    try:
+        await assert_copy_sources_writable(db, attachments)
+    except InvalidStorageRefError as exc:
+        raise TripAttachmentStorageRefError(str(exc)) from exc
+    for attachment in attachments:
         source_poi_id = attachment.trip_poi_id
         trip_poi_id = (
             poi_id_map[source_poi_id]

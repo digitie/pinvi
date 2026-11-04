@@ -109,6 +109,10 @@ class InvalidStorageRefError(StorageError):
     code = "INVALID_ATTACHMENT_STORAGE_REF"
 
 
+class UploadAlreadyStartedError(InvalidStorageRefError):
+    code = "UPLOAD_ALREADY_STARTED"
+
+
 class InvalidStorageProxyTokenError(StorageError):
     code = "INVALID_STORAGE_TOKEN"
 

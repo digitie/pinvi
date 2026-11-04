@@ -107,6 +107,7 @@ export default function MyFilesPage() {
             ? ` · 최근 ${items.length.toLocaleString('ko-KR')}개 표시`
             : ''}
         </p>
+        <p className="mt-1 text-sm text-muted">삭제한 여행·장소·첨부도 보존 중에는 저장 용량에 포함됩니다.</p>
       </div>
 
       {error && (

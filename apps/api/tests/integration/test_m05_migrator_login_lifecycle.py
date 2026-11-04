@@ -17,6 +17,20 @@ ROOT = Path(__file__).resolve().parents[4]
 COMPOSE_FILE = ROOT / "infra" / "docker-compose.app.yml"
 
 
+def _retention_runtime_privileges_sql(role: str) -> str:
+    tables = ("app.attachment_upload_intents", "app.attachment_gc_objects")
+    privileges = ("SELECT", "INSERT", "UPDATE", "DELETE")
+    columns = [
+        "("
+        + " AND ".join(
+            f"has_table_privilege('{role}', '{table}', '{privilege}')" for privilege in privileges
+        )
+        + ")::text"
+        for table in tables
+    ]
+    return "SELECT " + ", ".join(columns) + ";"
+
+
 def _docker_compose_binary() -> str | None:
     docker = shutil.which("docker")
     if docker is None:
@@ -660,7 +674,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "f",
             "t",
             "t",
-            "20260917_0102",  # 현재 head — T-361이 20260824_0101 뒤에 추가
+            "20261105_0103",  # 현재 head — T-361이 20260824_0101 뒤에 추가
         )
         canonical_fingerprint = role_catalog_fingerprint()
         assert sealed_role_topology_diagnostic() == (
@@ -834,7 +848,20 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             '--username="$PINVI_APP_DB_USER" '
             '--dbname="$POSTGRES_DB" --command="SELECT version_num FROM app.alembic_version"',
         )
-        assert runtime_version_select.stdout.strip() == "20260917_0102"  # 현재 head
+        assert runtime_version_select.stdout.strip() == "20261105_0103"  # 현재 head
+        retention_acl = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command=" + _retention_runtime_privileges_sql(runtime_role),
+        )
+        assert retention_acl.stdout.strip() == "true|true"
         compose(
             "exec",
             "-T",

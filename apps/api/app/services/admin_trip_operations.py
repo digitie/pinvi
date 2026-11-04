@@ -19,7 +19,19 @@ from app.models.trip_day import TripDay
 from app.models.user import User
 from app.schemas.admin import AdminOperationImpact, AdminOperationPolicyOption, AdminOperationResult
 from app.services import lexorank
-from app.services.trip import TripCopyError, copy_trip
+from app.services.rustfs_storage import InvalidStorageRefError
+from app.services.storage_lifecycle import assert_copy_sources_writable
+from app.services.storage_policy import (
+    AttachmentQuotaError,
+    assert_attachment_capacity,
+    preserve_deleted_day_attachment_charges,
+)
+from app.services.trip import (
+    TripAttachmentQuotaError,
+    TripAttachmentStorageRefError,
+    TripCopyError,
+    copy_trip,
+)
 
 
 class AdminTripOperationError(Exception):
@@ -161,7 +173,7 @@ async def copy_admin_trip(
             target_trip_id=target_trip_id,
             commit=False,
         )
-    except TripCopyError as exc:
+    except (TripCopyError, TripAttachmentQuotaError, TripAttachmentStorageRefError) as exc:
         raise AdminTripOperationConflictError(str(exc)) from exc
     await db.flush()
     result = AdminOperationResult(
@@ -243,6 +255,7 @@ async def copy_admin_day(
     include_pois: bool,
     include_attachments: bool,
 ) -> OperationState:
+    await db.execute(select(Trip).where(Trip.trip_id == target_trip_id).with_for_update())
     source_day = await _get_day(db, trip_id=source_trip_id, day_index=day_index)
     target_trip = await _get_trip(db, trip_id=target_trip_id)
     if await _day_exists(db, trip_id=target_trip_id, day_index=target_day_index):
@@ -311,6 +324,12 @@ async def move_admin_day(
     attachment_policy: Literal["move", "delete"],
     comment_policy: Literal["move", "delete"],
 ) -> OperationState:
+    await db.execute(
+        select(Trip)
+        .where(Trip.trip_id.in_([source_trip_id, target_trip_id]))
+        .order_by(Trip.trip_id)
+        .with_for_update()
+    )
     source_day = await _get_day(db, trip_id=source_trip_id, day_index=day_index)
     if source_trip_id == target_trip_id and day_index == target_day_index:
         raise AdminTripOperationConflictError("같은 날짜로 이동할 수 없습니다.")
@@ -363,6 +382,7 @@ async def move_admin_day(
         now=now,
         source_poi_ids=source_poi_ids,
     )
+    await preserve_deleted_day_attachment_charges(db, trip_id=source_trip_id, day_index=day_index)
     await db.delete(source_day)
     target_trip.version += 1
     if source_trip_id != target_trip_id:
@@ -389,6 +409,7 @@ async def delete_admin_day(
     trip_id: uuid.UUID,
     day_index: int,
 ) -> OperationState:
+    await db.execute(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
     day = await _get_day(db, trip_id=trip_id, day_index=day_index)
     before = {
         "day": _day_state(day),
@@ -424,6 +445,7 @@ async def delete_admin_day(
         now=now,
         source_poi_ids=[poi.attachment_id for poi in pois],
     )
+    await preserve_deleted_day_attachment_charges(db, trip_id=trip_id, day_index=day_index)
     await db.delete(day)
     trip = await _get_trip(db, trip_id=trip_id)
     trip.version += 1
@@ -451,6 +473,7 @@ async def copy_admin_poi(
     admin_user_id: uuid.UUID,
     include_attachments: bool,
 ) -> OperationState:
+    await db.execute(select(Trip).where(Trip.trip_id == target_trip_id).with_for_update())
     poi = await _get_poi(db, poi_id=poi_id)
     target_trip = await _get_trip(db, trip_id=target_trip_id)
     await _ensure_day(db, trip_id=target_trip_id, day_index=target_day_index)
@@ -472,6 +495,7 @@ async def copy_admin_poi(
             db,
             source_poi_id=poi.attachment_id,
             target_poi_id=copied.attachment_id,
+            target_trip_id=target_trip_id,
             uploaded_by_user_id=admin_user_id,
         )
     target_trip.version += 1
@@ -498,7 +522,7 @@ async def move_admin_poi(
     attachment_policy: Literal["move", "delete"],
     comment_policy: Literal["move", "delete"],
 ) -> OperationState:
-    poi = await _get_poi(db, poi_id=poi_id)
+    poi = await _lock_poi_trips(db, poi_id=poi_id, target_trip_id=target_trip_id)
     if poi.trip_id == target_trip_id and poi.day_index == target_day_index:
         raise AdminTripOperationConflictError("같은 날짜로 이동할 수 없습니다.")
     target_trip = await _get_trip(db, trip_id=target_trip_id)
@@ -547,7 +571,7 @@ async def delete_admin_poi(
     *,
     poi_id: uuid.UUID,
 ) -> OperationState:
-    poi = await _get_poi(db, poi_id=poi_id)
+    poi = await _lock_poi_trips(db, poi_id=poi_id)
     before = {"poi": _poi_state(poi), "counts": await _poi_counts(db, poi_id=poi_id)}
     now = datetime.now(UTC)
     attachments = await _move_or_delete_poi_attachments(db, poi_id=poi_id, policy="delete", now=now)
@@ -572,6 +596,60 @@ async def delete_admin_poi(
         affected={"pois": 1, "attachments": attachments, "comments": comments},
     )
     return OperationState(before=before, after={"poi": _poi_state(poi)}, result=result)
+
+
+async def _lock_poi_trips(
+    db: AsyncSession, *, poi_id: uuid.UUID, target_trip_id: uuid.UUID | None = None
+) -> TripDayPoi:
+    observed = await _get_poi(db, poi_id=poi_id)
+    source_trip_id = observed.trip_id
+    trip_ids = {source_trip_id, target_trip_id or source_trip_id}
+    trips = list(
+        await db.scalars(
+            select(Trip)
+            .where(Trip.trip_id.in_(trip_ids), Trip.deleted_at.is_(None))
+            .order_by(Trip.trip_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    )
+    if len(trips) != len(trip_ids):
+        raise AdminTripOperationNotFoundError("여행을 찾을 수 없습니다.")
+    poi = await db.scalar(
+        select(TripDayPoi)
+        .where(
+            TripDayPoi.attachment_id == poi_id,
+            TripDayPoi.trip_id == source_trip_id,
+            TripDayPoi.deleted_at.is_(None),
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if poi is None:
+        raise AdminTripOperationConflictError("POI가 변경되었습니다. 다시 불러와 주세요.")
+    return poi
+
+
+async def _assert_admin_attachment_copy_capacity(
+    db: AsyncSession,
+    *,
+    target_trip_id: uuid.UUID,
+    uploader_id: uuid.UUID,
+    attachments: list[CuratedPlanAttachment],
+) -> None:
+    if not attachments:
+        return
+    uploader = await _get_user(db, user_id=uploader_id)
+    try:
+        await assert_attachment_capacity(
+            db,
+            user=uploader,
+            trip_id=target_trip_id,
+            additional_bytes=sum(row.byte_size for row in attachments),
+        )
+        await assert_copy_sources_writable(db, attachments)
+    except (AttachmentQuotaError, InvalidStorageRefError) as exc:
+        raise AdminTripOperationConflictError(str(exc)) from exc
 
 
 def _option(
@@ -837,7 +915,11 @@ async def _copy_day_and_poi_attachments(
         target_filters.append(CuratedPlanAttachment.trip_poi_id.in_(list(poi_id_map.keys())))
     filters = [CuratedPlanAttachment.deleted_at.is_(None), or_(*target_filters)]
     result = await db.execute(select(CuratedPlanAttachment).where(*filters))
-    for attachment in result.scalars():
+    attachments = list(result.scalars())
+    await _assert_admin_attachment_copy_capacity(
+        db, target_trip_id=target_trip_id, uploader_id=uploaded_by_user_id, attachments=attachments
+    )
+    for attachment in attachments:
         target_poi_id = (
             poi_id_map[attachment.trip_poi_id]
             if attachment.trip_poi_id is not None and attachment.trip_poi_id in poi_id_map
@@ -871,6 +953,7 @@ async def _copy_poi_attachments(
     *,
     source_poi_id: uuid.UUID,
     target_poi_id: uuid.UUID,
+    target_trip_id: uuid.UUID,
     uploaded_by_user_id: uuid.UUID,
 ) -> int:
     copied = 0
@@ -880,7 +963,11 @@ async def _copy_poi_attachments(
             CuratedPlanAttachment.deleted_at.is_(None),
         )
     )
-    for attachment in result.scalars():
+    attachments = list(result.scalars())
+    await _assert_admin_attachment_copy_capacity(
+        db, target_trip_id=target_trip_id, uploader_id=uploaded_by_user_id, attachments=attachments
+    )
+    for attachment in attachments:
         db.add(
             CuratedPlanAttachment(
                 trip_poi_id=target_poi_id,

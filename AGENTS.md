@@ -459,3 +459,5 @@ ADR-077의 Map weather 플래그가 켜지면 관리자 weather-values도 사용
 - Skill 라우팅, 커밋 규약, PR 본문, 핸드오프 프로토콜은 `docs/agent-guide.md`.
 - 자주 묻는 작업, 도메인 어휘, DO NOT 22항은 `SKILL.md`.
 - 한 줄 진입 요약은 `CLAUDE.md`.
+
+ADR-078은 여행 휴지통30일·보존 첨부 과금·영속 업로드/GC와 관리자 명시적 정리를 정의한다(#667). 운영 최종 검증은 Claude Code가 담당한다.

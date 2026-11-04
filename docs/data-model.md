@@ -880,3 +880,11 @@ SPEC V8 O-6 / M-14에 따라 컬럼 추가:
 - ADR-NNN: 동행자 공유 권한 모델 상세화 (ACL/RBAC)
 - ADR-NNN: 사용자 활동 로그 (시간순 timeline view)
 - ADR-NNN: GPX 업로드 (route feature 사용자 생성)
+
+## 보존 첨부의 수명 (ADR-078)
+
+여행 삭제는 30일 휴지통이며 purge_started_at 뒤 영구 정리로 진행한다. 파일 참조의 purged_at은 물리 정리 확인 또는 다른 살아 있는 참조가 보호하는 객체에 대한 참조 정리 완료를 뜻한다. moderation_hold는 신고 복원용 보존이며 미과금 면제를 뜻하지 않는다.
+
+attachment_upload_intents가 미등록 업로드의 예약·일회성 시작/완료를 기록하고 attachment_gc_objects가 영구 폐기 키·lease·안전한 실패·재확인을 기록한다. 삭제 부모를 포함한 보존 참조와 미등록 예약은 총량을 계속 차지한다. 신뢰할 수 있는 원장 없이 버킷 전체를 추측해 GC하지 않는다.
+
+일자 CASCADE 전 과금 보존용으로 분리한 첨부는 restore_blocked=true로 원래 부모 소실을 영속화한다. 신고 복원으로 여행 수준 파일을 되살리지 못하며, moderation_hold는 해제하여 정리 자격을 유지한다. 관리자 파일 목록·count·다운로드도 purged_at이 있는 실제 폐기 파일을 제외한다.

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Literal
 
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -35,19 +37,29 @@ class EffectiveAttachmentQuota:
     user_quota_bytes: int
 
 
-async def get_storage_settings(db: AsyncSession) -> StorageSettings:
-    row = await db.scalar(select(StorageSettings).where(StorageSettings.settings_id == 1))
+async def get_storage_settings(db: AsyncSession, *, create: bool = False) -> StorageSettings:
+    row: StorageSettings | None = await db.scalar(
+        select(StorageSettings).where(StorageSettings.settings_id == 1)
+    )
     if row is not None:
         return row
-    row = StorageSettings(
-        settings_id=1,
-        avatar_max_upload_bytes=DEFAULT_AVATAR_MAX_UPLOAD_BYTES,
-        attachment_max_upload_bytes=DEFAULT_ATTACHMENT_MAX_UPLOAD_BYTES,
-        trip_attachment_quota_bytes=DEFAULT_TRIP_ATTACHMENT_QUOTA_BYTES,
-        user_attachment_quota_bytes=DEFAULT_USER_ATTACHMENT_QUOTA_BYTES,
+    values = {
+        "settings_id": 1,
+        "avatar_max_upload_bytes": DEFAULT_AVATAR_MAX_UPLOAD_BYTES,
+        "attachment_max_upload_bytes": DEFAULT_ATTACHMENT_MAX_UPLOAD_BYTES,
+        "trip_attachment_quota_bytes": DEFAULT_TRIP_ATTACHMENT_QUOTA_BYTES,
+        "user_attachment_quota_bytes": DEFAULT_USER_ATTACHMENT_QUOTA_BYTES,
+    }
+    if not create:
+        # 조회는 singleton INSERT 잠금을 만들지 않는다. 설정 변경만 명시적으로 초기화한다.
+        return StorageSettings(**values)
+    await db.execute(
+        insert(StorageSettings)
+        .values(**values)
+        .on_conflict_do_nothing(index_elements=[StorageSettings.settings_id])
     )
-    db.add(row)
-    await db.flush()
+    row = await db.scalar(select(StorageSettings).where(StorageSettings.settings_id == 1))
+    assert row is not None
     return row
 
 
@@ -56,7 +68,7 @@ async def set_avatar_max_upload_bytes(
     *,
     avatar_max_upload_bytes: int,
 ) -> tuple[StorageSettings, dict[str, int]]:
-    row = await get_storage_settings(db)
+    row = await get_storage_settings(db, create=True)
     before_state = {"avatar_max_upload_bytes": row.avatar_max_upload_bytes}
     row.avatar_max_upload_bytes = avatar_max_upload_bytes
     await db.flush()
@@ -70,7 +82,7 @@ async def set_attachment_storage_settings(
     trip_attachment_quota_bytes: int,
     user_attachment_quota_bytes: int,
 ) -> tuple[StorageSettings, dict[str, int]]:
-    row = await get_storage_settings(db)
+    row = await get_storage_settings(db, create=True)
     before_state = storage_settings_state(row)
     row.attachment_max_upload_bytes = attachment_max_upload_bytes
     row.trip_attachment_quota_bytes = trip_attachment_quota_bytes
@@ -113,7 +125,7 @@ def effective_attachment_quota(
 
 
 def _active_attachment_parent() -> ColumnElement[bool]:
-    """파일 목록·다운로드·쿼터는 같은 활성 부모 규칙을 사용한다."""
+    """목록·다운로드의 접근 규칙. 보존 객체의 쿼터와 구분한다."""
     active_trip = (
         exists()
         .where(Trip.trip_id == CuratedPlanAttachment.trip_id, Trip.deleted_at.is_(None))
@@ -130,8 +142,40 @@ def _active_attachment_parent() -> ColumnElement[bool]:
     )
     active_poi = active_poi.correlate(CuratedPlanAttachment)
     return and_(
+        CuratedPlanAttachment.purged_at.is_(None),
         or_(CuratedPlanAttachment.trip_id.is_(None), active_trip),
         or_(CuratedPlanAttachment.trip_poi_id.is_(None), active_poi),
+    )
+
+
+async def preserve_deleted_day_attachment_charges(
+    db: AsyncSession, *, trip_id: uuid.UUID, day_index: int
+) -> None:
+    """일자 CASCADE 전에 보존 파일을 비공개 여행 첨부로 남긴다."""
+    # 관리자 이동이 끝난 행은 원래 일자 집합에서 빠진 뒤여야 한다.
+    await db.flush()
+    now = datetime.now(UTC)
+    poi_ids = select(TripDayPoi.attachment_id).where(
+        TripDayPoi.trip_id == trip_id, TripDayPoi.day_index == day_index
+    )
+    await db.execute(
+        update(CuratedPlanAttachment)
+        .where(
+            or_(
+                (CuratedPlanAttachment.trip_id == trip_id)
+                & (CuratedPlanAttachment.trip_day_index == day_index),
+                CuratedPlanAttachment.trip_poi_id.in_(poi_ids),
+            )
+        )
+        .values(
+            trip_id=trip_id,
+            trip_day_index=None,
+            trip_poi_id=None,
+            moderation_hold=False,
+            restore_blocked=True,
+            deleted_at=func.coalesce(CuratedPlanAttachment.deleted_at, now),
+        )
+        .execution_options(synchronize_session="fetch")
     )
 
 
@@ -139,8 +183,7 @@ async def attachment_bytes_for_trip(db: AsyncSession, *, trip_id: uuid.UUID) -> 
     poi_ids = select(TripDayPoi.attachment_id).where(TripDayPoi.trip_id == trip_id)
     total = await db.scalar(
         select(func.coalesce(func.sum(CuratedPlanAttachment.byte_size), 0)).where(
-            CuratedPlanAttachment.deleted_at.is_(None),
-            _active_attachment_parent(),
+            CuratedPlanAttachment.purged_at.is_(None),
             or_(
                 CuratedPlanAttachment.trip_id == trip_id,
                 CuratedPlanAttachment.trip_poi_id.in_(poi_ids),
@@ -153,22 +196,23 @@ async def attachment_bytes_for_trip(db: AsyncSession, *, trip_id: uuid.UUID) -> 
 async def attachment_bytes_for_user(db: AsyncSession, *, user_id: uuid.UUID) -> int:
     total = await db.scalar(
         select(func.coalesce(func.sum(CuratedPlanAttachment.byte_size), 0)).where(
-            CuratedPlanAttachment.deleted_at.is_(None),
-            _active_attachment_parent(),
+            CuratedPlanAttachment.purged_at.is_(None),
             CuratedPlanAttachment.uploaded_by_user_id == user_id,
         )
     )
-    return int(total or 0)
+    from app.services.storage_lifecycle import pending_upload_bytes
+
+    return int(total or 0) + await pending_upload_bytes(db, user_id)
 
 
-async def assert_attachment_quota(
+async def assert_attachment_capacity(
     db: AsyncSession,
     *,
     user: User,
     trip_id: uuid.UUID,
-    byte_size: int,
+    additional_bytes: int,
 ) -> EffectiveAttachmentQuota:
-    # 업로드와 복원이 같은 순서(여행 → 사용자)로 잠가 총량 검사와 반영을 직렬화한다.
+    # 업로드는 여행 → 사용자 순서로 잠가 총량 검사와 반영을 직렬화한다.
     await db.scalar(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
     locked_user = await db.scalar(
         select(User)
@@ -181,19 +225,28 @@ async def assert_attachment_quota(
     user = locked_user
     settings_row = await get_storage_settings(db)
     quota = effective_attachment_quota(settings_row, user)
-    if byte_size > quota.max_upload_bytes:
-        raise AttachmentQuotaError(
-            f"개별 파일은 최대 {quota.max_upload_bytes} bytes까지 가능합니다."
-        )
     trip_used = await attachment_bytes_for_trip(db, trip_id=trip_id)
-    if trip_used + byte_size > quota.trip_quota_bytes:
+    if trip_used + additional_bytes > quota.trip_quota_bytes:
         raise AttachmentQuotaError(
             f"여행계획 첨부 총량은 최대 {quota.trip_quota_bytes} bytes까지 가능합니다."
         )
     user_used = await attachment_bytes_for_user(db, user_id=user.user_id)
-    if user_used + byte_size > quota.user_quota_bytes:
+    if user_used + additional_bytes > quota.user_quota_bytes:
         raise AttachmentQuotaError(
             f"사용자 첨부 총량은 최대 {quota.user_quota_bytes} bytes까지 가능합니다."
+        )
+    return quota
+
+
+async def assert_attachment_quota(
+    db: AsyncSession, *, user: User, trip_id: uuid.UUID, byte_size: int
+) -> EffectiveAttachmentQuota:
+    quota = await assert_attachment_capacity(
+        db, user=user, trip_id=trip_id, additional_bytes=byte_size
+    )
+    if byte_size > quota.max_upload_bytes:
+        raise AttachmentQuotaError(
+            f"개별 파일은 최대 {quota.max_upload_bytes} bytes까지 가능합니다."
         )
     return quota
 
@@ -306,7 +359,10 @@ async def list_admin_file_library(
     limit: int,
     offset: int,
 ) -> tuple[list[tuple[CuratedPlanAttachment, str | None, str | None, str]], int]:
-    filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None)]
+    filters: list[Any] = [
+        CuratedPlanAttachment.deleted_at.is_(None),
+        CuratedPlanAttachment.purged_at.is_(None),
+    ]
     if user_id is not None:
         filters.append(CuratedPlanAttachment.uploaded_by_user_id == user_id)
     if trip_id is not None:

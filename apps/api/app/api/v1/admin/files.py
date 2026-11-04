@@ -90,6 +90,7 @@ async def _get_attachment(db: DbSession, attachment_id: uuid.UUID) -> CuratedPla
         select(CuratedPlanAttachment).where(
             CuratedPlanAttachment.attachment_id == attachment_id,
             CuratedPlanAttachment.deleted_at.is_(None),
+            CuratedPlanAttachment.purged_at.is_(None),
         )
     )
     if attachment is None:

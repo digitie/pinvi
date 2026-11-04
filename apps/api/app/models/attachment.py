@@ -7,6 +7,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -77,6 +78,14 @@ class CuratedPlanAttachment(Base, TimestampMixin):
         nullable=False,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    restore_blocked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    moderation_hold: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     @property
     def notice_plan_id(self) -> uuid.UUID | None:

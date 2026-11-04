@@ -744,3 +744,22 @@
     - localStorage 키 pinvi.admin.sidebar.collapsed 를 '0' 으로 되돌림
   automation: scripted
   spec: specs/admin/admin-readonly-pages.live.spec.ts#ADM-040
+
+- id: ADM-041
+  title: 여행 휴지통·첨부 보존 상태와 정리 확인창 취소
+  priority: P2
+  tags: [desktop, mobile, admin, a11y]
+  preconditions:
+    - 관리자 로그인 상태
+  data_sources: [pinvi:storage-retention]
+  steps:
+    - /admin/retention의 여행 휴지통·첨부 정리 상태를 조회
+    - 실행 버튼이 있으면 사유·정확한 문구 입력 후 확인창을 열고 취소
+  expected:
+    - 30일 보존·후보 집계가 보이며 초기 실행 버튼은 비활성
+    - 확인창의 복원 불가 안내를 확인하고 취소하면 닫힘
+    - 영구 정리 POST는 보내지 않음
+  cleanup:
+    - 없음
+  automation: scripted
+  spec: specs/admin/admin-readonly-pages.live.spec.ts#ADM-041

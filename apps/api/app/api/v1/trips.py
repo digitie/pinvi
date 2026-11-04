@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from binascii import Error as BinasciiError
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from json import JSONDecodeError, dumps, loads
 from typing import Annotated, NoReturn
 
@@ -78,6 +78,7 @@ from app.services.trip import (
     TripOptimizeError,
     TripPermissionError,
     TripStatus,
+    TripTrashExpiredError,
     TripValidationError,
     TripVersionConflictError,
     TripVisibility,
@@ -137,6 +138,12 @@ def _to_response(trip) -> TripResponse:  # type: ignore[no-untyped-def]
         version=trip.version,
         created_at=trip.created_at,
         updated_at=trip.updated_at,
+        trash_expires_at=trip.deleted_at + timedelta(days=30) if trip.deleted_at else None,
+        can_restore=bool(
+            trip.deleted_at
+            and trip.purge_started_at is None
+            and trip.deleted_at + timedelta(days=30) > datetime.now(UTC)
+        ),
     )
 
 
@@ -539,6 +546,10 @@ async def restore_trip_endpoint(
 ) -> Envelope[TripResponse]:
     try:
         trip = await restore_trip(db, trip_id=trip_id, owner_user_id=uuid.UUID(current_user_id))
+    except TripTrashExpiredError as exc:
+        raise HTTPException(
+            status_code=410, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
     except TripNotFoundError as exc:
         _raise_trip_http(exc)
     except TripAttachmentQuotaError as exc:
@@ -605,6 +616,10 @@ async def copy_trip_endpoint(
             date_shift_days=body.date_shift_days,
             target_trip_id=body.target_trip_id,
         )
+    except TripAttachmentStorageRefError as exc:
+        _raise_attachment_storage_ref(exc)
+    except TripAttachmentQuotaError as exc:
+        _raise_attachment_quota(exc)
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
     except (TripCopyError, TripDayNotFoundError) as exc:

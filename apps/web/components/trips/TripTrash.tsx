@@ -28,7 +28,8 @@ export function TripTrash() {
   return <section className="space-y-5">
     <header className="space-y-2">
       <h1 className="text-2xl font-bold text-ink">여행 휴지통</h1>
-      <p className="text-sm text-muted">삭제한 여행을 초안으로 복원할 수 있습니다. 기존 공개 범위와 아직 유효한 공유 링크도 다시 적용됩니다.</p>
+      <p className="text-sm text-muted">삭제한 여행은 30일 동안 초안으로 복원할 수 있습니다. 기한 이후 정리 작업에서 영구 삭제됩니다. 복원하면 기존 공개 범위와 아직 유효한 공유 링크도 다시 적용됩니다.</p>
+      <p className="text-sm text-muted">휴지통의 첨부도 저장 용량에 포함됩니다. 복원해도 사용 용량은 늘어나지 않습니다.</p>
       <Link href="/trips" className="focus-ring inline-flex min-h-11 items-center underline">내 여행으로</Link>
     </header>
     {feedback && <p role="status" className="text-sm text-success-text">{feedback}</p>}
@@ -38,8 +39,8 @@ export function TripTrash() {
       : !page?.items.length ? <p>휴지통에 여행이 없습니다.</p>
       : <ul className="divide-y divide-hairline">
         {page.items.map((trip) => <li key={trip.trip_id} className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <div><h2 className="font-semibold">{trip.title}</h2><p className="text-sm text-muted">{trip.start_date ?? '날짜 미정'}{trip.end_date ? ` ~ ${trip.end_date}` : ''}</p></div>
-          <button type="button" aria-label={`${trip.title} 복원`} disabled={busyId != null}
+          <div><h2 className="font-semibold">{trip.title}</h2>{trip.trash_expires_at && <p className="text-sm text-muted">{trip.can_restore === false ? "보관 기한 만료 또는 정리 중 · 복원 불가" : new Date(trip.trash_expires_at).toLocaleString("ko-KR") + "까지 복원 가능"}</p>}<p className="text-sm text-muted">{trip.start_date ?? '날짜 미정'}{trip.end_date ? ` ~ ${trip.end_date}` : ''}</p></div>
+          <button type="button" aria-label={`${trip.title} 복원`} disabled={busyId != null || trip.can_restore === false}
             className="focus-ring min-h-11 rounded-sm border border-hairline px-4 disabled:opacity-50"
             onClick={async () => {
               if (busyId) return;

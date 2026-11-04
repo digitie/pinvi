@@ -25,6 +25,8 @@ from app.schemas.moderation import (
     ContentReportListResponse,
     ContentReportRecord,
 )
+from app.services.rustfs_storage import InvalidStorageRefError
+from app.services.storage_lifecycle import lock_restorable_attachment, lock_restorable_trip
 
 ContentModerationActionName = Literal["review", "hide", "takedown", "restore", "reject"]
 OPEN_REVIEW_STATUSES = {"received", "reviewing", "appealed"}
@@ -193,8 +195,6 @@ async def moderate_content_report(
     _require_action_allowed(row, action)
     before_state = await _load_current_target_state(db, row)
     now = datetime.now(UTC)
-    row.reviewer_user_id = actor_user_id
-    row.resolution_summary = body.resolution_summary.strip()
     if action == "review":
         row.status = "reviewing"
         row.reviewed_at = now
@@ -213,6 +213,8 @@ async def moderate_content_report(
     elif action == "reject":
         row.status = "rejected"
         row.actioned_at = now
+    row.reviewer_user_id = actor_user_id
+    row.resolution_summary = body.resolution_summary.strip()
     await db.flush()
     await _add_action(
         db,
@@ -524,15 +526,23 @@ async def _hide_target(
     target = await _load_target_model(db, row)
     if target is None:
         raise ContentReportNotFoundError
+    try:
+        if isinstance(target, Trip):
+            target = await lock_restorable_trip(db, target.trip_id)
+        elif isinstance(target, CuratedPlanAttachment):
+            target = await lock_restorable_attachment(db, target.attachment_id)
+    except InvalidStorageRefError as exc:
+        raise ContentReportTransitionError(str(exc)) from exc
     if isinstance(target, Trip):
         if taken_down:
             target.status = "archived"
-            target.deleted_at = now
+            target.deleted_at = target.deleted_at or now
         target.visibility = "private"
         target.version += 1
     elif isinstance(target, TripComment):
         target.deleted_at = target.deleted_at or now
     elif isinstance(target, CuratedPlanAttachment):
+        target.moderation_hold = True
         target.deleted_at = target.deleted_at or now
     elif isinstance(target, TripShareLink):
         target.revoked_at = target.revoked_at or now
@@ -545,6 +555,13 @@ async def _restore_target(db: AsyncSession, row: ContentReport) -> None:
     target = await _load_target_model(db, row)
     if target is None:
         raise ContentReportNotFoundError
+    try:
+        if isinstance(target, Trip):
+            target = await lock_restorable_trip(db, target.trip_id)
+        elif isinstance(target, CuratedPlanAttachment):
+            target = await lock_restorable_attachment(db, target.attachment_id)
+    except InvalidStorageRefError as exc:
+        raise ContentReportTransitionError(str(exc)) from exc
     snapshot = row.target_snapshot or {}
     if isinstance(target, Trip):
         target.deleted_at = None
@@ -554,6 +571,7 @@ async def _restore_target(db: AsyncSession, row: ContentReport) -> None:
     elif isinstance(target, TripComment):
         target.deleted_at = None
     elif isinstance(target, CuratedPlanAttachment):
+        target.moderation_hold = False
         target.deleted_at = None
     elif isinstance(target, TripShareLink):
         target.revoked_at = None

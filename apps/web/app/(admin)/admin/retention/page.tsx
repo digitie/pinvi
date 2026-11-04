@@ -17,6 +17,7 @@ import type { AdminRetentionRun } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { apiClient } from '@/lib/api';
+import { StorageRetentionPanel } from '@/components/admin/StorageRetentionPanel';
 
 const SCOPE_OPTIONS = [
   { value: 'all', label: '전체' },
@@ -293,6 +294,7 @@ export default function AdminRetentionPage() {
       )}
       {error && <ErrorBox message={error} />}
 
+      <StorageRetentionPanel />
       <Section title="실행 게이트">
         <div className="grid gap-3 text-sm sm:grid-cols-3" data-testid="admin-retention-summary">
           <MetricBox

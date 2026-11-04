@@ -81,7 +81,7 @@ post-v0.1.0 `Unreleased` 보강 진행 단계다. 이후 Sprint 5 (실시간 + E
 6 (MCP 외부 인터페이스 + Backup UI 핫스왑 + Korean geofencing + T108 N150 병행
 배포 + 법무 → **v1.0.0**). 릴리즈 마일스톤 표는 `docs/sprints/README.md`.
 
-ADR 현황: ADR-001 ~ **ADR-077**. 최근 박힘: ADR-024 (ADR-051로 superseded —
+ADR 현황: ADR-001 ~ **ADR-078**. 최근 박힘: ADR-024 (ADR-051로 superseded —
 과거 NTFS/WSL 미러 모델), ADR-025 (geocoding은 kor-travel-geo v2 REST 직접), ADR-026 (kor-travel-map은 OpenAPI
 HTTP 계약), **ADR-027** (그 HTTP 계약은 kor-travel-map이 신규 구축해야 할 목표 — 현재
 미존재, DEC-01=B), ADR-028 (정규 feature_id = kor_travel_map `make_feature_id`),
@@ -259,3 +259,5 @@ lint` + `npm run typecheck` (`apps/web`, Linux) + Playwright는 N150 전용 +
 | v1과 비교                                       | `docs/v1-to-v2-mapping.md`                                                                                                                     |
 
 자세한 진입 순서는 `AGENTS.md` "AI Agent 작업 진입 절차".
+
+ADR-078은 여행 휴지통30일·보존 첨부 과금·영속 업로드/GC와 관리자 명시적 정리를 정의한다(#667). 운영 최종 검증은 Claude Code가 담당한다.

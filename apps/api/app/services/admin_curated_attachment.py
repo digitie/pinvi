@@ -19,7 +19,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.attachment import CuratedPlanAttachment
 from app.models.curated_plan import CuratedPlanPoi, CuratedTripPlan
+from app.models.user import User
 from app.services.rustfs_storage import InvalidStorageRefError, validate_attachment_storage_ref
+from app.services.storage_lifecycle import claim_attachment_upload
+from app.services.storage_policy import (
+    attachment_bytes_for_user,
+    effective_attachment_quota,
+    get_storage_settings,
+)
 
 
 class CuratedAttachmentError(Exception):
@@ -127,6 +134,26 @@ async def create_curated_attachment(
         curated_poi_id=curated_poi_id,
         payload=payload,
     )
+    try:
+        await claim_attachment_upload(
+            db,
+            user_id=uploaded_by_user_id,
+            bucket=str(payload["bucket"]),
+            key=str(payload["storage_key"]),
+            byte_size=int(payload["byte_size"]),
+        )
+        user = await db.get(User, uploaded_by_user_id)
+        if user is None:
+            raise InvalidStorageRefError("업로드 사용자를 찾을 수 없습니다.")
+        quota = effective_attachment_quota(await get_storage_settings(db), user)
+        if (
+            await attachment_bytes_for_user(db, user_id=uploaded_by_user_id)
+            + int(payload["byte_size"])
+            > quota.user_quota_bytes
+        ):
+            raise InvalidStorageRefError("사용자 첨부 저장 용량을 초과했습니다.")
+    except InvalidStorageRefError as exc:
+        raise CuratedAttachmentStorageRefError(str(exc)) from exc
     attachment = CuratedPlanAttachment(
         curated_plan_id=curated_plan_id,
         curated_poi_id=curated_poi_id,

@@ -244,6 +244,17 @@ Cookie: pinvi_access=...
 
 여행/날짜/POI 첨부 metadata 등록 시 DB attachment metadata 기준으로 용량을 계산한다.
 
+#667: 삭제한 여행·POI와 soft delete된 첨부도 보존된 metadata의 크기를 총량에 포함한다.
+목록·다운로드는 기존 활성 부모/첨부 규칙을 유지한다. 복원은 이미 계산한 파일을 다시 노출하므로
+새 용량을 차감하지 않으며, 관리자가 한도를 낮춰 기존 사용량이 한도를 넘더라도 복원 자체를 막지 않는다.
+이 경우 새 업로드는 계속 한도를 검사한다. 일자 하드 삭제 전에는 일자·POI 첨부를 비공개 여행 첨부로
+옮겨 FK CASCADE가 과금 기록을 없애지 않게 한다. 복사·합치기로 만드는 새 첨부 참조는 추가 총량을
+검사하고 초과 시 전체 작업을 롤백한다. 같은 파일을 참조해도 metadata 행별 과금 기준을 유지한다.
+관리자 일자·POI 부분 복사도 실제 업로더로 기록되는 관리자의 총량을 검사한다.
+등록 직전에는 대상 여행 잠금 아래 쓰기 권한과 활성 부모 소속을 재검증한다. 관리자 이동 후
+다른 여행에 속하게 된 POI로의 오래된 요청은 INVALID_ATTACHMENT_STORAGE_REF(422)로 거부한다.
+객체 정리·휴지통 보존 기한은 범위 결정 중이다.
+
 | 정책                | 기본값                                                     | 사용자 override                              |
 | ------------------- | ---------------------------------------------------------- | -------------------------------------------- |
 | 개별 파일 최대 크기 | `storage_settings.attachment_max_upload_bytes` 기본 10MiB  | `users.attachment_max_upload_bytes_override` |
@@ -344,3 +355,13 @@ Methods: `PUT, GET, HEAD, OPTIONS`. Headers: `Content-Type, x-amz-*`.
 - [ ] 통합 테스트 (presigned URL 생성 + 검증)
 - [ ] kor-travel-map과 RustFS 공유 시 한 쪽 compose만 실행 가이드
       (`docs/runbooks/file-storage.md`)
+
+## 보존 첨부와 일회성 업로드 (#667, ADR-078)
+
+trip/day/poi/curated_plan/curated_poi 첨부의 URL 발급은 attachment_upload_intents에 예약한다. 만료된 미등록 예약도 물리 정리 확인 전까지 사용자 총량에 포함한다. 발급 전 초과는 409 ATTACHMENT_QUOTA_EXCEEDED다. 실제 proxy PUT 완료 byte_size와 일치해야 등록할 수 있고, 등록 트랜잭션에서 예약을 첨부 과금으로 바꾼다.
+
+proxy PUT은 시작 표식을 먼저 영속화한다. 같은 capability/키의 재사용은 422 UPLOAD_ALREADY_STARTED이며 새 URL을 발급해야 한다. 시작 뒤 중단·결과 불확실성도 키를 재사용하지 않는다. 영구 GC 표식이 있는 키의 PUT/등록/복사는 422 INVALID_ATTACHMENT_STORAGE_REF(관리자 복사409)로 거부한다.
+
+첨부가 삭제되거나 부모가 휴지통에 있어도 실제 파일이 남으면 과금한다. 파일 목록·다운로드 권한은 활성 부모 규칙을 유지한다. 물리 삭제 실패 원인은 관리자 상태 API의 비밀 없는 code:operation 집계에서 확인한다. 예약 없는 역사적 metadata 등록에는 기존 소유 prefix 계약을 유지하며, 기록 없는 저장소 객체를 일괄 추정 정리하지 않는다.
+
+저장소 설정 조회는 행이 없으면 기본값만 반환하고 INSERT하지 않는다. 명시적인 설정 변경만 singleton을 초기화하므로 최초 URL 발급과 첨부 등록 사이에 설정/사용자 잠금 순서가 역전되지 않는다.

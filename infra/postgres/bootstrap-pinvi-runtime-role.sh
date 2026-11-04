@@ -1274,4 +1274,8 @@ SQL
   if [ "${applied_revision}" = "20260917_0102" ]; then
     apply_runtime_acl_repair
   fi
+  if [ "${applied_revision}" = "20261105_0103" ]; then
+    apply_runtime_acl_repair
+  fi
+
 fi

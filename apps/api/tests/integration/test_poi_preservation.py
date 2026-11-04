@@ -148,7 +148,7 @@ async def test_poi_move_preserves_identity_metadata_and_attachments(
 
 
 @pytest.mark.parametrize("delete_parent", ["poi", "trip"])
-async def test_deleted_parent_excludes_files_and_quota_without_deleting_objects(
+async def test_deleted_parent_hides_files_but_keeps_retained_object_quota(
     client, verified_user, auth_cookies, session_factory, delete_parent
 ) -> None:
     user_id, _ = verified_user
@@ -179,12 +179,16 @@ async def test_deleted_parent_excludes_files_and_quota_without_deleting_objects(
     download = await client.get(f"/users/me/files/{attachment_id}/download-url", cookies=cookies)
     assert download.status_code == 404, download.text
     async with session_factory() as db:
-        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 0
-        assert await attachment_bytes_for_trip(db, trip_id=uuid.UUID(trip_id)) == 0
+        assert (
+            await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == payload["byte_size"]
+        )
+        assert (
+            await attachment_bytes_for_trip(db, trip_id=uuid.UUID(trip_id)) == payload["byte_size"]
+        )
         row = await db.get(CuratedPlanAttachment, uuid.UUID(attachment_id))
         assert row is not None and row.deleted_at is None
         assert row.storage_key == payload["storage_key"]
-        # 복원하면 동일 메타데이터와 quota가 돌아온다. 객체 삭제는 하지 않는다.
+        # 복원 전후 동일 메타데이터와 보존 객체의 쿼터를 유지한다.
         parent = await db.get(
             TripDayPoi if delete_parent == "poi" else Trip,
             uuid.UUID(poi_id if delete_parent == "poi" else trip_id),

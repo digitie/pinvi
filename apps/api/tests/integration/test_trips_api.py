@@ -1087,7 +1087,7 @@ async def test_attachment_upload_url_and_trip_quota_overrides(
     trip_id = created.json()["data"]["trip_id"]
 
     async with session_factory() as db:
-        settings_row = await get_storage_settings(db)
+        settings_row = await get_storage_settings(db, create=True)
         settings_row.attachment_max_upload_bytes = 1000
         settings_row.trip_attachment_quota_bytes = 5000
         settings_row.user_attachment_quota_bytes = 5000
@@ -1107,7 +1107,7 @@ async def test_attachment_upload_url_and_trip_quota_overrides(
     assert too_large_url.json()["error"]["code"] == "FILE_TOO_LARGE"
 
     async with session_factory() as db:
-        settings_row = await get_storage_settings(db)
+        settings_row = await get_storage_settings(db, create=True)
         settings_row.attachment_max_upload_bytes = 2000
         settings_row.trip_attachment_quota_bytes = 1500
         settings_row.user_attachment_quota_bytes = 5000

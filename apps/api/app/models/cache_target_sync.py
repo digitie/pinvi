@@ -615,7 +615,7 @@ class KtmCacheTargetBoundaryAudit(Base):
             # _BOUNDARY_CONTRACT_CHECK와 동일해야 한다.
             "contract_version = 'pinvi-cache-target-final-boundary/v1' "
             "AND status = 'succeeded' "
-            "AND (schema_revision = '20260824_0101' OR schema_revision = '20260917_0102')",
+            "AND (schema_revision = '20260824_0101' OR schema_revision = '20260917_0102' OR schema_revision = '20261105_0103')",
             name=conv("ck_ktm_ct_boundary_contract"),
         ),
         CheckConstraint(
