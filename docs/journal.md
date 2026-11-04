@@ -6,6 +6,15 @@
 - 이 커밋은 provenance/테스트 핀/문서만 바꾸며 제품은 679ca7a와 같다. 그 제품의 전체 WSL API 2,740개·웹 282개·실제 지연 UI 10항목 및 두 독립 리뷰를 완료했다.
 - 최종 Docker 설치 검증·두 exact HEAD 리뷰·CI를 마친 뒤 #662를 병합하고 최신 #643/#1444를 갱신한다. 운영 접속·배포·검증은 하지 않는다.
 
+
+## 2026-11-04 — #635 경로·영역 지도 레이어 초안
+- #643 본문·댓글과 Map #1444를 다시 읽었다. Map #1448(dd0238c) 및 SDK #20이 머지됐으며 Map 묶음은 완료됐다.
+- 최신 main7479bbe의 새 live E2E 카탈로그 #664(346건)를 기준으로 작업한다. 완료된 #643 항목의 카탈로그 기대값도 실제 동작 근거에 맞춰 확인한다.
+- 탐색·소유자 여행 지도에 경로/영역 토글을 추가하고 기존 vworld-map-web 선·면 컴포넌트로 LineString/MultiLineString/Polygon/MultiPolygon과 내부 구멍을 보존한다. 기존 팔레트·마커 톤은 유지한다.
+- 원래 map zoom14 이상에서 별도 in-bounds geometry 조회를 사용한다. nullable coord는 유지하며 popup 클릭 위치와 장소 좌표를 구분한다. 숨긴 feature·공유 지도 정책·오래된 비동기 응답 경계를 검증한다.
+- Map dd0238c의 OpenAPI/provenance를 동기화하고 geometry/truncated 계약을 HTTP→API→Zod→UI까지 전달한다. 검색·단건 상세에 없는 geometry 파라미터를 만들지 않는다.
+- 초안 PR 먼저 작성하고 구현 단위로 원격 커밋한다. WSL 실제 API/UI·관련 회귀·전문 적대 리뷰 2인·최종 CI 후 일반 머지한다. prod 접근·배포·검증은 하지 않는다.
+
 ## 2026-11-04 — 상세 카드 최종 WSL 전체 검사·실제 클릭 시간 검증
 
 - 제품 679ca7a의 WSL 전체 API 2,740개 통과·조건부 12개 skip(956.99초), 웹 전체 282개, workspace 타입 검사·API mypy 256파일·Ruff·포맷 481파일을 통과했다.
