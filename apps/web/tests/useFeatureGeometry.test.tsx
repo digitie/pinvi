@@ -279,3 +279,21 @@ describe('useFeatureGeometry', () => {
     expect(result.current.features[0]?.feature_id).toBe('route:retry');
   });
 });
+
+it('이전 native popup의 늦은 닫기가 같은 도형의 새 선택을 지우지 않는다', async () => {
+  inBounds.mockResolvedValue(response());
+  const { result } = renderHook(() => useFeatureGeometry({ active: true }));
+  act(() => {
+    result.current.onViewportChange(map());
+    result.current.toggle('route', true);
+  });
+  await tick();
+  act(() => result.current.select(route(), [127, 36]));
+  const old = result.current.selection!.revision;
+  act(() => result.current.select(route(), [127, 36]));
+  const current = result.current.selection!.revision;
+  act(() => result.current.clearSelection(old));
+  expect(result.current.selection?.revision).toBe(current);
+  act(() => result.current.clearSelection(current));
+  expect(result.current.selection).toBeNull();
+});

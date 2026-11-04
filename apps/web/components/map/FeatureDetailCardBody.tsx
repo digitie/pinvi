@@ -89,7 +89,12 @@ export function FeatureDetailCardBody({
   testId = 'feature-detail-card-body',
 }: FeatureDetailCardBodyProps) {
   return (
-    <div className="space-y-3" data-testid={testId} data-kind={card.kind}>
+    <div
+      className="space-y-3"
+      data-testid={testId}
+      data-kind={card.kind}
+      data-feature-id={card.feature_id}
+    >
       {card.degraded_providers.length > 0 && (
         <p
           className="flex items-center gap-1 text-xs text-muted"

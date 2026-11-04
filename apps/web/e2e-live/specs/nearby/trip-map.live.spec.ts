@@ -11,13 +11,17 @@
  * Mutating: creates one `[e2e]` trip per project in beforeAll and deletes it in afterAll (+ sweep).
  */
 import { expect, test, type Page } from '@playwright/test';
+import { runSearch, searchRows } from '../../helpers/search';
+import { renderedMap, waitForCamera } from '../../helpers/geometry';
+import { normalizeFixtureName } from '../../helpers/searchFixture';
 import {
   createTrip,
   deleteAllE2eTrips,
   deleteTrip,
   e2ePrefix,
   loginAsUser,
-  searchAndAddPlace,
+  poiRows,
+  selectDay,
   shot,
   waitForMapIdle,
 } from '../../helpers/live';
@@ -47,8 +51,6 @@ test.setTimeout(180_000);
 
 /** 2026-11-02 prod e2e itinerary — heritage/cave families spread over 영월·영주·안동 (north pin = 고씨굴). */
 const PLACES = ['영월 고씨굴', '소수서원', '도산서원', '안동하회마을'] as const;
-const REGION = { lonMin: 128.4, lonMax: 128.95, latMin: 36.5, latMax: 37.25 };
-const pickMapFeature = (rowText: string) => rowText.includes('장소');
 
 const tripMarkers = (page: Page) => page.locator('.maplibregl-marker.trip-map-marker');
 const searchCard = (page: Page) => page.getByTestId('trip-map-place-search');
@@ -63,6 +65,7 @@ async function openTrip(page: Page, id: string) {
 
 test.describe('NEAR trip map — four-place trip', () => {
   let tripId = '';
+  const expectedCoords:{lon:number;lat:number}[]=[];
 
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage();
@@ -75,13 +78,19 @@ test.describe('NEAR trip map — four-place trip', () => {
     tripId = trip.id;
     await page.goto(`/trips/${tripId}`);
     for (const place of PLACES) {
-      const key = place.replace(/^\S+\s/, ''); // '영월 고씨굴' → '고씨굴'
-      try {
-        await searchAndAddPlace(page, 1, place, (row) => pickMapFeature(row) && row.includes(key));
-      } catch {
-        // Map rows can briefly be missing (search degraded) — any non-external row with the name keeps a pin there
-        await searchAndAddPlace(page, 1, place, (row) => row.includes(key) && !/카카오|네이버/.test(row));
-      }
+      await selectDay(page,1);
+      const scope=page.locator('#trip-panel-plan').getByTestId('map-search').first();
+      const outcome=await runSearch(page,place,{scope});
+      expect(outcome.status).toBe(200);
+      const key=normalizeFixtureName(place.replace(/^\S+\s/,''));
+      const index=outcome.rows.findIndex(row=>row.source==='feature'&&row.coord!=null
+        &&normalizeFixtureName(row.name).endsWith(key));
+      expect(index,'여행 범위 fixture에는 해당 Map 장소의 실제 point 좌표가 필요하다').toBeGreaterThanOrEqual(0);
+      const picked=outcome.rows[index]!;
+      expectedCoords.push(picked.coord!);
+      const before=await poiRows(page).count();
+      await searchRows(page,undefined,scope).nth(index).click();
+      await expect(poiRows(page)).toHaveCount(before+1);
     }
     await page.close();
   });
@@ -140,19 +149,26 @@ test.describe('NEAR trip map — four-place trip', () => {
 
   test('NEAR-024 nearby data is requested for the trip viewport, not the Seoul default', async ({ page }) => {
     await openTrip(page, tripId);
+    const map=await renderedMap(page);
+    await waitForCamera(map);
+    expect(expectedCoords).toHaveLength(4);
     const res = await toggleExpectingRequest(page, 'highway_incident');
     const q = markersQuery(res);
-    expect(q.bbox[0]).toBeLessThanOrEqual(REGION.lonMin);
-    expect(q.bbox[2]).toBeGreaterThanOrEqual(REGION.lonMax);
-    expect(q.bbox[1]).toBeLessThanOrEqual(REGION.latMin);
-    expect(q.bbox[3]).toBeGreaterThanOrEqual(REGION.latMax);
+    for(const coord of expectedCoords){
+      expect(q.bbox[0]).toBeLessThanOrEqual(coord.lon);
+      expect(q.bbox[2]).toBeGreaterThanOrEqual(coord.lon);
+      expect(q.bbox[1]).toBeLessThanOrEqual(coord.lat);
+      expect(q.bbox[3]).toBeGreaterThanOrEqual(coord.lat);
+    }
+    expect(await map.evaluate((m,coords)=>coords.every(c=>m.getBounds().contains([c.lon,c.lat])),expectedCoords)).toBe(true);
+    await map.dispose();
     // The fitted viewport is centred on the trip (영월~안동), not on the Seoul default camera — at the
     // fit zoom a wide desktop viewport may still *contain* Seoul, so compare centres, not containment.
     const cx = (q.bbox[0] + q.bbox[2]) / 2;
     const cy = (q.bbox[1] + q.bbox[3]) / 2;
     // fit padding (search card + panel on the left) shifts the centre west by ~1°
-    expect(Math.abs(cx - (REGION.lonMin + REGION.lonMax) / 2)).toBeLessThan(2);
-    expect(Math.abs(cy - (REGION.latMin + REGION.latMax) / 2)).toBeLessThan(2);
+    expect(Math.abs(cx - (Math.min(...expectedCoords.map(c=>c.lon))+Math.max(...expectedCoords.map(c=>c.lon)))/2)).toBeLessThan(2);
+    expect(Math.abs(cy - (Math.min(...expectedCoords.map(c=>c.lat))+Math.max(...expectedCoords.map(c=>c.lat)))/2)).toBeLessThan(2);
     expect(Math.hypot(cx - 126.978, cy - 37.5665)).toBeGreaterThan(1);
     await expectLayerLineShape(page, 'highway_incident');
     const rest = await toggleExpectingRequest(page, 'rest_area', (x) => x.layers.includes('rest_area'));

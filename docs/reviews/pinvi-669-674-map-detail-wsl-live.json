@@ -1,0 +1,94 @@
+{
+  "ok": true,
+  "baseline": false,
+  "popupBudgetBaseline": false,
+  "popupTerminalMs": 2526.432393000003,
+  "nativeCloseBaseline": false,
+  "independentDetailMs": 931.814916000003,
+  "fixtureOnly": true,
+  "production_validation": false,
+  "httpProductMocks": false,
+  "tileFixtureOnly": true,
+  "ownedExternalProviderFixture": true,
+  "ownedGeolocationFaultInjection": true,
+  "browser": "156.0.8078.4",
+  "enrichmentMs": 2560.713111000001,
+  "initialFit": {
+    "width": 844,
+    "bbox": [127.98449837535867, 36.415773861281366, 129.36550162464448, 37.51912769603527],
+    "contained": [true, true, true, true]
+  },
+  "narrowFit": {
+    "width": 390,
+    "bbox": [128.35592934406384, 36.415773861281366, 128.99407065593738, 37.51912769603527],
+    "contained": [true, true, true, true]
+  },
+  "popup": {
+    "popupZ": "20",
+    "target": null,
+    "closeReceives": true
+  },
+  "popupBlocked": false,
+  "checks": [
+    "현재 HTTP 검색 응답의 정확 일치 point ID·좌표와 실제 zoom15/중심 검증",
+    "보류한 브라우저 위치 응답 해제 후 명시적 검색 카메라 유지",
+    "좌표 없는 검색 feature는 가짜 point 없이 실제 상세200으로 연결",
+    "실제 provider HTTP Kakao3초·Naver즉시 응답에서 단일2.5초 예산의 Naver 부분 UI 보존",
+    "Map4초 지연의 popup을 제한된 detail-card503·공개 오류 UI로 3.2초 안에 종료",
+    "외부 날씨4초 지연 중 실제 정본 popup ID·본문이3초 이내 표시",
+    "실제 배경 닫기 후 같은 핀 재선택·정확한 popup ID 복원",
+    "도형 실제 연속 클릭·native 늦은 닫기·배경 닫기 뒤 재선택",
+    "저장된4개 POI 좌표와 실제 초기/390px resize camera bbox 대조",
+    "모바일 제어 POI 선택→도형 전환에서 늦은 POI 닫기가 새 도형을 지우지 않음",
+    "여행 검색의 null 좌표 행은 상세 오안내 없이 비활성, 정상 좌표 행은 실제 POI201·목록5개",
+    "패널과 겹친 첫 popup의 실제 닫기 클릭 성공(force·dispatch 없음)"
+  ],
+  "scope": "격리 WSL의 실제 Map/PostGIS·Pinvi API·Next.js·Chromium. raster만 고정; 외부 provider/날씨 HTTP 및 Map latency는 소유한 시험 장치. 운영 접근 없음.",
+  "map_source": "dd0238c3f988b03dc02a2deb13e06e5258e85313",
+  "baseline_observations": [
+    "수정 전 실제 첫 popup z-index2가 교통 패널10 아래라 일반 닫기 클릭이 막혔다.",
+    "원시 popup 상세는 Map4초 지연 때3초 뒤에도 loading이었다.",
+    "네이티브 배경 닫기 뒤 같은 점을 다시 선택하면 popup이 없었다.",
+    "동시 시작·완료 결과·취소 회귀3개와 잘못된 provider 응답3개, stale 검색 응답2개가 수정 전에 실패했다.",
+    "여행 검색의 좌표 없는 feature가 상세 보기 활성 행인 회귀가 수정 전1실패·8대조 통과였다. 상세 capability를 탐색 호출부만 활성화해9개 통과했다."
+  ],
+  "limits": [
+    "실제 검색 첫 행은 좌표 있는 행이었다. 첫 null/wrong-name fixture는 순수 helper 회귀에서만 검증했다.",
+    "WSL 초기844px·390px의 실제4좌표는 수정 전에도 포함됐다. 운영 모바일 fit 결함을 재현했다고 주장하지 않으며 resize 제품 코드는 바꾸지 않았다.",
+    "2.5초는 서버 처리 전체 예산이다. 기록된 브라우저 시간은 이 시험 환경의 관측이며 네트워크 전체 시간 보장이 아니다.",
+    "운영 최종 검증은 Claude Code가 담당한다. 배경 지도 타일은 시험 고정 raster다."
+  ],
+  "checks_local": {
+    "api_detail": 20,
+    "web": 352,
+    "mypy_files": 256,
+    "web_typecheck": true,
+    "web_lint_errors": 0,
+    "web_existing_lint_warnings": 5,
+    "catalog_cases": 346,
+    "catalog_scripted": 298
+  },
+  "source_sha256": {
+    "apps/api/app/api/v1/features.py": "0dca114f2c9d426d9b4946befc274b51ace4c70db9a713f5d5c781e6c8397637",
+    "apps/api/tests/integration/test_feature_detail_card_api.py": "1b41671ffcc3bbee023cf70e5b5ccbdbdddcc337ef836dbb0877f59b9910be24",
+    "apps/web/app/globals.css": "cc29e3475f6851cda0b6eafbc8bfe5c469074781faaab5c86acb1396664bd538",
+    "apps/web/components/map/FeatureDetailCardBody.tsx": "724db6775fbee51976b966b8cb96bb30cd7ed8aca11153eb6f336b03a9e5dfd1",
+    "apps/web/components/map/FeatureGeometryLayer.tsx": "e5022096c6dd9a382b57e3a666092f8891fdd2c332cdf3ff33f7a8d773a18c8f",
+    "apps/web/components/map/FeatureMapView.tsx": "7671d234b51763cef6d680866a79b53f7b0c65cfe9abfe9d2f822d4b72ff435c",
+    "apps/web/components/map/MapSearchBox.tsx": "7fcc7103f6c9fdce43e772c27e99775490edbc5044d51dd79a0b5af21bf28b7e",
+    "apps/web/components/map/vworldPrimitives.tsx": "b2517dd09f7981ece2335c7ea8e9e395783e93abce9e45768358cab9186b1feb",
+    "apps/web/components/trips/SharedTripView.tsx": "440ee0ae4db2703da4704af7ca60f5e0aee36f6de8e2343e871adf0de573f1fb",
+    "apps/web/components/trips/TripDetail.tsx": "c76fe76524c05dfb291303f719dff9b222ab17f77a7ffc7082512f2d706f96db",
+    "apps/web/components/trips/TripMapView.tsx": "1ddd9a4a6f99c477b9931340c84160b0fd66bc26d8b343bbeff5227e3b0d88b6",
+    "apps/web/e2e-live/helpers/nearby.ts": "fa2e3d71b66844656a11fd36f016108d30685141aab8dd2f36e639b8e21b1648",
+    "apps/web/e2e-live/helpers/searchFixture.ts": "2b28091dc4a71e281da772a8e902400fb987a21f1c5bf47ef46a72b6e9f8d36d",
+    "apps/web/e2e-live/specs/core/core-resilience.live.spec.ts": "85daa9eae804e8705a676da6602022f08642081325f90f45d3b92a353831acb8",
+    "apps/web/e2e-live/specs/nearby/trip-map.live.spec.ts": "4653208b3d64e78bb9007b1b90e0ec2a2e601a6c43eacda407e788f1505befd7",
+    "apps/web/lib/useFeatureGeometry.ts": "274445928e1de84214629dec9705648d36ec8766abd8c410935091239cb08d8e",
+    "apps/web/tests/FeatureGeometryLayer.test.tsx": "7cfc1d4fc97197e4d1cc40a43d6c07c4b89f34e433974173127a4d218c25be52",
+    "apps/web/tests/MapSearchBox.test.tsx": "bb4e89531b16f9ba036c6ca7f7cec4d3ddf44d06f4a5756849275c56ab2b9440",
+    "apps/web/tests/searchFixtureSelection.test.ts": "a2e9c8e17882d6d5ca3958c6990660c0ed66bbb15a562495d2711dc2665c44df",
+    "apps/web/tests/tripMapViewFit.test.tsx": "5c2fc04094af6350eb8d2184634097ca1b0091e315ac1e6668f0d190a8b24b68",
+    "apps/web/tests/useFeatureGeometry.test.tsx": "eb2bf20eb8ce9b0782a8b6cd7bae74a0e4a5d3f3a04422362bec4865b9169759"
+  }
+}

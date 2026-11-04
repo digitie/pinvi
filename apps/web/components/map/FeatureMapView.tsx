@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LocateFixed } from 'lucide-react';
 import { ApiError, featureApi, userApi, weatherApi } from '@pinvi/api-client';
 import type {
-  FeatureDetail,
   FeaturesInBoundsResponse,
   FeatureWeatherCard,
   PlaceSearchResult,
@@ -58,7 +57,7 @@ import {
 import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
 import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
-import { addressLine } from '@/lib/featureAddress';
+import { useFeatureDetailCard } from '@/lib/useFeatureDetailCard';
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { useAbortableLoad } from '@/lib/useAbortableLoad';
@@ -257,7 +256,6 @@ export function FeatureMapView({
   // F5: feature 상세 풀스크린 모달(weather 제외). null이면 닫힘.
   const [detailFeatureId, setDetailFeatureId] = useState<string | null>(null);
   const mobileLayout = useMobileWebLayout();
-  const [detail, setDetail] = useState<FeatureDetail | null>(null);
   const [weather, setWeather] = useState<FeatureWeatherCard | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -504,18 +502,17 @@ export function FeatureMapView({
   const [prevSelectedFeatureId, setPrevSelectedFeatureId] = useState(selectedFeatureId);
   if (selectedFeatureId !== prevSelectedFeatureId) {
     setPrevSelectedFeatureId(selectedFeatureId);
-    setDetail(null);
     setWeather(null);
   }
 
   // 선택된 feature 의 상세·날씨를 **따로** 로드한다 — 상세(~0.1 s)가 느린 날씨(최대 4 s)를 기다리지
   // 않게. 선택이 바뀌면 직전 요청을 **취소**한다(느린 날씨 응답이 브라우저 연결을 붙잡아 다른 요청을
   // 줄 세우지 않게). 실패는 팝업 제목만으로 degrade.
-  useAbortableLoad(
-    selectedFeatureId,
-    (featureId, signal) => featureApi(apiClient).get(featureId, { signal }),
-    setDetail,
-  );
+  const {
+    card: detail,
+    loading: detailLoading,
+    error: detailError,
+  } = useFeatureDetailCard(detailFeatureId ? null : selectedFeatureId);
   useAbortableLoad(
     selectedFeatureId,
     (featureId, signal) => featureApi(apiClient).weather(featureId, {}, { signal }),
@@ -549,9 +546,18 @@ export function FeatureMapView({
   // 검색 결과(feature/my_poi/address/kakao/naver)로 지도를 이동. feature source면 마커도 선택.
   const handleSearchSelect = useCallback(
     (result: PlaceSearchResult) => {
+      userInteractedRef.current = true;
       clearGeometrySelection();
       const coord = result.coord;
-      if (!coord) return;
+      if (!coord) {
+        // 위치를 만들지 않고 실제 feature 상세로 연결한다.
+        if (result.feature_id) {
+          setSelected(null);
+          setSelectedWeatherMarker(null);
+          setDetailFeatureId(result.feature_id);
+        }
+        return;
+      }
       if (result.feature_id != null) {
         const style = resolveMarkerStyle({
           upstreamColor: result.marker_color,
@@ -760,7 +766,7 @@ export function FeatureMapView({
   }, []);
 
   const currentTemp = currentTempC(weather);
-  const detailAddress = addressLine(detail);
+  const detailAddress = detail?.address_line ?? null;
 
   return (
     // 높이는 셸이 흘려보낸다 — 바깥 래퍼까지 flex 사슬을 이어야 `h-full`이 실제로 해소된다
@@ -770,7 +776,11 @@ export function FeatureMapView({
         <div className="relative min-h-0 flex-1">
           <div className="pointer-events-none absolute inset-0 z-10">
             <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
-              <MapSearchBox onSelect={handleSearchSelect} getBias={getSearchBias} />
+              <MapSearchBox
+                onSelect={handleSearchSelect}
+                allowFeatureDetail
+                getBias={getSearchBias}
+              />
               {/* 상태는 상시 표가 아니라 **일이 생겼을 때만** 뜬다(DESIGN.md 상태 UI). */}
               {error ? (
                 <p
@@ -938,8 +948,21 @@ export function FeatureMapView({
               />
               {userLocation && <UserLocationMarker lngLat={userLocation} />}
               {selected && (
-                <Popup lngLat={selected.lngLat} maxWidth="260px" closeButton={false}>
-                  <div className="space-y-2">
+                <Popup
+                  key={selected.id}
+                  lngLat={selected.lngLat}
+                  maxWidth="260px"
+                  closeButton={false}
+                  onClose={() =>
+                    setSelected((current) => (current?.id === selected.id ? null : current))
+                  }
+                >
+                  <div
+                    className="space-y-2"
+                    data-testid="feature-map-popup"
+                    data-feature-id={selected.featureId}
+                    data-detail-feature-id={detail?.feature_id}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-semibold text-ink">
                         {detail?.name ?? selected.title}
@@ -969,7 +992,19 @@ export function FeatureMapView({
                     {currentTemp != null && (
                       <p className="text-xs text-body">현재 기온 {currentTemp.toFixed(0)}°C</p>
                     )}
-                    {!detail && <p className="text-xs text-muted">상세 불러오는 중…</p>}
+                    {detailLoading && !detail && (
+                      <p className="text-xs text-muted">상세 불러오는 중…</p>
+                    )}
+                    {detailError && (
+                      <p role="alert" className="text-xs text-error-text">
+                        {detailError}
+                      </p>
+                    )}
+                    {!!detail?.degraded_providers.length && (
+                      <p role="status" className="text-xs text-muted">
+                        일부 상세 정보가 지연되고 있습니다.
+                      </p>
+                    )}
                     {selected.featureId && (
                       <button
                         type="button"
@@ -986,7 +1021,17 @@ export function FeatureMapView({
               {/* T-368 — weather marker는 feature가 아니므로 상세보기가 없다. 값은 marker 자체
                   (`selectedWeatherMarker`)에 이미 있어 선택 시 별도 fetch가 필요 없다. */}
               {selectedWeatherMarker && (
-                <Popup lngLat={selectedWeatherMarker.lngLat} maxWidth="220px" closeButton={false}>
+                <Popup
+                  key={selectedWeatherMarker.id}
+                  lngLat={selectedWeatherMarker.lngLat}
+                  maxWidth="220px"
+                  closeButton={false}
+                  onClose={() =>
+                    setSelectedWeatherMarker((current) =>
+                      current?.id === selectedWeatherMarker.id ? null : current,
+                    )
+                  }
+                >
                   <div className="space-y-1">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-semibold text-ink">

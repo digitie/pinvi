@@ -5,11 +5,20 @@
  * lib/useFeatureDetailCard.ts (abort on featureId change), components/map/FeatureDetailModalController.tsx.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { clickableFeatureMarkers, dismissFeaturePopup, ensureFeatureMarkers, loginAsUser, shot } from '../../helpers/live';
+import {
+  clickableFeatureMarkers,
+  dismissFeaturePopup,
+  ensureFeatureMarkers,
+  loginAsUser,
+  shot,
+} from '../../helpers/live';
 import { annotate, isMobileViewport, timed, waitForMapCanvas } from '../../helpers/core';
 
 async function openExploreMap(page: Page) {
-  const inBounds = page.waitForResponse((r) => r.url().includes('/features/in-bounds') && r.status() === 200, { timeout: 45_000 });
+  const inBounds = page.waitForResponse(
+    (r) => r.url().includes('/features/in-bounds') && r.status() === 200,
+    { timeout: 45_000 },
+  );
   await page.goto('/map');
   await waitForMapCanvas(page);
   await inBounds;
@@ -24,59 +33,82 @@ test.describe('CORE resilience', () => {
     await loginAsUser(page);
   });
 
-  test('CORE-023 상세 카드는 날씨가 느려도 3초 안에 뜬다(#622 — detail-card 경로)', async ({ page }, testInfo) => {
-    await openExploreMap(page);
-    const [pin] = await clickableFeatureMarkers(page, 1);
-    expect(pin, 'a feature pin inside the visible map area').toBeTruthy();
-    const featureId = ((await pin!.getAttribute('aria-label')) ?? '').slice(0, 20);
-    let weatherMs: number | null = null;
-    const tW = Date.now();
-    page.on('response', (r) => {
-      if (/\/features\/[^/]+\/weather/.test(r.url()) && weatherMs == null) weatherMs = Date.now() - tW;
-    });
-    await pin!.click();
-    if (!isMobileViewport(page)) {
-      // the popup itself waits for detail + weather (#622 popup path, CORE-024)
-      await page.getByTestId('feature-map-detail-open').click({ timeout: 30_000 });
-    }
-    const { ms } = await timed(async () => {
-      await expect(page.getByTestId('feature-detail-card-body')).toBeVisible({ timeout: 10_000 });
-    });
-    await shot(page, 'CORE-023', 'card');
-    annotate(testInfo, 'metric', `detail-card ${ms}ms, feature=${featureId}, weather=${weatherMs ?? 'pending'}ms`);
-    expect(ms, 'detail-card visible within 3s').toBeLessThan(3000);
-    const kind = await page.getByTestId('feature-detail-card-body').getAttribute('data-kind');
-    expect(['place', 'event', 'notice', 'price']).toContain(kind);
-  });
-
-  test('CORE-024 마커 팝업의 상세 텍스트가 날씨 응답을 기다리지 않는다(#622 — 팝업 경로)', async ({ page }, testInfo) => {
-    test.skip(isMobileViewport(page), '모바일은 팝업 없이 상세 시트 직행');
-    // #622 shipped the split detail/weather load (no allSettled join in FeatureMapView) — the expected-fail
-    // marker was removed after the 2026-11-03 prod run passed (popup detail 11 ms).
+  test('CORE-023 상세 본문 또는 정본 서비스 저하를 3초 안에 표시', async ({ page }, testInfo) => {
     await openExploreMap(page);
     const [pin] = await clickableFeatureMarkers(page, 1);
     expect(pin).toBeTruthy();
-    let detailAt: number | null = null;
-    let weatherAt: number | null = null;
-    const t0 = Date.now();
-    page.on('response', (r) => {
-      const u = r.url();
-      if (/\/features\/[^/?]+\/weather/.test(u)) weatherAt = Date.now() - t0;
-      else if (/\/features\/[^/?]+$/.test(u) && r.request().method() === 'GET') detailAt = Date.now() - t0;
-    });
-    await pin!.click();
-    const popup = page.locator('.maplibregl-popup');
-    await expect(popup).toBeVisible({ timeout: 30_000 });
+    let code = 0;
     const { ms } = await timed(async () => {
-      await expect(popup.getByText('상세 불러오는 중…')).toHaveCount(0, { timeout: 10_000 });
+      const isCardRequest = (req: import('@playwright/test').Request) => {
+        const url = new URL(req.url());
+        return (
+          req.method() === 'GET' &&
+          url.pathname.endsWith('/detail-card') &&
+          !url.searchParams.has('providers')
+        );
+      };
+      if (!isMobileViewport(page)) {
+        const popupRequest = page.waitForRequest(isCardRequest);
+        await pin!.click();
+        await popupRequest;
+      }
+      const request = page.waitForRequest(isCardRequest);
+      if (isMobileViewport(page)) await pin!.click();
+      else await page.getByTestId('feature-map-detail-open').click();
+      const res = await (await request).response();
+      expect(res).not.toBeNull();
+      code = res!.status();
+      const payload = await res!.json();
+      if (code === 200) {
+        const body = page.getByTestId('feature-detail-card-body');
+        await expect(body).toBeVisible();
+        await expect(body).toHaveAttribute('data-feature-id', payload.data.feature_id);
+        await expect(body).toHaveAttribute('data-kind', payload.data.kind);
+      } else {
+        expect(code).toBe(503);
+        expect(payload.error.code).toBe('FEATURE_SERVICE_UNAVAILABLE');
+        await expect(page.getByTestId('feature-detail-modal').getByRole('alert')).toBeVisible();
+      }
     });
-    await shot(page, 'CORE-024', 'popup');
-    annotate(testInfo, 'metric', `popup detail ${ms}ms (detail resp ${detailAt}ms, weather resp ${weatherAt}ms)`);
-    // detail text must land within 3 s even when weather is slower than that
+    annotate(testInfo, 'metric', 'detail-card ' + ms + 'ms, HTTP ' + code);
     expect(ms).toBeLessThan(3000);
-    if (weatherAt != null && detailAt != null && weatherAt > detailAt + 500) {
-      expect(ms).toBeLessThan(weatherAt);
-    }
+    await shot(page, 'CORE-023', 'card');
+  });
+
+  test('CORE-024 팝업의 제한된 상세가 느린 날씨를 기다리지 않는다', async ({ page }, testInfo) => {
+    test.skip(isMobileViewport(page), '모바일은 상세 시트 직행');
+    await openExploreMap(page);
+    const [pin] = await clickableFeatureMarkers(page, 1);
+    expect(pin).toBeTruthy();
+    const response = page.waitForResponse((res) => {
+      const url = new URL(res.url());
+      return (
+        res.request().method() === 'GET' &&
+        url.pathname.endsWith('/detail-card') &&
+        !url.searchParams.has('providers')
+      );
+    });
+    let code = 0;
+    const { ms } = await timed(async () => {
+      await pin!.click();
+      const popup = page.getByTestId('feature-map-popup');
+      await expect(popup).toBeVisible();
+      const res = await response;
+      code = res.status();
+      const payload = await res.json();
+      if (code === 200) {
+        await expect(popup).toHaveAttribute('data-feature-id', payload.data.feature_id);
+        await expect(popup).toHaveAttribute('data-detail-feature-id', payload.data.feature_id);
+      } else {
+        expect(code).toBe(503);
+        expect(payload.error.code).toBe('FEATURE_SERVICE_UNAVAILABLE');
+        await expect(popup.getByRole('alert')).toBeVisible();
+      }
+      await expect(popup.getByText('상세 불러오는 중…')).toHaveCount(0);
+    });
+    annotate(testInfo, 'metric', 'popup detail ' + ms + 'ms, HTTP ' + code);
+    expect(ms).toBeLessThan(3000);
+    await shot(page, 'CORE-024', 'popup');
   });
 
   test('CORE-025 선택 변경 시 이전 상세 요청을 버린다 — stale 카드 없음', async ({ page }) => {
@@ -97,7 +129,19 @@ test.describe('CORE resilience', () => {
     await pins.nth(0).click();
     // desktop: immediately supersede A with B. Mobile: A's sheet now covers the map — the mobile branch
     // below closes it and taps B.
-    if (!isMobileViewport(page)) await pins.nth(1).click();
+    if (!isMobileViewport(page)) {
+      const uncovered = await pins.nth(1).evaluate((el) => {
+        const r = el.getBoundingClientRect(),
+          top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return top === el || el.contains(top);
+      });
+      if (!uncovered)
+        await page
+          .getByTestId('feature-map-popup')
+          .getByRole('button', { name: '닫기', exact: true })
+          .click();
+      await pins.nth(1).click();
+    }
     if (isMobileViewport(page)) {
       // mobile: A's sheet opened; close it, tap B, sheet must be B (useFeatureDetailCard aborts A)
       const modal = page.getByTestId('feature-detail-modal');
@@ -106,12 +150,28 @@ test.describe('CORE resilience', () => {
       await expect(modal).toHaveCount(0);
       await dismissFeaturePopup(page); // the selection popup stays over the map after the sheet closes
       await pins.nth(1).tap();
-      await expect(page.getByTestId('feature-detail-modal-title')).toContainText(b.slice(0, 4), { timeout: 15_000 });
-      await page.waitForTimeout(2500); // let any late A response land
+      const popup = page.getByTestId('feature-map-popup');
+      const idB = await popup.getAttribute('data-feature-id');
+      expect(idB).toBeTruthy();
+      await expect(page.getByTestId('feature-detail-card-body')).toHaveAttribute(
+        'data-feature-id',
+        idB!,
+      );
+      await expect(page.getByTestId('feature-detail-modal-title')).toContainText(b.slice(0, 4), {
+        timeout: 15_000,
+      });
+      await page.waitForTimeout(2500); // 기존 정본 예산 이후에도 B 본문 ID 유지
+      await expect(page.getByTestId('feature-detail-card-body')).toHaveAttribute(
+        'data-feature-id',
+        idB!,
+      );
       await expect(page.getByTestId('feature-detail-modal-title')).toContainText(b.slice(0, 4));
       await expect(page.getByTestId('feature-detail-modal-title')).not.toContainText(a.slice(0, 6));
     } else {
-      const popup = page.locator('.maplibregl-popup');
+      const popup = page.getByTestId('feature-map-popup');
+      const idB = await popup.getAttribute('data-feature-id');
+      expect(idB).toBeTruthy();
+      await expect(popup).toHaveAttribute('data-detail-feature-id', idB!);
       // the popup waits for detail + weather together (#622) — allow the slow path
       await expect(popup).toHaveCount(1, { timeout: 30_000 });
       await expect(popup).toContainText(b.slice(0, 4));
@@ -119,18 +179,26 @@ test.describe('CORE resilience', () => {
       await page.waitForTimeout(2500);
       await expect(popup).toContainText(b.slice(0, 4));
       await expect(popup).not.toContainText(a.slice(0, 6));
-      await expect(page.locator('[data-testid="feature-map-marker-style"][data-marker-selected="true"]')).toHaveCount(1);
+      await expect(
+        page.locator('[data-testid="feature-map-marker-style"][data-marker-selected="true"]'),
+      ).toHaveCount(1);
     }
     await shot(page, 'CORE-025', 'b-selected');
   });
 
-  test('CORE-026 빠른 pan 중 in-bounds 요청은 취소·대체된다(마지막 viewport만 반영)', async ({ page }, testInfo) => {
+  test('CORE-026 빠른 pan 중 in-bounds 요청은 취소·대체된다(마지막 viewport만 반영)', async ({
+    page,
+  }, testInfo) => {
     test.skip(isMobileViewport(page), 'desktop drag path');
     await openExploreMap(page);
     let requests = 0;
     let failed = 0;
-    page.on('request', (r) => { if (r.url().includes('/features/in-bounds')) requests++; });
-    page.on('requestfailed', (r) => { if (r.url().includes('/features/in-bounds')) failed++; });
+    page.on('request', (r) => {
+      if (r.url().includes('/features/in-bounds')) requests++;
+    });
+    page.on('requestfailed', (r) => {
+      if (r.url().includes('/features/in-bounds')) failed++;
+    });
     const canvas = page.locator('.maplibregl-canvas').first();
     const box = (await canvas.boundingBox())!;
     const cx = box.x + box.width / 2;

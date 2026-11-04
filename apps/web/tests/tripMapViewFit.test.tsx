@@ -9,6 +9,7 @@ import type { TripMapPoint } from '@pinvi/domain';
 
 const h = vi.hoisted(() => ({
   transportVisible: false,
+  popupClose: null as (() => void) | null,
   map: null as unknown,
   onMoveEnd: null as ((event: unknown) => void) | null,
 }));
@@ -32,7 +33,10 @@ vi.mock('@/components/map/vworldPrimitives', () => ({
   },
   ClusterLayer: () => null,
   PinMarker: () => null,
-  Popup: () => null,
+  Popup: ({ onClose }: { onClose?: () => void }) => {
+    h.popupClose = onClose ?? null;
+    return null;
+  },
   MapFallback: () => null,
   MapLoadingSkeleton: () => null,
 }));
@@ -133,6 +137,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   h.transportVisible = false;
   h.onMoveEnd = null;
+  h.popupClose = null;
 });
 
 describe('TripMapView 맞춤 배선', () => {
@@ -208,4 +213,13 @@ describe('TripMapView 맞춤 배선', () => {
     second.rerender(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
     expect(moved.fitBounds).toHaveBeenCalledTimes(1);
   });
+});
+
+it('제어된 POI popup이 native로 닫히면 선택 해제를 소유자에게 전달한다', () => {
+  h.map = fakeMap({ x: 300, y: 300 });
+  const select = vi.fn();
+  render(<TripMapView points={POINTS} selectedPoiId="north" onSelectPoi={select} />);
+  expect(h.popupClose).toEqual(expect.any(Function));
+  h.popupClose!();
+  expect(select).toHaveBeenCalledWith(null);
 });

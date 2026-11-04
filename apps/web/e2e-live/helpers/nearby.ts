@@ -12,6 +12,9 @@
  * No route mocking anywhere (#618 pitfall) — these only observe real requests.
  */
 import { expect, type Locator, type Page, type Response } from '@playwright/test';
+import { runSearch, searchRows } from './search';
+import { renderedMap, waitForCamera } from './geometry';
+import { coordinateFixtureIndex } from './searchFixture';
 
 export const LAYERS = ['fuel_station', 'rest_area', 'highway_incident', 'airport'] as const;
 export type Layer = (typeof LAYERS)[number];
@@ -180,14 +183,34 @@ export async function panBy(page: Page, key: 'ArrowLeft' | 'ArrowRight' | 'Arrow
   }
 }
 
-/** Explore map search → pick first result → map flies to it at zoom 15 (FeatureMapView.handleSearchSelect). */
+/** 현재 검색 응답의 좌표 있는 정확 일치 결과를 선택하고 실제 카메라 완료를 기다린다. */
 export async function searchAndFly(page: Page, query: string): Promise<void> {
-  const search = page.getByTestId('map-search').first();
-  const input = search.getByRole('textbox', { name: '장소·주소 검색' });
-  await input.fill(query);
-  const first = search.locator('li button').first();
-  await expect(first).toBeVisible({ timeout: 20_000 });
-  await first.click();
+  const result = await runSearch(page, query);
+  expect(result.status).toBe(200);
+  const index = coordinateFixtureIndex(result.rows,query);
+  expect(index, '좌표 있는 정확 일치 검색 fixture가 있어야 한다').toBeGreaterThanOrEqual(0);
+  const picked = result.rows[index]!;
+  const map = await renderedMap(page);
+  try {
+    await searchRows(page).nth(index).click();
+    await waitForCamera(map);
+    await expect
+      .poll(
+        async () =>
+          await map.evaluate((m, coord) => {
+            const center = m.getCenter();
+            return (
+              Math.abs(m.getZoom() - 15) < 0.01 &&
+              Math.abs(center.lng - coord!.lon) < 0.00001 &&
+              Math.abs(center.lat - coord!.lat) < 0.00001 &&
+              !m.isMoving()
+            );
+          }, picked.coord),
+      )
+      .toBe(true);
+  } finally {
+    await map.dispose();
+  }
 }
 
 /**

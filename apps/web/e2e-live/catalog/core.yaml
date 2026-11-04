@@ -115,7 +115,7 @@
     - account: test@test.com
   data_sources: []
   steps:
-    - "[e2e] 여행 생성 → 새 컨텍스트에서 /trips/{id} 진입 → /login → 로그인"
+    - '[e2e] 여행 생성 → 새 컨텍스트에서 /trips/{id} 진입 → /login → 로그인'
   expected:
     - /login?next=… 를 거쳐 로그인 뒤 /trips/{id}로 복귀
   cleanup: [생성한 여행 삭제]
@@ -181,7 +181,7 @@
     - data: Map에 '영월 고씨굴'(관광지/동굴), '안동하회마을'(국가유산) 검색 가능
   data_sources: [map:heritage, map:tourist, geo]
   steps:
-    - "[e2e] 여행 생성(11/05–11/08) → 1일차에 고씨굴·하회마을 추가 → 새로고침"
+    - '[e2e] 여행 생성(11/05–11/08) → 1일차에 고씨굴·하회마을 추가 → 새로고침'
   expected:
     - .trip-map-marker 2개가 캔버스 직후 표시, 통계칩 '장소 2곳', legend 2개
   cleanup: [여행 삭제]
@@ -381,11 +381,11 @@
   steps:
     - /map → 마커 선택 → 상세보기(모바일 직행) → feature-detail-card-body 시간 측정, weather 응답 시간 기록
   expected:
-    - 카드 < 3000ms, data-kind ∈ place/event/notice/price
+    - 3000ms 안에 해당 detail-card HTTP 응답과 UI가 일치한다. 200이면 선택 ID·kind·본문, 503이면 FEATURE_SERVICE_UNAVAILABLE와 공개 오류 안내를 확인한다.
   cleanup: [없음]
   automation: scripted
   spec: specs/core/core-resilience.live.spec.ts#CORE-023
-  notes: detail-card는 useFeatureDetailCard로 날씨와 독립.
+  notes: '#669/#674. 서버 전체 예산은 2.5초이며 이 카탈로그의 3초는 실제 브라우저 관측 기준이다. 날씨 지연 독립성은 WSL의 제어된 외부 HTTP 지연으로 별도 검증한다.'
 
 - id: CORE-024
   title: 마커 팝업 상세 텍스트가 날씨 응답을 기다리지 않는다(#622, 팝업 경로)
@@ -395,13 +395,13 @@
     - account: test@test.com
   data_sources: [map:*, weather:map-rest]
   steps:
-    - /map → 마커 클릭 → '상세 불러오는 중…' 소멸 시간 vs /features/{id}/weather 응답 시간
+    - /map → 마커 클릭 → 선택 ID의 detail-card 응답과 팝업 본문·오류 안내 시간을 측정한다.
   expected:
-    - (의도) 상세 < 3s, 날씨보다 먼저 — 현재 expected-fail
+    - 3000ms 안에 200의 선택 ID와 팝업 본문 ID 또는 503의 FEATURE_SERVICE_UNAVAILABLE와 오류 안내가 일치한다.
   cleanup: [없음]
   automation: scripted
   spec: specs/core/core-resilience.live.spec.ts#CORE-024
-  notes: '#622 로 분리 로드가 반영됐다 — 2026-11-03 prod 실행에서 팝업 상세 11 ms 로 통과, expected-fail 해제.'
+  notes: '#669/#674. 팝업도 제한된 detail-card를 사용한다. 빠른 정상 응답만으로 날씨 독립성을 증명하지 않으며 WSL에서 외부 날씨 지연·Map 지연을 각각 주입한다.'
 
 - id: CORE-025
   title: 선택 변경 시 이전 상세 요청 폐기 — stale 카드/팝업 없음
@@ -414,11 +414,11 @@
   steps:
     - A 클릭 직후 B 클릭 → 2.5s 뒤에도 B 내용
   expected:
-    - 팝업/시트 제목 = B, A 문구 없음, selected 1개
+    - 팝업/시트의 선택 ID·실제 detail-card 본문 ID = B, selected 1개
   cleanup: [없음]
   automation: scripted
   spec: specs/core/core-resilience.live.spec.ts#CORE-025
-  notes: useFeatureDetailCard AbortController / FeatureMapView active 플래그.
+  notes: '#674. 실제 B 본문 ID를 확인하고 데스크톱 팝업은 일반 클릭으로 닫는다. 네이티브 배경 닫기 뒤 같은 점·경로 재선택은 WSL 실제 UI에서 별도 검증한다.'
 
 - id: CORE-026
   title: 빠른 pan 중 in-bounds 요청 취소·대체 — 로딩 종료·오류 없음
@@ -473,7 +473,7 @@
   priority: P2
   tags: [desktop, mobile, a11y]
   preconditions:
-    - env: "@axe-core/playwright 설치(현재 apps/web devDependencies에 없음)"
+    - env: '@axe-core/playwright 설치(현재 apps/web devDependencies에 없음)'
   data_sources: []
   steps:
     - 각 페이지 로드 후 AxeBuilder.analyze
@@ -492,7 +492,7 @@
     - account: test@test.com
   data_sources: [map:heritage]
   steps:
-    - "[e2e] 여행+장소 1 → 세 화면 timed → annotations + JSON attach"
+    - '[e2e] 여행+장소 1 → 세 화면 timed → annotations + JSON attach'
   expected:
     - soft 5s(annotate), hard 30s
   cleanup: [여행 삭제]
@@ -509,7 +509,7 @@
     - data: "'소수서원', '도산서원'(국가유산) 검색 가능"
   data_sources: [map:heritage, geo]
   steps:
-    - "[e2e] 여행(11/05–11/08) → 목록 카드·상단 패널·일자 탭 날짜 → 일출/일몰 → 동선 최적화 미리보기 km"
+    - '[e2e] 여행(11/05–11/08) → 목록 카드·상단 패널·일자 탭 날짜 → 일출/일몰 → 동선 최적화 미리보기 km'
   expected:
     - "'2026년 11월 5일 - 2026년 11월 8일', 일출/일몰 HH:MM(24h) 또는 pending 문구, 'NN.Nkm'"
   cleanup: [여행 삭제]

@@ -26,7 +26,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.kakao_local import KakaoLocalClient, KakaoLocalClientDep, KakaoLocalError
+from app.clients.kakao_local import KakaoLocalClient, KakaoLocalClientDep
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
     KorTravelMapFeatureNotFound,
@@ -36,7 +36,7 @@ from app.clients.kor_travel_map import (
 )
 from app.clients.kor_travel_map_weather import create_map_weather_client
 from app.clients.kor_travel_weather import OptionalKorTravelWeatherClientDep
-from app.clients.naver_local import NaverLocalClient, NaverLocalClientDep, NaverLocalError
+from app.clients.naver_local import NaverLocalClient, NaverLocalClientDep
 from app.core.bbox import MAX_ZOOM, MIN_ZOOM, parse_bbox
 from app.core.config import settings
 from app.core.consent_deps import assert_location_consent, require_location_consent
@@ -591,43 +591,52 @@ async def _enrich_place_card(
     """
     lon = card.coord.lon if card.coord else None
     lat = card.coord.lat if card.coord else None
-    for provider in providers:
-        if provider == "kakao":
-            if kakao_local is None:
-                card.degraded_providers.append("kakao")
-                continue
-            try:
+
+    async def load(provider: ExternalRefProvider) -> None:
+        try:
+            if provider == "kakao":
+                if kakao_local is None:
+                    card.degraded_providers.append(provider)
+                    return
                 data = await kakao_local.search_keyword(query=card.name, size=5, x=lon, y=lat)
-                docs = data.get("documents") or []
-            except KakaoLocalError:
-                card.degraded_providers.append("kakao")
-                continue
-            card.enrichment.append(
-                best_match_enrichment(
-                    "kakao",
-                    feature_name=card.name,
-                    feature_coord=card.coord,
-                    documents=[d for d in docs if isinstance(d, dict)],
-                )
-            )
-        else:  # naver (좌표 파라미터 없음)
-            if naver_local is None:
-                card.degraded_providers.append("naver")
-                continue
-            try:
+                documents = data.get("documents")
+            else:
+                if naver_local is None:
+                    card.degraded_providers.append(provider)
+                    return
                 data = await naver_local.search_local(query=card.name, display=5)
-                items = data.get("items") or []
-            except NaverLocalError:
-                card.degraded_providers.append("naver")
-                continue
-            card.enrichment.append(
-                best_match_enrichment(
-                    "naver",
-                    feature_name=card.name,
-                    feature_coord=card.coord,
-                    documents=[i for i in items if isinstance(i, dict)],
-                )
+                documents = data.get("items")
+            if documents is None:
+                documents = []
+            if not isinstance(documents, list):
+                raise ValueError("invalid optional provider collection")
+            enrichment = best_match_enrichment(
+                provider,
+                feature_name=card.name,
+                feature_coord=card.coord,
+                documents=[row for row in documents if isinstance(row, dict)],
             )
+        except Exception as exc:
+            # 선택 정보의 호출·JSON/collection·매칭 실패는 정본 카드를 버리지 않는다.
+            # CancelledError는 BaseException이므로 전체 예산·호출자 취소를 그대로 전파한다.
+            card.degraded_providers.append(provider)
+            log.warning(
+                "feature_detail_card.enrichment_failed",
+                provider=provider,
+                failure_type=type(exc).__name__,
+            )
+            return
+        card.enrichment.append(enrichment)
+
+    try:
+        # TaskGroup은 예산·호출자 취소 때 형제를 취소하고 비동기 정리까지 회수한다.
+        # provider의 일반 예외는 load 안에서 저하로 격리하므로 sibling을 버리지 않는다.
+        async with asyncio.TaskGroup() as group:
+            for provider in providers:
+                group.create_task(load(provider))
+    finally:
+        order = {provider: index for index, provider in enumerate(providers)}
+        card.enrichment.sort(key=lambda row: order[row.provider])
 
 
 @router.get("/{feature_id}/detail-card", response_model=Envelope[FeatureDetailCard])
@@ -691,6 +700,9 @@ async def get_feature_detail_card(
                     )
                     card.degraded_providers.extend(p for p in requested if p not in completed)
         assert card is not None
+        # 완료 순서가 달라도 category 신호는 앞에 두고 provider 저하는 요청 순서로 고정한다.
+        order: dict[str, int] = {provider: index for index, provider in enumerate(requested)}
+        card.degraded_providers.sort(key=lambda name: order.get(name, -1))
         outcome = "degraded" if card.degraded_providers else "complete"
         return Envelope.of(card)
     finally:
