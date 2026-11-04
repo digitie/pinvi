@@ -1,3 +1,55 @@
+## 2026-11-04 — Map #1447 병합·소비자 provenance 동기화
+
+- Map #1447을 7ee94fb로 일반 병합했다. exact b778c097의 독립 리뷰 두 명과 최종 CI 전체를 확인했다. CI 단위/lint 3,643개·API 1,600개·Dagster 920개, PG 1,622개를 통과했다.
+- 세 OpenAPI profile은 검토된 바이트와 동일하다. Pinvi의 service/admin 실행 revision을 실제 Map 병합 커밋으로 맞췄고 capability generation과 M05 기존 attestation/체크섬은 보존했다.
+- 소비자 계약 318개 통과·조건부 9개 skip, 독립 설치 wheel의 packaged JSON·SHA·runtime revision·capability 대조를 통과했다.
+- 이 커밋은 provenance/테스트 핀/문서만 바꾸며 제품은 679ca7a와 같다. 그 제품의 전체 WSL API 2,740개·웹 282개·실제 지연 UI 10항목 및 두 독립 리뷰를 완료했다.
+- 최종 Docker 설치 검증·두 exact HEAD 리뷰·CI를 마친 뒤 #662를 병합하고 최신 #643/#1444를 갱신한다. 운영 접속·배포·검증은 하지 않는다.
+
+## 2026-11-04 — 상세 카드 최종 WSL 전체 검사·실제 클릭 시간 검증
+
+- 제품 679ca7a의 WSL 전체 API 2,740개 통과·조건부 12개 skip(956.99초), 웹 전체 282개, workspace 타입 검사·API mypy 256파일·Ruff·포맷 481파일을 통과했다.
+- 두 독립 전문 적대적 리뷰어가 exact 679ca7a에서 P0/P1/P2 없음으로 판정했고 해당 HEAD의 CI도 전체 통과했다.
+- 실제 HTTP 지연 주입 UI 10항목을 통과했다. cold 상세 HTTP 2.651초, 상세보기 클릭→부분 카드 2.301초·오류 안내 2.849초였다. 행사 기간·장소·저하 안내 및 오류 화면을 직접 확인했다. 소유 Map 테스트 middleware의 응답 전 지연 외에는 정본 route·DB·인증·HTTP를 사용하며 응답 대체는 없다. 운영 수치가 아니다.
+- 안전 결과는 docs/reviews/pinvi-663-detail-budget-local-live.json에 보존했고 모든 소유 서버·컨테이너를 종료했다.
+- 이 기록에는 제품 소스 변경이 없다. Map 최종 PostgreSQL CI·병합 이후 provenance 핀과 설치 wheel/Docker·계약 검증·최종 두 리뷰/CI를 마치고 병합한다. 운영 접근·배포·검증은 하지 않는다.
+
+## 2026-11-04 — #663 상세 카드 전체 대기 예산·초기 저하 표시
+
+- 같은 상세 카드 경로인 #663을 기존 초안 #662에 묶었다. Map 상세·카탈로그·선택 보강이 2.5초 handler 대기 예산을 공유하며 정본 미확보는 기존 typed 503, 확보 뒤 선택 정보 지연은 받은 값을 보존한 부분 카드로 종료한다.
+- 기존 degraded_providers에 category_labels를 사용하고 초기 모달·모든 kind에 공통 안내를 표시한다. 정상 카탈로그의 미지 코드와 카탈로그 실패를 구분하며 색상·wire shape는 유지한다.
+- 사용자 취소를 삼키지 않고 공유 카탈로그 shield를 보존한다. API 호출 시작 시각을 request 수명에 귀속해 전송 실패·취소 시 tracker의 장기 dict 잔류를 없애며 DB 로그 저장 시간을 별도 기록한다.
+- 수정 전 API 4개·UI 2개 실패를 확인했다. 수정 후 관련 API/로깅/카탈로그/상세 단위 53개·UI 9개를 통과했다. 실제 PG INSERT 잠금 대기 취소 후 세션·pool의 후속 호출 성공과 공유 cold 갱신의 다른 대기자 생존을 확인했다.
+- 운영 8.5초의 직접 원인을 확정하지 않는다. 두 전문 적대적 재리뷰·전체 WSL 관련 검사·실제 UI·최종 CI 후 순차 병합한다. prod 접근·배포·검증은 하지 않는다.
+
+## 2026-11-04 — 최신 #643 범위·실제 MCST 형식 UI 재검증
+
+- #643 본문·댓글과 Map #1444를 다시 읽었다. 새 #663 상세 카드 3초 예산 초과를 후속 범위에 포함했다.
+- Map 5fcb015 → Pinvi 5048156의 실제 HTTP·정상 앱 lifespan·Chromium UI 13항목을 통과했다. 실제 MCST 열·분류 tuple의 호텔·카페·펜션·박물관, 물리 업종이 빈 촬영지의 미분류와 공백이 다른 국가유산 우선 표시를 검증했다. 이름·주소·좌표는 fixture이며 원본 CSV는 커밋하지 않는다.
+- 행사 기간·장소 모달 스크린샷을 직접 확인했고 모든 소유 서버·컨테이너를 종료했다. 배경 raster 타일만 고정했으며 제품 API mock·dependency override는 없다.
+- 기존 제품 80593b4·정본 필드 투영은 바꾸지 않았다. Map 최종 하네스/전체 검사·CI 뒤 순차 병합하고 revision provenance를 갱신한다. 운영 검증은 Claude Code 담당이다.
+
+## 2026-11-04 — 행사 정본 실제 연결 UI 검증 완료
+
+- 관련 단위·HTTP API 41개를 WSL 테스트 DB에서 통과했다. CI에서 빠뜨린 포맷 적용 3개 파일을 보완하고 Python AST 동일성을 확인했다.
+- Map 정본 15b75fe와 Pinvi 제품 80593b4의 정상 lifespan·실제 HTTP·별도 DB·Chromium으로 11항목을 통과했다. 배경 raster 타일만 고정했으며 제품 API mock·dependency override는 없다.
+- 호텔/카페/마트/캠핑장/주차장 라벨, 행사 상세 모달 기간·장소, 격리 행 공개 검색 제외, 브라우저의 Pinvi API 경유를 확인했다. 안전한 결과는 `docs/reviews/pinvi-1439-event-local-live.json`에 보존한다. 생성한 서버·컨테이너는 모두 종료했다.
+- 두 독립 전문 리뷰어는 제품 80593b4에서 P0/P1/P2 없음을 확인했다. Map 전체 PG·CI 후 병합과 소비자 revision provenance 갱신·최종 exact HEAD 리뷰/CI를 이어간다. 운영 배포·검증은 하지 않는다.
+
+## 2026-11-04 — 행사 정본 상세 필드 회귀
+
+- Map 정본 `starts_on/ends_on/venue_name`을 구 alias보다 먼저 선택한다. 기존 상세 카드 shape·색상·빈 값 처리와 구 snapshot fallback은 유지한다.
+- 수정 전 canonical-only/구 alias 충돌 2개 단언 실패를 확인했다. 수정 후 관련 단위 35개·소스 mypy·Ruff를 통과했다.
+- 초안 #662에서 HTTP 회귀와 실제 Map→Pinvi→Chromium 연결을 검증하고, Map #1447 병합 뒤 정본 revision 핀을 맞춘 후 두 리뷰·CI로 병합한다. 운영 검증은 Claude Code 담당이다.
+
+## 2026-11-04 — #643 Map #1439 행사 정본 상세 필드 연결
+
+- 최신 #643 본문·댓글과 연결된 Map #1444 범위를 다시 확인했다.
+- Map 초안 #1447의 원천 분류·행사 정합성 변경과 함께 Pinvi가 정본 `starts_on`,
+  `ends_on`, `venue_name`을 기존 상세 카드 필드에 투영한다. 사용자 표시·색상은 유지한다.
+- 초안 PR을 먼저 만들고 실패 우선 회귀·실제 WSL 연결 UI 검증과 두 독립 전문 적대적 리뷰,
+  CI 후 Map → Pinvi 순으로 병합한다. 운영 접속·배포·테스트는 Claude Code 최종 담당이다.
+
 ## 2026-11-04 (codex) — #643 관리자 읽기 연결 (#648/#651)
 
 ## 2026-11-04 — 날씨 기반 병합·출처 버전 지문 대조 완료

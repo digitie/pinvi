@@ -30,6 +30,23 @@ cutover`)로 user 표면(`FeatureSummary`/`NearbyFeatureSummary`/`FeatureDetailR
 `apps/api/tests/unit/test_feature_schemas.py`(선언 등호 + OpenAPI 노출),
 `apps/web/tests/featureContract.test.ts`(Zod 미러).
 
+## 상세 카드 대기 예산 (#663)
+
+GET /features/{feature_id}/detail-card는 Map 상세·카탈로그·선택적 카카오/네이버 보강이
+하나의 2.5초 handler 대기 예산을 공유한다. UI 3초 목표에서 인증·직렬화·전송 여유를
+남긴 값이며 네트워크·인증까지 절대 3초를 보장하는 계약은 아니다.
+
+정본 DTO를 못 받으면 기존 503 FEATURE_SERVICE_UNAVAILABLE로 종료한다. 정본을 이미
+받았으면 기본 카드와 완료된 보강 결과를 보존하고, 늦은 부분을 degraded_providers로
+표시한다. category_labels는 카탈로그 조회 실패/대기 포기를 뜻한다. 정상 카탈로그에
+없는 코드라는 이유만으로 저하를 표시하지 않는다. 카카오·네이버는 기존 provider 이름을 쓴다.
+초기 모달과 행사 등 모든 kind에서도 부분 정보 안내를 표시한다. 카드 wire shape와 색상은 같다.
+
+한 요청의 취소는 공유 카탈로그 갱신을 취소하지 않고 사용자 요청 취소도 부분 성공으로 바꾸지 않는다.
+고정 단계 map_detail/category_wait/enrichment 및 전체 시간, API 로그 DB 저장 대기를 별도
+구조화 로그로 남긴다. HTTP latency 수치에 DB 로그 저장 시간이 포함된 것으로 해석하지 않는다.
+운영 워터월드 제주 8.5초의 직접 원인은 이 소스 수정만으로 확정하지 않는다.
+
 ## 2. Endpoint
 
 ### 2.1 `GET /features/in-bounds`

@@ -155,3 +155,28 @@ async def test_cold_fetch_is_bounded_by_short_budget(
     labels = await get_category_labels(hanging)
     assert asyncio.get_running_loop().time() - started < 1.0
     assert labels.label("06010000") is None
+
+
+async def test_cancelled_cold_waiter_does_not_cancel_shared_fetch(clock: _Clock) -> None:
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class ControlledClient(_Client):
+        async def categories(self, *, include_counts: bool = False) -> dict[str, Any]:
+            self.calls += 1
+            entered.set()
+            await release.wait()
+            return {"items": _ITEMS}
+
+    client = ControlledClient()
+    first = asyncio.create_task(get_category_labels(client))
+    await entered.wait()
+    second = asyncio.create_task(get_category_labels(client))
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    release.set()
+    labels = await asyncio.wait_for(second, 1)
+    assert labels.label("06010000") == "주차장"
+    assert await get_category_labels(client) is labels
+    assert client.calls == 1

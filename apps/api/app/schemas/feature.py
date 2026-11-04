@@ -164,7 +164,7 @@ class DetailCardBase(BaseModel):
     marker_color: str = Field(default="P-13", pattern=r"^P-\d{2}$")
     marker_icon: str = Field(default="marker", max_length=64)
     homepage_url: str | None = None
-    # 옵트인 enrichment 결과 + provider별 degrade(내부 값으로 fallback).
+    # 옵트인 enrichment 결과. degraded_providers는 외부 provider와 category_labels 저하를 표시한다.
     enrichment: list[ExternalEnrichment] = Field(default_factory=list)
     degraded_providers: list[str] = Field(default_factory=list)
 

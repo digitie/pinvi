@@ -18,6 +18,7 @@ log = structlog.get_logger("api_call")
 
 _PROVIDER_EXTENSION = "pinvi_provider"
 _REQUEST_ID_EXTENSION = "request_id"
+_REQUEST_STARTED_EXTENSION = "pinvi_api_call_started_at"
 
 
 class ApiCallTracker:
@@ -28,14 +29,14 @@ class ApiCallTracker:
 
     def __init__(self, session_factory: Any) -> None:
         self._session_factory = session_factory
-        self._start_times: dict[int, float] = {}
 
     async def on_request(self, request: httpx.Request) -> None:
-        self._start_times[id(request)] = time.perf_counter()
+        # 전송 실패·취소 때 response hook이 없어도 시작 시각은 request 수명과 함께 해제된다.
+        request.extensions[_REQUEST_STARTED_EXTENSION] = time.perf_counter()
 
     async def on_response(self, response: httpx.Response) -> None:
         request = response.request
-        start = self._start_times.pop(id(request), None)
+        start = request.extensions.pop(_REQUEST_STARTED_EXTENSION, None)
         latency_ms = int((time.perf_counter() - start) * 1000) if start else None
         provider = request.extensions.get(_PROVIDER_EXTENSION, "unknown")
         request_id_raw = request.extensions.get(_REQUEST_ID_EXTENSION)
@@ -46,6 +47,8 @@ class ApiCallTracker:
             except ValueError:
                 request_id = None
 
+        persist_started = time.perf_counter()
+        persisted = False
         try:
             async with self._session_factory() as session:
                 await _append(
@@ -58,8 +61,17 @@ class ApiCallTracker:
                     error_message=None,
                     request_id=request_id,
                 )
+                persisted = True
         except Exception as exc:
             log.warning("api_call_log.persist_failed", provider=str(provider), error=str(exc))
+        finally:
+            # HTTP latency와 분리해 DB 로그 저장 대기(취소/실패 포함)를 관측한다.
+            log.info(
+                "api_call_log.persist_completed",
+                provider=str(provider),
+                persisted=persisted,
+                duration_ms=round((time.perf_counter() - persist_started) * 1000, 3),
+            )
 
 
 def api_call_event_hooks(

@@ -24,6 +24,23 @@ function placeCard(over: Partial<Extract<FeatureDetailCard, { kind: 'place' }>> 
 }
 
 describe('FeatureDetailCardBody', () => {
+  it('초기 카드에서도 부분 정보 안내를 표시한다', () => {
+    render(<FeatureDetailCardBody card={placeCard({ degraded_providers: ['category_labels'] })} />);
+    expect(screen.getByText('일부 상세 정보를 불러오지 못했습니다.')).toBeInTheDocument();
+  });
+
+  it('행사 카드도 보강 요청 없이 부분 정보 안내를 표시한다', () => {
+    const card = {
+      ...placeCard({ degraded_providers: ['category_labels'] }),
+      kind: 'event',
+      start_date: null,
+      end_date: null,
+      venue: null,
+    } as FeatureDetailCard;
+    render(<FeatureDetailCardBody card={card} />);
+    expect(screen.getByText('일부 상세 정보를 불러오지 못했습니다.')).toBeInTheDocument();
+  });
+
   it('place 카드의 일반 필드를 렌더한다', () => {
     render(<FeatureDetailCardBody card={placeCard()} />);
     expect(screen.getByTestId('feature-detail-card-body-address')).toHaveTextContent(
