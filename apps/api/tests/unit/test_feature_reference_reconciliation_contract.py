@@ -16,7 +16,7 @@ from app.core.config import (
 _SNAPSHOT = (
     Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-service.json"
 )
-_MAP_SOURCE_REVISION = "a69d188d8c78ea573afc6e862f8ec9e0aa423ec0"
+_MAP_SOURCE_REVISION = "7ee94fb82ee8b6d9bbe296fe967734be3784ac48"
 _SNAPSHOT_SHA256 = "fd2aaa9e8c38e8a7f1a54550233b1b5af5a7aea1089c5432100d7464e5e4aaff"
 _LEASE_PATH = "/v1/service/feature-reference-reconciliations"
 _ACK_PATH = f"{_LEASE_PATH}/{{event_id}}/acks"

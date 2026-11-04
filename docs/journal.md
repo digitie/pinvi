@@ -1,3 +1,11 @@
+## 2026-11-04 — Map #1447 병합·소비자 provenance 동기화
+
+- Map #1447을 7ee94fb로 일반 병합했다. exact b778c097의 독립 리뷰 두 명과 최종 CI 전체를 확인했다. CI 단위/lint 3,643개·API 1,600개·Dagster 920개, PG 1,622개를 통과했다.
+- 세 OpenAPI profile은 검토된 바이트와 동일하다. Pinvi의 service/admin 실행 revision을 실제 Map 병합 커밋으로 맞췄고 capability generation과 M05 기존 attestation/체크섬은 보존했다.
+- 소비자 계약 318개 통과·조건부 9개 skip, 독립 설치 wheel의 packaged JSON·SHA·runtime revision·capability 대조를 통과했다.
+- 이 커밋은 provenance/테스트 핀/문서만 바꾸며 제품은 679ca7a와 같다. 그 제품의 전체 WSL API 2,740개·웹 282개·실제 지연 UI 10항목 및 두 독립 리뷰를 완료했다.
+- 최종 Docker 설치 검증·두 exact HEAD 리뷰·CI를 마친 뒤 #662를 병합하고 최신 #643/#1444를 갱신한다. 운영 접속·배포·검증은 하지 않는다.
+
 ## 2026-11-04 — 상세 카드 최종 WSL 전체 검사·실제 클릭 시간 검증
 
 - 제품 679ca7a의 WSL 전체 API 2,740개 통과·조건부 12개 skip(956.99초), 웹 전체 282개, workspace 타입 검사·API mypy 256파일·Ruff·포맷 481파일을 통과했다.
