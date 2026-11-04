@@ -835,6 +835,23 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             '--dbname="$POSTGRES_DB" --command="SELECT version_num FROM app.alembic_version"',
         )
         assert runtime_version_select.stdout.strip() == "20261105_0103"  # 현재 head
+        retention_acl = compose(
+            "exec",
+            "-T",
+            "app-postgres",
+            "psql",
+            "--no-psqlrc",
+            "--tuples-only",
+            "--no-align",
+            f"--username={root_role}",
+            "--dbname=pinvi",
+            "--command="
+            f"SELECT has_table_privilege('{runtime_role}', 'app.attachment_upload_intents', "
+            "'SELECT, INSERT, UPDATE, DELETE')::text, "
+            f"has_table_privilege('{runtime_role}', 'app.attachment_gc_objects', "
+            "'SELECT, INSERT, UPDATE, DELETE')::text;",
+        )
+        assert retention_acl.stdout.strip() == "true|true"
         compose(
             "exec",
             "-T",

@@ -215,7 +215,6 @@ class TripResponse(BaseModel):
     can_restore: bool = False
 
 
-
 class TripCopyResponse(BaseModel):
     trip: TripResponse
     created_trip: bool

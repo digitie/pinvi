@@ -107,12 +107,18 @@ async def upload_urls(
     if body.purpose in ATTACHMENT_PURPOSES:
         try:
             await reserve_attachment_upload(
-                db, user=user, bucket=response.bucket, key=response.storage_key,
-                byte_size=body.content_length, expires_at=response.expires_at,
+                db,
+                user=user,
+                bucket=response.bucket,
+                key=response.storage_key,
+                byte_size=body.content_length,
+                expires_at=response.expires_at,
             )
             await db.commit()
         except AttachmentQuotaError as exc:
-            raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)}) from exc
+            raise HTTPException(
+                status_code=409, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
     return Envelope.of(response)
 
 
@@ -122,15 +128,28 @@ async def storage_upload_proxy(token: str, request: Request, db: DbSession) -> R
         ref = parse_storage_proxy_token(token, expected_op="put")
         body = await request.body()
         ref = parse_storage_proxy_token(token, expected_op="put")
-        tracked = len(ref.storage_key.split("/")) > 1 and ref.storage_key.split("/")[1] in ATTACHMENT_PURPOSES
+        tracked = (
+            len(ref.storage_key.split("/")) > 1
+            and ref.storage_key.split("/")[1] in ATTACHMENT_PURPOSES
+        )
         await assert_objects_writable(db, [(ref.bucket, ref.storage_key)])
         intent: AttachmentUploadIntent | None = None
         if tracked:
-            intent = await db.get(AttachmentUploadIntent, (ref.bucket, ref.storage_key), populate_existing=True)
-            if intent is None or intent.purged_at is not None or intent.expires_at <= datetime.now(UTC):
-                raise InvalidStorageRefError("만료되거나 정리된 업로드입니다. 다시 업로드해 주세요.")
+            intent = await db.get(
+                AttachmentUploadIntent, (ref.bucket, ref.storage_key), populate_existing=True
+            )
+            if (
+                intent is None
+                or intent.purged_at is not None
+                or intent.expires_at <= datetime.now(UTC)
+            ):
+                raise InvalidStorageRefError(
+                    "만료되거나 정리된 업로드입니다. 다시 업로드해 주세요."
+                )
             if intent.registered_at is not None or intent.write_started_at is not None:
-                raise UploadAlreadyStartedError("이미 시도한 업로드입니다. 새 업로드 URL로 다시 선택해 주세요.")
+                raise UploadAlreadyStartedError(
+                    "이미 시도한 업로드입니다. 새 업로드 URL로 다시 선택해 주세요."
+                )
             if intent.byte_size != len(body):
                 raise InvalidStorageRefError("업로드 크기가 발급된 정보와 일치하지 않습니다.")
             write_token = uuid.uuid4()
@@ -138,13 +157,26 @@ async def storage_upload_proxy(token: str, request: Request, db: DbSession) -> R
             intent.write_started_at = datetime.now(UTC)
             await db.commit()  # 네트워크 쓰기 전에 one-shot 시작을 영속화한다.
             await assert_objects_writable(db, [(ref.bucket, ref.storage_key)])
-            intent = await db.get(AttachmentUploadIntent, (ref.bucket, ref.storage_key), populate_existing=True)
-            if intent is None or intent.write_token != write_token or intent.registered_at is not None or intent.purged_at is not None or intent.expires_at <= datetime.now(UTC):
+            intent = await db.get(
+                AttachmentUploadIntent, (ref.bucket, ref.storage_key), populate_existing=True
+            )
+            if (
+                intent is None
+                or intent.write_token != write_token
+                or intent.registered_at is not None
+                or intent.purged_at is not None
+                or intent.expires_at <= datetime.now(UTC)
+            ):
                 raise InvalidStorageRefError("업로드 대상이 변경되었습니다. 다시 업로드해 주세요.")
             parse_storage_proxy_token(token, expected_op="put")
-        write = asyncio.create_task(asyncio.to_thread(
-            put_storage_object, ref=ref, body=body, content_type=request.headers.get("content-type")
-        ))
+        write = asyncio.create_task(
+            asyncio.to_thread(
+                put_storage_object,
+                ref=ref,
+                body=body,
+                content_type=request.headers.get("content-type"),
+            )
+        )
         try:
             await asyncio.shield(write)
         except asyncio.CancelledError:
@@ -160,9 +192,13 @@ async def storage_upload_proxy(token: str, request: Request, db: DbSession) -> R
             raise
         if tracked:
             await assert_objects_writable(db, [(ref.bucket, ref.storage_key)])
-            intent = await db.get(AttachmentUploadIntent, (ref.bucket, ref.storage_key), populate_existing=True)
+            intent = await db.get(
+                AttachmentUploadIntent, (ref.bucket, ref.storage_key), populate_existing=True
+            )
             if intent is None or intent.write_token != write_token or intent.purged_at is not None:
-                raise InvalidStorageRefError("업로드 결과를 확정하지 못했습니다. 새 URL로 다시 업로드해 주세요.")
+                raise InvalidStorageRefError(
+                    "업로드 결과를 확정하지 못했습니다. 새 URL로 다시 업로드해 주세요."
+                )
             intent.uploaded_bytes = len(body)
         await db.commit()
     except Exception as exc:

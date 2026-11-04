@@ -407,3 +407,13 @@ curl -fsS -X POST "http://localhost:12801/admin/reset" \
 - `docs/spec/v8/04-admin.md` — SPEC V8 13 페이지
 - `docs/integrations/sentry.md` — audit chain alert
 - `docs/compliance/pipa.md` — PIPA 침해 통지 트리거
+
+## 여행 휴지통·첨부 정리 (#667)
+
+관리자 /admin/retention의 '여행 휴지통·첨부 정리'에서 후보·보존·진행/실패 집계를 확인한다. admin/cpo는 사유와 DELETE EXPIRED FILES를 입력하고 최종 확인 후 실행한다. operator는 상태만 조회한다. 30일 지난 여행은 API에서 이미 복원이 막히며, 이 명시적 실행이 실제 파일과 여행을 단계적으로 정리한다.
+
+한 번에 모든 항목이 끝난다고 가정하지 않는다. 남은 후보/대기 항목과 TRIP_BUSY/TRIP_REFERENCED를 확인해 다시 실행한다. AccessDenied:DeleteObject/ DeleteObjects/ ListObjectVersions/ GetBucketVersioning은 해당 버킷의 삭제·버전 조회/삭제 권한을 확인한다. versioning 버킷은 과거 버전과 삭제 표식까지 제거되어야 완료다. 연결 실패는 STORAGE_UNAVAILABLE로 표시한다. 원시 오류/키를 공개 UI에 붙여 넣지 않는다.
+
+신고 보존 파일·30일 이내 여행의 공유 참조는 정리하지 않으며 계속 과금한다. 다른 살아 있는 참조가 보호하는 객체는 그대로 두고 삭제된 참조의 과금만 해제한다. 불확실한 미등록 PUT은 보호 기간 뒤 재시도한다. 이미 정리한 키의 후속 재확인 실패는 verify 단계이며 최초 삭제 실패와 과금 의미가 다르다.
+
+이 기능의 정리는 관리자 실행 경로다. 새 운영 schedule이나 외부 노드를 자동으로 구성하지 않는다. 기존 RustFS 관리자 force 삭제는 참조 보호를 우회하는 명시적인 특권 작업이므로 보존 콘솔의 대체 경로로 쓰지 않는다. 신규 상태를 잃는 구버전 롤백·예약/GC 원장 삭제는 키 재사용 방지를 깨뜨리므로 수행하지 않는다. 운영 적용과 최종 운영 검증은 Claude Code 담당이다.

@@ -325,8 +325,10 @@ async def move_admin_day(
     comment_policy: Literal["move", "delete"],
 ) -> OperationState:
     await db.execute(
-        select(Trip).where(Trip.trip_id.in_([source_trip_id, target_trip_id]))
-        .order_by(Trip.trip_id).with_for_update()
+        select(Trip)
+        .where(Trip.trip_id.in_([source_trip_id, target_trip_id]))
+        .order_by(Trip.trip_id)
+        .with_for_update()
     )
     source_day = await _get_day(db, trip_id=source_trip_id, day_index=day_index)
     if source_trip_id == target_trip_id and day_index == target_day_index:
@@ -380,9 +382,7 @@ async def move_admin_day(
         now=now,
         source_poi_ids=source_poi_ids,
     )
-    await preserve_deleted_day_attachment_charges(
-        db, trip_id=source_trip_id, day_index=day_index
-    )
+    await preserve_deleted_day_attachment_charges(db, trip_id=source_trip_id, day_index=day_index)
     await db.delete(source_day)
     target_trip.version += 1
     if source_trip_id != target_trip_id:
@@ -604,17 +604,26 @@ async def _lock_poi_trips(
     observed = await _get_poi(db, poi_id=poi_id)
     source_trip_id = observed.trip_id
     trip_ids = {source_trip_id, target_trip_id or source_trip_id}
-    trips = list(await db.scalars(
-        select(Trip).where(Trip.trip_id.in_(trip_ids), Trip.deleted_at.is_(None))
-        .order_by(Trip.trip_id).with_for_update().execution_options(populate_existing=True)
-    ))
+    trips = list(
+        await db.scalars(
+            select(Trip)
+            .where(Trip.trip_id.in_(trip_ids), Trip.deleted_at.is_(None))
+            .order_by(Trip.trip_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    )
     if len(trips) != len(trip_ids):
         raise AdminTripOperationNotFoundError("여행을 찾을 수 없습니다.")
     poi = await db.scalar(
-        select(TripDayPoi).where(
-            TripDayPoi.attachment_id == poi_id, TripDayPoi.trip_id == source_trip_id,
+        select(TripDayPoi)
+        .where(
+            TripDayPoi.attachment_id == poi_id,
+            TripDayPoi.trip_id == source_trip_id,
             TripDayPoi.deleted_at.is_(None),
-        ).with_for_update().execution_options(populate_existing=True)
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if poi is None:
         raise AdminTripOperationConflictError("POI가 변경되었습니다. 다시 불러와 주세요.")
@@ -622,7 +631,10 @@ async def _lock_poi_trips(
 
 
 async def _assert_admin_attachment_copy_capacity(
-    db: AsyncSession, *, target_trip_id: uuid.UUID, uploader_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    target_trip_id: uuid.UUID,
+    uploader_id: uuid.UUID,
     attachments: list[CuratedPlanAttachment],
 ) -> None:
     if not attachments:
@@ -630,7 +642,9 @@ async def _assert_admin_attachment_copy_capacity(
     uploader = await _get_user(db, user_id=uploader_id)
     try:
         await assert_attachment_capacity(
-            db, user=uploader, trip_id=target_trip_id,
+            db,
+            user=uploader,
+            trip_id=target_trip_id,
             additional_bytes=sum(row.byte_size for row in attachments),
         )
         await assert_copy_sources_writable(db, attachments)

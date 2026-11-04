@@ -33,6 +33,30 @@ test.describe('ADM read-only pages', () => {
     await loginAsAdmin(page);
   });
 
+  test('ADM-041 attachment retention status and confirmation remain read only', async ({ page }) => {
+    const status = waitForGet(page, /\/admin\/storage-retention(?:\?|$)/);
+    await page.goto('/admin/retention');
+    await status;
+    const panel = page.getByTestId('storage-retention');
+    await expect(panel).toContainText('30일');
+    await expect(panel).toContainText('기한 지난 여행');
+    const run = panel.getByRole('button', { name: '기한 지난 여행·파일 정리' });
+    if (await run.count()) {
+      await expect(run).toBeDisabled();
+      await panel.getByLabel('첨부 정리 사유').fill('카탈로그 확인창만 검증');
+      await panel.getByLabel(/확인 문구:/).fill('DELETE EXPIRED FILES');
+      await run.click();
+      const confirm = page.getByRole('alertdialog');
+      await expect(confirm).toBeVisible();
+      await expect(confirm).toContainText('복원할 수 없습니다');
+      await confirm.getByRole('button', { name: '취소', exact: true }).click();
+      await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    }
+    await expectNoRuntimeError(page);
+    if (isMobileProject()) await expectNoRootHorizontalScroll(page);
+    await shot(page, 'ADM-041', 'attachment-retention');
+  });
+
   test('ADM-007 dashboard stat strip and system board', async ({ page }) => {
     const stats = waitForGet(page, /\/admin\/stats/);
     await page.goto('/admin');

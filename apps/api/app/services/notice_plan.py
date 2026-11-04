@@ -510,7 +510,9 @@ async def copy_plan_to_trip(
     created_trip = False
     if target_trip_id is not None:
         trip = await db.scalar(
-            select(Trip).where(Trip.trip_id == target_trip_id, Trip.deleted_at.is_(None)).with_for_update()
+            select(Trip)
+            .where(Trip.trip_id == target_trip_id, Trip.deleted_at.is_(None))
+            .with_for_update()
         )
         if trip is None:
             raise NoticePlanNotFoundError("대상 여행을 찾을 수 없습니다.")
@@ -537,17 +539,26 @@ async def copy_plan_to_trip(
     last_sort: dict[int, str | None] = {}
 
     # 작업 전체 파일 집합을 먼저 모아 User → Object 전역 순서로 한 번에 잠근다.
-    all_attachments = list(await db.scalars(select(CuratedPlanAttachment).where(
-        CuratedPlanAttachment.curated_poi_id.in_([poi.curated_poi_id for poi in source_pois]),
-        CuratedPlanAttachment.deleted_at.is_(None), CuratedPlanAttachment.purged_at.is_(None),
-    )))
+    all_attachments = list(
+        await db.scalars(
+            select(CuratedPlanAttachment).where(
+                CuratedPlanAttachment.curated_poi_id.in_(
+                    [poi.curated_poi_id for poi in source_pois]
+                ),
+                CuratedPlanAttachment.deleted_at.is_(None),
+                CuratedPlanAttachment.purged_at.is_(None),
+            )
+        )
+    )
     if all_attachments:
         user = await db.get(User, user_id)
         if user is None:
             raise NoticePlanCopyError("사용자를 찾을 수 없습니다.")
         try:
             await assert_attachment_capacity(
-                db, user=user, trip_id=trip.trip_id,
+                db,
+                user=user,
+                trip_id=trip.trip_id,
                 additional_bytes=sum(row.byte_size for row in all_attachments),
             )
             await assert_copy_sources_writable(db, all_attachments)
@@ -589,7 +600,9 @@ async def copy_plan_to_trip(
         copied_poi_ids.append(new_poi.attachment_id)
 
         # 첨부 복제 (curated_poi → 새 trip_poi)
-        source_attachments = [row for row in all_attachments if row.curated_poi_id == src.curated_poi_id]
+        source_attachments = [
+            row for row in all_attachments if row.curated_poi_id == src.curated_poi_id
+        ]
         for att in source_attachments:
             db.add(
                 CuratedPlanAttachment(

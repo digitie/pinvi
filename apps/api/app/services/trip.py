@@ -368,7 +368,9 @@ async def restore_trip(db: AsyncSession, *, trip_id: uuid.UUID, owner_user_id: u
     )
     if trip is None or trip.deleted_at is None:
         raise TripNotFoundError("휴지통에서 여행을 찾을 수 없습니다.")
-    if trip.purge_started_at is not None or trip.deleted_at <= datetime.now(UTC) - timedelta(days=TRASH_RETENTION_DAYS):
+    if trip.purge_started_at is not None or trip.deleted_at <= datetime.now(UTC) - timedelta(
+        days=TRASH_RETENTION_DAYS
+    ):
         raise TripTrashExpiredError("30일 보관 기한이 지난 여행은 복원할 수 없습니다.")
     # 휴지통의 첨부도 이미 쿼터에 포함된다. 복원은 추가 저장 공간을 만들지 않는다.
     trip.deleted_at = None
@@ -670,7 +672,9 @@ async def copy_trip(
         created_trip = True
     else:
         existing_target_trip = await db.scalar(
-            select(Trip).where(Trip.trip_id == target_trip_id, Trip.deleted_at.is_(None)).with_for_update()
+            select(Trip)
+            .where(Trip.trip_id == target_trip_id, Trip.deleted_at.is_(None))
+            .with_for_update()
         )
         if existing_target_trip is None:
             raise TripNotFoundError("대상 여행을 찾을 수 없습니다.")
@@ -849,29 +853,38 @@ async def create_attachment(
     if quota_trip_id is None:
         raise TripAttachmentStorageRefError("첨부 용량을 계산할 여행계획이 필요합니다.")
     locked_trip = await db.scalar(
-        select(Trip).where(Trip.trip_id == quota_trip_id, Trip.deleted_at.is_(None))
-        .with_for_update().execution_options(populate_existing=True)
+        select(Trip)
+        .where(Trip.trip_id == quota_trip_id, Trip.deleted_at.is_(None))
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if locked_trip is None or (trip_id is not None and trip_id != quota_trip_id):
         raise TripAttachmentStorageRefError("첨부 대상이 변경되었습니다. 다시 불러와 주세요.")
     try:
         await get_trip_for_user_write(db, trip_id=quota_trip_id, user_id=uploaded_by_user_id)
     except (TripNotFoundError, TripPermissionError) as exc:
-        raise TripAttachmentStorageRefError("첨부 대상이 변경되었습니다. 다시 불러와 주세요.") from exc
+        raise TripAttachmentStorageRefError(
+            "첨부 대상이 변경되었습니다. 다시 불러와 주세요."
+        ) from exc
     if trip_poi_id is not None:
         parent = await db.scalar(
-            select(TripDayPoi).where(
+            select(TripDayPoi)
+            .where(
                 TripDayPoi.attachment_id == trip_poi_id,
                 TripDayPoi.trip_id == quota_trip_id,
                 TripDayPoi.deleted_at.is_(None),
-            ).with_for_update().execution_options(populate_existing=True)
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         if parent is None:
             raise TripAttachmentStorageRefError("첨부 대상이 변경되었습니다. 다시 불러와 주세요.")
     elif trip_day_index is not None:
-        day = await db.scalar(select(TripDay).where(
-            TripDay.trip_id == quota_trip_id, TripDay.day_index == trip_day_index
-        ).with_for_update())
+        day = await db.scalar(
+            select(TripDay)
+            .where(TripDay.trip_id == quota_trip_id, TripDay.day_index == trip_day_index)
+            .with_for_update()
+        )
         if day is None:
             raise TripAttachmentStorageRefError("첨부 대상이 변경되었습니다. 다시 불러와 주세요.")
     # 대상(trip 또는 POI)당 첨부 개수 상한 — 남용/저장소 비대 방지(T-105).
@@ -900,8 +913,11 @@ async def create_attachment(
         raise TripAttachmentStorageRefError("업로드 사용자를 찾을 수 없습니다.")
     try:
         await claim_attachment_upload(
-            db, user_id=uploaded_by_user_id, bucket=str(payload["bucket"]),
-            key=str(payload["storage_key"]), byte_size=int(payload["byte_size"]),
+            db,
+            user_id=uploaded_by_user_id,
+            bucket=str(payload["bucket"]),
+            key=str(payload["storage_key"]),
+            byte_size=int(payload["byte_size"]),
         )
     except InvalidStorageRefError as exc:
         raise TripAttachmentStorageRefError(str(exc)) from exc
@@ -1356,7 +1372,9 @@ async def _copy_trip_attachments(
             raise TripNotFoundError("사용자를 찾을 수 없습니다.")
         try:
             await assert_attachment_capacity(
-                db, user=actor, trip_id=target_trip_id,
+                db,
+                user=actor,
+                trip_id=target_trip_id,
                 additional_bytes=sum(row.byte_size for row in attachments),
             )
         except AttachmentQuotaError as exc:

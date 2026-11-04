@@ -713,7 +713,7 @@ async def test_notice_and_trip_copy_take_shared_object_set_in_global_order(
                 .order_by(CuratedPlanPoi.day_index, CuratedPlanPoi.sort_order)
             )
         )
-        for poi, key in zip(pois[:len(keys)], keys, strict=True):
+        for poi, key in zip(pois[: len(keys)], keys, strict=True):
             for kwargs in [
                 {"curated_poi_id": poi.curated_poi_id, "uploaded_by_user_id": admin},
                 {"trip_id": uuid.UUID(other_source), "uploaded_by_user_id": other},
@@ -785,3 +785,338 @@ async def test_notice_and_trip_copy_take_shared_object_set_in_global_order(
     results = await asyncio.wait_for(asyncio.gather(notice, public), 10)
     assert [r.status_code for r in results] == [201, 201], [r.text for r in results]
     assert seq["notice"] == seq["trip"] == sorted(keys)
+
+
+async def test_0103_moderation_backfill_uses_action_history_conservatively(
+    client, verified_user, auth_cookies, session_factory
+):
+    import ast
+    from pathlib import Path
+
+    from sqlalchemy import text
+
+    from app.models.moderation import ContentModerationAction, ContentReport
+
+    user_id, _ = verified_user
+    uid = uuid.UUID(user_id)
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    now = datetime.now(UTC)
+    cases = [
+        ("rejected", [("reject", 0)], False),
+        ("appealed", [("hide", 0), ("appeal", 1)], True),
+        ("rejected", [("hide", 0), ("restore", 1), ("reject", 2)], True),
+        ("hidden", [("hide", 0), ("restore", 3)], True),
+        ("appealed", [("hide", 0), ("restore", 0)], True),
+        ("restored", [("hide", 0)], False),
+        ("reviewing", [("takedown", 0), ("review", 1)], True),
+    ]
+    expected = {}
+    for status, actions, hold in cases:
+        file = await _file(client, cookies, user_id, trip)
+        aid = uuid.UUID(file["attachment_id"])
+        async with session_factory() as db:
+            row = await db.get(CuratedPlanAttachment, aid)
+            row.deleted_at = now
+            report = ContentReport(
+                target_type="attachment",
+                target_id=aid,
+                target_trip_id=uuid.UUID(trip),
+                target_owner_user_id=uid,
+                reporter_user_id=uid,
+                reason_code="other",
+                reason_text="historical decision",
+                status=status,
+                actioned_at=now,
+            )
+            db.add(report)
+            await db.flush()
+            for action, seconds in actions:
+                db.add(
+                    ContentModerationAction(
+                        report_id=report.report_id,
+                        actor_user_id=uid,
+                        action=action,
+                        action_reason="historical action",
+                        created_at=now + timedelta(seconds=seconds),
+                    )
+                )
+            await db.commit()
+        expected[aid] = hold
+    migration = (
+        Path(__file__).resolve().parents[2]  # noqa: ASYNC240 — 로컬 fixture 경로만 해석
+        / "alembic/versions/20261105_0103_attachment_retention.py"
+    )
+    tree = ast.parse(migration.read_text())
+    sql = next(
+        node.args[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "execute"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and "UPDATE app.curated_plan_attachments" in str(node.args[0].value)
+    )
+    async with session_factory() as db:
+        await db.execute(text(sql))
+        await db.commit()
+        for aid, hold in expected.items():
+            row = await db.get(CuratedPlanAttachment, aid, populate_existing=True)
+            assert row.moderation_hold is hold
+
+
+async def test_expired_parent_overrides_moderation_hold(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    file = await _file(client, cookies, user_id, trip)
+    async with session_factory() as db:
+        row = await db.get(CuratedPlanAttachment, uuid.UUID(file["attachment_id"]))
+        row.deleted_at = datetime.now(UTC)
+        row.moderation_hold = True
+        await db.commit()
+    await _trash(session_factory, trip, 31)
+    calls = []
+
+    async def delete(bucket, key):
+        calls.append(key)
+
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
+    async with session_factory() as db:
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_deleted"] == 1 and result["trips_deleted"] == 1
+        assert calls == [file["storage_key"]]
+
+
+@pytest.mark.parametrize(
+    "roles,read_status,write_status,can_execute",
+    [
+        (["user"], 404, 404, False),
+        (["user", "operator"], 200, 404, False),
+        (["user", "admin"], 200, 200, True),
+        (["user", "cpo"], 200, 200, True),
+    ],
+)
+async def test_storage_retention_role_boundary(
+    client, auth_cookies, session_factory, roles, read_status, write_status, can_execute
+):
+    from tests.integration.test_admin_retention_api import _create_user
+
+    uid = await _create_user(session_factory, roles=roles, email_prefix="storage-retention")
+    cookies = auth_cookies(str(uid))
+    read = await client.get("/admin/storage-retention", cookies=cookies)
+    assert read.status_code == read_status, read.text
+    if read_status == 200:
+        assert read.json()["data"]["can_execute"] is can_execute
+    write = await client.post(
+        "/admin/storage-retention/execute",
+        cookies=cookies,
+        json={
+            "access_reason": "role boundary regression",
+            "confirm_phrase": "DELETE EXPIRED FILES",
+        },
+    )
+    assert write.status_code == write_status, write.text
+
+
+@pytest.mark.parametrize(
+    "reason,phrase",
+    [
+        ("    ", "DELETE EXPIRED FILES"),
+        ("abc", "DELETE EXPIRED FILES"),
+        ("valid reason", "DELETE"),
+    ],
+)
+async def test_invalid_storage_cleanup_confirmation_has_no_audit_or_effect(
+    client, auth_cookies, session_factory, reason, phrase
+):
+    from sqlalchemy import func, select
+
+    from app.models.audit import AdminAuditLog
+    from tests.integration.test_admin_retention_api import _create_user
+
+    uid = await _create_user(
+        session_factory, roles=["user", "admin"], email_prefix="storage-confirm"
+    )
+    response = await client.post(
+        "/admin/storage-retention/execute",
+        cookies=auth_cookies(str(uid)),
+        json={"access_reason": reason, "confirm_phrase": phrase},
+    )
+    assert response.status_code == 422, response.text
+    async with session_factory() as db:
+        assert await db.scalar(select(func.count()).select_from(AdminAuditLog)) == 0
+        assert await db.scalar(select(func.count()).select_from(AttachmentGcObject)) == 0
+
+
+async def test_retention_request_audit_is_committed_before_storage_delete(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    from sqlalchemy import select
+
+    from app.models.audit import AdminAuditLog
+    from tests.integration.test_admin_retention_api import _create_user
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    file = await _file(client, cookies, user_id, trip)
+    await client.delete(f"/trips/{trip}/attachments/{file['attachment_id']}", cookies=cookies)
+    admin = await _create_user(
+        session_factory, roles=["user", "admin"], email_prefix="storage-audit"
+    )
+
+    async def denied(bucket, key):
+        async with session_factory() as observer:
+            rows = list(await observer.scalars(select(AdminAuditLog)))
+            assert len(rows) == 1
+            assert rows[0].action == "storage.retention_requested"
+            assert rows[0].access_reason == "bounded cleanup regression"
+        raise ClientError(
+            {"Error": {"Code": "AccessDenied", "Message": "private storage detail"}}, "DeleteObject"
+        )
+
+    monkeypatch.setattr(gc, "delete_attachment_object", denied)
+    response = await client.post(
+        "/admin/storage-retention/execute",
+        cookies=auth_cookies(str(admin)),
+        json={
+            "access_reason": "  bounded cleanup regression  ",
+            "confirm_phrase": "DELETE EXPIRED FILES",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["objects_failed"] == 1
+    assert (
+        "AccessDenied:DeleteObject" in response.text
+        and "private storage detail" not in response.text
+    )
+    async with session_factory() as db:
+        rows = list(await db.scalars(select(AdminAuditLog).order_by(AdminAuditLog.log_id)))
+        assert [r.action for r in rows] == [
+            "storage.retention_requested",
+            "storage.retention_completed",
+        ]
+        assert rows[0].resource_id == rows[1].resource_id
+        assert rows[1].prev_hash == rows[0].content_hash
+
+
+async def test_verification_rotates_by_last_attempt_not_lifetime_delete_attempts(
+    session_factory, monkeypatch
+):
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        for key, attempts, age in [("old-high", 1000, 5), ("new-low-a", 0, 3), ("new-low-b", 0, 2)]:
+            db.add(
+                AttachmentGcObject(
+                    bucket="pinvi-media",
+                    storage_key=key,
+                    attempts=attempts,
+                    queued_at=now - timedelta(hours=age + 1),
+                    deleted_at=now - timedelta(hours=age),
+                    last_verified_at=now - timedelta(hours=age),
+                )
+            )
+        await db.commit()
+    calls = []
+
+    async def unavailable(bucket, key):
+        calls.append(key)
+        raise ClientError({"Error": {"Code": "AccessDenied"}}, "DeleteObject")
+
+    monkeypatch.setattr(gc, "delete_attachment_object", unavailable)
+    async with session_factory() as db:
+        first = await gc.execute_attachment_retention(db)
+    assert calls == ["old-high", "new-low-a"]
+    assert first["verification_failed"] == 2
+    calls.clear()
+    async with session_factory() as db:
+        second = await gc.execute_attachment_retention(db)
+    assert calls == ["new-low-b"]
+    assert second["verification_failed"] == 1
+
+
+async def test_admin_library_does_not_offer_collected_poi_object(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    from tests.integration.test_admin_retention_api import _create_user
+    from tests.integration.test_pois_reorder import _add_poi
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    poi = await _add_poi(client, cookies, trip, sort_order="a0", feature_id=None)
+    file = await client.post(
+        f"/trips/{trip}/pois/{poi['attachment_id']}/attachments",
+        json=_attachment_payload(user_id, byte_size=60, purpose="poi_attachment"),
+        cookies=cookies,
+    )
+    assert file.status_code == 201, file.text
+    aid = file.json()["data"]["attachment_id"]
+    await client.delete(f"/trips/{trip}/pois/{poi['attachment_id']}", cookies=cookies)
+
+    async def delete(bucket, key):
+        return None
+
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
+    async with session_factory() as db:
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_deleted"] == 1
+    admin = await _create_user(
+        session_factory, roles=["user", "admin"], email_prefix="purged-library"
+    )
+    admin_cookies = auth_cookies(str(admin))
+    response = await client.get("/admin/files", cookies=admin_cookies)
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["total"] == 0
+    download = await client.get(f"/admin/files/{aid}/download-url", cookies=admin_cookies)
+    assert download.status_code == 404, download.text
+
+
+async def test_deleted_poi_then_hard_deleted_day_cannot_restore_detached_file(
+    client, verified_user, auth_cookies, session_factory
+):
+    from app.models.moderation import ContentReport
+    from app.services.moderation import ContentReportTransitionError, _restore_target
+    from tests.integration.test_pois_reorder import _add_poi
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    poi = await _add_poi(client, cookies, trip, sort_order="a0", feature_id=None)
+    response = await client.post(
+        f"/trips/{trip}/pois/{poi['attachment_id']}/attachments",
+        json=_attachment_payload(user_id, byte_size=60, purpose="poi_attachment"),
+        cookies=cookies,
+    )
+    assert response.status_code == 201, response.text
+    aid = uuid.UUID(response.json()["data"]["attachment_id"])
+    async with session_factory() as db:
+        row = await db.get(CuratedPlanAttachment, aid)
+        row.deleted_at = datetime.now(UTC)
+        row.moderation_hold = True
+        await db.commit()
+    await client.delete(f"/trips/{trip}/pois/{poi['attachment_id']}", cookies=cookies)
+    removed = await client.delete(
+        f"/trips/{trip}/days/1", headers={"If-Match": "1"}, cookies=cookies
+    )
+    assert removed.status_code == 204, removed.text
+    report = ContentReport(
+        target_type="attachment",
+        target_id=aid,
+        target_trip_id=uuid.UUID(trip),
+        reason_code="other",
+        reason_text="lost parent",
+        status="hidden",
+    )
+    async with session_factory() as db:
+        with pytest.raises(ContentReportTransitionError):
+            await _restore_target(db, report)
+        await db.rollback()
+        row = await db.get(CuratedPlanAttachment, aid)
+        assert row.deleted_at is not None
+    files = await client.get("/users/me/files", cookies=cookies)
+    assert files.json()["data"]["total"] == 0

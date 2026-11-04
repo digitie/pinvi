@@ -14,9 +14,9 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | share | 35 | 30 | 1 | 4 |
 | poi | 32 | 25 | 5 | 2 |
 | notify | 26 | 18 | 0 | 8 |
-| admin | 40 | 36 | 2 | 2 |
+| admin | 41 | 37 | 2 | 2 |
 | core | 31 | 30 | 1 | 0 |
-| **all** | **346** | **298** | **21** | **27** |
+| **all** | **347** | **299** | **21** | **27** |
 
 Spec files: 55.
 
@@ -339,6 +339,7 @@ Spec files: 55.
 | ADM-038 | admin | Feature 변경 요청 페이지 — Map 이 whole-row change-request 라우트를 제거한 뒤의 동작 기록(알려진 drift) | P2 | desktop, admin | scripted | `specs/admin/admin-features.live.spec.ts#ADM-038` |
 | ADM-039 | admin | 같은 실체가 이미 있을 때 승인이 exact_conflict → PinVi 상태 '중복' | P3 | desktop, admin | blocked |  |
 | ADM-040 | admin | 사이드바 접기/펼치기 상태가 localStorage 로 유지되고 본문 건너뛰기 링크가 존재 | P3 | desktop, admin, a11y | scripted | `specs/admin/admin-readonly-pages.live.spec.ts#ADM-040` |
+| ADM-041 | admin | 여행 휴지통·첨부 보존 상태와 정리 확인창 취소 | P2 | desktop, mobile, admin, a11y | scripted | `specs/admin/admin-readonly-pages.live.spec.ts#ADM-041` |
 | CORE-001 | core | 로그인 — 하이드레이션 전 클릭이 입력을 지우지 않고 제출된다(#619) | P1 | desktop, mobile, auth | scripted | `specs/core/core-auth-session.live.spec.ts#CORE-001` |
 | CORE-002 | core | 잘못된 비밀번호 — '이메일 또는 비밀번호가 올바르지 않습니다.' 알림, URL 유지, 쿠키 미발급 | P1 | desktop, mobile, auth | scripted | `specs/core/core-auth-session.live.spec.ts#CORE-002` |
 | CORE-003 | core | 로그아웃 뒤 보호 페이지 접근은 /login으로 간다 | P1 | desktop, auth | scripted | `specs/core/core-auth-session.live.spec.ts#CORE-003` |

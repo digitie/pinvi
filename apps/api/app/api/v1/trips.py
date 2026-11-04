@@ -139,7 +139,11 @@ def _to_response(trip) -> TripResponse:  # type: ignore[no-untyped-def]
         created_at=trip.created_at,
         updated_at=trip.updated_at,
         trash_expires_at=trip.deleted_at + timedelta(days=30) if trip.deleted_at else None,
-        can_restore=bool(trip.deleted_at and trip.purge_started_at is None and trip.deleted_at + timedelta(days=30) > datetime.now(UTC)),
+        can_restore=bool(
+            trip.deleted_at
+            and trip.purge_started_at is None
+            and trip.deleted_at + timedelta(days=30) > datetime.now(UTC)
+        ),
     )
 
 
@@ -543,7 +547,9 @@ async def restore_trip_endpoint(
     try:
         trip = await restore_trip(db, trip_id=trip_id, owner_user_id=uuid.UUID(current_user_id))
     except TripTrashExpiredError as exc:
-        raise HTTPException(status_code=410, detail={"code": exc.code, "message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=410, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
     except TripNotFoundError as exc:
         _raise_trip_http(exc)
     except TripAttachmentQuotaError as exc:

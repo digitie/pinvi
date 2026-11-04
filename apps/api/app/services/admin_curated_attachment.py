@@ -136,14 +136,21 @@ async def create_curated_attachment(
     )
     try:
         await claim_attachment_upload(
-            db, user_id=uploaded_by_user_id, bucket=str(payload["bucket"]),
-            key=str(payload["storage_key"]), byte_size=int(payload["byte_size"]),
+            db,
+            user_id=uploaded_by_user_id,
+            bucket=str(payload["bucket"]),
+            key=str(payload["storage_key"]),
+            byte_size=int(payload["byte_size"]),
         )
         user = await db.get(User, uploaded_by_user_id)
         if user is None:
             raise InvalidStorageRefError("업로드 사용자를 찾을 수 없습니다.")
         quota = effective_attachment_quota(await get_storage_settings(db), user)
-        if await attachment_bytes_for_user(db, user_id=uploaded_by_user_id) + int(payload["byte_size"]) > quota.user_quota_bytes:
+        if (
+            await attachment_bytes_for_user(db, user_id=uploaded_by_user_id)
+            + int(payload["byte_size"])
+            > quota.user_quota_bytes
+        ):
             raise InvalidStorageRefError("사용자 첨부 저장 용량을 초과했습니다.")
     except InvalidStorageRefError as exc:
         raise CuratedAttachmentStorageRefError(str(exc)) from exc

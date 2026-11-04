@@ -179,8 +179,12 @@ async def test_deleted_parent_hides_files_but_keeps_retained_object_quota(
     download = await client.get(f"/users/me/files/{attachment_id}/download-url", cookies=cookies)
     assert download.status_code == 404, download.text
     async with session_factory() as db:
-        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == payload["byte_size"]
-        assert await attachment_bytes_for_trip(db, trip_id=uuid.UUID(trip_id)) == payload["byte_size"]
+        assert (
+            await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == payload["byte_size"]
+        )
+        assert (
+            await attachment_bytes_for_trip(db, trip_id=uuid.UUID(trip_id)) == payload["byte_size"]
+        )
         row = await db.get(CuratedPlanAttachment, uuid.UUID(attachment_id))
         assert row is not None and row.deleted_at is None
         assert row.storage_key == payload["storage_key"]

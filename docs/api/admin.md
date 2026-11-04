@@ -3003,3 +3003,15 @@ dev/staging에서는 dry-run 전용 scenario catalog를 반환한다. 실제 see
 - [ ] `apps/api/app/core/rbac.py` (`roles` 검사 + 404 변환)
 - [ ] 통합 테스트 + RBAC 거부 e2e + chain 검증
 - [ ] 운영 환경 `ENABLE_SEED=false` 시 seed/reset 라우트 404 확인
+
+## 여행 휴지통·첨부 정리 (#667, ADR-078)
+
+GET /admin/storage-retention은 admin/operator/cpo가 조회한다. POST /admin/storage-retention/execute는 admin/cpo만 실행한다. 일반 사용자는404, operator의 실행도404다. 기존 PII 정리 API와 별도로 attachment_retention 수명을 다룬다.
+
+실행 본문은 access_reason(공백 제거 후5~1000자), confirm_phrase("DELETE EXPIRED FILES")다. 요청 감사 storage.retention_requested를 먼저 커밋한 뒤 제한된 작업을 실행하고 storage.retention_completed를 기록한다. 두 감사의 resource_id가 같은 실행을 가리킨다. 상태/감사 결과에는 객체 키·소유자 식별자·원시 provider 메시지를 싣지 않는다.
+
+상태는 retention_days, expired_trips, eligible_attachments, held_attachments, expired_uploads, protected_uploads, pending_objects, in_progress_objects, errors와 can_execute를 제공한다. errors의 code는 안전한 저장소 코드와 연산이며 phase=delete/verify로 최초 삭제·후속 재확인을 구분한다.
+
+결과는 expired_trips_started, retired_references, objects_deleted, objects_failed, objects_verified, verification_failed, trips_deleted, trip_cleanup_errors와 최신 status다. 일부 객체 실패는200 결과의 집계/오류로 표현하며 미확인 파일은 계속 과금한다. TRIP_BUSY/TRIP_REFERENCED는 여행 정리를 다음 실행에서 재시도할 수 있다는 뜻이다. 동시 실행에서 처리 중인 항목은 lease 집계로 표시한다.
+
+일자 CASCADE 전 과금 보존용으로 분리한 첨부는 restore_blocked=true로 원래 부모 소실을 영속화한다. 신고 복원으로 여행 수준 파일을 되살리지 못하며, moderation_hold는 해제하여 정리 자격을 유지한다. 관리자 파일 목록·count·다운로드도 purged_at이 있는 실제 폐기 파일을 제외한다.

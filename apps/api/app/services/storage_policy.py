@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -37,18 +38,24 @@ class EffectiveAttachmentQuota:
 
 
 async def get_storage_settings(db: AsyncSession) -> StorageSettings:
-    row = await db.scalar(select(StorageSettings).where(StorageSettings.settings_id == 1))
+    row: StorageSettings | None = await db.scalar(
+        select(StorageSettings).where(StorageSettings.settings_id == 1)
+    )
     if row is not None:
         return row
-    row = StorageSettings(
-        settings_id=1,
-        avatar_max_upload_bytes=DEFAULT_AVATAR_MAX_UPLOAD_BYTES,
-        attachment_max_upload_bytes=DEFAULT_ATTACHMENT_MAX_UPLOAD_BYTES,
-        trip_attachment_quota_bytes=DEFAULT_TRIP_ATTACHMENT_QUOTA_BYTES,
-        user_attachment_quota_bytes=DEFAULT_USER_ATTACHMENT_QUOTA_BYTES,
+    await db.execute(
+        insert(StorageSettings)
+        .values(
+            settings_id=1,
+            avatar_max_upload_bytes=DEFAULT_AVATAR_MAX_UPLOAD_BYTES,
+            attachment_max_upload_bytes=DEFAULT_ATTACHMENT_MAX_UPLOAD_BYTES,
+            trip_attachment_quota_bytes=DEFAULT_TRIP_ATTACHMENT_QUOTA_BYTES,
+            user_attachment_quota_bytes=DEFAULT_USER_ATTACHMENT_QUOTA_BYTES,
+        )
+        .on_conflict_do_nothing(index_elements=[StorageSettings.settings_id])
     )
-    db.add(row)
-    await db.flush()
+    row = await db.scalar(select(StorageSettings).where(StorageSettings.settings_id == 1))
+    assert row is not None
     return row
 
 
@@ -160,6 +167,8 @@ async def preserve_deleted_day_attachment_charges(
             trip_id=trip_id,
             trip_day_index=None,
             trip_poi_id=None,
+            moderation_hold=False,
+            restore_blocked=True,
             deleted_at=func.coalesce(CuratedPlanAttachment.deleted_at, now),
         )
         .execution_options(synchronize_session="fetch")
@@ -188,6 +197,7 @@ async def attachment_bytes_for_user(db: AsyncSession, *, user_id: uuid.UUID) -> 
         )
     )
     from app.services.storage_lifecycle import pending_upload_bytes
+
     return int(total or 0) + await pending_upload_bytes(db, user_id)
 
 
@@ -231,7 +241,9 @@ async def assert_attachment_quota(
         db, user=user, trip_id=trip_id, additional_bytes=byte_size
     )
     if byte_size > quota.max_upload_bytes:
-        raise AttachmentQuotaError(f"개별 파일은 최대 {quota.max_upload_bytes} bytes까지 가능합니다.")
+        raise AttachmentQuotaError(
+            f"개별 파일은 최대 {quota.max_upload_bytes} bytes까지 가능합니다."
+        )
     return quota
 
 
@@ -343,7 +355,10 @@ async def list_admin_file_library(
     limit: int,
     offset: int,
 ) -> tuple[list[tuple[CuratedPlanAttachment, str | None, str | None, str]], int]:
-    filters: list[Any] = [CuratedPlanAttachment.deleted_at.is_(None)]
+    filters: list[Any] = [
+        CuratedPlanAttachment.deleted_at.is_(None),
+        CuratedPlanAttachment.purged_at.is_(None),
+    ]
     if user_id is not None:
         filters.append(CuratedPlanAttachment.uploaded_by_user_id == user_id)
     if trip_id is not None:

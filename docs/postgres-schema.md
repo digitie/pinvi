@@ -1340,3 +1340,14 @@ v1의 `apps/api/alembic/versions/`에서 v2로 그대로 가져올 항목:
 - attachment_upload_intents는 첨부 purpose의 URL 발급·예약 크기·만료·실제 PUT 완료 크기·등록/정리를 기록한다. 미등록 예약도 사용자 총량에 포함하며 등록과 과금 전환은 원자적이다.
 - attachment_gc_objects의 (bucket,storage_key) 기본키는 영구 tombstone이다. lease token·기한·시도 횟수·비밀 없는 provider 오류 코드를 보존한다. 새 참조와 실제 proxy PUT은 같은 객체별 advisory 잠금을 사용한다.
 - 보존 첨부의 사용자/여행/POI 합산에는 purged_at IS NULL 부분 인덱스를 제공한다. 0103은 app schema만 변경하며 M05 boundary의 과거 revision OR 리터럴을 보존하고 새 head를 추가한다.
+
+### 0103 수명 상태의 세부 의미 (ADR-078)
+
+- curated_plan_attachments.moderation_hold: hide/takedown 뒤 신고 복원용 보존. 이력이 없는 최초 reject와 실제 hide 뒤 appeal/review/reject를 구분하며, 같은 시각의 조치는 보수적으로 보존한다.
+- attachment_upload_intents.write_token/write_started_at: 네트워크 PUT 전에 커밋하는 일회성 시작 표식. uploaded_bytes는 실제 성공 완료 확인이며 등록의 필수 조건이다. 미등록·만료 예약은 정리까지 과금한다. 시작했으나 완료가 불확실하면 시작 후30분까지 보호한다.
+- attachment_gc_objects.last_verified_at: 물리 삭제 또는 후속 재확인 시각. 삭제된 영구 표식도 한 시간 뒤부터 제한된 재삭제 대상으로 삼아 늦게 남은 옛 PUT를 정리한다.
+- attachment_gc_objects.last_verification_attempt_at: 실패를 포함한 마지막 재검증 시작 시각. 누적 삭제 시도 횟수와 무관하게 오래 기다린 항목부터 처리해 대상 순환을 보장한다.
+- lease_token 일치 조건으로만 결과를 반영하여 옛 worker가 새 실행의 성공 상태를 덮어쓰지 못한다. 오류는 안전한 code:operation만 기록한다.
+- purged_at 부분 covering index는 업로더/여행/POI 총량 조회를 지원한다. 신규 두 테이블의 SELECT/INSERT/UPDATE/DELETE는 M05 runtime ACL repair 대상이며 runtime에 DDL이나 alembic_version 쓰기 권한을 추가하지 않는다.
+
+일자 CASCADE 전 과금 보존용으로 분리한 첨부는 restore_blocked=true로 원래 부모 소실을 영속화한다. 신고 복원으로 여행 수준 파일을 되살리지 못하며, moderation_hold는 해제하여 정리 자격을 유지한다. 관리자 파일 목록·count·다운로드도 purged_at이 있는 실제 폐기 파일을 제외한다.

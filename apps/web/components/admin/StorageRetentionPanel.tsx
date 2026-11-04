@@ -46,7 +46,7 @@ export function StorageRetentionPanel() {
         {data.held_attachments > 0 && <p className="text-sm text-muted">신고 복원을 위해 보존 중인 첨부 {data.held_attachments}개는 정리하지 않습니다. 보존 중인 용량은 계속 반영합니다.</p>}
         {data.protected_uploads > 0 && <p className="text-sm text-muted">결과가 불확실한 업로드 {data.protected_uploads}개를 잠시 보존합니다. 보호 기간 뒤 다시 정리해 주세요.</p>}
         {data.in_progress_objects > 0 && <p role="status" className="text-sm text-muted">{data.in_progress_objects}개 파일을 다른 실행에서 처리 중입니다.</p>}
-        {data.errors.map((item) => <p key={item.code} role="alert" className="text-sm text-error-text">
+        {data.errors.map((item) => <p key={[item.phase, item.code].join(':')} role="alert" className="text-sm text-error-text">
           {item.count}개 파일 정리 실패 · {item.code}: {reasons[item.code.split(':')[0] ?? ''] ?? '저장소의 오류를 확인한 뒤 재시도해 주세요.'} {item.phase === "verify" ? "삭제 상태 재확인에 실패했습니다." : "삭제 확인 전까지 사용 용량을 유지합니다."}
         </p>)}
       </>}

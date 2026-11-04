@@ -1,4 +1,5 @@
 """관리자 첨부 정리의 집계 계약. 객체 키/개인 식별자는 노출하지 않는다."""
+
 from typing import Literal
 
 from pydantic import BaseModel, Field
