@@ -35,6 +35,8 @@ Environment (names only — values live in the root-only env file, never on the 
 USAGE
 }
 
+# Keep the original argv: the option loop below consumes it, and the sudo re-exec must replay it.
+orig_args=("$@")
 projects=()
 areas=()
 grep_expr=""
@@ -98,19 +100,43 @@ if [[ "$list_only" != "1" ]]; then
   if [[ ! -r "$env_file" ]]; then
     if [[ "$EUID" -ne 0 ]]; then
       echo "env file $env_file is not readable — re-running with sudo (SUDO_USER keeps the result dir)" >&2
-      exec sudo --preserve-env=PINVI_E2E_ENV_FILE,PINVI_E2E_RESULTS_ROOT,PINVI_LIVE_EXPECTED_REVISION,PINVI_PLAYWRIGHT_RUNNER_IMAGE,PINVI_PLAYWRIGHT_RUNNER_REPO_ROOT,HOME "$0" "$@"
+      exec sudo --preserve-env=PINVI_E2E_ENV_FILE,PINVI_E2E_RESULTS_ROOT,PINVI_LIVE_EXPECTED_REVISION,PINVI_PLAYWRIGHT_RUNNER_IMAGE,PINVI_PLAYWRIGHT_RUNNER_REPO_ROOT,HOME "$0" "${orig_args[@]}"
     fi
     echo "error: env file $env_file is missing or unreadable" >&2
+    exit 1
+  fi
+  if [[ -L "$env_file" || ! -f "$env_file" ]]; then
+    echo "error: $env_file must be a regular file (not a symlink)" >&2
     exit 1
   fi
   if [[ "$(stat -c '%a' "$env_file")" != "600" && "$(stat -c '%a' "$env_file")" != "400" ]]; then
     echo "error: $env_file must be mode 600 (or 400); it holds credentials" >&2
     exit 1
   fi
-  set -a
-  # shellcheck disable=SC1090
-  source "$env_file"
-  set +a
+  if [[ "$EUID" -eq 0 && "$(stat -c '%u' "$env_file")" != "0" ]]; then
+    echo "error: $env_file must be owned by root when the runner runs as root" >&2
+    exit 1
+  fi
+  # Parse KEY=VALUE lines instead of sourcing: only PLAYWRIGHT_BASE_URL and PINVI_E2E_* names are
+  # accepted, values are taken literally (optional surrounding quotes stripped), nothing is executed.
+  line_re='^(PLAYWRIGHT_BASE_URL|PINVI_E2E_[A-Z0-9_]+)=(.*)$'
+  dq_re='^"(.*)"$'
+  sq_re="^'(.*)'$"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line//[[:space:]]/}" || "$line" =~ ^[[:space:]]*# ]] && continue
+    line="${line#export }"
+    if [[ ! "$line" =~ $line_re ]]; then
+      echo "error: $env_file has an unsupported line (only PLAYWRIGHT_BASE_URL / PINVI_E2E_* = value)" >&2
+      exit 1
+    fi
+    key="${BASH_REMATCH[1]}"
+    val="${BASH_REMATCH[2]}"
+    if [[ "$val" =~ $dq_re || "$val" =~ $sq_re ]]; then
+      val="${BASH_REMATCH[1]}"
+    fi
+    export "$key=$val"
+  done < "$env_file"
   for name in PLAYWRIGHT_BASE_URL PINVI_E2E_USER_EMAIL PINVI_E2E_USER_PASSWORD; do
     if [[ -z "${!name:-}" ]]; then
       echo "error: $env_file must set $name" >&2
@@ -155,13 +181,18 @@ if [[ "$list_only" == "1" ]]; then
   # create their output, so point it at a throwaway dir (never root-owned files inside the checkout).
   PINVI_E2E_OUTPUT_DIR="$(mktemp -d)"
   export PINVI_E2E_OUTPUT_DIR
-  exec npm -w @pinvi/web run test:e2e:live-catalog:list -- "${pw_args[@]}"
+  list_status=0
+  npm -w @pinvi/web run test:e2e:live-catalog:list -- "${pw_args[@]}" || list_status=$?
+  rm -rf -- "$PINVI_E2E_OUTPUT_DIR"
+  exit "$list_status"
 fi
 
 # ── result dir (mounted into the container at the same absolute path) ──
 results_root="${PINVI_E2E_RESULTS_ROOT:-${HOME}/pinvi-live-catalog-results}"
 run_dir="${results_root}/$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$run_dir"
+mkdir -p "$results_root"
+# Failure artifacts can hold production page content; keep the run dir private to its owner.
+mkdir -m 700 "$run_dir"
 export PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR="$run_dir"
 export PINVI_E2E_OUTPUT_DIR="$run_dir"
 export PINVI_LIVE_UI_E2E=1
@@ -178,7 +209,7 @@ else
   echo "live catalog: no results.json in $run_dir (run aborted before the reporter wrote it)" >&2
 fi
 if [[ -n "${SUDO_USER:-}" && "$EUID" -eq 0 ]]; then
-  chown -R "$SUDO_USER" "$run_dir" || true
+  chown -R --no-dereference "$SUDO_USER" "$run_dir" || true
 fi
 echo "live catalog: exit $status, report $run_dir/html/index.html"
 exit "$status"

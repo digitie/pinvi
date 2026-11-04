@@ -125,7 +125,7 @@ test.describe.serial('ADM features', () => {
     await expect(error.or(empty).or(rows.first())).toBeVisible({ timeout: 30_000 });
     if (await error.count()) {
       await expect(error).toContainText(/찾을 수 없습니다|사용 불가|올바르지 않습니다/);
-      test.info().annotations.push({ type: 'drift', description: `upstream ${response.status()}: ${await error.textContent()}` });
+      test.info().annotations.push({ type: 'drift', description: `upstream ${response.status()}: ${((await error.textContent()) ?? '').slice(0, 80)}` });
     } else {
       test.info().annotations.push({ type: 'drift', description: `list rendered (${await rows.count()} rows) — Map still serves change-requests` });
     }

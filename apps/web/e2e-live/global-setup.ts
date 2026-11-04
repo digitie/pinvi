@@ -85,8 +85,8 @@ export default async function globalSetup(): Promise<void> {
     );
   }
   const baseURL = process.env.PLAYWRIGHT_BASE_URL!;
-  if (/localhost|127\.0\.0\.1/.test(baseURL) && process.env.PINVI_E2E_ALLOW_LOCAL !== '1') {
-    throw new Error('live catalog: PLAYWRIGHT_BASE_URL 은 배포된 origin 이어야 한다(#618). 로컬 스택은 PINVI_E2E_ALLOW_LOCAL=1 로만.');
+  if (/localhost|127\.0\.0\.1/.test(baseURL)) {
+    throw new Error('live catalog: PLAYWRIGHT_BASE_URL 은 배포된 origin 이어야 한다(#618, localhost 금지).');
   }
 
   const browser = await chromium.launch();

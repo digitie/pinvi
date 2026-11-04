@@ -34,6 +34,11 @@ import path from 'node:path';
 export const e2ePrefix = '[e2e]';
 /** Persistent read-only seed trip (WX-011/012); never swept because it does not start with `[e2e]`. */
 export const seedSunTripTitle = process.env.PINVI_E2E_SEED_SUN_TRIP ?? '[e2e-seed] weather-sun';
+// ensureSeedTrip may delete and recreate an incomplete seed by exact title — never let an env typo
+// point that at a real trip.
+if (!seedSunTripTitle.startsWith('[e2e-seed] ')) {
+  throw new Error('PINVI_E2E_SEED_SUN_TRIP must start with "[e2e-seed] "');
+}
 
 /**
  * Prod web origin. Must be explicit (#618: the live suite never falls back to localhost).
@@ -861,13 +866,24 @@ export const shotDir: string =
   path.join(process.env.PINVI_E2E_OUTPUT_DIR ?? path.resolve(process.cwd(), 'test-results'), 'shots');
 
 const SHARE_URL_BANNER = '[data-testid="new-share-url"] code';
+/** Telegram chat ids: the settings form input, the settings target list and the trip target list. */
+const TELEGRAM_CHAT_IDS = [
+  '[data-testid="telegram-chat-id"]',
+  '[aria-label="연결된 Telegram 대상"] .font-mono',
+  '[data-testid="trip-telegram-list"] .font-mono',
+].join(', ');
 
-export async function shot(page: Page, id: string, step: string): Promise<void> {
+export async function shot(page: Page, id: string, step: string, opts: { mask?: Locator[] } = {}): Promise<void> {
   const safe = `${id}-${step}`.replace(/[^A-Za-z0-9._-]+/g, '_');
   const file = path.join(shotDir, `${safe}.png`);
   await fs.mkdir(shotDir, { recursive: true });
-  // The one-time share URL banner carries the share token — always masked.
-  await page.screenshot({ path: file, fullPage: false, mask: [page.locator(SHARE_URL_BANNER)] });
+  // The one-time share URL banner (share token) and Telegram chat ids are always masked; callers add
+  // page-specific masks (e.g. recipient addresses on admin pages).
+  await page.screenshot({
+    path: file,
+    fullPage: false,
+    mask: [page.locator(SHARE_URL_BANNER), page.locator(TELEGRAM_CHAT_IDS), ...(opts.mask ?? [])],
+  });
   try {
     await test.info().attach(`${safe}.png`, { path: file, contentType: 'image/png' });
   } catch {

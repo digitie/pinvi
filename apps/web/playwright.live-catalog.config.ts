@@ -15,10 +15,11 @@ import path from 'node:path';
  *  - `session`  TRIP-046 only (`@slow`, ~13 min). Opt in with `PINVI_E2E_SESSION=1`; the n150
  *               runner never selects it unless asked (`--project session`).
  *
- * Artifacts: trace `retain-on-failure` carries request URLs, so every spec that opens a share link
- * sets `test.use({ trace: 'off' })` (share/*, weather-share-mobile, nearby/trip-shared); the `shot`
- * helper masks the one-time share-URL banner. Credentials never reach a trace: the login helpers
- * type them, and only the POST body (not recorded without `sources`) would hold them.
+ * Artifacts: trace is OFF. A Playwright trace records every action's arguments (the passwords typed by
+ * the login helpers, the cookies replayed by `reuseSession`), request/response headers and DOM
+ * snapshots — `sources: false` does not change that — so against production it would put credentials,
+ * session tokens and share tokens into the report. Failures are diagnosed from the error, the
+ * annotations and the `shot()` screenshots, which mask share URLs and Telegram chat ids.
  */
 const outputRoot = process.env.PINVI_E2E_OUTPUT_DIR ?? path.resolve(__dirname, 'test-results', 'live-catalog');
 const includeSession = process.env.PINVI_E2E_SESSION === '1';
@@ -46,7 +47,7 @@ export default defineConfig({
     serviceWorkers: 'block',
     locale: 'ko-KR',
     timezoneId: 'Asia/Seoul',
-    trace: { mode: 'retain-on-failure', sources: false },
+    trace: 'off',
     screenshot: 'off',
     video: 'off',
     actionTimeout: 20_000,

@@ -27,6 +27,7 @@ import {
   targetRow,
   tripTitle,
   waitForTelegramSendSince,
+  skipIfRealDefaultTarget,
 } from '../../helpers/notify';
 
 async function adminPage(browser: Browser): Promise<Page> {
@@ -56,6 +57,7 @@ test.describe('NTF delivery — trip_created 알림', () => {
   test('NTF-012 기본 대상=테스트 chat → 여행 생성 → sendMessage 200 (admin 로그) + 대상 상태 정상', async ({ page, browser }) => {
     const chatId = requireTestChat(test);
     const label = e2eLabel('NTF-012');
+    await skipIfRealDefaultTarget(test, page, apiBase);
     await page.goto('/settings/telegram');
     const created = await registerTargetViaForm(page, { chatId, label, isDefault: true });
     expect(created.status).toBe(201);

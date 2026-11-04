@@ -18,6 +18,7 @@ import {
   resolveApiBase,
   sweepE2eTargets,
   tripTitle,
+  skipIfRealDefaultTarget,
 } from '../../helpers/notify';
 
 const section = (page: import('@playwright/test').Page) => page.getByTestId('trip-telegram-targets');
@@ -69,6 +70,7 @@ test.describe('NTF trip link — 공유 탭 Telegram 알림 대상', () => {
   test('NTF-009 여행에 대상 연결 → 목록 표시 → 해제 → 목록에서 제거', async ({ page }, info) => {
     const chatId = requireTestChat(test);
     const label = e2eLabel('NTF-009');
+    await skipIfRealDefaultTarget(test, page, apiBase);
     await page.goto('/settings/telegram');
     const created = await registerTargetViaForm(page, { chatId, label, isDefault: true });
     expect(created.status).toBe(201);
@@ -84,7 +86,8 @@ test.describe('NTF trip link — 공유 탭 Telegram 알림 대상', () => {
     expect(linkRes.status()).toBe(201);
     const list = page.getByTestId('trip-telegram-list');
     await expect(list).toContainText(label);
-    await expect(list).toContainText(chatId);
+    // Boolean check: a failing toContainText would print the chat id into the report.
+    await expect.poll(async () => ((await list.textContent()) ?? '').includes(chatId), { message: 'linked target shows the test chat id' }).toBe(true);
     await expect(list.getByLabel('기본')).toBeVisible();
     // The linked target disappears from the selectable options.
     await expect(page.getByTestId('trip-telegram-select').locator(`option[value="${created.data!.id}"]`)).toHaveCount(0);

@@ -161,6 +161,11 @@ export async function createE2eSuggestion(
   expect(res.status(), 'POST /features/requests should be 201 (or 200 on per-user dedup)').toBeLessThan(300);
   const body = (await res.json()) as { data: { request_id: string; status: string } };
   await expect(dialog).toContainText('제안이 접수됐습니다');
+  // A 200 is a per-user dedup reply; it must still point at an [e2e] suggestion before we ever reject it.
+  const echoedTitle = (body.data as { title?: string; name?: string }).title ?? (body.data as { name?: string }).name;
+  if (echoedTitle !== undefined && !echoedTitle.startsWith(E2E)) {
+    throw new Error('createE2eSuggestion: server returned a non-[e2e] suggestion; refusing to use it');
+  }
   return body.data.request_id;
 }
 
@@ -177,6 +182,7 @@ export async function openReviewDialog(admin: Page, requestId: string, statusFil
     await filtered;
   }
   await expect(admin.getByTestId(`admin-fr-row-${requestId}`)).toBeVisible({ timeout: 30_000 });
+  await expect(admin.getByTestId(`admin-fr-row-${requestId}`)).toContainText(E2E);
   await admin.getByTestId(`admin-fr-review-${requestId}`).click();
   await expect(admin.getByTestId('admin-fr-review-dialog')).toBeVisible();
 }

@@ -18,6 +18,7 @@ import {
   sweepE2eTargets,
   targetRow,
   targetsList,
+  skipIfRealDefaultTarget,
 } from '../../helpers/notify';
 
 test.describe('NTF settings — Telegram 알림', () => {
@@ -96,6 +97,7 @@ test.describe('NTF settings — Telegram 알림', () => {
   test('NTF-004 테스트 chat 등록 → verify 성공 → 정상·chat type·제목 스냅샷, 폼 리셋', async ({ page }, info) => {
     const chatId = requireTestChat(test);
     const label = e2eLabel('NTF-004');
+    await skipIfRealDefaultTarget(test, page, apiBase);
     const result = await registerTargetViaForm(page, { chatId, label, isDefault: true });
     expect(result.status, result.message ?? '').toBe(201);
     expect(result.data?.telegram_label).toBe(label);
@@ -104,7 +106,8 @@ test.describe('NTF settings — Telegram 알림', () => {
     const row = targetRow(page, label);
     await expect(row).toBeVisible();
     await expect(row.getByLabel('기본')).toBeVisible(); // ★ default star
-    await expect(row).toContainText(chatId);
+    // Boolean check: a failing toContainText would print the chat id into the report.
+    await expect.poll(async () => ((await row.textContent()) ?? '').includes(chatId), { message: 'target row shows the test chat id' }).toBe(true);
     if (result.data?.last_verified_at) {
       // verify ran (prod bot token set): type + status
       expect(['private', 'group', 'supergroup', 'channel']).toContain(result.data.telegram_chat_type);
@@ -177,6 +180,7 @@ test.describe('NTF settings — Telegram 알림', () => {
     const chatId = requireTestChat(test);
     const a = e2eLabel('NTF-007 A');
     const b = e2eLabel('NTF-007 B');
+    await skipIfRealDefaultTarget(test, page, apiBase);
     expect((await registerTargetViaForm(page, { chatId, label: a, isDefault: true })).status).toBe(201);
     await expect(targetRow(page, a).getByLabel('기본')).toBeVisible();
 

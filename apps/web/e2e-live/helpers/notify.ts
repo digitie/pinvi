@@ -97,6 +97,21 @@ export async function sweepE2eTargets(page: Page, apiBase: string): Promise<numb
   return n;
 }
 
+/**
+ * Registering an `[e2e]` target as default clears the default flag of whatever target the account
+ * already has, and the sweep cannot give it back. Skip default-registering cases while a real
+ * (non-`[e2e]`) default target exists so the account's own setting is never changed.
+ */
+export async function skipIfRealDefaultTarget(
+  test: { skip: (c: boolean, d: string) => void },
+  page: Page,
+  apiBase: string,
+): Promise<void> {
+  const rows = await listTargets(page, apiBase);
+  const realDefault = rows.some((t) => t.is_default && !t.telegram_label?.startsWith(e2ePrefix));
+  test.skip(realDefault, '계정에 실제(non-[e2e]) 기본 Telegram 대상이 있어 기본 지정 케이스를 건너뛴다(설정 보존)');
+}
+
 /** The settings list (`<ul aria-label="연결된 Telegram 대상">`) and the row for one label. */
 export const targetsList = (page: Page): Locator =>
   page.getByRole('list', { name: '연결된 Telegram 대상' });

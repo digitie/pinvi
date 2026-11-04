@@ -22,7 +22,7 @@ suite)·`playwright.admin-live.config.ts`(admin read-only matrix)와 분리된 �
 러너는 다른 live suite 와 같은 게이트를 지난다 — exact checkout(`PINVI_LIVE_EXPECTED_REVISION`),
 clean worktree, digest-pinned Playwright image, fresh `npm ci`, host network. 결과는
 `$HOME/pinvi-live-catalog-results/<YYYYMMDD-HHMMSS>/` 에 남는다(`html/index.html`, `results.json`,
-`artifacts/`(trace), `shots/`).
+`artifacts/`, `shots/`). 결과 디렉터리는 mode 700 으로 만든다.
 
 ```bash
 cd ~/pinvi            # 검증할 체크아웃 (clean, HEAD = 실행할 revision)
@@ -51,18 +51,27 @@ scripts/n150-live-catalog.sh --head --project session       # TRIP-046(@slow, ~1
 
 ### 1.1 아티팩트와 비밀
 
-- trace 는 `retain-on-failure`(sources 제외). **공유 링크를 여는 스펙**(`specs/share/*`,
-  `weather/weather-share-mobile`, `nearby/trip-shared`)은 토큰이 URL·요청 로그에 남으므로
-  `test.use({ trace: 'off' })` 로 끈다. 새 스펙이 공유 링크를 열면 같은 줄을 넣는다.
-- `shot()` 은 `[data-testid=new-share-url] code`(1회성 공유 URL 배너)를 항상 마스킹한다.
+- **trace 는 전역 off.** Playwright trace 는 `sources: false` 여도 action 인자(로그인 helper 가
+  입력한 비밀번호, `reuseSession` 이 `addCookies` 로 넣는 세션 쿠키), 요청·응답 헤더, DOM 스냅숏을
+  기록하므로 prod 에서는 자격증명·세션·공유 토큰이 리포트에 실린다. 실패는 오류 메시지·annotation·
+  `shot()` 스크린샷으로 본다. 공유 스펙의 `test.use({ trace: 'off' })` 는 중복 방어로 남겨 둔다.
+- `shot()` 은 1회성 공유 URL 배너(`[data-testid=new-share-url] code`)와 Telegram chat id(입력칸·
+  설정 목록·여행 대상 목록)를 항상 마스킹하고, 호출자가 `{ mask }` 로 더한다(NTF-022 수신 주소).
 - 자격증명은 helper 가 입력 폼에 타이핑만 하고 어디에도 기록하지 않는다. 오류 메시지는 env 이름만
-  담는다(`requireEnv`). 공유 토큰은 `redact()` 로 가린 뒤에만 메시지에 넣는다.
+  담는다(`requireEnv`). 공유 토큰·chat id 와의 비교는 **불리언 단언**으로 해서 실패 메시지에 값이
+  찍히지 않게 하고(`expect(a === b, '설명').toBe(true)`), 메시지에 넣을 때는 `redact()` 를 거친다.
+- 정리 대상은 서버가 돌려준 값의 접두사로만 고른다: 여행 제목·Telegram label·파일 이름이
+  `[e2e]` 로 시작할 때만 삭제한다. 시드 여행 제목(`PINVI_E2E_SEED_SUN_TRIP`)은 `[e2e-seed] ` 로
+  시작해야 하고, 계정에 실제 기본 Telegram 대상이 있으면 기본 지정 케이스(NTF-004/007/009/012)는
+  건너뛴다.
 - 결과 디렉터리는 컨테이너(root)가 쓰고 러너가 호출자 소유로 되돌린다. 공개 저장소·이슈에
   trace/report 를 올리지 않는다.
 
 ## 2. env 파일 (이름만)
 
-러너는 `PINVI_E2E_ENV_FILE`(기본 `/root/.pinvi-e2e.env`, mode 600) 을 `set -a` 로 읽어
+러너는 `PINVI_E2E_ENV_FILE`(기본 `/root/.pinvi-e2e.env`, mode 600, root 소유, symlink 금지) 을
+`source` 하지 않고 `KEY=VALUE` 줄로 파싱해(키는 `PLAYWRIGHT_BASE_URL`·`PINVI_E2E_*` 만, 값은 문자
+그대로, 바깥 따옴표만 벗김)
 `scripts/n150-playwright-runner.sh` 의 허용 목록에 있는 이름만 컨테이너로 넘긴다. 값은 어디에도
 쓰지 않는다.
 

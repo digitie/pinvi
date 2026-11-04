@@ -26,7 +26,8 @@ test.describe('NTF admin — 알림 운영 화면 (read-only)', () => {
     await expect(page.getByTestId('admin-emails-status-filter')).toBeVisible();
     await expect(page.getByTestId('admin-emails-refresh')).toBeEnabled();
     await expect(appAlerts(page)).toHaveCount(0);
-    await shot(page, 'NTF-022', 'emails');
+    // Recipient addresses (to_email, font-mono cells) are real users' data — masked.
+    await shot(page, 'NTF-022', 'emails', { mask: [page.locator('main .font-mono')] });
   });
 
   test('NTF-023 /admin/etl Telegram outbox 카드: due/backoff/stuck/retry exhausted 숫자 + 임계값', async ({ page }) => {

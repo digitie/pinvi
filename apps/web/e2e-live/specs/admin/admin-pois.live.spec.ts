@@ -63,6 +63,9 @@ test.describe.serial('ADM POI admin (mutating, self-cleaning)', () => {
 
   test('ADM-029 link status broken → normal round trip leaves [e2e] audit rows', async () => {
     const page = admin.page; // still on the POI detail page from ADM-028
+    // Only ever mutate the [e2e] POI created in beforeAll.
+    test.skip(!title, 'ADM-028 did not run');
+    await expect(page.getByTestId('admin-poi-info')).toContainText(title);
     const select = page.getByTestId('admin-poi-link-status');
     test.skip((await select.count()) === 0, 'POI has no feature link (non-Map result picked?) — select hidden');
     const reason = `${E2E} ADM-029 link-status`;

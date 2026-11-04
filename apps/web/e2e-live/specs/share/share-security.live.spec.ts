@@ -111,7 +111,8 @@ test.describe('SHR 보안 네거티브 (desktop)', () => {
       .map((u) => redact(u, link.token));
     expect(leaks).toEqual([]);
     // 응답 본문이 아닌 화면에는 1회성 배너에만 표시된다(목록에는 token 없음).
-    await expect(page.getByTestId('share-link-list')).not.toContainText(link.token);
+    const listText = (await page.getByTestId('share-link-list').textContent()) ?? '';
+    expect(listText.includes(link.token), 'share list must not show the token').toBe(false);
   });
 
   test('SHR-017 존재하지 않는 여행 id → 404 안내, 비로그인 /trips/{id} → 로그인으로', async ({

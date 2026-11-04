@@ -56,10 +56,9 @@ test.describe('SHR 공유 링크 (desktop)', () => {
 
     const banner = page.getByTestId('new-share-url');
     await expect(banner.getByRole('button', { name: '링크 복사' })).toBeVisible();
-    await expect(banner.getByRole('link', { name: '열기' })).toHaveAttribute(
-      'href',
-      sharedPath(id, link.token),
-    );
+    // Token-bearing values are compared as booleans: a failing matcher would print the token.
+    const openHref = await banner.getByRole('link', { name: '열기' }).getAttribute('href');
+    expect(openHref === sharedPath(id, link.token), 'banner 열기 href is the share path').toBe(true);
 
     const list = page.getByTestId('share-link-list');
     await expect(list.getByRole('listitem')).toHaveCount(1);
@@ -98,7 +97,7 @@ test.describe('SHR 공유 링크 (desktop)', () => {
         .poll(() => fresh.page.getByRole('region', { name: '여행 지도' }).locator('canvas').count())
         .toBeGreaterThan(0);
       // 로그인 없이 열렸음을 확인: 인증 보호 라우트로 리다이렉트되지 않았다.
-      expect(new URL(fresh.page.url()).pathname).toBe(sharedPath(id, link.token));
+      expect(new URL(fresh.page.url()).pathname === sharedPath(id, link.token), 'stayed on the share path').toBe(true);
       await shot(fresh.page, 'SHR-002', '01-shared-readonly');
     } finally {
       await fresh.context.close();
@@ -144,7 +143,7 @@ test.describe('SHR 공유 링크 (desktop)', () => {
     );
 
     const second = await createShareLink(page);
-    expect(second.token).not.toBe(first.token);
+    expect(second.token !== first.token, 'second link has a new token').toBe(true);
     const list = page.getByTestId('share-link-list');
     await expect(list.getByRole('listitem')).toHaveCount(2);
     await expect(list.getByRole('button', { name: '공유 링크 철회' })).toHaveCount(1);
@@ -226,7 +225,7 @@ test.describe('SHR 공유 링크 (desktop)', () => {
       page.getByTestId('new-share-url').getByRole('link', { name: '열기' }).click(),
     ]);
     await popup.waitForLoadState();
-    expect(new URL(popup.url()).pathname).toBe(sharedPath(id, link.token));
+    expect(new URL(popup.url()).pathname === sharedPath(id, link.token), 'popup opened the share path').toBe(true);
     await expectSharedReadOnly(popup, title);
     await popup.close();
   });
@@ -242,8 +241,10 @@ test.describe('SHR 공유 링크 (desktop)', () => {
 
     await page.getByTestId('new-share-url').getByRole('button', { name: '링크 복사' }).click();
     await expect
-      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-      .toBe(link.url);
+      .poll(async () => (await page.evaluate(() => navigator.clipboard.readText())) === link.url, {
+        message: 'clipboard holds the displayed share URL',
+      })
+      .toBe(true);
   });
 
   test('SHR-011 공유 페이지의 날씨/일출·일몰은 중립 텍스트만 (park: 설악산)', async ({

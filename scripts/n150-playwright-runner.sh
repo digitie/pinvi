@@ -192,6 +192,18 @@ if [[ -n "$output_dir" ]]; then
     echo "error: PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR must be an existing absolute directory" >&2
     exit 1
   fi
+  # The dir is mounted read-write into a root container and re-owned afterwards, so accept only a fresh,
+  # empty, real directory outside the checkout — never /, $HOME or anything under the repository.
+  if [[ -L "$output_dir" || -n "$(ls -A -- "$output_dir")" ]]; then
+    echo "error: PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR must be an empty directory (not a symlink)" >&2
+    exit 1
+  fi
+  output_real="$(cd "$output_dir" && pwd -P)"
+  case "$output_real" in
+    /|"$(cd "${HOME:-/}" && pwd -P)"|"$repo_root"|"$repo_root"/*)
+      echo "error: PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR must not be /, \$HOME or inside the checkout" >&2
+      exit 1 ;;
+  esac
 fi
 evidence_dir="${PINVI_M05_UI_EVIDENCE_DIR:-${PINVI_M04_UI_EVIDENCE_DIR:-}}"
 if [[ -n "${PINVI_M04_UI_EVIDENCE_DIR:-}" && -n "${PINVI_M05_UI_EVIDENCE_DIR:-}" ]]; then
@@ -429,7 +441,7 @@ if [[ -n "$marker_path" && -e "$marker_path" ]]; then
 fi
 # live catalog 결과 디렉터리는 호출자 소유로 되돌린다(컨테이너는 root).
 if [[ -n "${PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR:-}" && -d "${PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR}" ]]; then
-  chown -R "$PINVI_PLAYWRIGHT_RUNNER_EVIDENCE_OWNER" "${PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR}"
+  chown -R --no-dereference "$PINVI_PLAYWRIGHT_RUNNER_EVIDENCE_OWNER" "${PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR}"
 fi
 exit "$test_status"'
   bash

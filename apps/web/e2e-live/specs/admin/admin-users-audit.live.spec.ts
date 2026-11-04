@@ -78,7 +78,7 @@ test.describe('ADM users / audit (read-only)', () => {
     await expect(result.or(error)).toBeVisible({ timeout: 120_000 });
     if (await result.count()) {
       await expect(result).toContainText(/OK — \d+건 검증 완료|BROKEN — log_id/);
-      test.info().annotations.push({ type: 'chain', description: (await result.textContent()) ?? '' });
+      test.info().annotations.push({ type: 'chain', description: ((await result.textContent()) ?? '').match(/^(OK|BROKEN)[^,]{0,40}/)?.[0] ?? 'result' });
     } else {
       test.info().annotations.push({ type: 'chain', description: 'verify refused (needs cpo role)' });
     }

@@ -311,11 +311,17 @@ export async function sweepE2eFiles(page: Page): Promise<number> {
     await page.goto('/files');
     await expect(page.getByRole('heading', { name: '파일' })).toBeVisible();
     await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 20_000 });
-    const rows = page.getByTestId('my-file-list').getByRole('listitem').filter({ hasText: e2ePrefix });
+    // Match on the filename cell only (the row also shows trip/POI context text), anchored at the start.
+    const rows = page
+      .getByTestId('my-file-list')
+      .getByRole('listitem')
+      .filter({ has: page.locator('span.font-semibold', { hasText: /^\s*\[e2e\]/ }) });
     const count = await rows.count();
     if (count === 0) return removed;
     for (let i = 0; i < count; i += 1) {
       const row = rows.first();
+      const fileName = ((await row.locator('span.font-semibold').first().textContent()) ?? '').trim();
+      if (!fileName.startsWith(e2ePrefix)) throw new Error('sweepE2eFiles: refusing to delete a non-[e2e] file');
       await row.getByRole('button', { name: '삭제' }).click();
       const dialog = page.getByTestId('file-delete-confirm');
       await expect(dialog).toBeVisible();
