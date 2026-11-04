@@ -104,7 +104,8 @@ test.describe.serial('ADM features', () => {
     const section = page.locator('[data-slot="card"]', { has: page.getByText('weather values', { exact: true }) }).first();
     await expect(section).toContainText('asof');
     await expect(section).toContainText('latest');
-    await expect(section).toContainText(/\b(fresh|stale)\b/);
+    // textContent joins the flag with the next span ("freshsource style …"), so no trailing \b.
+    await expect(section).toContainText(/\b(fresh|stale)/);
     const rows = page.locator('[data-testid^="admin-feature-weather-row-"]');
     await expect(rows.first()).toBeVisible({ timeout: 30_000 });
     const ids = await rows.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
