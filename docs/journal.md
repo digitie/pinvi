@@ -7,6 +7,15 @@
 - 최종 Docker 설치 검증·두 exact HEAD 리뷰·CI를 마친 뒤 #662를 병합하고 최신 #643/#1444를 갱신한다. 운영 접속·배포·검증은 하지 않는다.
 
 
+
+## 2026-11-04 — #635 geometry HTTP 계약 연결
+- 수정 전 API6개·웹6개 회귀 실패를 확인했다. geometry와 truncated가 제거되던 투영을 보완하고 include_geometry를 opt-in 전달한다.
+- route/area의 nullable coord는 그대로 유지하고 네 도형·다각형 내부 구멍을 보존한다. Zod는 유한 WGS84 좌표·선 길이·닫힌 ring을 검사하며 잘못된 도형은 예외 누출 없이 거부한다.
+- 낮은 zoom의 geometry 요청은 상류 I/O 전에 422다. 관련 API104개·웹14개와 schema/api-client 타입 검사를 통과했다.
+- 검토·병합된 Map dd0238c의 3 OpenAPI와 provenance를 동기화했다. service/user bytes는 불변이고 admin은 검토된 이벤트 payload 필드만 추가됨을 대조했다. M05 envelope/조건부 키를 유지하며 생성물을 재생성했다.
+- 지도 레이어·선택·토글·오래된 응답 경계와 새 카탈로그 정합을 이어간다. 운영 접근·배포·테스트 없음.
+
+
 ## 2026-11-04 — #635 경로·영역 지도 레이어 초안
 - #643 본문·댓글과 Map #1444를 다시 읽었다. Map #1448(dd0238c) 및 SDK #20이 머지됐으며 Map 묶음은 완료됐다.
 - 최신 main7479bbe의 새 live E2E 카탈로그 #664(346건)를 기준으로 작업한다. 완료된 #643 항목의 카탈로그 기대값도 실제 동작 근거에 맞춰 확인한다.

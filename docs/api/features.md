@@ -63,6 +63,9 @@ Cookie: pinvi_access=...
   `packages/schemas/src/feature.ts` 기준. Satellite/Hybrid는 z18까지)
 - `kinds`: `place,event,notice,price,weather,route,area` 중 반복 파라미터 (`kinds=a&kinds=b`)
 - `cluster_unit`(선택), `category`(선택), `limit`(기본 500, 최대 2000 → kor_travel_map `max_items`)
+- include_geometry(기본 false): zoom14 이상에서 route/area GeoJSON을 요청한다. 낮은 zoom에서는 422다. 탐색·여행 지도는 실제 줌을 먼저 확인하고 point 조회와 별도로 호출한다.
+- items[].geometry는 LineString/MultiLineString/Polygon/MultiPolygon 또는 null이다. 내부 구멍을 보존하며 geometry가 있어도 nullable coord를 임의 중심점으로 채우지 않는다.
+- truncated는 Map의 잘림 여부를 보존한다. true면 일부 결과이므로 지도 범위를 좁혀 다시 조회할 수 있도록 안내한다.
 - zoom별 클러스터링은 **kor_travel_map 서버 책임**(`cluster_unit`/`zoom`). granularity는
   `cluster_unit`(`sido | sigungu | eupmyeondong | individual`)으로 응답에 실린다.
 
@@ -91,6 +94,7 @@ Cookie: pinvi_access=...
       },
     ],
     "cluster_unit": "sigungu",
+    "truncated": false,
     "zoom": 12,
     "bbox": { "lng_min": 129.0, "lat_min": 35.0, "lng_max": 129.2, "lat_max": 35.2 },
   },

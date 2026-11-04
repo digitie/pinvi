@@ -35,6 +35,34 @@ export const MarkerColorSchema = z.string().regex(/^P-\d{2}$/, 'marker color는 
  * cutover(`1f2bdc3a`)로 user 표면에서 사라져 공개 계약에서도 제거했다(T-VN-42).
  * `distance_m`은 nearby 응답에만 채워진다.
  */
+/** Map 정본 WGS84 도형. nullable 장소 좌표를 도형 중심으로 대체하지 않는다. */
+const GeometryPositionSchema = z
+  .tuple([z.number().finite().min(-180).max(180), z.number().finite().min(-90).max(90)])
+  .rest(z.number().finite());
+const GeometryLineSchema = z.array(GeometryPositionSchema).min(2);
+const GeometryRingSchema = z
+  .array(GeometryPositionSchema)
+  .min(4)
+  .refine((ring) => {
+    const first = ring[0];
+    const last = ring[ring.length - 1];
+    return (
+      ring.length >= 4 &&
+      first !== undefined &&
+      last !== undefined &&
+      first[0] === last[0] &&
+      first[1] === last[1]
+    );
+  }, '다각형의 시작점과 끝점이 같아야 합니다.');
+const GeometryPolygonSchema = z.array(GeometryRingSchema).min(1);
+export const FeatureGeometrySchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('LineString'), coordinates: GeometryLineSchema }),
+  z.object({ type: z.literal('MultiLineString'), coordinates: z.array(GeometryLineSchema).min(1) }),
+  z.object({ type: z.literal('Polygon'), coordinates: GeometryPolygonSchema }),
+  z.object({ type: z.literal('MultiPolygon'), coordinates: z.array(GeometryPolygonSchema).min(1) }),
+]);
+export type FeatureGeometry = z.infer<typeof FeatureGeometrySchema>;
+
 export const FeatureSummarySchema = z.object({
   feature_id: FeatureIdSchema,
   kind: FeatureKindSchema,
@@ -46,6 +74,7 @@ export const FeatureSummarySchema = z.object({
   marker_color: MarkerColorSchema,
   marker_icon: z.string().max(64),
   distance_m: z.number().nullable().optional(),
+  geometry: FeatureGeometrySchema.nullable().optional(),
 });
 export type FeatureSummary = z.infer<typeof FeatureSummarySchema>;
 
@@ -62,6 +91,7 @@ export const FeaturesInBoundsResponseSchema = z.object({
   items: z.array(FeatureSummarySchema),
   clusters: z.array(FeatureClusterSchema),
   cluster_unit: z.string().nullable().optional(),
+  truncated: z.boolean().optional(),
   zoom: z.number().int().min(5).max(19),
   bbox: BBoxSchema,
 });

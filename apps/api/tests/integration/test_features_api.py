@@ -316,3 +316,75 @@ async def test_categories_active_only_is_applied_locally_not_delegated_upstream(
     # 어느 쪽이든 upstream에는 `active_only`가 나가지 않는다(fake 시그니처가 실제 client와
     # 같으므로 라우터가 다시 위임하면 TypeError로 즉시 red가 된다).
     assert fake.calls["categories"] == {"include_counts": False}
+
+
+async def test_in_bounds_passes_geometry_and_truncation_without_a_point(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+) -> None:
+    geometry = {
+        "type": "Polygon",
+        "coordinates": [
+            [[127, 37.5], [127.02, 37.5], [127.02, 37.52], [127, 37.5]],
+            [[127.005, 37.505], [127.01, 37.505], [127.01, 37.51], [127.005, 37.505]],
+        ],
+    }
+
+    class GeometryClient(_FakeKorTravelMapClient):
+        async def features_in_bounds(self, **kwargs: Any) -> dict[str, Any]:
+            self.calls["in_bounds"] = kwargs
+            return {
+                "items": [
+                    {
+                        "feature_id": "area:635",
+                        "kind": "area",
+                        "name": "구멍 있는 공원",
+                        "lon": None,
+                        "lat": None,
+                        "geometry": geometry,
+                    }
+                ],
+                "clusters": [],
+                "truncated": True,
+            }
+
+    fake = GeometryClient()
+    _override(fake)
+    try:
+        response = await client.get(
+            "/features/in-bounds?bbox=127,37.5,127.1,37.6&zoom=14"
+            "&kinds=route&kinds=area&include_geometry=true",
+            cookies=auth_cookies(verified_user[0]),
+        )
+    finally:
+        _clear()
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["items"][0]["geometry"] == geometry
+    assert data["items"][0]["coord"] is None
+    assert data["truncated"] is True
+    assert fake.calls["in_bounds"]["include_geometry"] is True
+    assert fake.calls["in_bounds"]["kinds"] == ["route", "area"]
+    assert fake.calls["in_bounds"]["cluster_unit"] is None
+
+
+@pytest.mark.parametrize("zoom", ["13", "13.5"])
+async def test_geometry_cannot_be_requested_below_detail_zoom(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    zoom: str,
+) -> None:
+    fake = _FakeKorTravelMapClient()
+    _override(fake)
+    try:
+        response = await client.get(
+            "/features/in-bounds?bbox=127,37.5,127.1,37.6"
+            f"&zoom={zoom}&kinds=area&include_geometry=true",
+            cookies=auth_cookies(verified_user[0]),
+        )
+    finally:
+        _clear()
+    assert response.status_code == 422
+    assert "in_bounds" not in fake.calls

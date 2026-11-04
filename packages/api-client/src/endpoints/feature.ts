@@ -26,6 +26,7 @@ export const featureApi = (client: ApiClient) => ({
       category?: string;
       clusterUnit?: string;
       limit?: number;
+      includeGeometry?: boolean;
     },
     // viewport pan은 빠르게 superseded되므로 호출부가 AbortSignal을 넘겨 직전 요청을
     // 취소할 수 있다. signal은 client.fetch가 upstream fetch로 그대로 전달한다.
@@ -34,6 +35,7 @@ export const featureApi = (client: ApiClient) => ({
     const qs = new URLSearchParams();
     qs.set('bbox', params.bbox);
     qs.set('zoom', String(params.zoom));
+    if (params.includeGeometry) qs.set('include_geometry', 'true');
     if (params.kinds) for (const k of params.kinds) qs.append('kinds', k);
     if (params.category) qs.set('category', params.category);
     if (params.clusterUnit) qs.set('cluster_unit', params.clusterUnit);

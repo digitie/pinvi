@@ -13,5 +13,5 @@ from __future__ import annotations
 from pathlib import Path
 
 SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-admin.json"
-UPSTREAM_COMMIT = "7ee94fb82ee8b6d9bbe296fe967734be3784ac48"
-SNAPSHOT_SHA256 = "0ea72954952f831adb679c45a48a7d217a82c2c8a288655dfeb17ab3e5ea0df1"
+UPSTREAM_COMMIT = "dd0238c3f988b03dc02a2deb13e06e5258e85313"
+SNAPSHOT_SHA256 = "43df297363745e3c618b0c757caa2e61b3218a5ae8cde4939c9c8938420d97c6"
