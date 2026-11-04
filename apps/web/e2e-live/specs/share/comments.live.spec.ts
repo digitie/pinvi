@@ -1,5 +1,5 @@
 /**
- * SHR 댓글 — 작성/삭제, 입력 검증, 두 신원 간 전파(탭 재진입), 작성자별 삭제 버튼.
+ * SHR 댓글 — 작성/삭제, 입력 검증, 두 신원 간 실시간 전파(comment.created), 작성자·소유자 삭제 버튼.
  * 두 번째 신원은 일반 사용자 test2(PINVI_E2E_USER2_*). 댓글 수정 UI/API는 없다(SHR-021 blocked).
  * 일자/장소 대상 댓글 UI도 없다(SHR-022 blocked).
  */
@@ -77,7 +77,7 @@ test.describe('SHR 댓글', () => {
     await expect(page.getByTestId('trip-comment-list')).toHaveCount(0);
   });
 
-  test('SHR-024 동행(test2)이 쓴 댓글은 소유자의 댓글 탭 재진입 시 보인다', async ({ page, browser }) => {
+  test('SHR-024 동행(test2)이 쓴 댓글이 소유자의 열린 댓글 탭에 실시간으로 나타난다', async ({ page, browser }) => {
     test.skip(isMobileProject(), '데스크톱 전용(두 신원)');
     const title = uniqueTitle('024');
     const { id } = await createTrip(page, { title, start: '2026-11-20', end: '2026-11-20' });
@@ -98,11 +98,9 @@ test.describe('SHR 댓글', () => {
       const body = `[e2e] SHR-024 전파 ${Date.now()}`;
       await postComment(user2.page, body);
 
-      // TripComments는 자체 fetch — realtime reload와 무관하므로 탭 재진입(remount)으로 갱신된다.
-      await openTripTab(page, '일정');
-      await openTripTab(page, '댓글');
-      await expect(page.getByTestId('trip-comment-list')).toContainText(body);
-      await shot(page, 'SHR-024', '01-comment-visible-after-reenter');
+      // #627 (fixed by #655): comment.created 실시간 이벤트가 열린 댓글 탭을 다시 불러온다 — 탭 재진입 없음.
+      await expect(page.getByTestId('trip-comment-list')).toContainText(body, { timeout: 15_000 });
+      await shot(page, 'SHR-024', '01-comment-visible-realtime');
 
       await user2.page.getByTestId('trip-comment-list').getByRole('button', { name: '댓글 삭제' }).click();
       await expect(commentSection(user2.page)).toContainText('아직 댓글이 없습니다.');
@@ -114,7 +112,7 @@ test.describe('SHR 댓글', () => {
     await expect(page.getByTestId('companion-list')).toHaveCount(0);
   });
 
-  test('SHR-033 동행(test2)의 댓글 — 작성자만 삭제 버튼, 소유자 화면엔 버튼 없음', async ({
+  test('SHR-033 동행(test2)의 댓글 — 작성자와 여행 소유자에게 삭제 버튼, 동행 화면엔 자기 댓글만', async ({
     page,
     browser,
   }) => {
@@ -137,18 +135,18 @@ test.describe('SHR 댓글', () => {
         user2.page.getByTestId('trip-comment-list').getByRole('button', { name: '댓글 삭제' }),
       ).toHaveCount(1);
 
-      // 소유자가 쓴 댓글은 소유자 화면에서 삭제 가능, 동행 댓글은 버튼 없음(canDeleteComment=작성자만).
+      // #628 (fixed by #655): API와 같이 여행 소유자는 동행 댓글도 지울 수 있다 — 소유자 화면엔 버튼 2개.
       await openTripTab(page, '댓글');
       const ownerBody = `[e2e] SHR-033 소유자 댓글 ${Date.now()}`;
       await postComment(page, ownerBody);
       const ownerList = page.getByTestId('trip-comment-list');
       await expect(ownerList).toContainText(body);
       await expect(ownerList.getByRole('listitem')).toHaveCount(2);
-      await expect(ownerList.getByRole('button', { name: '댓글 삭제' })).toHaveCount(1);
+      await expect(ownerList.getByRole('button', { name: '댓글 삭제' })).toHaveCount(2);
       await expect(
         ownerList.getByRole('listitem').filter({ hasText: body }).getByRole('button', { name: '댓글 삭제' }),
-      ).toHaveCount(0);
-      await shot(page, 'SHR-033', '01-owner-delete-only-own');
+      ).toHaveCount(1);
+      await shot(page, 'SHR-033', '01-owner-can-delete-both');
 
       // 반대로 동행 화면에서도 소유자 댓글에는 삭제 버튼이 없다.
       await openTripTab(user2.page, '일정');
@@ -157,10 +155,12 @@ test.describe('SHR 댓글', () => {
       await expect(user2List).toContainText(ownerBody);
       await expect(user2List.getByRole('button', { name: '댓글 삭제' })).toHaveCount(1);
 
-      await ownerList.getByRole('button', { name: '댓글 삭제' }).click();
+      // 소유자가 동행의 댓글을 지운다 → 동행 화면에서도 실시간으로 사라진다(comment.deleted).
+      await ownerList.getByRole('listitem').filter({ hasText: body }).getByRole('button', { name: '댓글 삭제' }).click();
       await expect(ownerList.getByRole('listitem')).toHaveCount(1);
-      await user2List.getByRole('button', { name: '댓글 삭제' }).click();
-      await expect(commentSection(user2.page)).toContainText('아직 댓글이 없습니다.');
+      await expect(user2List).not.toContainText(body, { timeout: 15_000 });
+      await ownerList.getByRole('button', { name: '댓글 삭제' }).click();
+      await expect(commentSection(page)).toContainText('아직 댓글이 없습니다.');
     } finally {
       await user2.context.close();
     }

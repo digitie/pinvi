@@ -183,7 +183,7 @@
   notes: ADR-055 F1 — 기간 축소는 일자를 지우지 않고 out_of_range만 표시.
 
 - id: TRIP-011
-  title: 편집 다이얼로그에서 종료일 < 시작일 — 422 로 거부, 다이얼로그에 날짜 오류 안내
+  title: 편집 다이얼로그에서 종료일 < 시작일 — 종료일 필드 안내로 거부, API도 422
   priority: P3
   tags: [desktop, mobile, mutating]
   preconditions:
@@ -191,14 +191,16 @@
   data_sources: []
   steps:
     - 새 여행 D+40 ~ D+41 → '편집' → 시작일 D+45, 종료일 D+41 → 저장
+    - 같은 기간을 API로 PATCH(If-Match 현재 version)
   expected:
-    - PATCH /trips/{id} → 422, 다이얼로그가 열린 채 '종료일은 시작일 이후여야 합니다.'
+    - 다이얼로그가 열린 채 종료일 필드 aria-invalid + '종료일은 시작일 이후여야 합니다.', PATCH 요청 0건
+    - API PATCH /trips/{id} → 422, error.message '종료일은 시작일 이후여야 합니다.'
     - 여행 기간은 바뀌지 않는다
   cleanup:
     - afterEach deleteTrip(id)
   automation: scripted
   spec: specs/trip/trip-create.live.spec.ts#TRIP-011
-  notes: '#624 — TripUpdate 에 범위 검증이 없다. prod(2026-11-03)는 500 INTERNAL_ERROR + "변경에 실패했습니다." → test.fail(#624). 수정 후 test.fail 제거.'
+  notes: '#624 — #654(API 422) + #643 리뷰 PR(다이얼로그 필드 검증·한국어 안내)로 수정. test.fail 제거, 정상 단언.'
 
 # ───────────────────────────── styles / regions ─────────────────────────────
 - id: TRIP-012
@@ -460,7 +462,7 @@
     - afterEach deleteTrip(id)
   automation: scripted
   spec: specs/trip/trip-days.live.spec.ts#TRIP-026
-  notes: '#649 — 중복 날짜가 저장된다(dayUsingDate 가 effective_date 미비교). test.fail(#649).'
+  notes: '#649 — #657 로 수정(effective_date 비교, 서버도 같은 규칙). test.fail 제거, 정상 단언.'
 
 - id: TRIP-027
   title: 가운데 일자 삭제 — 'N일차 추가' 라벨이 가장 낮은 빈 번호를 가리킨다
@@ -531,7 +533,7 @@
   automation: scripted
   spec: specs/trip/trip-places.live.spec.ts#TRIP-030
   notes: HTML5 DnD — 터치 프로젝트(hasTouch)에서는 skip, 모바일 수동은 TRIP-051.
-  # 2026-11-03 prod: #652 — 재정렬이 간헐 409 SORT_ORDER_CONFLICT(응답에 DB 원문). 새로고침 뒤 두 번째 재정렬까지 단언, test.fail(#652).
+  # #652(간헐 409 SORT_ORDER_CONFLICT + DB 원문) — #656 으로 수정. 새로고침 뒤 두 번째 재정렬까지 정상 단언(test.fail 제거).
 
 - id: TRIP-031
   title: 장소 삭제 — 행·헤더·마커가 함께 줄고 순번이 재계산된다
@@ -744,21 +746,26 @@
   spec: specs/trip/trip-list.live.spec.ts#TRIP-042
 
 - id: TRIP-043
-  title: 여행 삭제 — 확인 2단계, 목록에서 사라지고 상세 URL은 오류, 되돌리기 없음
+  title: 여행 삭제 → 휴지통 → 복원 — 목록·상세에서 사라졌다가 초안으로 장소와 함께 돌아온다
   priority: P1
   tags: [desktop, mobile, mutating, search]
   preconditions:
     - account: test@test.com (user)
   data_sources: [map:heritage, geo]
   steps:
-    - 생성 + 장소 1곳 → '삭제' → '삭제 확인' → 목록 두 버킷 확인 → /trips/{id} 직접 접근
+    - 생성 + 장소 1곳(안동하회마을) → 상태 '예정'으로 저장 → '삭제' → '삭제 확인'
+    - 목록 두 버킷 확인 → /trips/{id} 직접 접근
+    - /trips 의 '휴지통' → /trips/trash 에서 해당 여행 '복원'
+    - /trips 목록 → 상세
   expected:
-    - /trips로 이동, 양쪽 버킷에 카드 없음, 되돌리기 버튼 없음, 상세 접근 시 trip-detail-error
+    - 삭제 직후 /trips로 이동, 양쪽 버킷에 카드 없음, 상세 접근 시 trip-detail-error
+    - 휴지통 목록에 여행 1건, '복원' → POST /trips/{id}/restore 200 + '"<제목>" 여행을 초안으로 복원했습니다.', 휴지통에서 사라짐
+    - 목록 카드와 상세 상단에 '초안', 1일차 장소 1곳 그대로(GET /trips/{id})
   cleanup:
-    - 케이스 자체가 삭제; afterEach 재삭제 제외
+    - afterEach deleteTrip(id) — 복원된 여행을 다시 휴지통으로 보낸다
   automation: scripted
   spec: specs/trip/trip-list.live.spec.ts#TRIP-043
-  notes: soft_delete(status=archived, deleted_at) — 되돌리기는 제공하지 않는다(소유자 결정 2026-11-03, #633 not planned). 부재를 계속 단언한다.
+  notes: 소유자 결정 변경(2026-11-04) — 휴지통 복원(#633, #657)을 유지한다. 삭제는 soft_delete(status=archived, deleted_at), 복원은 status=draft·version+1, 기존 공개 범위·유효 공유 링크 재적용. 휴지통 영구 삭제·보존 기한은 아직 없다.
 
 - id: TRIP-044
   title: 버킷 전환 — 예정/지난 여행 필터가 aria-pressed로 바뀌고 카드 집합이 분리된다

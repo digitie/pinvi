@@ -193,7 +193,7 @@ export default function TripEditScreen() {
   const onDeleteTrip = () => {
     confirmDestructive({
       title: '여행 삭제',
-      message: '이 여행을 삭제할까요? 되돌릴 수 없습니다.',
+      message: '이 여행을 삭제할까요? 삭제한 여행은 웹의 여행 휴지통에서 초안으로 복원할 수 있습니다.',
       confirmLabel: '삭제',
       onConfirm: () => deleteTripMutation.mutate(),
     });

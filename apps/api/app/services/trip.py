@@ -241,7 +241,10 @@ async def list_trips_for_owner(
         Trip.owner_user_id == user_id,
         Trip.deleted_at.is_not(None) if trashed else Trip.deleted_at.is_(None),
     ]
-    if bucket == "future":
+    # 휴지통은 일정 버킷과 무관하다 — 지난 여행도 복원 대상이므로 bucket을 적용하지 않는다.
+    if trashed:
+        pass
+    elif bucket == "future":
         filters.append(or_(Trip.end_date.is_(None), Trip.end_date >= today))
     elif bucket == "past":
         filters.append(Trip.end_date < today)
@@ -298,15 +301,36 @@ async def update_trip(
     expected_version: int,
     patch: dict[str, Any],
 ) -> Trip:
+    # 같은 If-Match의 동시 PATCH(소유자·공유 편집 링크)와 휴지통 이동을 직렬화한다.
+    await db.refresh(trip, with_for_update=True)
+    if trip.deleted_at is not None:
+        raise TripNotFoundError("여행을 찾을 수 없습니다.")
     if trip.version != expected_version:
         raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
     # PATCH에서 생략하거나 null인 날짜는 기존 값을 유지한다.
     start_date = patch.get("start_date") or trip.start_date
     end_date = patch.get("end_date") or trip.end_date
     if (start_date is None) != (end_date is None):
-        raise TripValidationError("start_date와 end_date는 동시에 채워지거나 동시에 비어야 합니다.")
+        raise TripValidationError("시작일과 종료일을 함께 입력하거나 둘 다 비워두세요.")
     if start_date is not None and end_date is not None and end_date < start_date:
-        raise TripValidationError("end_date는 start_date 이후여야 합니다.")
+        raise TripValidationError("종료일은 시작일 이후여야 합니다.")
+    if start_date != trip.start_date:
+        # 시작일이 바뀌면 지정 날짜 없는 일자의 날짜가 함께 움직인다 — 다른 일자의 지정 날짜와
+        # 겹치면 같은 날짜 일자가 두 개가 된다(#649와 같은 불변식).
+        seen: dict[date, int] = {}
+        days = await db.scalars(
+            select(TripDay).where(TripDay.trip_id == trip.trip_id).order_by(TripDay.day_index)
+        )
+        for day in days:
+            effective = day.date or default_trip_day_date(start_date, day.day_index)
+            if effective is None:
+                continue
+            if effective in seen:
+                raise TripValidationError(
+                    f"{seen[effective]}일차와 {day.day_index}일차의 날짜가 겹칩니다. "
+                    "일자 날짜를 먼저 바꿔 주세요."
+                )
+            seen[effective] = day.day_index
     if "primary_region_code" in patch:
         primary_region_code = patch.pop("primary_region_code")
         trip.primary_region_code = primary_region_code

@@ -367,12 +367,34 @@ function ReviewDialog({
   const [err, setErr] = useState<string | null>(null);
   const panelErrorRef = useRef<HTMLParagraphElement | null>(null);
 
+  // 결과 미확정 명령은 서버에 저장된 입력으로만 재시도할 수 있다. 목록이 다시 불러와져 저장 입력이
+  // 생기거나 바뀌면(예: 409 충돌 뒤) 화면 입력을 그 값으로 맞추고, 사라지면 대기 표시를 푼다.
+  const savedInputKey = dispatch ? JSON.stringify(savedInput) : '';
+  const lastSavedInputKey = useRef(savedInputKey);
+  useEffect(() => {
+    if (lastSavedInputKey.current === savedInputKey) return;
+    lastSavedInputKey.current = savedInputKey;
+    setCommandPending(Boolean(savedInputKey));
+    if (!savedInputKey) return;
+    setAccessReason(savedText('access_reason'));
+    setName(savedText('name'));
+    setCategory(savedText('category'));
+    setMarkerColor(savedText('marker_color'));
+    setMarkerIcon(savedText('marker_icon'));
+    // savedText는 savedInputKey가 같으면 같은 값을 돌려준다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedInputKey]);
+
   useEffect(() => {
     if (!err) return;
     panelErrorRef.current?.focus({ preventScroll: true });
   }, [err]);
 
-  const approvalBody = () => ({
+  const approvalBody = () => {
+    const stored = commandPending && dispatch ? AdminFeatureRequestApproveSchema.safeParse(savedInput) : null;
+    return stored?.success ? stored.data : editedApprovalBody();
+  };
+  const editedApprovalBody = () => ({
     access_reason: accessReason.trim(),
     ...(typeof savedInput.kor_travel_map_reason === 'string'
       ? { kor_travel_map_reason: savedInput.kor_travel_map_reason }
@@ -404,7 +426,8 @@ function ReviewDialog({
             (error.status === 0 ||
               (error.status >= 200 && error.status < 300) ||
               error.status >= 500 ||
-              error.code === 'MAP_COMMAND_PENDING')))
+              // Map 명령 충돌(409)도 저장된 명령을 지우지 않는다 — 같은 입력으로만 재시도해야 한다.
+              (error.status === 409 && error.code !== 'INVALID_STATE'))))
       ) {
         setCommandPending(true);
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });

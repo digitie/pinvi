@@ -117,12 +117,11 @@
   steps:
     - "[e2e] 여행 생성 → 새 컨텍스트에서 /trips/{id} 진입 → /login → 로그인"
   expected:
-    - (의도) /trips/{id}로 복귀
-    - (현재) /trips로 착지 — expected-fail
+    - /login?next=… 를 거쳐 로그인 뒤 /trips/{id}로 복귀
   cleanup: [생성한 여행 삭제]
   automation: scripted
   spec: specs/core/core-auth-session.live.spec.ts#CORE-007
-  notes: test.fail — login/page.tsx는 router.push('/trips') 고정, onUnauthorized도 next 파라미터 없음. 구현 여부 open question.
+  notes: '#644 — #655 로 수정(login next 복귀, safeLoginReturnTo 같은 출처 경로만). test.fail 제거, 정상 단언.'
 
 - id: CORE-008
   title: 비로그인 보호 페이지(/trips,/map,/files,/settings) 접근은 /login

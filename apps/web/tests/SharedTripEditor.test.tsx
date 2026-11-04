@@ -26,9 +26,8 @@ describe('공유 여행 정보 편집', () => {
     fireEvent.change(screen.getByLabelText('여행 제목'), { target: { value: '바뀐 여행' } });
     fireEvent.click(screen.getByRole('button', { name: '여행 정보 저장' }));
     await screen.findByText('여행 정보를 저장했습니다.');
-    expect(api.updateShared).toHaveBeenCalledWith(trip.trip_id, 'share', 2, {
-      title: '바뀐 여행', description: '', region_hint: null,
-    });
+    // 바뀐 필드만 보낸다 — 손대지 않은 null 설명이 ""로 바뀌면 안 된다.
+    expect(api.updateShared).toHaveBeenCalledWith(trip.trip_id, 'share', 2, { title: '바뀐 여행' });
     expect(onSaved).toHaveBeenCalledWith(updated);
   });
   it('409 뒤 최신 정보로 갱신하고 새 버전으로 재시도한다', async () => {
@@ -37,11 +36,13 @@ describe('공유 여행 정보 편집', () => {
     api.getShared.mockResolvedValue({ trip: latest });
     const onSaved = vi.fn();
     const { rerender } = render(<SharedTripEditor tripId={trip.trip_id} token="share" trip={trip} onSaved={onSaved} />);
+    fireEvent.change(screen.getByLabelText('여행 설명'), { target: { value: '내 설명' } });
     fireEvent.click(screen.getByRole('button', { name: '여행 정보 저장' }));
     fireEvent.click(await screen.findByRole('button', { name: '최신 정보 불러오기' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(latest));
     rerender(<SharedTripEditor tripId={trip.trip_id} token="share" trip={latest} onSaved={onSaved} />);
     api.updateShared.mockResolvedValue({ ...latest, version: 4 });
+    fireEvent.change(screen.getByLabelText('여행 설명'), { target: { value: '다시 쓴 설명' } });
     fireEvent.click(screen.getByRole('button', { name: '여행 정보 저장' }));
     await screen.findByText('여행 정보를 저장했습니다.');
     expect(api.updateShared.mock.calls.map((args) => args[2])).toEqual([2, 3]);
@@ -59,9 +60,21 @@ describe('공유 여행 정보 편집', () => {
     api.updateShared.mockRejectedValue(new Error('failed'));
     const onSaved = vi.fn();
     render(<SharedTripEditor tripId={trip.trip_id} token="share" trip={trip} onSaved={onSaved} />);
+    fireEvent.change(screen.getByLabelText('지역'), { target: { value: '부산' } });
     fireEvent.click(screen.getByRole('button', { name: '여행 정보 저장' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('저장하지 못했습니다.');
     expect(onSaved).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole('button', { name: '여행 정보 저장' })).toBeEnabled());
+  });
+  it('바뀐 것이 없으면 요청하지 않고, 지운 설명은 null로 보낸다', async () => {
+    const described = { ...trip, description: '원래 설명', region_hint: '경주' };
+    api.updateShared.mockResolvedValue({ ...described, description: null, version: 3 });
+    render(<SharedTripEditor tripId={trip.trip_id} token="share" trip={described} onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '여행 정보 저장' }));
+    await screen.findByText('여행 정보를 저장했습니다.');
+    expect(api.updateShared).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('여행 설명'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: '여행 정보 저장' }));
+    await waitFor(() => expect(api.updateShared).toHaveBeenCalledWith(trip.trip_id, 'share', 2, { description: null }));
   });
 });

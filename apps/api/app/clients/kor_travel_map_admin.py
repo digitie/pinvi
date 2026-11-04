@@ -48,6 +48,17 @@ _OPS_SCOPE_HEADER = "X-Kor-Travel-Map-Ops-Scope"
 _REQUEST_ID_HEADER = "X-Request-Id"
 _REVISION_ETAG_PATTERN = re.compile(r'^"[1-9][0-9]*"$')
 
+
+def _path_segment(value: str) -> str:
+    """사용자 유래 id를 Map URL path의 **한 세그먼트**로만 넣는다.
+
+    `/`·`?`·`#`는 인코딩하고, 인코딩해도 그대로인 점 세그먼트(`.`·`..`)는 httpx가 URL을
+    정규화하며 상위 경로로 바꾸므로 거부한다(제안의 `target_feature_id`는 사용자 입력이다).
+    """
+    if value in {".", ".."}:
+        raise KorTravelMapBadRequest("Map 경로 id가 올바르지 않습니다.", code="VALIDATION_ERROR")
+    return quote(value, safe="")
+
 OpsScope = Literal["ops:read", "ops:cancel"]
 
 _OPS_OBSERVABILITY_READ_PATHS = frozenset(
@@ -569,13 +580,15 @@ class KorTravelMapAdminClient:
         """GET /v1/service/admin-features/{id} — admin feature 상세 data 반환."""
         return self._data(
             await self._send(
-                "GET", f"/v1/service/admin-features/{quote(feature_id, safe='')}", feature_read=True
+                "GET", f"/v1/service/admin-features/{_path_segment(feature_id)}", feature_read=True
             )
         )
 
     async def get_feature_revision_etag(self, feature_id: str) -> str:
         """stable revision GET의 canonical ETag를 mutation precondition으로 보존한다."""
-        resp = await self._send("GET", f"/v1/admin/features/{feature_id}/revision")
+        resp = await self._send(
+            "GET", f"/v1/admin/features/{_path_segment(feature_id)}/revision"
+        )
         self._data(resp)
         entity_tag = cast(str | None, resp.headers.get("ETag"))
         if entity_tag is None or _REVISION_ETAG_PATTERN.fullmatch(entity_tag) is None:
@@ -601,7 +614,7 @@ class KorTravelMapAdminClient:
         return self._command_receipt(
             await self._send(
                 "PATCH",
-                f"/v1/admin/features/{quote(feature_id, safe='')}",
+                f"/v1/admin/features/{_path_segment(feature_id)}",
                 json=dict(payload),
                 headers={"If-Match": expected_revision, "Idempotency-Key": idempotency_key},
             ),
@@ -623,7 +636,7 @@ class KorTravelMapAdminClient:
         return self._command_receipt(
             await self._send(
                 "DELETE",
-                f"/v1/admin/features/{quote(feature_id, safe='')}",
+                f"/v1/admin/features/{_path_segment(feature_id)}",
                 json=body,
                 headers={"If-Match": expected_revision, "Idempotency-Key": idempotency_key},
             ),
@@ -815,7 +828,7 @@ class KorTravelMapAdminClient:
         return self._data(
             await self._send(
                 "PATCH",
-                f"/v1/admin/features/dedup-reviews/{review_id}",
+                f"/v1/admin/features/dedup-reviews/{_path_segment(review_id)}",
                 json=body,
                 headers={"Idempotency-Key": idempotency_key},
             )

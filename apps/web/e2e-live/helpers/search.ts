@@ -222,11 +222,10 @@ export function insideBbox(row: SearchRow, bbox: [number, number, number, number
 }
 
 export function recordPerf(testInfo: TestInfo, label: string, ms: number, budgetMs: number): void {
-  // Budgets are targets, not gates: over budget is recorded; > 2× budget is the known latency issue #663
-  // reproducing — marked expected-fail at runtime (it is intermittent, so no static test.fail).
+  // Budgets are targets, not gates: over budget is recorded; > 2× budget fails softly. The detail-card
+  // latency issue #663 was fixed by #662 (single 2.5 s handler budget), so it is no longer expected-fail.
   testInfo.annotations.push({ type: ms > budgetMs ? 'perf-over-budget' : 'perf', description: `${label}: ${ms}ms (budget ${budgetMs}ms)` });
-  const knownIssue = label.startsWith('detail-card') ? ' (#663)' : '';
-  if (knownIssue && ms >= budgetMs * 2) test.fail(true, `#663 reproduced: ${label} ${ms}ms > 2× budget ${budgetMs}ms`);
+  const knownIssue = label.startsWith('detail-card') ? ' (#663 regression)' : '';
   expect.soft(ms, `${label} > 2× budget ${budgetMs}ms${knownIssue}`).toBeLessThan(budgetMs * 2);
 }
 

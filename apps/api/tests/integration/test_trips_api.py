@@ -1187,7 +1187,7 @@ async def test_trip_patch_rejects_reversed_dates_without_mutation(
     )
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
-    assert response.json()["error"]["message"] == "end_date는 start_date 이후여야 합니다."
+    assert response.json()["error"]["message"] == "종료일은 시작일 이후여야 합니다."
     detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
     trip = detail.json()["data"]["trip"]
     assert trip["start_date"] == "2026-06-10"
