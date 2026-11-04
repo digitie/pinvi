@@ -536,7 +536,9 @@ class KorTravelMapClient:
         segment = _path_segment(feature_id)
         if segment is None:
             return None
-        resp = await self._send("GET", f"/v1/features/{segment}", allow_public_api_key=True)
+        # 계약 경로 표(test_kor_travel_map_contract)가 f-string 자리 이름으로 경로를 대조한다.
+        feature_id = segment
+        resp = await self._send("GET", f"/v1/features/{feature_id}", allow_public_api_key=True)
         if resp.status_code == status.HTTP_404_NOT_FOUND:
             return None
         return self._data(resp)
@@ -772,7 +774,11 @@ class KorTravelMapClient:
         segment = _path_segment(feature_id)
         if segment is None:
             return None
-        resp = await self._send("GET", f"/v1/public/beaches/{segment}", allow_public_api_key=True)
+        # 계약 경로 표(test_kor_travel_map_contract)가 f-string 자리 이름으로 경로를 대조한다.
+        feature_id = segment
+        resp = await self._send(
+            "GET", f"/v1/public/beaches/{feature_id}", allow_public_api_key=True
+        )
         if resp.status_code == status.HTTP_404_NOT_FOUND:
             return None
         return self._data(resp)
@@ -848,7 +854,11 @@ class KorTravelMapClient:
         segment = _path_segment(feature_id)
         if segment is None:
             return None
-        resp = await self._send("GET", f"/v1/public/festivals/{segment}", allow_public_api_key=True)
+        # 계약 경로 표(test_kor_travel_map_contract)가 f-string 자리 이름으로 경로를 대조한다.
+        feature_id = segment
+        resp = await self._send(
+            "GET", f"/v1/public/festivals/{feature_id}", allow_public_api_key=True
+        )
         if resp.status_code == status.HTTP_404_NOT_FOUND:
             return None
         return self._data(resp)
