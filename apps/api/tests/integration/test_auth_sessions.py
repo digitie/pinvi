@@ -184,3 +184,71 @@ async def test_logout_revokes_refresh_session_and_clears_cookies(client, session
         )
         assert session is not None
         assert session.revoked_at is not None
+
+
+async def test_logout_invalidates_access_token_of_the_session(client, session_factory) -> None:
+    """#672 — 로그아웃 뒤 같은 access JWT로 /auth/me 가 200이면 안 된다.
+
+    관리자 로그인 거절 흐름(로그인 → 즉시 로그아웃)에서 cookie 삭제가 반영되기 전에 나간 요청이
+    stateless access JWT로 세션을 되살렸다. 로그아웃은 cookie와 무관하게 서버에서 끊어야 한다.
+    """
+    _user_id, email, password = await _seed_active_user(session_factory)
+    login_resp = await client.post("/auth/login", json={"email": email, "password": password})
+    access_token = login_resp.cookies["pinvi_access"]
+    refresh_token = login_resp.cookies["pinvi_refresh"]
+    client.cookies.clear()
+
+    before = await client.get("/auth/me", cookies={"pinvi_access": access_token})
+    assert before.status_code == 200
+
+    out = await client.post(
+        "/auth/logout",
+        cookies={"pinvi_access": access_token, "pinvi_refresh": refresh_token},
+    )
+    assert out.status_code == 204
+    client.cookies.clear()
+
+    after = await client.get("/auth/me", cookies={"pinvi_access": access_token})
+    assert after.status_code == 401
+    refreshed = await client.post("/auth/refresh", cookies={"pinvi_refresh": refresh_token})
+    assert refreshed.status_code == 401
+
+
+async def test_logout_with_only_access_cookie_still_invalidates_it(client, session_factory) -> None:
+    """refresh cookie가 없어도(경로·만료 차이) access JWT 자체로 로그아웃이 끊는다(#672)."""
+    _user_id, email, password = await _seed_active_user(session_factory)
+    login_resp = await client.post("/auth/login", json={"email": email, "password": password})
+    access_token = login_resp.cookies["pinvi_access"]
+    client.cookies.clear()
+
+    out = await client.post("/auth/logout", cookies={"pinvi_access": access_token})
+    assert out.status_code == 204
+    client.cookies.clear()
+
+    after = await client.get("/auth/me", cookies={"pinvi_access": access_token})
+    assert after.status_code == 401
+
+
+async def test_logout_keeps_other_refresh_sessions_usable(client, session_factory) -> None:
+    """다른 기기 세션은 access JWT만 한 번 갱신하면 계속 쓸 수 있다(refresh session은 그대로)."""
+    _user_id, email, password = await _seed_active_user(session_factory)
+    first = await client.post("/auth/login", json={"email": email, "password": password})
+    first_access = first.cookies["pinvi_access"]
+    first_refresh = first.cookies["pinvi_refresh"]
+    client.cookies.clear()
+    second = await client.post("/auth/login", json={"email": email, "password": password})
+    second_refresh = second.cookies["pinvi_refresh"]
+    client.cookies.clear()
+
+    out = await client.post(
+        "/auth/logout", cookies={"pinvi_access": first_access, "pinvi_refresh": first_refresh}
+    )
+    assert out.status_code == 204
+    client.cookies.clear()
+
+    refreshed = await client.post("/auth/refresh", cookies={"pinvi_refresh": second_refresh})
+    assert refreshed.status_code == 200
+    new_access = refreshed.cookies["pinvi_access"]
+    client.cookies.clear()
+    me = await client.get("/auth/me", cookies={"pinvi_access": new_access})
+    assert me.status_code == 200

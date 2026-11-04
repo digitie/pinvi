@@ -224,6 +224,32 @@ def test_redact_secrets_path_tokens() -> None:
     )
     # 다른 path의 같은 이름은 건드리지 않는다
     assert redact_secrets("/api/v1/trips/shared/list") == "/api/v1/trips/shared/list"
+    # 하위 경로가 붙은 API 공유 경로도 토큰만 가린다(웹 규칙이 하위 segment를 토큰으로 오인하지 않는다)
+    assert redact_secrets(f"/api/v1/trips/{trip}/shared/tok_abc/comments") == (
+        f"/api/v1/trips/{trip}/shared/***/comments"
+    )
+
+
+def test_redact_secrets_web_shared_page_token() -> None:
+    """#671 — 웹 공유 화면 경로와 그것을 실은 `next=`·`return_to`(인코딩 포함)의 토큰도 가린다."""
+    trip = "11111111-1111-4111-8111-111111111111"
+    assert redact_secrets(f'"GET /shared/{trip}/tok_abc?_rsc=1 HTTP/1.1"') == (
+        f'"GET /shared/{trip}/***?_rsc=1 HTTP/1.1"'
+    )
+    assert redact_secrets(f"https://pinvi.example/shared/{trip}/tok_abc") == (
+        f"https://pinvi.example/shared/{trip}/***"
+    )
+    assert redact_secrets(f"/login?next=%2Fshared%2F{trip}%2Ftok_abc&_rsc=x") == (
+        f"/login?next=%2Fshared%2F{trip}%2F***&_rsc=x"
+    )
+    assert redact_secrets(f"next=%252Fshared%252F{trip}%252Ftok_abc") == (
+        f"next=%252Fshared%252F{trip}%252F***"
+    )
+    assert redact_secrets(f'{{"return_to": "/shared/{trip}/tok_abc"}}') == (
+        f'{{"return_to": "/shared/{trip}/***"}}'
+    )
+    # 토큰 없는 복귀 경로는 그대로
+    assert redact_secrets(f"/login?next=%2Fshared%2F{trip}") == f"/login?next=%2Fshared%2F{trip}"
 
 
 def test_redact_secrets_oauth_callback_code_and_state() -> None:

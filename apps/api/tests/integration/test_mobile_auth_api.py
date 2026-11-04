@@ -82,3 +82,18 @@ async def test_mobile_logout_revokes_refresh(client, session_factory) -> None:  
 
     after = await client.post("/mobile/auth/refresh", json={"refresh_token": refresh})
     assert after.status_code == 401
+
+
+async def test_mobile_logout_invalidates_bearer_access_token(client, session_factory) -> None:  # type: ignore[no-untyped-def]
+    """#672 — 모바일 로그아웃 뒤 같은 Bearer access JWT는 401."""
+    email, password = await _seed_user(session_factory)
+    login = await client.post("/mobile/auth/login", json={"email": email, "password": password})
+    data = login.json()["data"]
+    headers = {"Authorization": f"Bearer {data['access_token']}"}
+    assert (await client.get("/auth/me", headers=headers)).status_code == 200
+
+    out = await client.post(
+        "/mobile/auth/logout", json={"refresh_token": data["refresh_token"]}, headers=headers
+    )
+    assert out.status_code == 204
+    assert (await client.get("/auth/me", headers=headers)).status_code == 401
