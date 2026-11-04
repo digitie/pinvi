@@ -176,7 +176,14 @@ export default function AdminAbusePage() {
       header: 'Status',
       sortable: true,
       sortValue: (row) => row.status,
-      cell: (row) => <StatusPill status={row.status} />,
+      cell: (row) => (
+        <div className="space-y-1">
+          <StatusPill status={row.status} />
+          {row.status === 'observed' && row.active_override_action === 'allowed' && (
+            <p className="text-xs text-muted">사용자 설정 상한 적용 · 기존 허용 우회 미적용</p>
+          )}
+        </div>
+      ),
     },
     {
       key: 'expires',

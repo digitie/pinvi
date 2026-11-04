@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.middleware.rate_limit import (
     IdentityKind,
+    configured_user_bucket_limits,
     effective_rate_limit_backend_name,
     rate_limit_bucket_hash,
     rate_limit_identity_key,
@@ -315,23 +316,33 @@ async def _active_override_map(
         ).all()
     )
     result: dict[str, RateLimitOverride] = {}
+    configured_limits = configured_user_bucket_limits()
     for override in overrides:
-        result.setdefault(override.bucket_hash, override)
+        selected = result.get(override.bucket_hash)
+        if selected is None or (
+            (override.limit_name, override.bucket_hash) in configured_limits
+            and override.action == "blocked"
+            and selected.action != "blocked"
+        ):
+            result[override.bucket_hash] = override
     return result
 
 
 async def _rate_limited_bucket_count(db: AsyncSession, *, now: datetime) -> int:
     rows = (
         await db.execute(
-            select(RateLimitBucket.limit_name, RateLimitBucket.count).where(
-                RateLimitBucket.expires_at >= now
-            )
+            select(
+                RateLimitBucket.limit_name, RateLimitBucket.count, RateLimitBucket.bucket_hash
+            ).where(RateLimitBucket.expires_at >= now)
         )
     ).all()
     total = 0
-    for limit_name, count in rows:
+    configured_limits = configured_user_bucket_limits()
+    for limit_name, count, bucket_hash in rows:
         try:
-            limit = rate_limit_policy_for_name(limit_name).limit_per_minute
+            limit = configured_limits.get(
+                (limit_name, bucket_hash), rate_limit_policy_for_name(limit_name).limit_per_minute
+            )
         except KeyError:
             continue
         if count > limit:
@@ -353,10 +364,13 @@ def _bucket_record(
     except KeyError:
         limit = 0
         identity_kind = "ip"
+    configured_limit = configured_user_bucket_limits().get((row.limit_name, row.bucket_hash))
+    if configured_limit is not None:
+        limit = configured_limit
     status: Literal["observed", "blocked", "allowed", "expired"] = "observed"
     if row.expires_at <= now:
         status = "expired"
-    elif override is not None:
+    elif override is not None and (override.action == "blocked" or configured_limit is None):
         status = cast(Literal["blocked", "allowed"], override.action)
     return AdminRateLimitBucketRecord(
         bucket_hash_prefix=_hash_prefix(row.bucket_hash),

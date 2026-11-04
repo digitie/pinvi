@@ -32,6 +32,36 @@ from app.db import session as db_session
 IdentityKind = Literal["ip", "ip_email", "user", "shared_token"]
 BackendName = Literal["memory", "postgres"]
 
+USER_LIMIT_NAMES: Final[tuple[str, ...]] = (
+    "authenticated_default",
+    "feature_search",
+    "storage_upload_urls",
+    "trip_exports",
+)
+
+
+def _configured_user_limit(policy_name: str, raw_key: str) -> int | None:
+    """_identity_key의 검증된 user prefix만 설정 membership으로 사용한다."""
+    if policy_name not in USER_LIMIT_NAMES or not raw_key.startswith("user:"):
+        return None
+    subject = raw_key[len("user:") :]
+    try:
+        if str(uuid.UUID(subject)) != subject:
+            return None
+    except ValueError:
+        return None
+    return settings.pinvi_rate_limit_user_limit_overrides.get(subject)
+
+
+def configured_user_bucket_limits() -> dict[tuple[str, str], int]:
+    """관리자 관측에도 같은 기존 HMAC identity의 유효 상한을 적용한다. UUID는 응답하지 않는다."""
+    return {
+        (name, _bucket_hash(name, "user:" + subject)): cap
+        for subject, cap in settings.pinvi_rate_limit_user_limit_overrides.items()
+        for name in USER_LIMIT_NAMES
+    }
+
+
 AUTH_LOW_PATHS: Final[set[str]] = {
     "/auth/login",
     "/auth/register",
@@ -185,6 +215,10 @@ class RateLimitMiddleware:
         expires_at = window_start + timedelta(seconds=window_seconds * 2)
         raw_key = _identity_key(request, path=path, policy=policy, email=email)
         bucket_hash = _bucket_hash(policy.name, raw_key)
+        configured_limit = _configured_user_limit(policy.name, raw_key)
+        effective_limit = (
+            configured_limit if configured_limit is not None else policy.limit_per_minute
+        )
 
         try:
             override_decision = None
@@ -193,6 +227,7 @@ class RateLimitMiddleware:
                     bucket_hash=bucket_hash,
                     limit_name=policy.name,
                     now=now,
+                    prefer_blocked=configured_limit is not None,
                 )
             if override_decision is not None and override_decision.action == "blocked":
                 retry_after = max(
@@ -214,7 +249,11 @@ class RateLimitMiddleware:
                 )
                 await response(scope, receive, send)
                 return
-            if override_decision is not None and override_decision.action == "allowed":
+            if (
+                override_decision is not None
+                and override_decision.action == "allowed"
+                and configured_limit is None
+            ):
                 await self.app(scope, receive, send)
                 return
             count = await self._backend_for_settings().hit(
@@ -237,14 +276,14 @@ class RateLimitMiddleware:
             await response(scope, receive, send)
             return
 
-        if count > policy.limit_per_minute:
+        if count > effective_limit:
             retry_after = _retry_after_seconds(now, window_start, window_seconds)
             response = JSONResponse(
                 status_code=429,
                 content=build_error(
                     "RATE_LIMITED",
                     "요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.",
-                    {"limit": policy.limit_per_minute, "window_seconds": window_seconds},
+                    {"limit": effective_limit, "window_seconds": window_seconds},
                 ),
                 headers={"Retry-After": str(retry_after)},
             )
@@ -490,26 +529,25 @@ async def _active_override_decision(
     bucket_hash: str,
     limit_name: str,
     now: datetime,
+    prefer_blocked: bool = False,
 ) -> RateLimitOverrideDecision | None:
     from app.models.rate_limit import RateLimitOverride
 
     async with db_session.async_session_factory() as session:
+        statement = select(
+            RateLimitOverride.override_id,
+            RateLimitOverride.action,
+            RateLimitOverride.expires_at,
+        ).where(
+            RateLimitOverride.bucket_hash == bucket_hash,
+            RateLimitOverride.limit_name == limit_name,
+            RateLimitOverride.revoked_at.is_(None),
+            RateLimitOverride.expires_at > now,
+        )
+        if prefer_blocked:
+            statement = statement.order_by((RateLimitOverride.action == "blocked").desc())
         row = (
-            await session.execute(
-                select(
-                    RateLimitOverride.override_id,
-                    RateLimitOverride.action,
-                    RateLimitOverride.expires_at,
-                )
-                .where(
-                    RateLimitOverride.bucket_hash == bucket_hash,
-                    RateLimitOverride.limit_name == limit_name,
-                    RateLimitOverride.revoked_at.is_(None),
-                    RateLimitOverride.expires_at > now,
-                )
-                .order_by(RateLimitOverride.created_at.desc())
-                .limit(1)
-            )
+            await session.execute(statement.order_by(RateLimitOverride.created_at.desc()).limit(1))
         ).one_or_none()
     if row is None:
         return None
