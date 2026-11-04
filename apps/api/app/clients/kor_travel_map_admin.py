@@ -882,7 +882,9 @@ class KorTravelMapAdminClient:
             body["reason"] = reason
         if operator is not None:
             body["operator"] = operator
-        return self._payload(await self._send("PATCH", f"/v1/admin/issues/{_path_segment(issue_id)}", json=body))
+        return self._payload(
+            await self._send("PATCH", f"/v1/admin/issues/{_path_segment(issue_id)}", json=body)
+        )
 
     async def list_consistency_reports(
         self,

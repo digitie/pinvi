@@ -1129,7 +1129,8 @@ export default function AdminFeatureRequestsPage() {
 
       {selected && (
         <ReviewDialog
-          request={selected}
+          // 열린 뒤 재조회한 행(저장된 Map 명령 포함)을 반영한다 — 선택 시점 스냅샷만 보면 409 뒤 대기를 놓친다.
+          request={data?.items.find((item) => item.request_id === selected.request_id) ?? selected}
           onClose={closeReview}
           returnFocusRef={reviewReturnFocusRef}
           onDone={(message) => {
