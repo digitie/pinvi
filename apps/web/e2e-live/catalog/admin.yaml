@@ -645,7 +645,7 @@
   spec: specs/admin/admin-promotion.live.spec.ts#ADM-034
 
 - id: ADM-035
-  title: 이미 처리된 제안은 검토 다이얼로그가 '이미 처리된 제안입니다.' 만 보이고 승인/거절 버튼이 없다
+  title: 이미 처리된 제안은 검토 다이얼로그가 '처리 완료된 제안입니다.' 를 보이고 승인/거절 버튼이 없다
   priority: P2
   tags: [desktop, admin]
   preconditions:
@@ -654,7 +654,7 @@
   steps:
     - 상태 필터 '거절' → 해당 행 검토
   expected:
-    - admin-fr-review-panel 에 '이미 처리된 제안입니다.', admin-fr-approve / admin-fr-reject 없음, 닫기 버튼만
+    - admin-fr-review-panel 에 '처리 완료된 제안입니다.', admin-fr-approve / admin-fr-reject 없음(삭제·닫기만, #634)
   cleanup:
     - 없음
   automation: scripted

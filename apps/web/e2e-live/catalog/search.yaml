@@ -369,7 +369,7 @@
   cleanup: [읽기 전용]
   automation: scripted
   spec: specs/search/search-sources.live.spec.ts#SRCH-027
-  notes: 'kor-travel-map#1439 — event 기간·장소 없음. test.fail.'
+  notes: 'kor-travel-map#1439 해소(Map ad75031a, 2026-11-04 운영 live 통과) — test.fail 제거.'
 
 - id: SRCH-028
   title: 국립공원 — '설악산국립공원'(area kind) → 라벨 국립공원/자연경관

@@ -100,7 +100,8 @@ test.describe.serial('ADM features', () => {
     await page.goto(`/admin/features/${encodeURIComponent(featureId)}/weather-values`);
     const res = await weather;
     expect(res.status(), 'weather proxy must be up (503 = WEATHER_SERVICE_UNAVAILABLE is a real finding)').toBe(200);
-    const section = page.locator('section', { hasText: 'weather values' }).first();
+    // Section → SectionCard renders a <div data-slot="card">, not a <section>.
+    const section = page.locator('[data-slot="card"]', { has: page.getByText('weather values', { exact: true }) }).first();
     await expect(section).toContainText('asof');
     await expect(section).toContainText('latest');
     await expect(section).toContainText(/\b(fresh|stale)\b/);
