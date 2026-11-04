@@ -9,7 +9,12 @@ import pytest
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.services.poi import PoiNotFoundError, create_poi, reorder_pois, update_poi
-from app.services.trip import TripNotFoundError, update_trip
+from app.services.trip import (
+    TripNotFoundError,
+    delete_or_transfer_trip,
+    delete_trip_day,
+    update_trip,
+)
 from tests.integration.test_pois_reorder import _add_poi
 
 pytestmark = pytest.mark.asyncio
@@ -187,3 +192,39 @@ async def test_day_note_is_bounded(client, verified_user, auth_cookies) -> None:
         cookies=cookies,
     )
     assert fits.status_code == 200, fits.text
+
+
+async def test_soft_delete_locks_and_bumps_the_latest_version(
+    client, verified_user, auth_cookies, session_factory
+) -> None:
+    """권한 확인 뒤 다른 PATCH 가 먼저 커밋돼도 휴지통 이동은 최신 version 위에 올린다."""
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip_id = await _trip(client, cookies)
+    async with session_factory() as db:
+        stale = await db.get(Trip, uuid.UUID(trip_id))
+        assert stale is not None and stale.version == 1
+        patched = await client.patch(
+            f"/trips/{trip_id}", json={"title": "먼저"}, headers={"If-Match": "1"}, cookies=cookies
+        )
+        assert patched.status_code == 200, patched.text
+        deleted = await delete_or_transfer_trip(
+            db,
+            trip=stale,
+            actor_user_id=uuid.UUID(user_id),
+            mode="soft_delete",
+            new_owner_user_id=None,
+        )
+        assert deleted.version == 3 and deleted.title == "먼저" and deleted.deleted_at is not None
+
+
+async def test_day_delete_rechecks_trash_under_lock(
+    client, verified_user, auth_cookies, session_factory
+) -> None:
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip_id = await _trip(client, cookies)
+    await _soft_delete(client, cookies, trip_id)
+    async with session_factory() as db:
+        with pytest.raises(TripNotFoundError):
+            await delete_trip_day(db, trip_id=uuid.UUID(trip_id), day_index=3, expected_version=1)

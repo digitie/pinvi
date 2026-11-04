@@ -415,6 +415,10 @@ async def delete_or_transfer_trip(
     new_owner_user_id: uuid.UUID | None,
 ) -> Trip:
     if mode == "soft_delete":
+        # PATCH 와 같은 행 잠금 — 동시 PATCH 뒤 옛 version 으로 덮어 같은 version 두 상태가 생기지 않게.
+        await db.refresh(trip, with_for_update=True)
+        if trip.deleted_at is not None:
+            raise TripNotFoundError("여행을 찾을 수 없습니다.")
         trip.status = "archived"
         trip.deleted_at = datetime.now(UTC)
         trip.version += 1
@@ -617,7 +621,11 @@ async def delete_trip_day(
         함께 삭제된(FK CASCADE) 활성 POI 수.
     """
     # POI 생성·이동과 같은 여행 잠금을 먼저 잡아 빈 일자 확인과 삭제를 직렬화한다.
-    await db.scalar(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
+    locked = await db.scalar(
+        select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)).with_for_update()
+    )
+    if locked is None:
+        raise TripNotFoundError("여행을 찾을 수 없습니다.")
     day = await get_trip_day(db, trip_id=trip_id, day_index=day_index)
     if day.version != expected_version:
         raise TripVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")

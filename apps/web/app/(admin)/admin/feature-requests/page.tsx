@@ -425,10 +425,13 @@ function ReviewDialog({
             (error.status === 0 ||
               (error.status >= 200 && error.status < 300) ||
               error.status >= 500 ||
-              // Map 명령 충돌(409)도 저장된 명령을 지우지 않는다 — 같은 입력으로만 재시도해야 한다.
-              (error.status === 409 && error.code !== 'INVALID_STATE'))))
+              error.code === 'MAP_COMMAND_PENDING')))
       ) {
         setCommandPending(true);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
+      } else if (!isNewPlace && error instanceof ApiError && error.status === 409) {
+        // Map 명령 충돌(409)은 저장된 명령을 남길 수도(전송 뒤), 아닐 수도(revision 조회 중) 있다 —
+        // 다시 불러와 저장 명령이 있으면 위의 렌더 중 동기화가 입력을 잠근다.
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
       }
       setErr(error instanceof ApiError ? error.message : '승인에 실패했습니다.');
