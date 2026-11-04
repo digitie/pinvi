@@ -256,3 +256,10 @@ body {
     position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%);
   }
 }
+
+
+/* 라이브러리의 첫 popup inline z-index(2)보다 앱 지도 패널(z10)이 높다.
+   선택 popup의 닫기를 막지 않도록 앱 전용 class만 올린다. dialog/sheet(z50)는 그대로 위다. */
+.pinvi-map-popup {
+  z-index: 20 !important;
+}

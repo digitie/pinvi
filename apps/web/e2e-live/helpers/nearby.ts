@@ -14,6 +14,7 @@
 import { expect, type Locator, type Page, type Response } from '@playwright/test';
 import { runSearch, searchRows } from './search';
 import { renderedMap, waitForCamera } from './geometry';
+import { coordinateFixtureIndex } from './searchFixture';
 
 export const LAYERS = ['fuel_station', 'rest_area', 'highway_incident', 'airport'] as const;
 export type Layer = (typeof LAYERS)[number];
@@ -184,16 +185,9 @@ export async function panBy(page: Page, key: 'ArrowLeft' | 'ArrowRight' | 'Arrow
 
 /** 현재 검색 응답의 좌표 있는 정확 일치 결과를 선택하고 실제 카메라 완료를 기다린다. */
 export async function searchAndFly(page: Page, query: string): Promise<void> {
-  const normalize = (name: string) =>
-    name
-      .normalize('NFKC')
-      .replace(/\s/g, '')
-      .replace(/\([^)]*\)$/, '');
   const result = await runSearch(page, query);
   expect(result.status).toBe(200);
-  const index = result.rows.findIndex(
-    (row) => row.coord != null && normalize(row.name) === normalize(query),
-  );
+  const index = coordinateFixtureIndex(result.rows,query);
   expect(index, '좌표 있는 정확 일치 검색 fixture가 있어야 한다').toBeGreaterThanOrEqual(0);
   const picked = result.rows[index]!;
   const map = await renderedMap(page);

@@ -96,10 +96,20 @@ export const PinMarker = dynamic<PinMarkerProps>(
   { ssr: false },
 );
 
-export const Popup = dynamic<PopupProps>(
+const VWorldPopup = dynamic<PopupProps>(
   () => import('vworld-map-web').then((module) => module.Popup),
   { ssr: false },
 );
+
+/** 앱 컨트롤(z10)보다 선택 popup이 위에 오도록 애플리케이션 계층을 지정한다. */
+export function Popup(props: PopupProps) {
+  return (
+    <VWorldPopup
+      {...props}
+      className={['pinvi-map-popup', props.className].filter(Boolean).join(' ')}
+    />
+  );
+}
 
 export const UserLocationMarker = dynamic<UserLocationMarkerProps>(
   () => import('vworld-map-web').then((module) => module.UserLocationMarker),
