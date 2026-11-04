@@ -42,7 +42,9 @@ test.describe('ADM auth', () => {
       if (!origin && /\/auth\/(login|logout)$/.test(req.url())) origin = new URL(req.url()).origin;
     });
 
-    const logoutSeen = page.waitForRequest((req) => req.method() === 'POST' && /\/auth\/logout$/.test(req.url()), { timeout: 30_000 });
+    // Wait for the logout *response* (its Set-Cookie deletion), not just the request (#672 — the request-only wait
+    // raced the 204; the server now also invalidates the access JWT itself, so either order must end in 401).
+    const logoutSeen = page.waitForResponse((res) => res.request().method() === 'POST' && /\/auth\/logout$/.test(res.url()), { timeout: 30_000 });
     await page.goto('/admin/login');
     await page.locator(ADMIN_LOGIN.username).fill(creds.email);
     await page.locator(ADMIN_LOGIN.password).fill(creds.password);
@@ -52,7 +54,7 @@ test.describe('ADM auth', () => {
     await expect(err).toHaveText('관리자 권한이 없는 계정입니다.');
     await expect(err).toHaveAttribute('role', 'alert');
     await expect(page).toHaveURL(/\/admin\/login(?:[?#].*)?$/);
-    await logoutSeen;
+    expect((await logoutSeen).status(), 'refused admin login must log the session out').toBe(204);
     expect(origin, 'API origin should have been observed from /auth/login').not.toBeNull();
     const me = await page.request.get(`${origin}/auth/me`);
     expect(me.status(), 'session must be gone after refused admin login').toBe(401);

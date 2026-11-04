@@ -1,3 +1,14 @@
+## 2026-11-04 (claude) — 보안 회귀 #671(공유 토큰 return-to 누출)·#672(로그아웃 뒤 세션 잔존)
+
+- #671: 공유 화면의 로그인 링크 4곳(마스트헤드·오류 화면·공유 편집·댓글)이 `next=/shared/{tripId}/{token}`을 실어
+  Next.js prefetch·접근 로그·OAuth `return_to_path`로 토큰이 퍼졌다. 이제 `next=/shared/{tripId}`만 싣고(`prefetch={false}`),
+  공유 화면이 같은 탭 sessionStorage에 토큰을 두어 새 경유지 `app/shared/[tripId]/page.tsx`가 로그인 뒤 되찾는다(새 탭이면 안내).
+  `safeLoginReturnTo`·세션 만료 `redirectToLogin`·서버 OAuth `return_to`가 공유·저장소 토큰과 비밀 query를 지우고,
+  로그 가리기(#620)가 웹 공유 경로와 그 `%2F` 인코딩(`next=`)까지 덮는다.
+- #672: 로그아웃은 refresh session만 폐기해 stateless access JWT가 만료(10분)까지 살아 있었다 — 관리자 로그인 거절 흐름의
+  `/auth/me`가 cookie 삭제 반영 전 200. 로그아웃(웹·모바일)이 사용자의 `access_token_version`을 올려(관리자 세션 폐기와 같은
+  장치) 같은 access JWT가 즉시 401이 된다. ADM-002 spec은 logout 요청이 아니라 응답을 기다린다.
+
 ## 2026-11-04 (claude) — #643 수정 묶음(#654~#662) 리뷰 보완·live e2e 카탈로그 갱신
 
 ## 2026-11-04 — #674 실제 클릭 재현·제한된 popup 상세 연결

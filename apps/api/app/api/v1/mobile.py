@@ -8,9 +8,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, cast
+from typing import Annotated, Any, Literal, cast
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Header, HTTPException, Request, status
 from sqlalchemy import select
 
 from app.core.config import settings
@@ -191,9 +191,17 @@ async def mobile_refresh(
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def mobile_logout(body: MobileRefreshRequest, db: DbSession) -> None:
-    """모바일 logout — 본문 refresh token으로 세션 폐기."""
-    await revoke_user_session(db, refresh_token=body.refresh_token)
+async def mobile_logout(
+    body: MobileRefreshRequest,
+    db: DbSession,
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
+    """모바일 logout — 본문 refresh token으로 세션 폐기 + Bearer access JWT 무효화(#672)."""
+    scheme, _, credential = (authorization or "").partition(" ")
+    access_token = credential.strip() if scheme.lower() == "bearer" else None
+    await revoke_user_session(
+        db, refresh_token=body.refresh_token, access_token=access_token or None
+    )
 
 
 @router.post("/auth/oauth/google/start", response_model=Envelope[OAuthStartResponse])

@@ -5,6 +5,7 @@ import { Loader2, MessageSquare, Send, Trash2 } from 'lucide-react';
 import { ApiError, authApi, tripApi } from '@pinvi/api-client';
 import type { TripCommentResponse } from '@pinvi/schemas';
 import { apiClient, sharedApiClient } from '@/lib/api';
+import { sharedLoginHref } from '@/lib/loginReturnTo';
 import { canDeleteComment } from '@pinvi/domain';
 
 function formatDateTime(value: string): string {
@@ -122,7 +123,7 @@ export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken 
       {sharedToken && (
         <p className="text-sm text-muted">
           작성하려면 <a className="focus-ring underline" target="_blank" rel="noopener noreferrer"
-            href={`/login?next=${encodeURIComponent(`/shared/${tripId}/${sharedToken}`)}`}>새 탭에서 로그인</a>한 뒤
+            href={sharedLoginHref(tripId)}>새 탭에서 로그인</a>한 뒤
           이 화면에서 다시 작성해 주세요. 입력은 유지됩니다.
         </p>
       )}

@@ -172,7 +172,11 @@ Cookie: pinvi_refresh=...
 ```
 
 응답 204. 현재 `pinvi_refresh`에 해당하는 `app.user_sessions.revoked_at = now()` +
-Set-Cookie로 두 cookie 삭제.
+그 사용자(및 `pinvi_access` JWT의 사용자)의 `users.access_token_version` +1 + Set-Cookie로 두 cookie 삭제.
+access JWT는 stateless라 refresh session 폐기만으로는 만료(기본 10분)까지 살아 있었다 —
+version을 올려 로그아웃 직후 같은 access JWT의 `/auth/me`도 401이 된다(#672). 같은 사용자의
+다른 기기 access JWT도 무효가 되지만 그 refresh session은 살아 있어 다음 요청에서 한 번 갱신된다.
+모바일 `POST /mobile/auth/logout`도 `Authorization: Bearer`가 있으면 같은 규칙이다.
 
 ### 3.4 `GET /auth/me`
 

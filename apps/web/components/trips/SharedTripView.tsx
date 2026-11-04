@@ -13,6 +13,7 @@ import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 import { ButtonLink } from '@/components/ui/Button';
 import { formatTripDateRange, holidayLabel, holidaysByDate } from '@/lib/tripDateLabels';
+import { sharedLoginHref } from '@/lib/loginReturnTo';
 
 const VWORLD_API_KEY = process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? '';
 
@@ -100,7 +101,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
           <ButtonLink href="/" variant="primary">
             홈으로
           </ButtonLink>
-          <ButtonLink href={`/login?next=${encodeURIComponent(`/shared/${tripId}/${token}`)}`} variant="secondary">
+          <ButtonLink href={sharedLoginHref(tripId)} prefetch={false} variant="secondary">
             로그인
           </ButtonLink>
         </div>
