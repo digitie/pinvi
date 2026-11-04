@@ -23,4 +23,6 @@
 
 ## 구현·초기 검증
 
-설정·요청별 상한·대상만 blocked 우선/allowed 무시·관리자 관측을 구현했다. 초기19단위/전달 실패와4PG실패를 확인한 뒤 관련48개·mypy256·웹 타입/lint를 통과했다. 실제 Compose unset/empty/JSON3경우, 실제 WSL UI9흐름을 확인했다. Manager 운영 전달선이 최신 source에도 없어 별도 owner PR을 준비한다. API 정책의 정본은 Pinvi이며 Manager는 문자열 전달만 소유한다. 운영 구성과6개 기존 행 처리는 Claude Code 담당으로 유지한다.
+설정·요청별 상한·대상만 blocked 우선/allowed 무시·관리자 관측을 구현했다. 초기19단위/전달 실패와4PG실패를 확인한 뒤 관련48개·mypy256·웹 타입/lint를 통과했다. 실제 Compose unset/empty/JSON3경우, 실제 WSL UI9흐름을 확인했다. Manager 운영 전달선이 최신 source에도 없어 별도 owner PR582로 보완했다. API 정책의 정본은 Pinvi이며 Manager는 문자열 전달만 소유한다. 운영 구성과6개 기존 행 처리는 Claude Code 담당으로 유지한다.
+
+최종 웹 전체376개를 통과했고 실제 UI 스크린샷3장을 확인했다. [WSL 증거](../reviews/pinvi-653-rate-limits-wsl-live.json)에 제품 파일 해시와 범위를 기록했다.
