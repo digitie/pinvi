@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ApiError, tripApi } from '@pinvi/api-client';
 import type { TripResponse } from '@pinvi/schemas';
 import { sharedApiClient } from '@/lib/api';
+import { sharedLoginHref } from '@/lib/loginReturnTo';
 
 export function SharedTripEditor({ tripId, token, trip, onSaved }: {
   tripId: string; token: string; trip: TripResponse; onSaved: (trip: TripResponse) => void;
@@ -43,7 +44,7 @@ export function SharedTripEditor({ tripId, token, trip, onSaved }: {
       <p className="text-sm text-muted">
         여행 제목·설명·지역을 편집할 수 있습니다.
         로그인이 필요하면 <a className="focus-ring underline" target="_blank" rel="noopener noreferrer"
-          href={`/login?next=${encodeURIComponent(`/shared/${tripId}/${token}`)}`}>새 탭에서 로그인</a>한 뒤
+          href={sharedLoginHref(tripId)}>새 탭에서 로그인</a>한 뒤
         이 화면에서 다시 저장해 주세요. 입력은 유지됩니다.
       </p>
       <label className="block text-sm">여행 제목

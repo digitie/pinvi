@@ -1,11 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const tripId = '11111111-1111-4111-8111-111111111111';
 const token = 'share-token-abc';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
 
-test('공유 링크로 읽기전용 여행 뷰가 로그인 없이 렌더링된다', async ({ page }) => {
+async function routeSharedView(page: Page): Promise<void> {
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/shared\/[^/]+$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.continue();
     await route.fulfill({
@@ -87,6 +87,10 @@ test('공유 링크로 읽기전용 여행 뷰가 로그인 없이 렌더링된�
       }),
     });
   });
+}
+
+test('공유 링크로 읽기전용 여행 뷰가 로그인 없이 렌더링된다', async ({ page }) => {
+  await routeSharedView(page);
 
   // ADR-076 — 공유 화면은 비로그인이라 /transport/*(로그인 필요)를 부르면 안 된다(401 → 로그인 이동).
   const transportRequests: string[] = [];
@@ -106,4 +110,61 @@ test('공유 링크로 읽기전용 여행 뷰가 로그인 없이 렌더링된�
   // 읽기 전용 — 편집/삭제 버튼이 없다.
   await expect(page.getByRole('button', { name: '마커 편집' })).toHaveCount(0);
   expect(transportRequests).toEqual([]);
+});
+
+// #671 — 공유 토큰은 페이지 URL과 공유 API 호출 밖으로 나가면 안 된다(로그인 링크·prefetch·OAuth return_to).
+test('공유 화면 로그인 링크는 토큰을 싣지 않고, 로그인 뒤 같은 탭이 공유 화면으로 돌아온다', async ({ page }) => {
+  await routeSharedView(page);
+  const authUser = {
+    user_id: '88888888-8888-4888-8888-888888888888',
+    email: 'viewer@example.com',
+    nickname: '보는 사람',
+    avatar_url: null,
+    status: 'active',
+    roles: ['user'],
+    email_verified_at: '2026-06-01T09:00:00+09:00',
+    has_password: true,
+    oauth_identities: [],
+  };
+  await page.route(/.*\/auth\/oauth\/providers$/, (route) =>
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { providers: [] } }) }),
+  );
+  await page.route(/.*\/auth\/login$/, (route) =>
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: authUser }) }),
+  );
+
+  const leaks: string[] = [];
+  page.on('request', (request) => {
+    const url = request.url();
+    if (!url.includes(token)) return;
+    const { pathname } = new URL(url);
+    // 허용: 공유 화면 문서 자체와 공유 API(`/trips/{id}/shared/{token}…`).
+    if (pathname === `/shared/${tripId}/${token}` || pathname.includes(`/trips/${tripId}/shared/${token}`)) return;
+    leaks.push(url);
+  });
+
+  await page.goto(`/shared/${tripId}/${token}`);
+  await expect(page.getByRole('heading', { name: '공유된 부산 여행' })).toBeVisible();
+
+  const loginLinks = page.locator('a[href^="/login"]');
+  expect(await loginLinks.count()).toBeGreaterThan(0);
+  for (const href of await loginLinks.evaluateAll((els) => els.map((el) => el.getAttribute('href') ?? ''))) {
+    expect(href).not.toContain(token);
+    expect(href).toBe(`/login?next=${encodeURIComponent(`/shared/${tripId}`)}`);
+  }
+
+  await page.getByRole('banner').getByRole('link', { name: '로그인' }).click();
+  await expect(page).toHaveURL(new RegExp(`/login\\?next=${encodeURIComponent(`/shared/${tripId}`)}$`));
+  await page.getByTestId('login-email').fill('viewer@example.com');
+  await page.getByTestId('login-password').fill('password-1234');
+  await page.getByTestId('login-submit').click();
+
+  await expect(page).toHaveURL(new RegExp(`/shared/${tripId}/${token}$`));
+  await expect(page.getByRole('heading', { name: '공유된 부산 여행' })).toBeVisible();
+  expect(leaks).toEqual([]);
+});
+
+test('토큰을 모르는 탭(새 탭 로그인)의 /shared/{tripId} 는 원래 탭으로 돌아가라고 안내한다', async ({ page }) => {
+  await page.goto(`/shared/${tripId}`);
+  await expect(page.getByTestId('shared-resume-missing')).toContainText('원래 탭으로 돌아가');
 });
