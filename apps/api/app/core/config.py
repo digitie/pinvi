@@ -1010,7 +1010,10 @@ class Settings(BaseSettings):
     pinvi_rate_limit_public_per_minute: int = 60
     pinvi_rate_limit_authenticated_per_minute: int = 60
     # #653: canonical user UUID별 상한. 만료/무제한 우회 없이 네 사용자 정책의 한도를 대체한다.
-    pinvi_rate_limit_user_limit_overrides: dict[str, Annotated[StrictInt, Field(gt=0)]] = Field(
+    # 상한(le)은 설정 하나로 사실상 무제한 우회가 되돌아오는 것을 막는다(분당 6000 = 초당 100).
+    pinvi_rate_limit_user_limit_overrides: dict[
+        str, Annotated[StrictInt, Field(gt=0, le=6000)]
+    ] = Field(
         default_factory=dict
     )
 

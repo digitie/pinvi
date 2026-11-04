@@ -63,7 +63,7 @@ Cookie: pinvi_access=...
   `packages/schemas/src/feature.ts` 기준. Satellite/Hybrid는 z18까지)
 - `kinds`: `place,event,notice,price,weather,route,area` 중 반복 파라미터 (`kinds=a&kinds=b`)
 - `cluster_unit`(선택), `category`(선택), `limit`(기본 500, 최대 2000 → kor_travel_map `max_items`)
-- include_geometry(기본 false): zoom14 이상에서 route/area GeoJSON을 요청한다. 낮은 zoom에서는 422다. 탐색·여행 지도는 실제 줌을 먼저 확인하고 point 조회와 별도로 호출한다.
+- include_geometry(기본 false): zoom14 이상에서 route/area GeoJSON을 요청한다. 낮은 zoom에서는 422다. 탐색·여행 지도는 실제 줌을 먼저 확인하고 point 조회와 별도로 호출한다. 도형 요청은 bbox 가로·세로 0.5° 이하, `limit` 200 이하만 받는다(초과 422, zoom은 호출자가 고르는 값이라 범위를 따로 묶는다). 계약을 어긴 도형 하나는 웹이 그 항목의 geometry만 비운다.
 - items[].geometry는 LineString/MultiLineString/Polygon/MultiPolygon 또는 null이다. 내부 구멍을 보존하며 geometry가 있어도 nullable coord를 임의 중심점으로 채우지 않는다.
 - truncated는 Map의 잘림 여부를 보존한다. true면 일부 결과이므로 지도 범위를 좁혀 다시 조회할 수 있도록 안내한다.
 - zoom별 클러스터링은 **kor_travel_map 서버 책임**(`cluster_unit`/`zoom`). granularity는

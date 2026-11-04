@@ -20,7 +20,9 @@ const WEATHER_LABELS: Record<string, string> = {
   TMN: '최저',
   TMX: '최고',
   SKY: '하늘',
-  PTY: '강수',
+  PTY: '강수형태',
+  VEC: '풍향',
+  WIND_DIRECTION: '풍향',
   POP: '강수확률',
   PCP: '강수량',
   RN1: '1시간 강수량',
@@ -69,8 +71,9 @@ function metricHaystack(metric: WeatherMetric): string {
 }
 
 function metricLabel(metric: WeatherMetric): string {
+  // 같은 물리량은 제공자와 무관하게 같은 라벨로 보인다(기상청 "하늘상태"·외부 null 이름 모두 "하늘").
   const key = metric.metric_key.toUpperCase();
-  return metric.metric_name?.trim() || WEATHER_LABELS[key] || '기타 날씨';
+  return WEATHER_LABELS[key] || metric.metric_name?.trim() || '기타 날씨';
 }
 
 function formatNumber(value: number): string {
@@ -81,6 +84,7 @@ function displayUnit(unit: string | null | undefined): string {
   if (unit === 'deg_c') return '°C';
   if (unit === 'deg_f') return '°F';
   if (unit === 'ug/m3') return 'μg/m³';
+  if (unit === 'deg') return '°';
   if (unit === 'code' || unit === 'index') return '';
   return unit ?? '';
 }
@@ -148,14 +152,15 @@ function isWeatherMetric(metric: WeatherMetric): boolean {
   );
 }
 function representativeOrder(a: WeatherMetric, b: WeatherMetric): number {
-  // 날짜 안의 대표 시각: 관측은 최신, 예보는 가장 이른 유효 시각. 평균/범위로 합치지 않는다.
+  // 같은 지표는 기상청 우선(제공자 순서) → 날짜 안의 대표 시각(관측은 최신, 예보는 가장 이른
+  // 유효 시각). 외부 제공자의 더 이른 슬롯이 기상청 값을 밀어내지 않는다. 평균/범위로 합치지 않는다.
   const aCurrent = CURRENT_STYLE_RE.test(a.forecast_style);
   const bCurrent = CURRENT_STYLE_RE.test(b.forecast_style);
   if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
   const direction = aCurrent ? -1 : 1;
   return (
-    (metricInstant(a) - metricInstant(b)) * direction ||
     rank(PROVIDER_ORDER, a.provider ?? '') - rank(PROVIDER_ORDER, b.provider ?? '') ||
+    (metricInstant(a) - metricInstant(b)) * direction ||
     a.forecast_style.localeCompare(b.forecast_style) ||
     a.metric_key.localeCompare(b.metric_key) ||
     (a.value_text ?? String(a.value_number)).localeCompare(b.value_text ?? String(b.value_number))
@@ -170,18 +175,32 @@ const KMA_SKY_LABELS: Record<number, string> = {
   3: '구름많음',
   4: '흐림',
 };
+// 기상청 동네예보 PTY(강수형태) 코드표. 5~7은 초단기 전용.
+const KMA_PTY_LABELS: Record<number, string> = {
+  0: '없음',
+  1: '비',
+  2: '비/눈',
+  3: '눈',
+  4: '소나기',
+  5: '빗방울',
+  6: '빗방울눈날림',
+  7: '눈날림',
+};
+const KMA_CODE_TABLES: Record<string, Record<number, string>> = {
+  SKY: KMA_SKY_LABELS,
+  PTY: KMA_PTY_LABELS,
+};
 function formatMetric(metric: WeatherMetric): string | null {
   const text = metric.value_text?.trim();
   // 원문 설명은 보존한다. 알려진 문자열 코드만 숫자 코드와 같은 표로 해석한다.
-  const skyCode = text ? (/^[1-4]$/.test(text) ? Number(text) : null) : metric.value_number;
-  const sky =
-    metric.provider === 'python-kma-api' &&
-    metric.metric_key.toUpperCase() === 'SKY' &&
-    skyCode != null
-      ? KMA_SKY_LABELS[skyCode]
-      : null;
+  const table =
+    metric.provider === 'python-kma-api'
+      ? KMA_CODE_TABLES[metric.metric_key.toUpperCase()]
+      : undefined;
+  const code = text ? (/^\d$/.test(text) ? Number(text) : null) : metric.value_number;
+  const coded = table && code != null ? table[code] : null;
   const value =
-    sky ||
+    coded ||
     text ||
     (metric.value_number != null
       ? `${formatNumber(metric.value_number)}${displayUnit(metric.unit)}`

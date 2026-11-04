@@ -1,3 +1,10 @@
+## 2026-11-05 — Claude 리뷰 보완(#665·#677·#679·#680)
+
+- 두 독립 적대 리뷰(A 보안·데이터·성능, B 정합성·UX·계약)에서 High 0. 검증 후 고친 것: 도형 요청 bbox·limit 서버 상한(A), 설정 상한 최대 6000(A), feature_id 경로 escape(A), 잘못된 도형 하나가 응답 전체를 거부(A·B), 날짜 날씨 기상청 우선·PTY 코드표·라벨/단위 통일(B). 실패 우선 테스트를 먼저 커밋했다.
+- 보고만: 로그아웃된 access token도 설정 상한 bucket을 쓴다(인증 전 단계, DB 조회 비용), 큰 area의 목록 포커스 popup이 면 밖일 수 있음, 지오메트리 bbox 캐시 키가 세밀해 재사용이 거의 없음, NEAR-024 모바일 원인 미재현.
+- live e2e: SRCH-023/024 근처 point 기본값을 운영 Map 데이터로 확인(줌 15 화면에 대상 route 여럿). 운영 Map area kind 0건이라 SRCH-028은 데이터 blocked.
+- 운영 Manager compose가 `PINVI_RATE_LIMIT_USER_LIMIT_OVERRIDES`를 pinvi-api에 전달하지 않는다 — Manager 변경 전까지 #653 DB override 6건 유지.
+
 ## 2026-11-05 — #653 구현·실패 우선/실제 DB 검증
 
 - 초기 설정·상한·Compose 전달19실패/7대조와 PostgreSQL4실패/4대조를 확인했다. canonical UUID→양의 StrictInt 설정은 기본 빈 객체이며 네 사용자 정책의 요청별 유효 limit만 바꾼다.
