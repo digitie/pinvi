@@ -776,7 +776,11 @@ export function FeatureMapView({
         <div className="relative min-h-0 flex-1">
           <div className="pointer-events-none absolute inset-0 z-10">
             <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
-              <MapSearchBox onSelect={handleSearchSelect} getBias={getSearchBias} />
+              <MapSearchBox
+                onSelect={handleSearchSelect}
+                allowFeatureDetail
+                getBias={getSearchBias}
+              />
               {/* 상태는 상시 표가 아니라 **일이 생겼을 때만** 뜬다(DESIGN.md 상태 UI). */}
               {error ? (
                 <p

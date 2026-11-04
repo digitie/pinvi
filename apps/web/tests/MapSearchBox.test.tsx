@@ -208,7 +208,7 @@ it('좌표 없는 feature는 상세 선택을 유지하고 실행 경로 없는 
   });
   searchPlaces.mockResolvedValue({ results: [detail, inert], degraded_sources: [] });
   const onSelect = vi.fn();
-  render(<MapSearchBox onSelect={onSelect} />);
+  render(<MapSearchBox onSelect={onSelect} allowFeatureDetail />);
   fireEvent.change(screen.getByLabelText('장소·주소 검색'), { target: { value: '검색' } });
   const feature = await screen.findByTestId('map-search-result-feature');
   expect(feature).toHaveTextContent('상세 보기');
@@ -216,4 +216,22 @@ it('좌표 없는 feature는 상세 선택을 유지하고 실행 경로 없는 
   expect(screen.getByTestId('map-search-result-kakao')).toBeDisabled();
   fireEvent.click(feature);
   expect(onSelect).toHaveBeenCalledWith(detail);
+});
+
+it('상세 동작 없는 여행 검색은 좌표 없는 feature를 비활성화하고 정상 위치 선택은 유지한다', async () => {
+  const missing = makeResult({ feature_id: 'feature:null', name: '위치 없는 장소', coord: null });
+  const point = makeResult({ feature_id: 'feature:point', name: '위치 있는 장소' });
+  searchPlaces.mockResolvedValue({ results: [missing, point], degraded_sources: [] });
+  const onSelect = vi.fn();
+  render(<MapSearchBox onSelect={onSelect} />);
+  fireEvent.change(screen.getByLabelText('장소·주소 검색'), { target: { value: '장소' } });
+  const rows = await screen.findAllByTestId('map-search-result-feature');
+  expect(rows[0]).toBeDisabled();
+  expect(rows[0]).toHaveTextContent('위치 정보 없음');
+  expect(rows[0]).not.toHaveTextContent('상세 보기');
+  fireEvent.click(rows[0]!);
+  expect(onSelect).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('장소·주소 검색')).toHaveValue('장소');
+  fireEvent.click(rows[1]!);
+  expect(onSelect).toHaveBeenCalledWith(point);
 });

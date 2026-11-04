@@ -28,3 +28,8 @@
 - 실제4개 POI는 초기844px/390px에서 모두 포함됐다. 운영 모바일 맞춤 원인은 재현하지 못했으므로 resize 제품 코드를 추가하지 않았다. 검색 fixture는 현재 HTTP의 정확 일치·좌표 있는 행으로 제한하고 실제4좌표를 bbox와 비교한다.
 - WSL 실제 UI11흐름·API20·웹351·mypy256·타입·Ruff·lint(기존5경고)·카탈로그346/자동298을 확인했다. 안전한 증거와 소스 지문은 docs/reviews/pinvi-669-674-map-detail-wsl-live.json에 있다.
 - 남은 게이트: 최종 커밋의 전문 적대 리뷰2인, CI 전체, 미해결 원격 리뷰 확인, 일반 squash merge. 운영 최종 검증은 Claude Code가 담당한다.
+
+## 최종 리뷰 보완
+
+- 여행 검색은 상세 열기 capability가 없어 좌표 없는 feature를 추가할 수 없다. 상세 capability를 명시한 탐색만 활성 상세 행을 제공한다.
+- 새 실패 우선 회귀와 WSL 실제 UI의 null 행 비활성·정상 좌표 POST201/목록5개를 추가했다. 웹352·실제 UI12흐름을 통과했다. 최종 manifest가 이전 관측·소스 지문을 대체한다.

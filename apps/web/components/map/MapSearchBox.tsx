@@ -9,6 +9,8 @@ import { isAbortError } from '@/lib/abort';
 
 export interface MapSearchBoxProps {
   onSelect: (result: PlaceSearchResult) => void;
+  /** 좌표 없는 feature를 상세로 여는 호출부만 허용한다. 여행 POI 추가에는 좌표가 필요하다. */
+  allowFeatureDetail?: boolean;
   className?: string;
   /**
    * 검색 시점의 지역 편향 bbox(`lng_min,lat_min,lng_max,lat_max`)를 돌려준다 — 여행 장소 범위 또는
@@ -46,7 +48,12 @@ function resultKey(r: PlaceSearchResult, index: number): string {
   return `${r.source}-${r.feature_id ?? r.poi_id ?? r.external_id ?? index}`;
 }
 
-export function MapSearchBox({ onSelect, className, getBias }: MapSearchBoxProps) {
+export function MapSearchBox({
+  onSelect,
+  allowFeatureDetail = false,
+  className,
+  getBias,
+}: MapSearchBoxProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlaceSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -159,11 +166,12 @@ export function MapSearchBox({ onSelect, className, getBias }: MapSearchBoxProps
             // §5.2(HARD): kakao/naver 행은 가시적 attribution 배지 + provider_url back-link 필수.
             // 앵커를 pick 버튼 안에 중첩하면 invalid HTML이므로 형제 요소로 둔다.
             const backLink = isExternal && result.provider_url ? result.provider_url : null;
+            const canOpenDetail = allowFeatureDetail && !!result.feature_id;
             return (
               <li key={resultKey(result, index)} className="flex items-stretch">
                 <button
                   type="button"
-                  disabled={!result.coord && !result.feature_id}
+                  disabled={!result.coord && !canOpenDetail}
                   onClick={() => handlePick(result)}
                   className="flex min-w-0 flex-1 items-start gap-2 px-3 py-2 text-left hover:bg-surface-soft disabled:cursor-default disabled:opacity-60"
                   data-testid={`map-search-result-${result.source}`}
@@ -184,7 +192,7 @@ export function MapSearchBox({ onSelect, className, getBias }: MapSearchBoxProps
                     </span>
                     {!result.coord && (
                       <span className="block text-xs text-muted">
-                        {result.feature_id ? '상세 보기' : '위치 정보 없음'}
+                        {canOpenDetail ? '상세 보기' : '위치 정보 없음'}
                       </span>
                     )}
                     {secondary && (
