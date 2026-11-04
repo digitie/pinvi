@@ -279,7 +279,8 @@
   tags: [desktop, nearby, search]
   preconditions:
     - account: test@test.com (user)
-  data_sources: [transport:gas, transport:rest-area, transport:incident, transport:airport, map:place, geo]
+  data_sources:
+    [transport:gas, transport:rest-area, transport:incident, transport:airport, map:place, geo]
   steps:
     - /map(zoom 8) → 칩 4개 전부 켜기 → '서울역' 검색 후 선택
   expected:
@@ -420,12 +421,13 @@
   steps:
     - /trips/{id} → '교통 돌발' → '휴게소'
   expected:
-    - 요청 bbox가 128.4–128.95E, 36.5–37.25N을 포함, 서울시청(126.978,37.5665)은 포함하지 않음
+    - 요청 bbox와 네이티브 지도 bounds가 실제 생성한 4개 POI 좌표를 모두 포함하고, 서울시청(126.978,37.5665)은 포함하지 않음
     - 휴게소 ok면 'N곳' N>0(중앙고속도로)
   cleanup:
     - afterAll 여행 삭제
   automation: scripted
   spec: specs/nearby/trip-map.live.spec.ts#NEAR-024
+  notes: '#674. 현재 검색 응답의 좌표 있는 정확 일치 Map 행을 선택한다. 고정 지역 사각형을 POI 좌표로 가정하지 않는다.'
 
 - id: NEAR-025
   title: POI 핀 선택 → flyTo → 켜 둔 레이어 재조회(같은 zoom, 북쪽으로 이동한 bbox)
@@ -640,7 +642,7 @@
     - "'방금 갱신' → 'n분 전 갱신' 또는 분 값 증가(응답 age_seconds + 경과)"
   cleanup: []
   automation: manual
-  notes: "고정 대기 2분이 필요해 자동 스위트에서 뺐다(규칙: 고정 sleep 지양)."
+  notes: '고정 대기 2분이 필요해 자동 스위트에서 뺐다(규칙: 고정 sleep 지양).'
 
 - id: NEAR-038
   title: 칩 접근성 — group 이름, 키보드 Space/Enter 토글, 44px 터치 타깃

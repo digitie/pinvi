@@ -22,7 +22,11 @@ const CACHE_MAX = 32;
 const DEBOUNCE_MS = 250;
 type Viewport = { bbox: string; zoom: number; eligible: boolean };
 type Result = { key: string; data?: FeaturesInBoundsResponse; error?: string; loading: boolean };
-export type GeometrySelection = { feature: GeometryFeature; anchor: [number, number] };
+export type GeometrySelection = {
+  feature: GeometryFeature;
+  anchor: [number, number];
+  revision: number;
+};
 
 export function useFeatureGeometry({
   active,
@@ -42,6 +46,7 @@ export function useFeatureGeometry({
   const [reload, setReload] = useState(0);
   const mapRef = useRef<MapLibreMap | null>(null);
   const generation = useRef(0);
+  const selectionRevision = useRef(0);
   const abort = useRef<AbortController | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cache = useRef(new Map<string, { at: number; data: FeaturesInBoundsResponse }>());
@@ -188,13 +193,18 @@ export function useFeatureGeometry({
       }
       onSelect?.(feature);
       setSelection({
+        revision: ++selectionRevision.current,
         feature,
         anchor: anchor ?? [(bounds[0][0] + bounds[1][0]) / 2, (bounds[0][1] + bounds[1][1]) / 2],
       });
     },
     [active, viewport?.eligible, kinds, hiddenFeatureIds, onSelect],
   );
-  const clearSelection = useCallback(() => setSelection(null), []);
+  const clearSelection = useCallback((expectedRevision?: number) => {
+    setSelection((current) =>
+      expectedRevision === undefined || current?.revision === expectedRevision ? null : current,
+    );
+  }, []);
   const retry = useCallback(() => {
     cancel();
     if (query) cache.current.delete(query.key);

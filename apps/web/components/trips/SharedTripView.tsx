@@ -61,8 +61,9 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
   const selectedDay = view?.days.find((day) => day.day_index === selectedDayIndex) ?? null;
   const holidayMap = useMemo(() => holidaysByDate(view?.days ?? []), [view?.days]);
 
-  const handleSelectPoi = (poiId: string) => {
+  const handleSelectPoi = (poiId: string | null) => {
     setSelectedPoiId(poiId);
+    if (poiId == null) return;
     const dayIndex = poiDay.get(poiId);
     if (dayIndex != null) setSelectedDayIndex(dayIndex);
   };

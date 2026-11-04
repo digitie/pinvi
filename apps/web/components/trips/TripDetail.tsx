@@ -679,7 +679,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
     });
   };
 
-  const handleSelectPoi = (poiId: string) => {
+  const handleSelectPoi = (poiId: string | null) => {
+    if (poiId == null) {
+      setSelectedPoiId(null);
+      return;
+    }
     setActivePanel('plan');
     setSelectedPoiId(poiId);
     const dayIndex = poiDay.get(poiId);

@@ -136,7 +136,7 @@ export interface TripMapViewProps {
   showFeatures?: boolean;
   hiddenFeatureIds?: ReadonlySet<string>;
   canAddFeature?: boolean;
-  onSelectPoi?: (poiId: string) => void;
+  onSelectPoi?: (poiId: string | null) => void;
   onMarkerContextMenu?: (poiId: string) => void;
   onAddFeature?: (feature: FeatureSummary) => void;
   onCreatePoiAtCoordinate?: (coord: { lon: number; lat: number }) => void;
@@ -207,10 +207,11 @@ export function TripMapView({
   const handleGeometrySelect = useCallback(
     (feature: GeometryFeature) => {
       userMovedRef.current = true;
+      onSelectPoi?.(null);
       setSelectedFeature(null);
       if (mobileLayout) setDetailFeatureId(feature.feature_id);
     },
-    [mobileLayout],
+    [mobileLayout, onSelectPoi],
   );
   const geometry = useFeatureGeometry({
     active: showFeatures,
@@ -222,7 +223,10 @@ export function TripMapView({
   const [previousGeometryPoiId, setPreviousGeometryPoiId] = useState(selectedPoiId);
   if (previousGeometryPoiId !== selectedPoiId) {
     setPreviousGeometryPoiId(selectedPoiId);
-    clearGeometrySelection();
+    if (selectedPoiId != null) {
+      clearGeometrySelection();
+      if (selectedFeature) setSelectedFeature(null);
+    }
   }
 
   const surfaceClassName =
@@ -656,6 +660,7 @@ export function TripMapView({
                   ariaLabel={marker.point.title}
                   onClick={() => {
                     clearGeometrySelection();
+                    setSelectedFeature(null);
                     onSelectPoi?.(marker.point.poiId);
                   }}
                   onContextMenu={(event) => {
@@ -686,6 +691,7 @@ export function TripMapView({
                     ariaLabel={marker.feature.name}
                     onClick={() => {
                       clearGeometrySelection();
+                      onSelectPoi?.(null);
                       setSelectedFeature(marker.feature);
                       // 모바일: weather 외 feature는 상세 시트를 바로 연다(ADR-056).
                       if (mobileLayout && marker.feature.kind !== 'weather') {
@@ -709,7 +715,13 @@ export function TripMapView({
             />
           )}
           {selected && !geometry.selection && (
-            <Popup lngLat={[selected.lon, selected.lat]} maxWidth="240px" closeButton={false}>
+            <Popup
+              key={selected.poiId}
+              lngLat={[selected.lon, selected.lat]}
+              maxWidth="240px"
+              closeButton={false}
+              onClose={() => onSelectPoi?.(null)}
+            >
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-ink">{selected.title}</p>
                 {selectedResolutionNotice && (
@@ -721,6 +733,7 @@ export function TripMapView({
           {selectedFeature?.coord && (
             <Popup
               lngLat={[selectedFeature.coord.lon, selectedFeature.coord.lat]}
+              onClose={() => setSelectedFeature(null)}
               maxWidth="240px"
               closeButton={false}
             >

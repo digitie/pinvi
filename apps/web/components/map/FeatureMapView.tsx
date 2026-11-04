@@ -944,7 +944,15 @@ export function FeatureMapView({
               />
               {userLocation && <UserLocationMarker lngLat={userLocation} />}
               {selected && (
-                <Popup lngLat={selected.lngLat} maxWidth="260px" closeButton={false}>
+                <Popup
+                  key={selected.id}
+                  lngLat={selected.lngLat}
+                  maxWidth="260px"
+                  closeButton={false}
+                  onClose={() =>
+                    setSelected((current) => (current?.id === selected.id ? null : current))
+                  }
+                >
                   <div
                     className="space-y-2"
                     data-testid="feature-map-popup"
@@ -1009,7 +1017,17 @@ export function FeatureMapView({
               {/* T-368 — weather marker는 feature가 아니므로 상세보기가 없다. 값은 marker 자체
                   (`selectedWeatherMarker`)에 이미 있어 선택 시 별도 fetch가 필요 없다. */}
               {selectedWeatherMarker && (
-                <Popup lngLat={selectedWeatherMarker.lngLat} maxWidth="220px" closeButton={false}>
+                <Popup
+                  key={selectedWeatherMarker.id}
+                  lngLat={selectedWeatherMarker.lngLat}
+                  maxWidth="220px"
+                  closeButton={false}
+                  onClose={() =>
+                    setSelectedWeatherMarker((current) =>
+                      current?.id === selectedWeatherMarker.id ? null : current,
+                    )
+                  }
+                >
                   <div className="space-y-1">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-semibold text-ink">

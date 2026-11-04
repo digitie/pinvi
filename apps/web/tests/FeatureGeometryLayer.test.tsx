@@ -134,7 +134,9 @@ describe('geometry layers', () => {
     expect(queryRenderedFeatures).toHaveBeenCalledTimes(1);
   });
   it('popup은 장소 추가 제스처에서 제외하고 원래 coord를 만들지 않는다', () => {
-    const current = state({ selection: { feature: features[2]!, anchor: [127.03, 37.03] } });
+    const current = state({
+      selection: { feature: features[2]!, anchor: [127.03, 37.03], revision: 1 },
+    });
     const open = vi.fn();
     render(<FeatureGeometryPopup state={current} onOpenDetail={open} />);
     expect(screen.getByTestId('geometry-popup')).toHaveAttribute('data-map-overlay', '');

@@ -179,7 +179,13 @@ export function FeatureGeometryPopup({
   const selection = state.selection;
   if (!selection) return null;
   return (
-    <Popup lngLat={selection.anchor} maxWidth="260px" closeButton={false}>
+    <Popup
+      key={selection.revision}
+      lngLat={selection.anchor}
+      maxWidth="260px"
+      closeButton={false}
+      onClose={() => state.clearSelection(selection.revision)}
+    >
       <div
         className="space-y-2"
         data-map-overlay=""
@@ -198,7 +204,7 @@ export function FeatureGeometryPopup({
             type="button"
             aria-label="경로·영역 닫기"
             className="focus-ring text-xs text-muted hover:text-ink"
-            onClick={state.clearSelection}
+            onClick={() => state.clearSelection()}
           >
             닫기
           </button>
