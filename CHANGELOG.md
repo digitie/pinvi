@@ -532,3 +532,5 @@
 - Docker compose observability config.
 - Docker app smoke와 수동 smoke는 release tag 생성 전 main에서 재확인했다. 이후 post-v0.1.0
   변경은 `Unreleased` 절에 누적한다.
+
+- #667 공통 수정: 삭제 후에도 보존되는 첨부를 쿼터에 반영하며, 기존 파일 복원은 새 업로드로 계산하지 않는다(보존 정책 결정·최종 검증 진행 중).

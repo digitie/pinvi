@@ -30,9 +30,6 @@ from app.services.rustfs_storage import InvalidStorageRefError, validate_attachm
 from app.services.storage_policy import (
     AttachmentQuotaError,
     assert_attachment_quota,
-    attachment_bytes_for_user,
-    effective_attachment_quota,
-    get_storage_settings,
 )
 
 
@@ -360,48 +357,11 @@ async def restore_trip(db: AsyncSession, *, trip_id: uuid.UUID, owner_user_id: u
     )
     if trip is None:
         raise TripNotFoundError("휴지통에서 여행을 찾을 수 없습니다.")
-    poi_ids = select(TripDayPoi.attachment_id).where(
-        TripDayPoi.trip_id == trip_id, TripDayPoi.deleted_at.is_(None)
-    )
-    uploader_ids = select(CuratedPlanAttachment.uploaded_by_user_id).where(
-        CuratedPlanAttachment.deleted_at.is_(None),
-        or_(
-            CuratedPlanAttachment.trip_id == trip_id, CuratedPlanAttachment.trip_poi_id.in_(poi_ids)
-        ),
-    )
-    # 모든 업로더를 같은 순서로 잠가 서로 다른 여행의 동시 복원도 직렬화한다.
-    uploaders = list(
-        await db.scalars(
-            select(User)
-            .where(or_(User.user_id == owner_user_id, User.user_id.in_(uploader_ids)))
-            .order_by(User.user_id)
-            .with_for_update(key_share=True)
-            .execution_options(populate_existing=True)
-        )
-    )
-    user = next((u for u in uploaders if u.user_id == owner_user_id), None)
-    if user is None:
-        raise TripNotFoundError("사용자를 찾을 수 없습니다.")
+    # 휴지통의 첨부도 이미 쿼터에 포함된다. 복원은 추가 저장 공간을 만들지 않는다.
     trip.deleted_at = None
     trip.status = "draft"
     trip.version += 1
-    try:
-        await db.flush()
-        await assert_attachment_quota(db, user=user, trip_id=trip_id, byte_size=0)
-        settings_row = await get_storage_settings(db)
-        for uploader in uploaders:
-            if uploader.user_id == owner_user_id:
-                continue
-            quota = effective_attachment_quota(settings_row, uploader)
-            used = await attachment_bytes_for_user(db, user_id=uploader.user_id)
-            if used > quota.user_quota_bytes:
-                raise AttachmentQuotaError(
-                    "첨부 업로더의 저장 공간 한도를 초과하여 복원할 수 없습니다."
-                )
-        await db.commit()
-    except AttachmentQuotaError as exc:
-        await db.rollback()
-        raise TripAttachmentQuotaError(str(exc)) from exc
+    await db.commit()
     await db.refresh(trip)
     return trip
 

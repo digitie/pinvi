@@ -29,6 +29,7 @@ export function TripTrash() {
     <header className="space-y-2">
       <h1 className="text-2xl font-bold text-ink">여행 휴지통</h1>
       <p className="text-sm text-muted">삭제한 여행을 초안으로 복원할 수 있습니다. 기존 공개 범위와 아직 유효한 공유 링크도 다시 적용됩니다.</p>
+      <p className="text-sm text-muted">휴지통의 첨부도 저장 용량에 포함됩니다. 복원해도 사용 용량은 늘어나지 않습니다.</p>
       <Link href="/trips" className="focus-ring inline-flex min-h-11 items-center underline">내 여행으로</Link>
     </header>
     {feedback && <p role="status" className="text-sm text-success-text">{feedback}</p>}

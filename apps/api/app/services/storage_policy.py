@@ -113,7 +113,7 @@ def effective_attachment_quota(
 
 
 def _active_attachment_parent() -> ColumnElement[bool]:
-    """파일 목록·다운로드·쿼터는 같은 활성 부모 규칙을 사용한다."""
+    """목록·다운로드의 접근 규칙. 보존 객체의 쿼터와 구분한다."""
     active_trip = (
         exists()
         .where(Trip.trip_id == CuratedPlanAttachment.trip_id, Trip.deleted_at.is_(None))
@@ -139,8 +139,6 @@ async def attachment_bytes_for_trip(db: AsyncSession, *, trip_id: uuid.UUID) -> 
     poi_ids = select(TripDayPoi.attachment_id).where(TripDayPoi.trip_id == trip_id)
     total = await db.scalar(
         select(func.coalesce(func.sum(CuratedPlanAttachment.byte_size), 0)).where(
-            CuratedPlanAttachment.deleted_at.is_(None),
-            _active_attachment_parent(),
             or_(
                 CuratedPlanAttachment.trip_id == trip_id,
                 CuratedPlanAttachment.trip_poi_id.in_(poi_ids),
@@ -153,8 +151,6 @@ async def attachment_bytes_for_trip(db: AsyncSession, *, trip_id: uuid.UUID) -> 
 async def attachment_bytes_for_user(db: AsyncSession, *, user_id: uuid.UUID) -> int:
     total = await db.scalar(
         select(func.coalesce(func.sum(CuratedPlanAttachment.byte_size), 0)).where(
-            CuratedPlanAttachment.deleted_at.is_(None),
-            _active_attachment_parent(),
             CuratedPlanAttachment.uploaded_by_user_id == user_id,
         )
     )
@@ -168,7 +164,7 @@ async def assert_attachment_quota(
     trip_id: uuid.UUID,
     byte_size: int,
 ) -> EffectiveAttachmentQuota:
-    # 업로드와 복원이 같은 순서(여행 → 사용자)로 잠가 총량 검사와 반영을 직렬화한다.
+    # 업로드는 여행 → 사용자 순서로 잠가 총량 검사와 반영을 직렬화한다.
     await db.scalar(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
     locked_user = await db.scalar(
         select(User)

@@ -166,7 +166,7 @@ async def test_owner_trash_restore_preserves_days_pois_files_and_sharing(
     assert repeated.status_code == 404
 
 
-async def test_restore_quota_failure_rolls_back_trash_state(
+async def test_restore_does_not_add_storage_even_if_current_quota_is_lower(
     client, verified_user, auth_cookies, session_factory
 ):
     user_id, _ = verified_user
@@ -185,14 +185,13 @@ async def test_restore_quota_failure_rolls_back_trash_state(
         user.user_attachment_quota_bytes_override = 100
         await db.commit()
     restored = await client.post(f"/trips/{trip_id}/restore", cookies=cookies)
-    assert restored.status_code == 409, restored.text
-    assert restored.json()["error"]["code"] == "ATTACHMENT_QUOTA_EXCEEDED"
+    assert restored.status_code == 200, restored.text
     async with session_factory() as db:
         trip = await db.get(Trip, uuid.UUID(trip_id))
-        assert trip.deleted_at is not None and trip.status == "archived"
+        assert trip.deleted_at is None and trip.status == "draft"
 
 
-async def test_concurrent_restores_share_the_uploader_quota_lock(
+async def test_concurrent_restores_preserve_already_charged_bytes(
     client, verified_user, auth_cookies, session_factory
 ):
     from app.services.storage_policy import attachment_bytes_for_user
@@ -220,12 +219,12 @@ async def test_concurrent_restores_share_the_uploader_quota_lock(
     results = await asyncio.gather(
         *[client.post(f"/trips/{trip_id}/restore", cookies=cookies) for trip_id in trip_ids]
     )
-    assert sorted(r.status_code for r in results) == [200, 409], [r.text for r in results]
+    assert sorted(r.status_code for r in results) == [200, 200], [r.text for r in results]
     async with session_factory() as db:
-        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 60
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 120
 
 
-async def test_restore_checks_collaborator_uploader_quota(
+async def test_restore_preserves_collaborator_charge_without_new_storage(
     client, verified_user, auth_cookies, session_factory
 ):
     from datetime import UTC, datetime
@@ -270,11 +269,17 @@ async def test_restore_checks_collaborator_uploader_quota(
         user.user_attachment_quota_bytes_override = 100
         await db.commit()
     restored = await client.post(f"/trips/{trip_id}/restore", cookies=owner)
-    assert restored.status_code == 409, restored.text
-    assert restored.json()["error"]["code"] == "ATTACHMENT_QUOTA_EXCEEDED"
+    assert restored.status_code == 200, restored.text
     async with session_factory() as db:
         trip = await db.get(Trip, uuid.UUID(trip_id))
-        assert trip.deleted_at is not None
+        assert trip.deleted_at is None
+    denied = await client.post(
+        f"/trips/{other_trip_id}/attachments",
+        json=_attachment_payload(uploader_id, byte_size=1),
+        cookies=uploader,
+    )
+    assert denied.status_code == 409, denied.text
+    assert denied.json()["error"]["code"] == "ATTACHMENT_QUOTA_EXCEEDED"
 
 
 async def test_poi_auto_day_creation_cannot_duplicate_derived_date(
