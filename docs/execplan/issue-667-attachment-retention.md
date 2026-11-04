@@ -69,3 +69,11 @@ POI 사전 검사 후 관리자 이동과 업로드가 겹치는 Event 회귀2�
 - 추가 경합 회귀에서 최초 전역 storage_settings 생성의 실제 PK 충돌도 확인했다. INSERT ON CONFLICT DO NOTHING으로 초기화를 원자화하고 같은 동시 복사 대조를 통과했다.
 - 보완 뒤 관련API95개(110.27초)·웹381개·공유 스키마24개·웹 타입/lint(기존5경고)를 통과했다. 카탈로그347/자동299, 목록592건을 확인했다. 전체 API 단위·M05·최종 실제 UI/리뷰/CI는 계속 진행한다.
 - ADR-078·API/스키마/런북·AGENTS/CLAUDE를 동기화했다. 운영 접근·배포·시험은 없고 최종 prod 검증은 Claude Code 담당이다.
+
+## 2026-11-05 — #667 최종 WSL 검증·소스 리뷰 완료
+
+- product SHA3aa504b를 두 전문 리뷰어가 독립적으로 전체 검토했고 남은P0/P1/P2가 없다. 최종 증거 커밋의 정확 SHA 확인과CI는 별도 게이트다.
+- 최종 관련API137(128.91초), API 단위1969통과9건너뜀(86.76초), 강화된M05/실제migration2(150.59초), mypy261·Ruff/format, 웹381·스키마24·웹 타입/lint(기존5경고)를 통과했다. OpenAPI3경로/4스키마를 export·검사했고 카탈로그347/자동299·목록592를 확인했다.
+- 실제 WSL Map/PostGIS·Pinvi API·Next/Chromium·RustFS7흐름과 물리 객체3건 대조를 다시 통과했다. 실제 RustFS의 과거 버전2개 삭제/인접 prefix 보존도 확인했다. 소유 스택 종료와 화면3장 확인을 마쳤다. 증거는 docs/reviews/pinvi-667-retention-wsl-live.json이다.
+- HEAD 고정형 서명 검증 중 커밋을 바꿔 발생한1실패는 숨기지 않고 기록했다.3aa504b 고정 재실행에서 단위1969통과9건너뜀을 확인했다.
+- 운영 접근·배포·시험은 없다. 최종 prod 적용·시험은 Claude Code가 담당한다. 정확최종SHA 리뷰·CI 후 일반 squash merge하고#668로 진행한다.

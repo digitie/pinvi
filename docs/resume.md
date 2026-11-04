@@ -1,3 +1,11 @@
+## 2026-11-05 — #667 최종 WSL 검증·소스 리뷰 완료
+
+- product SHA3aa504b를 두 전문 리뷰어가 독립적으로 전체 검토했고 남은P0/P1/P2가 없다. 최종 증거 커밋의 정확 SHA 확인과CI는 별도 게이트다.
+- 최종 관련API137(128.91초), API 단위1969통과9건너뜀(86.76초), 강화된M05/실제migration2(150.59초), mypy261·Ruff/format, 웹381·스키마24·웹 타입/lint(기존5경고)를 통과했다. OpenAPI3경로/4스키마를 export·검사했고 카탈로그347/자동299·목록592를 확인했다.
+- 실제 WSL Map/PostGIS·Pinvi API·Next/Chromium·RustFS7흐름과 물리 객체3건 대조를 다시 통과했다. 실제 RustFS의 과거 버전2개 삭제/인접 prefix 보존도 확인했다. 소유 스택 종료와 화면3장 확인을 마쳤다. 증거는 docs/reviews/pinvi-667-retention-wsl-live.json이다.
+- HEAD 고정형 서명 검증 중 커밋을 바꿔 발생한1실패는 숨기지 않고 기록했다.3aa504b 고정 재실행에서 단위1969통과9건너뜀을 확인했다.
+- 운영 접근·배포·시험은 없다. 최종 prod 적용·시험은 Claude Code가 담당한다. 정확최종SHA 리뷰·CI 후 일반 squash merge하고#668로 진행한다.
+
 ## 2026-11-05 — #667 추가 적대 리뷰의 설정 잠금·ACL 검증 보완
 
 - 두 리뷰어의 재검토에서 빈 singleton 설정 생성의 Settings→User / User→Settings 잠금 역전과 다중 privilege 목록이 OR로 평가되는 ACL 검사 빈틈을 찾았다. 실제 PostgreSQL Event 교차 요청1개와 SELECT-only 역할1개를 각각 실패로 먼저 확인했다.
