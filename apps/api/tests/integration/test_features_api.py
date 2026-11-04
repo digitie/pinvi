@@ -435,7 +435,9 @@ async def test_point_request_keeps_wide_bbox_and_large_limit(
     assert fake.calls["in_bounds"]["max_items"] == 2000
 
 
-@pytest.mark.parametrize(("limit", "expected"), [("", 200), ("&limit=2000", 200), ("&limit=100", 100)])
+@pytest.mark.parametrize(
+    ("limit", "expected"), [("", 200), ("&limit=2000", 200), ("&limit=100", 100)]
+)
 async def test_geometry_item_count_is_clamped(
     client: Any,
     verified_user: tuple[str, str],
