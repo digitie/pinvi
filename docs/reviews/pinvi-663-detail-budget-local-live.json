@@ -1,0 +1,71 @@
+{
+  "ok": true,
+  "fixtureOnly": true,
+  "production_validation": false,
+  "tileFixtureOnly": true,
+  "httpProductMocks": false,
+  "ownedLatencyFaultInjection": true,
+  "detailBudgetSeconds": 2.5,
+  "browser": "156.0.8078.4",
+  "coldHttpMs": 2650.775649000003,
+  "uiPartialMs": 2301.1990210000004,
+  "uiErrorMs": 2849.3908459999984,
+  "checks": [
+    "실제 Pinvi 로그인과 세션",
+    "실제 Map 정본 기간·장소→Pinvi 상세 카드 HTTP",
+    "공백 다른 정본 국가유산이 테마 원천보다 먼저 표시",
+    "실제 WebGL 지도 검색 선택→상세 모달 기간·장소",
+    "초기 행사 모달에서 실제 지연 카탈로그 부분 정보 안내",
+    "필수 정보 누락 행사의 공개 검색 제외",
+    "브라우저는 Pinvi API 경유",
+    "배경 타일만 고정한 실제 MapLibre 렌더러",
+    "상세보기 클릭부터 실제 오류 UI 표시까지 3초 미만",
+    "실제 Map 상세 응답 지연을 3초 내 typed 503으로 종료"
+  ],
+  "map_source_revision": "b778c097702e5cdcb68bf71fead479f34748ebf7",
+  "pinvi_product_revision": "679ca7a92f475d151d0c46b6a443641d34a9a18e",
+  "safeHandlerTimings": [
+    {
+      "outcome": "degraded",
+      "budget_exceeded": true,
+      "deadline_stage": "category_wait",
+      "total_ms": 2500.543,
+      "stage_ms": {
+        "map_detail": 1309.658,
+        "category_wait": 1190.49
+      }
+    },
+    {
+      "outcome": "degraded",
+      "budget_exceeded": false,
+      "deadline_stage": "enrichment",
+      "total_ms": 1028.551,
+      "stage_ms": {
+        "map_detail": 1028.44,
+        "category_wait": 0.002,
+        "enrichment": 0.0
+      }
+    },
+    {
+      "outcome": "failed",
+      "budget_exceeded": true,
+      "deadline_stage": "map_detail",
+      "total_ms": 2500.146,
+      "stage_ms": {
+        "map_detail": 2500.084
+      }
+    },
+    {
+      "outcome": "failed",
+      "budget_exceeded": true,
+      "deadline_stage": "map_detail",
+      "total_ms": 2500.81,
+      "stage_ms": {
+        "map_detail": 2500.752
+      }
+    }
+  ],
+  "owned_stack_stopped": true,
+  "screenshots_inspected": true,
+  "fault_note": "소유 Map 테스트 앱 middleware에서 실제 응답 전에만 지연을 넣었다. 정본 route·DB·인증·HTTP는 실제 구현이며 제품 응답 대체나 dependency override는 없다. 카탈로그 5초·첫 정본 1초·후속 정본 5초 지연. 로컬 fixture 수치이며 운영 성능을 보장하지 않는다."
+}
