@@ -180,7 +180,12 @@ export function FeatureGeometryPopup({
   if (!selection) return null;
   return (
     <Popup lngLat={selection.anchor} maxWidth="260px" closeButton={false}>
-      <div className="space-y-2" data-map-overlay="" data-testid="geometry-popup">
+      <div
+        className="space-y-2"
+        data-map-overlay=""
+        data-testid="geometry-popup"
+        data-feature-id={selection.feature.feature_id}
+      >
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-sm font-semibold text-ink">{selection.feature.name}</p>

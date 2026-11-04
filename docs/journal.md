@@ -1,5 +1,14 @@
 ## 2026-11-04 (claude) — #643 수정 묶음(#654~#662) 리뷰 보완·live e2e 카탈로그 갱신
 
+## 2026-11-04 — #635 실제 선·면 UI와 카탈로그 보강
+
+- 최신 main8196e21을 통합했다. Map ad75031의 기존 계약·provenance를 보존하고 M05 pair를 재생성했다.
+- 격리 WSL의 실제 Map/PostGIS→Pinvi HTTP→Chromium WebGL 14개 흐름을 통과했다. 배경 raster만 고정했고 제품 HTTP를 mock하지 않았다. 선·면·구멍 hit·null coord·목록 키보드·큰 bounds·공유 차단·390px 모바일 상세를 확인했다.
+- 추적된 catalogue helper를 직접 실행했다. 목록 DOM을 남기고 native layer를 지우면 canvas 단언이 실패한다. 상세는 fallback 제목 대신 정확한 HTTP200·ID/kind·렌더된 본문을 검증한다.
+- 웹 전체333·타입·lint(기존 경고5개)를 통과했다. API 전체2765 통과·12 제외와 공용 스키마23개를 확인했다. 최종 두 리뷰·CI·머지는 별도다.
+- 운영 검증은 하지 않았다. 안전한 증거는 docs/reviews/pinvi-635-geometry-local-live.json에 둔다.
+
+
 - Codex 가 머지한 #654~#662 를 두 독립 적대 리뷰(보안·권한·데이터 / 정확성·UX·계약)로 다시 보고, 직접 확인한 지적만
   한 PR 로 고쳤다. 여행 PATCH 는 잠금 뒤 휴지통 재확인·기간 이동으로 생기는 일자 날짜 중복 422·한국어 날짜 안내,
   휴지통 목록은 bucket 무관, POI 생성·수정·정렬은 잠금 뒤 여행 삭제 재확인, Map admin 경로 id 는 한 세그먼트로 고정,

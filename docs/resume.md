@@ -1,5 +1,14 @@
 ## 2026-11-04 (claude) — #643 수정 묶음 리뷰 보완 PR
 
+## 2026-11-04 — #635 실제 선·면 UI와 카탈로그 보강
+
+- 최신 main8196e21을 통합했다. Map ad75031의 기존 계약·provenance를 보존하고 M05 pair를 재생성했다.
+- 격리 WSL의 실제 Map/PostGIS→Pinvi HTTP→Chromium WebGL 14개 흐름을 통과했다. 배경 raster만 고정했고 제품 HTTP를 mock하지 않았다. 선·면·구멍 hit·null coord·목록 키보드·큰 bounds·공유 차단·390px 모바일 상세를 확인했다.
+- 추적된 catalogue helper를 직접 실행했다. 목록 DOM을 남기고 native layer를 지우면 canvas 단언이 실패한다. 상세는 fallback 제목 대신 정확한 HTTP200·ID/kind·렌더된 본문을 검증한다.
+- 웹 전체333·타입·lint(기존 경고5개)를 통과했다. API 전체2765 통과·12 제외와 공용 스키마23개를 확인했다. 최종 두 리뷰·CI·머지는 별도다.
+- 운영 검증은 하지 않았다. 안전한 증거는 docs/reviews/pinvi-635-geometry-local-live.json에 둔다.
+
+
 - #654~#662 리뷰 지적 수정 + live e2e 카탈로그(TRIP-043 휴지통 복원, 수정 이슈 test.fail 해제) 를 한 PR 로 묶었다.
 - Map admin OpenAPI 재vendor 는 Map 리뷰 PR 머지 뒤 최종 Map SHA 로 같은 PR 에 넣는다(회전 preflight digest 일치).
 - 다음: 배포 뒤 소유자가 live 카탈로그 전체를 실행한다. 남은 expected-fail 은 Map #1438~#1440 뿐이다.

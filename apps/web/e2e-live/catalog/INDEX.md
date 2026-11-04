@@ -103,12 +103,12 @@ Spec files: 55.
 | SRCH-020 | search | 숙박·캠핑장 — '오토캠핑장' → 카테고리 라벨 캠핑 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-020` |
 | SRCH-021 | search | 음식점 — '안동찜닭' → feature 또는 kakao/naver 행 | P2 | desktop, search | scripted | `specs/search/search-sources.live.spec.ts#SRCH-021` |
 | SRCH-022 | search | 카페 — '카페' → 카테고리 라벨 카페/커피전문점 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-022` |
-| SRCH-023 | search | 등산로 — '대청봉' → 설악산 대청봉 코스(route kind) 검색·상세 | P1 | desktop, search, poi | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-023` |
-| SRCH-024 | search | 등산로 — '북한산' 코스 다수 노출 | P3 | desktop, search | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-024` |
+| SRCH-023 | search | 대청봉 경로 — 근처 point로 이동 후 실제 선 클릭·목록·상세 | P1 | desktop, search, poi | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-023` |
+| SRCH-024 | search | 북한산 경로 — 근처 point 범위의 복수 선·토글 OFF | P3 | desktop, search | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-024` |
 | SRCH-025 | search | 국가유산 — '소수서원' → 라벨 국가유산/사적 | P1 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-025` |
 | SRCH-026 | search | 국가유산 — '도산서원' | P3 | desktop, search | manual |  |
 | SRCH-027 | search | 축제/행사 — '축제' → kind=event 상세에 기간(period) 표시 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-027` |
-| SRCH-028 | search | 국립공원 — '설악산국립공원'(area kind) → 라벨 국립공원/자연경관 | P2 | desktop, search, poi | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-028` |
+| SRCH-028 | search | 설악산 영역 — 실제 면 클릭·큰 bounds 선택 후 상세 유지 | P2 | desktop, search, poi | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-028` |
 | SRCH-029 | search | 수목원 — '국립수목원' → 라벨 수목원 | P3 | desktop, search | manual |  |
 | SRCH-030 | search | 휴양림 — '자연휴양림' → 라벨 휴양림 | P3 | desktop, search | manual |  |
 | SRCH-031 | search | 박물관/미술관 — '국립중앙박물관' → 라벨 박물관/문화시설 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-031` |

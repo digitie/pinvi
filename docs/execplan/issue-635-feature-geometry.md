@@ -23,3 +23,12 @@
 - WSL 전용이며 prod 접근·배포·테스트는 수행하지 않는다. 최종 운영 검증은 Claude Code 담당이다.
 - 실제 Telegram 메시지를 발송하지 않는다.
 - 자격 증명·실제 운영 주소는 커밋하지 않는다.
+
+## WSL 실행 결과
+
+- 웹 전체 333개, 관련 geometry 43개, 타입·lint 통과.
+- 실제 HTTP·worker·WebGL UI 14개 흐름과 renderer 제거 음성 대조 통과.
+- 단일·복수 선/면과 ring은 계약/단위 테스트로 보존하며, DB의 Multi 변형은 실제 API/render에서 확인했다.
+- 최초 viewport 초기화와 transport 상세 전환의 선택 정리, 원래 큰 bounds 이동의 하한을 보완했다.
+- 카탈로그 SRCH-023/024/028은 실제 geometry source/hit/click·이동 완료·상세 HTTP를 검사한다.
+- API 전체2765 통과·12 제외, 공용 스키마23개 통과. 최종 2인 리뷰·최종 SHA CI와 머지는 진행 중이다.
