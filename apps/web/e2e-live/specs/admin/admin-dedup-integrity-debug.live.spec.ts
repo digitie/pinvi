@@ -12,11 +12,10 @@ test.describe('ADM dedup / integrity / debug (read-only)', () => {
   });
 
   test('ADM-022 + ADM-023 dedup review list, detail panel, filter forwarding', async ({ page }) => {
-    test.fail(true, '#651: GET /admin/dedup-review → 422 FORBIDDEN (Map rejects PinVi), page looks like an empty queue');
     const list = waitForGet(page, /\/admin\/dedup-review/);
     await page.goto('/admin/dedup-review');
-    // soft: keep checking filter forwarding (ADM-023) even while the list itself fails (#651)
-    expect.soft((await list).status(), 'GET /admin/dedup-review').toBe(200);
+    // #651 (fixed by #660): the list is read through Map's ops dedup-review endpoint and answers 200.
+    expect((await list).status(), 'GET /admin/dedup-review').toBe(200);
     await expect(page.getByRole('heading', { name: 'Dedup review' })).toBeVisible();
     const rows = page.locator('[data-testid^="admin-dedup-row-"]');
     if (await rows.count()) {

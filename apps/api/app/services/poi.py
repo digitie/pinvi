@@ -33,6 +33,18 @@ _REGION_CODE_KEYS = (
 _REGION_CONTAINER_KEYS = ("region", "address", "location")
 
 
+async def _lock_active_trip(db: AsyncSession, trip_id: uuid.UUID) -> Trip | None:
+    """POI 쓰기를 여행 행 잠금으로 직렬화하고, 잠금 뒤 휴지통 이동 여부를 다시 확인한다.
+
+    권한 확인은 잠금 전에 끝나므로 같은 시각 여행 삭제와 경주하면 휴지통 여행에 쓰기가
+    남는다 — 잠금을 잡은 뒤의 `deleted_at`이 정본이다.
+    """
+    trip: Trip | None = await db.scalar(
+        select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)).with_for_update()
+    )
+    return trip
+
+
 class PoiError(Exception):
     code: str = "INTERNAL_ERROR"
 
@@ -104,7 +116,8 @@ async def create_poi(
     source: str | None = None,
     external_ref: dict[str, Any] | None = None,
 ) -> TripDayPoi:
-    await db.scalar(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
+    if await _lock_active_trip(db, trip_id) is None:
+        raise TripNotFoundError("여행을 찾을 수 없습니다.")
     day = await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
     # ADR-055: day.date는 override-only. rise/set seed는 effective_date(override 또는 파생)로.
     locdate = await trip_day_effective_locdate(
@@ -176,9 +189,9 @@ async def update_poi(
     expected_version: int,
     patch: dict[str, Any],
 ) -> TripDayPoi:
-    await db.scalar(select(Trip).where(Trip.trip_id == poi.trip_id).with_for_update())
+    trip = await _lock_active_trip(db, poi.trip_id)
     await db.refresh(poi, with_for_update=True)
-    if poi.deleted_at is not None:
+    if trip is None or poi.deleted_at is not None:
         raise PoiNotFoundError("POI를 찾을 수 없습니다.")
     if poi.version != expected_version:
         raise PoiVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
@@ -293,7 +306,8 @@ async def reorder_pois(
     moves: list[tuple[uuid.UUID, str]],
     day_index: int,
 ) -> list[TripDayPoi]:
-    await db.scalar(select(Trip).where(Trip.trip_id == trip_id).with_for_update())
+    if await _lock_active_trip(db, trip_id) is None:
+        raise PoiNotFoundError("정렬할 POI를 찾을 수 없습니다.")
     poi_ids = [pid for pid, _ in moves]
     if len(set(poi_ids)) != len(poi_ids):
         raise SortOrderConflictError("같은 POI를 두 번 정렬할 수 없습니다.")

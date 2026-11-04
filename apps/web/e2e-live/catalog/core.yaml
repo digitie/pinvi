@@ -117,12 +117,11 @@
   steps:
     - "[e2e] 여행 생성 → 새 컨텍스트에서 /trips/{id} 진입 → /login → 로그인"
   expected:
-    - (의도) /trips/{id}로 복귀
-    - (현재) /trips로 착지 — expected-fail
+    - /login?next=… 를 거쳐 로그인 뒤 /trips/{id}로 복귀
   cleanup: [생성한 여행 삭제]
   automation: scripted
   spec: specs/core/core-auth-session.live.spec.ts#CORE-007
-  notes: test.fail — login/page.tsx는 router.push('/trips') 고정, onUnauthorized도 next 파라미터 없음. 구현 여부 open question.
+  notes: '#644 — #655 로 수정(login next 복귀, safeLoginReturnTo 같은 출처 경로만). test.fail 제거, 정상 단언.'
 
 - id: CORE-008
   title: 비로그인 보호 페이지(/trips,/map,/files,/settings) 접근은 /login
@@ -350,11 +349,11 @@
   steps:
     - 2핀 여행 진입 → 가장 남쪽 핀 bbox vs trip-map-stats bbox
   expected:
-    - (의도) 겹치지 않음 — 현재 expected-fail
+    - 겹치지 않음(정상 단언 — 실패하면 #623 재현)
   cleanup: [여행 삭제]
   automation: scripted
   spec: specs/core/core-mobile.live.spec.ts#CORE-021
-  notes: test.fail. fitPadding은 위쪽만 보정, 아래 통계칩(bottom-16)은 미반영.
+  notes: '#623 은 핀 위치에 따라 재현되므로 test.fail 대신 정상 단언(2026-11-03 mobile 실행에서 통과, runbook §8.2).'
 
 - id: CORE-022
   title: 오버레이 키보드 Tab 순서 — 검색창이 캔버스/마커보다 먼저 포커스

@@ -20,11 +20,19 @@ export function SharedTripEditor({ tripId, token, trip, onSaved }: {
       onSubmit={async (event) => {
         event.preventDefault();
         if (saving) return;
-        setSaving(true); setError(null); setSaved(false); setConflict(false);
+        // 바뀐 필드만 보낸다 — 손대지 않은 null 설명·지역이 ""로 덮이지 않게. 빈 입력은 null.
+        const patch: { title?: string; description?: string | null; region_hint?: string | null } = {};
+        const nextTitle = title.trim();
+        const nextDescription = description.trim() ? description : null;
+        const nextRegion = region.trim() || null;
+        if (nextTitle !== trip.title) patch.title = nextTitle;
+        if (nextDescription !== (trip.description ?? null)) patch.description = nextDescription;
+        if (nextRegion !== (trip.region_hint ?? null)) patch.region_hint = nextRegion;
+        setError(null); setSaved(false); setConflict(false);
+        if (Object.keys(patch).length === 0) { setSaved(true); return; }
+        setSaving(true);
         try {
-          const result = await tripApi(sharedApiClient).updateShared(tripId, token, trip.version, {
-            title: title.trim(), description, region_hint: region || null,
-          });
+          const result = await tripApi(sharedApiClient).updateShared(tripId, token, trip.version, patch);
           onSaved(result); setSaved(true);
         } catch (err) {
           setError(err instanceof ApiError ? err.message : '여행 정보를 저장하지 못했습니다.');

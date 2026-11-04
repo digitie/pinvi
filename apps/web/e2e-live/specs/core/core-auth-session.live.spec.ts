@@ -131,8 +131,7 @@ test.describe('CORE auth/session', () => {
     await page2.close();
   });
 
-  test('CORE-007 비로그인 딥링크 → 로그인 → 원래 여행으로 복귀', async ({ browser, page }, testInfo) => {
-    test.fail(true, 'login/page.tsx는 항상 router.push("/trips") — return_to/next 파라미터가 없다 (origin/main b1cef056)');
+  test('CORE-007 비로그인 딥링크 → 로그인 → 원래 여행으로 복귀', async ({ browser, page }) => {
     await loginAsUser(page);
     const { id } = await createTrip(page, {
       title: `${e2ePrefix} CORE-007 ${Date.now()}`,
@@ -154,7 +153,6 @@ test.describe('CORE auth/session', () => {
     } finally {
       await deleteTrip(page, id);
     }
-    annotate(testInfo, 'expected-fail', '현재 동작: /trips로 착지. 복귀 기능 구현 여부는 open question');
   });
 
   test('CORE-008 비로그인 보호 페이지 접근은 /login으로', async ({ page }) => {

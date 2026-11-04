@@ -12,7 +12,15 @@ describe('로그인 복귀 경로', () => {
       expect(OAuthStartRequestSchema.parse({ return_to: safeLoginReturnTo(path) }).return_to).toBe(path);
     },
   );
-  it.each([null, '', 'https://evil.example', '//evil.example', '/\\evil.example', '/\nevil.example', '/login', '/admin/features', '/register', '/a/..//attacker.example/landing'])(
+  it('서버 저장 한도(255자)를 넘는 쿼리·hash는 버리고 경로만 남긴다', () => {
+    const long = `/trips/abc?q=${'가'.repeat(300)}#c`;
+    const result = safeLoginReturnTo(long);
+    expect(result).toBe('/trips/abc');
+    expect(OAuthStartRequestSchema.parse({ return_to: result }).return_to).toBe('/trips/abc');
+    expect(safeLoginReturnTo(`/${'a'.repeat(300)}`)).toBe('/trips');
+    expect(() => OAuthStartRequestSchema.parse({ return_to: `/${'a'.repeat(255)}` })).toThrow();
+  });
+  it.each([null, '', 'https://evil.example', '//evil.example', '/\\evil.example', '/\nevil.example', '/login', '/admin/features', '/register', '/a/..//attacker.example/landing', '/trips//x'])(
     '외부 또는 인증 반복 경로 %s를 차단한다', (path) => {
       expect(safeLoginReturnTo(path)).toBe('/trips');
     },

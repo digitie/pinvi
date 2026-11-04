@@ -2,8 +2,10 @@
  * SHR 공유 링크 — 생성/열람/철회/재생성/만료/권한별/복사/열기/다일자/날씨 중립 텍스트/삭제된 여행.
  * 데스크톱 1440x900 기준. mobile 태그 케이스는 share-mobile.live.spec.ts.
  */
-import { expect, test } from '@playwright/test';
+import { expect, test, type Request } from '@playwright/test';
 import {
+  apiBaseURL,
+  appAlerts,
   baseURL,
   createTrip,
   deleteTrip,
@@ -19,6 +21,7 @@ import {
   gotoTrip,
   openSharedInFreshContext,
   openTripTab,
+  postComment,
   shareSection,
   sharedPath,
   uniqueTitle,
@@ -164,30 +167,36 @@ test.describe('SHR 공유 링크 (desktop)', () => {
     }
   });
 
-  test('SHR-005 과거 만료일로 만든 링크 — 목록 "만료", 열면 404', async ({ page, browser }) => {
+  test('SHR-005 과거 만료일 — 링크를 만들지 않고 안내, API도 422', async ({ page }) => {
+    // #626 (fixed by #655 + review PR): a past expiry is refused before the request; the API refuses it too.
     const title = uniqueTitle('005');
     const { id } = await createTrip(page, { title, start: '2026-11-20', end: '2026-11-20' });
     created.push(id);
     await gotoTrip(page, id, title);
     await openTripTab(page, '공유');
-    const link = await createShareLink(page, { expires: '2026-01-01' });
+    const section = shareSection(page);
+    await section.getByLabel('만료일(선택)').fill('2026-01-01');
+    let posted = 0;
+    const countPost = (r: Request) => {
+      if (r.method() === 'POST' && /\/share-tokens(\?|$)/.test(new URL(r.url()).pathname)) posted += 1;
+    };
+    page.on('request', countPost);
+    await section.getByRole('button', { name: '링크 만들기' }).click();
+    await expect(appAlerts(section)).toContainText('만료일은 오늘 이후로 선택해 주세요.');
+    page.off('request', countPost);
+    expect(posted, 'past expiry must not be sent').toBe(0);
+    await expect(page.getByTestId('new-share-url')).toHaveCount(0);
+    await shot(page, 'SHR-005', '01-past-expiry-refused');
 
-    const item = page.getByTestId('share-link-list').getByRole('listitem').first();
-    await expect(item).toContainText('만료');
-    await expect(item).toContainText('2026');
-    await expect(item.getByRole('button', { name: '공유 링크 철회' })).toHaveCount(0);
-    await shot(page, 'SHR-005', '01-expired-list');
-
-    const fresh = await openSharedInFreshContext(browser, id, link.token);
-    try {
-      expect(fresh.apiStatus).toBe(404);
-      await expectSharedError(fresh.page, '공유 토큰을 찾을 수 없습니다');
-    } finally {
-      await fresh.context.close();
-    }
+    const api = await apiBaseURL(page);
+    const res = await page.context().request.post(`${api}/trips/${id}/share-tokens`, {
+      data: { visibility: 'view_only', expires_at: '2026-01-01T14:59:59.000Z' },
+    });
+    expect(res.status(), 'POST share-tokens with a past expires_at').toBe(422);
   });
 
-  test('SHR-006 "편집 가능"/"댓글 가능" 링크도 공유 페이지는 읽기 전용', async ({ page, browser }) => {
+  test('SHR-006 "댓글 가능"·"편집 가능" 링크 — 권한대로 댓글·여행 정보 편집이 열린다', async ({ page, browser }) => {
+    // #625 (fixed by #655): comment links show comments; edit links also show the trip-info editor.
     const title = uniqueTitle('006');
     const { id } = await createTrip(page, { title, start: '2026-11-20', end: '2026-11-20' });
     created.push(id);
@@ -199,17 +208,36 @@ test.describe('SHR 공유 링크 (desktop)', () => {
     await expect(list).toContainText('편집 가능');
     await expect(list).toContainText('댓글 가능');
 
-    for (const link of [editLink, commentLink]) {
+    // logged out: permission label + comment section; writing needs login (guidance, no mutation)
+    for (const [link, label] of [[commentLink, '댓글 가능'], [editLink, '편집 가능']] as const) {
       const fresh = await openSharedInFreshContext(browser, id, link.token);
       try {
         expect(fresh.apiStatus).toBe(200);
-        await expectSharedReadOnly(fresh.page, title);
-        await expect(fresh.page.getByLabel('댓글 입력')).toHaveCount(0);
-        await expect(fresh.page.getByRole('button', { name: '편집' })).toHaveCount(0);
+        await expect(fresh.page.getByText(`공유된 여행 · ${label}`)).toBeVisible();
+        await expect(fresh.page.getByRole('region', { name: '댓글' })).toBeVisible();
+        await expect(fresh.page.getByText('댓글 작성·삭제와 여행 정보 편집에는 로그인이 필요합니다.')).toBeVisible();
+        await expect(fresh.page.getByRole('form', { name: '공유 여행 정보 편집' })).toHaveCount(label === '편집 가능' ? 1 : 0);
       } finally {
         await fresh.context.close();
       }
     }
+
+    // logged in (owner session): the edit link saves trip info, the comment link posts a comment
+    await page.goto(sharedPath(id, editLink.token));
+    const editor = page.getByRole('form', { name: '공유 여행 정보 편집' });
+    const renamed = `${title} 편집`;
+    await editor.getByLabel('여행 제목').fill(renamed);
+    await editor.getByRole('button', { name: '여행 정보 저장' }).click();
+    await expect(editor.getByText('여행 정보를 저장했습니다.')).toBeVisible();
+    await page.goto(sharedPath(id, commentLink.token));
+    await expect(page.getByRole('heading', { level: 1, name: renamed })).toBeVisible();
+    await expect(page.getByRole('form', { name: '공유 여행 정보 편집' })).toHaveCount(0);
+    const body = `[e2e] SHR-006 공유 댓글 ${Date.now()}`;
+    await postComment(page, body);
+    await shot(page, 'SHR-006', '01-comment-link-posted');
+    await page.getByTestId('trip-comment-list').getByRole('listitem').filter({ hasText: body })
+      .getByRole('button', { name: '댓글 삭제' }).click();
+    await expect(page.getByTestId('trip-comment-list').getByText(body)).toHaveCount(0);
   });
 
   test('SHR-007 "열기"는 새 탭에서 공유 페이지를 연다', async ({ page, context }) => {

@@ -19,7 +19,7 @@ test.describe.serial('ADM features', () => {
   test('ADM-015 + ADM-016 search 안동하회마을, state badges and detail inspector', async ({ page }) => {
     await page.goto('/admin/features');
     await page.getByTestId('admin-features-search').fill(PLACE);
-    await searchAdminFeatures(page); // #648: retries intermittent 503s, fails with the issue number otherwise
+    await searchAdminFeatures(page); // #648 (fixed by #660): Korean q must answer < 500
 
     const row = page.locator('[data-testid^="admin-features-row-"]').filter({ hasText: PLACE }).first();
     await expect(row).toBeVisible({ timeout: 30_000 });
@@ -100,10 +100,12 @@ test.describe.serial('ADM features', () => {
     await page.goto(`/admin/features/${encodeURIComponent(featureId)}/weather-values`);
     const res = await weather;
     expect(res.status(), 'weather proxy must be up (503 = WEATHER_SERVICE_UNAVAILABLE is a real finding)').toBe(200);
-    const section = page.locator('section', { hasText: 'weather values' }).first();
+    // Section → SectionCard renders a <div data-slot="card">, not a <section>.
+    const section = page.locator('[data-slot="card"]', { has: page.getByText('weather values', { exact: true }) }).first();
     await expect(section).toContainText('asof');
     await expect(section).toContainText('latest');
-    await expect(section).toContainText(/\b(fresh|stale)\b/);
+    // textContent joins the flag with the next span ("freshsource style …"), so no trailing \b.
+    await expect(section).toContainText(/\b(fresh|stale)/);
     const rows = page.locator('[data-testid^="admin-feature-weather-row-"]');
     await expect(rows.first()).toBeVisible({ timeout: 30_000 });
     const ids = await rows.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));

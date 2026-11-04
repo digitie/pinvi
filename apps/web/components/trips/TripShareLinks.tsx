@@ -26,6 +26,11 @@ export interface TripShareLinksProps {
   onChanged: () => void | Promise<unknown>;
 }
 
+/** 만료일 입력과 같은 기준(KST)의 오늘 `YYYY-MM-DD`. */
+function todayInSeoul(): string {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date());
+}
+
 export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinksProps) {
   const [visibility, setVisibility] = useState<TripShareLinkVisibility>('view_only');
   const [expiresAt, setExpiresAt] = useState('');
@@ -36,10 +41,15 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
   const [newToken, setNewToken] = useState<string | null>(null);
 
   const create = async () => {
-    setCreating(true);
     setError(null);
     setNewUrl(null);
     setNewToken(null);
+    // 서버는 지난 만료일을 422 "요청이 올바르지 않습니다."로만 거부한다 — 이유를 필드 옆에서 먼저 알린다.
+    if (expiresAt && expiresAt < todayInSeoul()) {
+      setError('만료일은 오늘 이후로 선택해 주세요.');
+      return;
+    }
+    setCreating(true);
     try {
       const res = await tripApi(apiClient).createShareToken(tripId, {
         visibility,
@@ -99,7 +109,7 @@ export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinks
           만료일(선택)
           <input
             type="date"
-            min={new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date())}
+            min={todayInSeoul()}
             value={expiresAt}
             onChange={(event) => setExpiresAt(event.target.value)}
             className="mt-1 block min-h-11 rounded-sm border border-hairline px-2 text-base font-normal text-ink outline-hidden focus:border-primary"

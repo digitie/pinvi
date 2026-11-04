@@ -74,7 +74,7 @@
   cleanup: [읽기 전용]
   automation: scripted
   spec: specs/search/search-basic.live.spec.ts#SRCH-004
-  notes: '#650 — 전체 도로명 주소(시·도 약칭) 주소 행 0건. test.fail(#650).'
+  notes: '#650 — kor-travel-geo #622 로 수정(2026-11-03 닫힘). test.fail 제거, 정상 단언 — 실패하면 #650 재발.'
 
 - id: SRCH-005
   title: 도로명 부분 주소('하회종가길') → 주소 또는 장소 행
@@ -371,7 +371,7 @@
   cleanup: [읽기 전용]
   automation: scripted
   spec: specs/search/search-sources.live.spec.ts#SRCH-027
-  notes: 'kor-travel-map#1439 — event 기간·장소 없음. test.fail.'
+  notes: 'kor-travel-map#1439 해소(Map ad75031a, 2026-11-04 운영 live 통과) — test.fail 제거.'
 
 - id: SRCH-028
   title: 국립공원 — '설악산국립공원'(area kind) → 라벨 국립공원/자연경관
@@ -730,4 +730,4 @@
   cleanup: [읽기 전용]
   automation: scripted
   spec: specs/search/search-perf.live.spec.ts#SRCH-055
-  notes: soft 기록은 예산 2배까지 통과; 상세 카드가 6 s 를 넘으면 #663 재현으로 런타임 test.fail.
+  notes: soft 기록은 예산 2배까지 통과. #663(상세 카드 지연)은 #662(단일 2.5 s 처리 예산)로 수정 — 런타임 test.fail 제거, 6 s 초과는 soft 실패(#663 회귀).

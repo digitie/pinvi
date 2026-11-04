@@ -132,8 +132,8 @@ scripts/n150-live-catalog.sh --head --project session       # TRIP-046(@slow, ~1
 - D7. **비관리자의 admin API 는 404 RESOURCE_NOT_FOUND 를 유지**한다(존재 은닉, rbac.py SPEC V8
   M-4). #632 는 변경 없이 닫는다. ADM-004 는 404 를 정상 통과 케이스로 단언하고(`test.fail` 없음),
   ADM-003 의 UI 가드(`/admin/login?reason=forbidden`)도 그대로다.
-- D8. **여행 삭제 되돌리기는 제공하지 않는다**(#633 closed, not planned). TRIP-043 은 부재를 계속
-  단언하며, 이를 "gap" 으로 적지 않는다.
+- D8. ~~여행 삭제 되돌리기는 제공하지 않는다~~ → **2026-11-04 소유자 결정 변경: 휴지통 복원을 유지**한다
+  (#633, #657). TRIP-043 은 삭제 → 휴지통 표시 → 복원 → '초안'·장소 보존을 단언한다.
 - D9. 테스트 사용자 비밀번호가 prod 에서 바뀐다. 러너와 helper 는 자격증명을 **env 파일에서만**
   읽고 어디에도 기본값을 두지 않는다(`requireEnv` — 누락 시 이름만 담아 즉시 실패).
 
@@ -217,46 +217,49 @@ scripted 케이스의 spec 파일·id 존재). 목록 검증은 `test:e2e:live-c
 | ADM-031/039 | blocked | 승인(승격)은 PinVi/Map 양쪽에서 비가역(#634) |
 | CORE-005 | manual | 실제 11분 유휴 — 예산 초과 |
 
-Expected-fail(`test.fail`) 로 두고 수정 뒤 뒤집을 케이스: CORE-007(로그인 후 원래 URL 복귀 없음),
-CORE-021(#623 모바일 stats 칩 fit padding) 및 §8 의 이슈 표에 적힌 케이스. CORE-024(#622)는 prod 에서 통과해
-해제했다(2026-11-03).
+Expected-fail(`test.fail`) 로 남은 것은 Map 이슈(kor-travel-map#1438~#1440) 케이스뿐이다. #643 수정 묶음
+(#654~#662)과 리뷰 PR 로 CORE-007(#644)·TRIP-011(#624)·TRIP-026(#649)·SRCH-004(#650)·ADM-022(#651)·
+TRIP-030(#652)의 `test.fail` 과 #648·#663 의 런타임 `test.fail` 을 해제했고(2026-11-04), SHR-005/006/024/033 과
+TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 2026-11-03 에 해제했다.
 
 ## 8. 이슈 (label `e2e-catalog`, 2026-11-03)
 
 | # | 종류 | 제목 | 관련 케이스 |
 | --- | --- | --- | --- |
-| #624 | bug | PATCH /trips 가 end_date < start_date 허용 | TRIP-011 (현재 동작을 단언) |
-| #625 | bug | 공유 링크 권한 comment/edit 가 공유 페이지에 효과 없음 | SHR-006 |
-| #626 | bug | 과거 expires_at 로 생성 즉시 만료된 공유 링크 | SHR-005 |
-| #627 | bug | 댓글 탭이 comment.created 실시간 이벤트에 갱신되지 않음 | SHR-024 |
-| #628 | bug | 댓글 삭제 권한 UI/API 불일치 | SHR-033 |
-| #629 | bug | POI 범위 첨부가 삭제 뒤에도 /files 에 남음 | POI-030, teardown 파일 sweep |
-| #630 | bug | 지도 우클릭 수동 POI 의 source 컬럼 NULL | POI-001 |
-| #631 | bug | /admin/features/change-requests 가 제거된 Map 엔드포인트 호출 | ADM-038 |
+| #624 | fixed (#654 + 리뷰 PR) | PATCH /trips 가 end_date < start_date 허용(prod 500) | TRIP-011 — 다이얼로그 종료일 필드 안내 + API 422 정상 단언 |
+| #625 | fixed (#655) | 공유 링크 권한 comment/edit 가 공유 페이지에 효과 없음 | SHR-006 — 권한별 댓글·편집 폼, 로그인 쓰기 단언 |
+| #626 | fixed (#655 + 리뷰 PR) | 과거 expires_at 로 생성 즉시 만료된 공유 링크 | SHR-005 — 클라이언트 안내 + API 422 |
+| #627 | fixed (#655) | 댓글 탭이 comment.created 실시간 이벤트에 갱신되지 않음 | SHR-024 — 탭 재진입 없이 표시 |
+| #628 | fixed (#655) | 댓글 삭제 권한 UI/API 불일치 | SHR-033 — 소유자는 동행 댓글도 삭제 |
+| #629 | fixed (#656) | POI 범위 첨부가 삭제 뒤에도 /files 에 남음 | POI-030, teardown 파일 sweep |
+| #630 | fixed (#656) | 지도 우클릭 수동 POI 의 source 컬럼 NULL | POI-001 |
+| #631 | fixed (#659) | /admin/features/change-requests 가 제거된 Map 엔드포인트 호출 | ADM-038 |
 | #632 | closed, no change (D7) | 비관리자 admin API 는 404 RESOURCE_NOT_FOUND 유지 | ADM-003/004 |
-| #633 | closed, not planned (D8) | 여행 삭제 되돌리기 없음 | TRIP-043 (부재 단언) |
-| #634 | enhancement | Kakao/Naver pick 자동 feature 제안의 admin 삭제·dry-run | POI-014/015, ADM-031, D1 |
+| #633 | fixed (#657, D8 변경) | 여행 휴지통·복원 | TRIP-043 — 삭제 → 휴지통 → 복원(초안·장소 보존) |
+| #634 | done (#659) | Kakao/Naver pick 자동 feature 제안의 admin 삭제·dry-run | POI-014/015, ADM-031, D1 |
 | #635 | enhancement | route·area kind 렌더링 | SRCH-023/024/028 |
 | #636 | enhancement | '일정 정보 알람으로 보내기' | NTF-020 |
 | #637 | enhancement | 기상 특보 Telegram 알림 | NTF-018 |
 | #638 | enhancement | 일간/주간 브리프 예약 알림 | NTF-019 |
-| #639 | enhancement | 장소를 다른 일자로 옮기기 | TRIP-053 |
-| #640 | enhancement | 일자 메모 UI | TRIP-054 |
+| #639 | done (#656) | 장소를 다른 일자로 옮기기 | TRIP-053 |
+| #640 | done (#657) | 일자 메모 UI | TRIP-054 |
 | #641 | enhancement | 여행 내보내기(인쇄/PDF/ICS) | SHR-032 |
-| #642 | enhancement | Map 날씨 카드 stale 배지 | WX-024 |
+| #642 | done (#661) | Map 날씨 카드 stale 배지 | WX-024 |
 | #643 | umbrella | live e2e 카탈로그 발견 사항 모음 | 전부 |
-| #648 | bug | `/admin/features` 한국어 `q` 검색 **간헐** 503 FEATURE_SERVICE_UNAVAILABLE | ADM-015/016, WX-018/019 (helper 가 매 시도 reload 로 3회 재요청, 끝내 503 이면 런타임 `test.fail(#648)`) |
-| #649 | bug | 일자 날짜 중복이 저장됨(`dayUsingDate` 가 effective_date 미비교) | TRIP-026 (`test.fail`) |
-| #650 | bug | 전체 도로명 주소(시·도 약칭) 검색에 주소 행 0건 | SRCH-004 (`test.fail`) |
-| #651 | bug | admin dedup review 목록이 항상 422 FORBIDDEN(Map 거절), 화면은 빈 큐 | ADM-022/023 (`test.fail`) |
-| #652 | bug | 장소 재정렬 간헐 409 SORT_ORDER_CONFLICT + 응답에 DB 오류 원문 | TRIP-030 (`test.fail`) |
-| #663 | bug | 상세 카드 `detail-card` 지연 3.7→6.2→8.5 s(같은 장소, 실행마다 악화) | SRCH-055 (예산 2배 6 s 초과 시 런타임 `test.fail(#663)`) |
+| #644 | fixed (#655) | 로그인 후 원래 가려던 페이지로 복귀(return-to) | CORE-007 — `test.fail` 제거 |
+| #648 | fixed (#660) | `/admin/features` 한국어 `q` 검색 503 FEATURE_SERVICE_UNAVAILABLE | ADM-015/016, WX-018/019 — helper 재시도·런타임 `test.fail` 제거, 5xx 면 실패 |
+| #649 | fixed (#657 + 리뷰 PR) | 일자 날짜 중복이 저장됨(`dayUsingDate` 가 effective_date 미비교) | TRIP-026 — `test.fail` 제거 |
+| #650 | fixed (kor-travel-geo #622) | 전체 도로명 주소(시·도 약칭) 검색에 주소 행 0건 | SRCH-004 — `test.fail` 제거(실패 = 재발) |
+| #651 | fixed (#660) | admin dedup review 목록이 항상 422 FORBIDDEN(Map 거절), 화면은 빈 큐 | ADM-022/023 — `test.fail` 제거, GET 200 단언 |
+| #652 | fixed (#656) | 장소 재정렬 간헐 409 SORT_ORDER_CONFLICT + 응답에 DB 오류 원문 | TRIP-030 — `test.fail` 제거 |
+| #663 | fixed (#662) | 상세 카드 `detail-card` 지연 3.7→6.2→8.5 s(같은 장소, 실행마다 악화) | SRCH-055 — 런타임 `test.fail` 제거, 6 s 초과는 soft 실패 |
 | kor-travel-map#1438 | bug | feature 카테고리 오분류(숙박·카페·마트·캠핑장·주차장) | SRCH-019/020/022, NEAR-030 (`test.fail`) |
 | kor-travel-map#1439 | bug | event 기간·장소 누락, 축제 category·중복 | SRCH-027 (`test.fail`) |
 | kor-travel-map#1440 | bug | 과거 날짜 날씨 daily_summaries 미제공 | WX-004 (`test.fail`) |
 
-#624 는 prod 재확인 결과 이제 **500 INTERNAL_ERROR** — TRIP-011 은 422 + 날짜 안내를 기대값으로 두고
-`test.fail(#624)`.
+#624 는 prod 재확인(2026-11-03) 때 **500 INTERNAL_ERROR** 였고 #654 가 422 로 바꿨다. 리뷰 PR 이 다이얼로그에서
+요청 전에 종료일 필드로 안내하고 API 문구를 한국어('종료일은 시작일 이후여야 합니다.')로 맞췄다. 이 표의
+fixed 항목은 prod 배포 뒤 첫 실행에서 확인한다.
 
 ## 8.1 1차 prod 실행 분류 (2026-11-03, run `20261103-063010`, desktop 291건)
 

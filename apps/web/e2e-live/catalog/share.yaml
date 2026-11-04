@@ -81,7 +81,7 @@
   spec: specs/share/share-links.live.spec.ts#SHR-004
 
 - id: SHR-005
-  title: 과거 만료일로 만든 링크 — 목록 '만료', 열면 404
+  title: 과거 만료일 — 링크를 만들지 않고 안내, API도 422
   priority: P2
   tags: [desktop, mutating, share]
   preconditions:
@@ -89,33 +89,35 @@
   data_sources: []
   steps:
     - "'만료일(선택)'에 2026-01-01 입력 → '링크 만들기'"
-    - 새 컨텍스트로 열기
+    - 같은 값을 API로 POST /trips/{id}/share-tokens
   expected:
-    - 목록 항목 '만료' 상태, 만료일 표시(2026…), 철회 버튼 없음
-    - 공유 API 404 + '공유 토큰을 찾을 수 없습니다'
+    - "공유 영역 오류 '만료일은 오늘 이후로 선택해 주세요.', POST 요청 0건, 새 링크 배너 없음"
+    - API 422(VALIDATION_ERROR)
   cleanup:
     - 여행 삭제
   automation: scripted
   spec: specs/share/share-links.live.spec.ts#SHR-005
-  notes: 서버가 과거 expires_at를 거부하지 않는다(ShareLinkCreate 검증 없음) — 거부로 바뀌면 케이스를 '422 검증'으로 갱신.
+  notes: '#626 — #655(서버 AwareDatetime·미래 검증) + #643 리뷰 PR(클라이언트 안내)로 수정. 만료일은 KST 하루 끝(23:59:59+09:00)으로 보낸다.'
 
 - id: SHR-006
-  title: "'편집 가능'·'댓글 가능' 링크도 공유 페이지는 읽기 전용"
+  title: "'댓글 가능'·'편집 가능' 링크 — 권한대로 댓글·여행 정보 편집이 열린다"
   priority: P2
   tags: [desktop, mutating, share]
   preconditions:
     - account: test@test.com (user)
   data_sources: []
   steps:
-    - 권한 '편집 가능'·'댓글 가능'으로 링크 2개 생성 → 각각 새 컨텍스트로 열기
+    - 권한 '편집 가능'·'댓글 가능'으로 링크 2개 생성 → 각각 로그아웃 새 컨텍스트로 열기
+    - 로그인(소유자) 세션으로 편집 링크 → 제목 수정 저장 → 댓글 링크 → 댓글 작성 → 삭제
   expected:
     - 목록에 '편집 가능'·'댓글 가능' 라벨
-    - 두 링크 모두 200, 읽기 전용 골격, 댓글 입력/편집 버튼 없음
+    - 로그아웃 — 두 링크 200, '공유된 여행 · 댓글 가능/편집 가능', 댓글 영역 + 로그인 필요 안내, 편집 폼은 편집 링크에만
+    - 로그인 — 편집 링크 저장 '여행 정보를 저장했습니다.', 댓글 링크 제목 반영·편집 폼 없음, 댓글 작성/삭제 성공
   cleanup:
-    - 여행 삭제
+    - 댓글 삭제 + 여행 삭제
   automation: scripted
   spec: specs/share/share-links.live.spec.ts#SHR-006
-  notes: SharedTripView는 visibility를 렌더에 쓰지 않는다 — 'comment/edit'는 현재 라벨만 다르다(제품 결정 필요, README 참조).
+  notes: '#625 — #655 로 수정. 쓰기는 로그인 사용자만(PATCH/POST/DELETE /trips/{id}/shared/{token}… 는 CurrentUserId 필수), comment 링크의 PATCH 는 403.'
 
 - id: SHR-007
   title: 배너의 '열기'는 새 탭에서 공유 페이지를 연다
@@ -412,21 +414,21 @@
   notes: 같은 user_id 두 탭은 presence map 키가 같아 N은 1 또는 0일 수 있어 정확한 수는 단언하지 않는다.
 
 - id: SHR-024
-  title: 동행(test2)이 쓴 댓글은 소유자의 댓글 탭 재진입 시 보인다
+  title: 동행(test2)이 쓴 댓글이 소유자의 열린 댓글 탭에 실시간으로 나타난다
   priority: P2
   tags: [desktop, mutating, share]
   preconditions:
     - account: test@test.com (user) + test2@test.com (보기 전용 동행으로 초대)
   data_sources: []
   steps:
-    - "소유자가 test2를 '보기 전용'으로 초대 → 양쪽 상세 '댓글' 탭 → test2가 작성 → 소유자: '일정' 탭 → '댓글' 탭"
+    - "소유자가 test2를 '보기 전용'으로 초대 → 양쪽 상세 '댓글' 탭 → test2가 작성 → 소유자 탭은 그대로 둔다"
   expected:
-    - viewer도 댓글 작성 가능(읽기 권한이면 POST 허용); 소유자 목록에 test2 댓글 표시 → test2가 삭제 → 빈 상태
+    - "viewer도 댓글 작성 가능(읽기 권한이면 POST 허용); 탭 재진입 없이 15 s 안에 소유자 목록에 test2 댓글 표시(comment.created) → test2가 삭제 → 빈 상태"
   cleanup:
     - 댓글 삭제(test2) + 동행 제거 + 여행 삭제
   automation: scripted
   spec: specs/share/comments.live.spec.ts#SHR-024
-  notes: TripComments는 realtime 이벤트(comment.created)로 자동 갱신되지 않는다(자체 fetch) — 발견사항, README 참조.
+  notes: '#627 — #655 로 수정(comment.created/deleted 이벤트가 댓글 목록을 다시 불러온다).'
 
 - id: SHR-025
   title: 기존 사용자(test2) 초대 → '참여' 상태·역할 라벨 → 제거
@@ -568,22 +570,23 @@
   notes: 제품 결정 필요. 브라우저 기본 인쇄(Ctrl+P)의 공유 페이지 레이아웃은 수동 검토 후보.
 
 - id: SHR-033
-  title: 동행(test2)의 댓글 — 작성자에게만 삭제 버튼(소유자·동행 양쪽 화면)
+  title: 동행(test2)의 댓글 — 작성자와 여행 소유자에게 삭제 버튼
   priority: P2
   tags: [desktop, mutating, share]
   preconditions:
     - test2 두 번째 신원
   data_sources: []
   steps:
-    - test2(편집자) 초대 → test2가 댓글 작성 → 소유자도 댓글 작성 → 양쪽 '댓글' 탭 비교 → 각자 자기 댓글 삭제
+    - test2(편집자) 초대 → test2가 댓글 작성 → 소유자도 댓글 작성 → 양쪽 '댓글' 탭 비교 → 소유자가 두 댓글 모두 삭제
   expected:
-    - 소유자 목록 2건, '댓글 삭제' 버튼 1개(자기 댓글에만, test2 댓글엔 없음 — canDeleteComment=작성자만)
-    - test2 목록도 자기 댓글에만 버튼 1개; 각자 삭제 후 빈 상태
+    - 소유자 목록 2건, '댓글 삭제' 버튼 2개(자기 댓글 + test2 댓글 — 소유자는 모든 댓글 삭제 가능)
+    - test2 목록은 자기 댓글에만 버튼 1개
+    - 소유자가 test2 댓글 삭제 → test2 화면에서도 실시간으로 사라짐 → 소유자 자기 댓글 삭제 → 빈 상태
   cleanup:
     - 댓글 삭제 + 동행 제거 + 여행 삭제
   automation: scripted
   spec: specs/share/comments.live.spec.ts#SHR-033
-  notes: API(delete_comment)는 소유자 삭제도 허용하나 UI는 숨긴다 — UI/API 불일치 발견사항.
+  notes: '#628 — #655 로 수정(canDeleteComment 에 여행 소유자 포함, API delete_comment 와 일치).'
 
 - id: SHR-034
   title: 공유 페이지 접근성 수동 점검(헤딩 순서·tablist 레이블·포커스 링·공개 chrome)

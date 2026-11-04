@@ -152,14 +152,14 @@ class TripDayCreate(BaseModel):
     day_index: int | None = Field(default=None, ge=1)
     date: Date | None = None
     title: str | None = Field(default=None, max_length=200)
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=2000)
     marker_color: MarkerColorStr | None = None
 
 
 class TripDayUpdate(BaseModel):
     date: Date | None = None
     title: str | None = Field(default=None, max_length=200)
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=2000)
     marker_color: MarkerColorStr | None = None
 
 

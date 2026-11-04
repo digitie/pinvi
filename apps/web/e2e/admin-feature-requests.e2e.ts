@@ -539,6 +539,71 @@ test('결과 미확정 직접 명령은 원래 입력을 잠가 재생한다', a
   expect(submitted).toEqual(input);
 });
 
+test('Map 명령 409 충돌 뒤 저장된 입력으로 화면을 맞추고 그 입력으로만 재시도한다', async ({ page }) => {
+  // 서버는 Map 409 충돌에서 저장된 명령을 지우지 않는다 — 화면에서 고친 값으로 재시도하면
+  // MAP_COMMAND_PENDING 으로 영구히 막히므로, 재조회한 저장 입력으로 잠그고 그대로 보낸다.
+  const stored = { access_reason: '저장된 검수 사유', name: '저장된 이름' };
+  let dispatchStored = false;
+  const submissions: unknown[] = [];
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/feature-requests',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            items: [
+              {
+                ...correctionSummary,
+                kor_travel_map_ref: dispatchStored ? { dispatch: { input: stored } } : null,
+              },
+            ],
+            total: 1,
+            page: 1,
+            limit: 50,
+          },
+        }),
+      });
+    },
+  );
+  await page.route(
+    (url) =>
+      url.port === '12801' &&
+      url.pathname === `/admin/feature-requests/${correctionRequestId}/approve`,
+    async (route) => {
+      submissions.push(route.request().postDataJSON());
+      if (submissions.length === 1) {
+        dispatchStored = true;
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: { code: 'MAP_COMMAND_CONFLICT', message: 'Map 명령이 충돌했습니다.' },
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { request_id: correctionRequestId, status: 'added' } }),
+      });
+    },
+  );
+  await page.goto('/admin/feature-requests');
+  await page.getByTestId(`admin-fr-review-${correctionRequestId}`).click();
+  await page.getByTestId('admin-fr-name').fill(stored.name);
+  await page.getByTestId('admin-fr-reason').fill(stored.access_reason);
+  await page.getByTestId('admin-fr-approve').click();
+  await expect(page.getByTestId('admin-fr-panel-error')).toBeVisible();
+  await expect(page.getByTestId('admin-fr-approve')).toHaveText('기존 명령 재시도');
+  await expect(page.getByTestId('admin-fr-name')).toHaveValue(stored.name);
+  await expect(page.getByTestId('admin-fr-name')).toBeDisabled();
+  await expect(page.getByTestId('admin-fr-reason')).toHaveAttribute('readonly');
+  await page.getByTestId('admin-fr-approve').click();
+  await expect(page.getByTestId('admin-fr-review-dialog')).toHaveCount(0);
+  expect(submissions).toEqual([stored, stored]);
+});
+
 for (const failure of ['timeout', 'bad-response'] as const) {
   test(`직접 명령 ${failure} 뒤에도 입력 잠금·재조회·재열기를 유지한다`, async ({ page }) => {
     if (failure === 'timeout') await page.clock.install();

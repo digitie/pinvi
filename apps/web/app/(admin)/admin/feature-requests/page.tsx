@@ -367,12 +367,33 @@ function ReviewDialog({
   const [err, setErr] = useState<string | null>(null);
   const panelErrorRef = useRef<HTMLParagraphElement | null>(null);
 
+  // 결과 미확정 명령은 서버에 저장된 입력으로만 재시도할 수 있다. 목록이 다시 불러와져 저장 입력이
+  // 생기거나 바뀌면(예: 409 충돌 뒤) 화면 입력을 그 값으로 맞추고, 사라지면 대기 표시를 푼다.
+  // (렌더 중 파생 상태 조정 — effect 안 setState 대신 React 권장 패턴.)
+  const savedInputKey = dispatch ? JSON.stringify(savedInput) : '';
+  const [syncedInputKey, setSyncedInputKey] = useState(savedInputKey);
+  if (syncedInputKey !== savedInputKey) {
+    setSyncedInputKey(savedInputKey);
+    setCommandPending(Boolean(savedInputKey));
+    if (savedInputKey) {
+      setAccessReason(savedText('access_reason'));
+      setName(savedText('name'));
+      setCategory(savedText('category'));
+      setMarkerColor(savedText('marker_color'));
+      setMarkerIcon(savedText('marker_icon'));
+    }
+  }
+
   useEffect(() => {
     if (!err) return;
     panelErrorRef.current?.focus({ preventScroll: true });
   }, [err]);
 
-  const approvalBody = () => ({
+  const approvalBody = () => {
+    const stored = commandPending && dispatch ? AdminFeatureRequestApproveSchema.safeParse(savedInput) : null;
+    return stored?.success ? stored.data : editedApprovalBody();
+  };
+  const editedApprovalBody = () => ({
     access_reason: accessReason.trim(),
     ...(typeof savedInput.kor_travel_map_reason === 'string'
       ? { kor_travel_map_reason: savedInput.kor_travel_map_reason }
@@ -407,6 +428,10 @@ function ReviewDialog({
               error.code === 'MAP_COMMAND_PENDING')))
       ) {
         setCommandPending(true);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
+      } else if (!isNewPlace && error instanceof ApiError && error.status === 409) {
+        // Map 명령 충돌(409)은 저장된 명령을 남길 수도(전송 뒤), 아닐 수도(revision 조회 중) 있다 —
+        // 다시 불러와 저장 명령이 있으면 위의 렌더 중 동기화가 입력을 잠근다.
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
       }
       setErr(error instanceof ApiError ? error.message : '승인에 실패했습니다.');
@@ -1104,7 +1129,8 @@ export default function AdminFeatureRequestsPage() {
 
       {selected && (
         <ReviewDialog
-          request={selected}
+          // 열린 뒤 재조회한 행(저장된 Map 명령 포함)을 반영한다 — 선택 시점 스냅샷만 보면 409 뒤 대기를 놓친다.
+          request={data?.items.find((item) => item.request_id === selected.request_id) ?? selected}
           onClose={closeReview}
           returnFocusRef={reviewReturnFocusRef}
           onDone={(message) => {

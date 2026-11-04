@@ -153,7 +153,7 @@ export const TripDayCreateSchema = z.object({
   day_index: z.number().int().min(1).optional(),
   date: z.string().date().nullable().optional(),
   title: z.string().max(200).nullable().optional(),
-  note: z.string().nullable().optional(),
+  note: z.string().max(2000).nullable().optional(),
   marker_color: MarkerColorKeySchema.nullable().optional(),
 });
 export type TripDayCreate = z.infer<typeof TripDayCreateSchema>;
@@ -161,7 +161,7 @@ export type TripDayCreate = z.infer<typeof TripDayCreateSchema>;
 export const TripDayUpdateSchema = z.object({
   date: z.string().date().nullable().optional(),
   title: z.string().max(200).nullable().optional(),
-  note: z.string().nullable().optional(),
+  note: z.string().max(2000).nullable().optional(),
   marker_color: MarkerColorKeySchema.nullable().optional(),
 });
 export type TripDayUpdate = z.infer<typeof TripDayUpdateSchema>;

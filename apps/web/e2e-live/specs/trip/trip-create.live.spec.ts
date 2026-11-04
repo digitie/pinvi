@@ -2,8 +2,9 @@
  * TRIP-001 … TRIP-011 — trip creation shapes, invalid dates, date change after places exist.
  * Live PROD, user account, every trip is `[e2e]`-prefixed and deleted in afterEach.
  */
-import { expect, test } from '@playwright/test';
+import { expect, test, type Request } from '@playwright/test';
 import {
+  apiBaseURL,
   createTrip,
   deleteTrip,
   loginAsUser,
@@ -228,10 +229,9 @@ test('[TRIP-010] 장소가 있는 상태에서 기간 축소/확장 — 기간 �
   await shot(page, 'TRIP-010', 'extended');
 });
 
-test('[TRIP-011] 편집 다이얼로그에서 종료일 < 시작일 — 422 로 거부, 다이얼로그에 날짜 오류 안내', async ({ page }) => {
-  // Correct behaviour (TripCreate already validates; TripUpdate must too). Prod today answers
-  // 500 INTERNAL_ERROR and the dialog says only "변경에 실패했습니다." — #624.
-  test.fail(true, '#624: PATCH /trips with end<start → 500 INTERNAL_ERROR (expected 422 + date message)');
+test('[TRIP-011] 편집 다이얼로그에서 종료일 < 시작일 — 종료일 필드 안내로 거부, API도 422', async ({ page }) => {
+  // #624 (fixed by #654 + review PR): the dialog validates the range before any request and marks the
+  // end-date field; the API independently answers 422 with the same Korean message.
   const { id } = await createTrip(page, { title: e2eTitle('편집역전'), start: isoDate(40), end: isoDate(41) });
   created.push(id);
   await gotoTrip(page, id);
@@ -239,15 +239,31 @@ test('[TRIP-011] 편집 다이얼로그에서 종료일 < 시작일 — 422 로 
   const dialog = await openTripEdit(page);
   await page.locator('#trip-edit-start').fill(isoDate(45));
   await page.locator('#trip-edit-end').fill(isoDate(41));
-  const patched = page
-    .waitForResponse((r) => r.request().method() === 'PATCH' && new RegExp(`/trips/${id}$`).test(new URL(r.url()).pathname), {
-      timeout: 20_000,
-    })
-    .catch(() => null);
+  let patched = 0;
+  const countPatch = (r: Request) => {
+    if (r.method() === 'PATCH' && new RegExp(`/trips/${id}$`).test(new URL(r.url()).pathname)) patched += 1;
+  };
+  page.on('request', countPatch);
   await page.getByTestId('trip-edit-save').click();
-  const res = await patched;
-  await shot(page, 'TRIP-011', 'edit-reversed');
-  expect(res?.status(), 'PATCH /trips/{id} with end < start').toBe(422);
   await expect(dialog).toBeVisible();
+  await expect(page.locator('#trip-edit-end')).toHaveAttribute('aria-invalid', 'true');
   await expect(dialog).toContainText('종료일은 시작일 이후여야 합니다.');
+  page.off('request', countPatch);
+  expect(patched, 'invalid range must not be sent').toBe(0);
+  await shot(page, 'TRIP-011', 'edit-reversed');
+
+  // server contract: the same range is rejected with 422 + the dialog's message, nothing changes
+  const api = await apiBaseURL(page);
+  const view = await page.context().request.get(`${api}/trips/${id}`);
+  const version = ((await view.json()) as { data: { trip: { version: number } } }).data.trip.version;
+  const res = await page.context().request.patch(`${api}/trips/${id}`, {
+    headers: { 'If-Match': String(version) },
+    data: { start_date: isoDate(45), end_date: isoDate(41) },
+  });
+  expect(res.status(), 'PATCH /trips/{id} with end < start').toBe(422);
+  expect(((await res.json()) as { error?: { message?: string } }).error?.message).toBe('종료일은 시작일 이후여야 합니다.');
+  const after = (await (await page.context().request.get(`${api}/trips/${id}`)).json()) as {
+    data: { trip: { start_date: string; end_date: string } };
+  };
+  expect([after.data.trip.start_date, after.data.trip.end_date]).toEqual([isoDate(40), isoDate(41)]);
 });
