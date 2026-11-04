@@ -37,21 +37,25 @@ class EffectiveAttachmentQuota:
     user_quota_bytes: int
 
 
-async def get_storage_settings(db: AsyncSession) -> StorageSettings:
+async def get_storage_settings(db: AsyncSession, *, create: bool = False) -> StorageSettings:
     row: StorageSettings | None = await db.scalar(
         select(StorageSettings).where(StorageSettings.settings_id == 1)
     )
     if row is not None:
         return row
+    values = {
+        "settings_id": 1,
+        "avatar_max_upload_bytes": DEFAULT_AVATAR_MAX_UPLOAD_BYTES,
+        "attachment_max_upload_bytes": DEFAULT_ATTACHMENT_MAX_UPLOAD_BYTES,
+        "trip_attachment_quota_bytes": DEFAULT_TRIP_ATTACHMENT_QUOTA_BYTES,
+        "user_attachment_quota_bytes": DEFAULT_USER_ATTACHMENT_QUOTA_BYTES,
+    }
+    if not create:
+        # 조회는 singleton INSERT 잠금을 만들지 않는다. 설정 변경만 명시적으로 초기화한다.
+        return StorageSettings(**values)
     await db.execute(
         insert(StorageSettings)
-        .values(
-            settings_id=1,
-            avatar_max_upload_bytes=DEFAULT_AVATAR_MAX_UPLOAD_BYTES,
-            attachment_max_upload_bytes=DEFAULT_ATTACHMENT_MAX_UPLOAD_BYTES,
-            trip_attachment_quota_bytes=DEFAULT_TRIP_ATTACHMENT_QUOTA_BYTES,
-            user_attachment_quota_bytes=DEFAULT_USER_ATTACHMENT_QUOTA_BYTES,
-        )
+        .values(**values)
         .on_conflict_do_nothing(index_elements=[StorageSettings.settings_id])
     )
     row = await db.scalar(select(StorageSettings).where(StorageSettings.settings_id == 1))
@@ -64,7 +68,7 @@ async def set_avatar_max_upload_bytes(
     *,
     avatar_max_upload_bytes: int,
 ) -> tuple[StorageSettings, dict[str, int]]:
-    row = await get_storage_settings(db)
+    row = await get_storage_settings(db, create=True)
     before_state = {"avatar_max_upload_bytes": row.avatar_max_upload_bytes}
     row.avatar_max_upload_bytes = avatar_max_upload_bytes
     await db.flush()
@@ -78,7 +82,7 @@ async def set_attachment_storage_settings(
     trip_attachment_quota_bytes: int,
     user_attachment_quota_bytes: int,
 ) -> tuple[StorageSettings, dict[str, int]]:
-    row = await get_storage_settings(db)
+    row = await get_storage_settings(db, create=True)
     before_state = storage_settings_state(row)
     row.attachment_max_upload_bytes = attachment_max_upload_bytes
     row.trip_attachment_quota_bytes = trip_attachment_quota_bytes

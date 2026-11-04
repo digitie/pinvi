@@ -17,6 +17,20 @@ ROOT = Path(__file__).resolve().parents[4]
 COMPOSE_FILE = ROOT / "infra" / "docker-compose.app.yml"
 
 
+def _retention_runtime_privileges_sql(role: str) -> str:
+    tables = ("app.attachment_upload_intents", "app.attachment_gc_objects")
+    privileges = ("SELECT", "INSERT", "UPDATE", "DELETE")
+    columns = [
+        "("
+        + " AND ".join(
+            f"has_table_privilege('{role}', '{table}', '{privilege}')" for privilege in privileges
+        )
+        + ")::text"
+        for table in tables
+    ]
+    return "SELECT " + ", ".join(columns) + ";"
+
+
 def _docker_compose_binary() -> str | None:
     docker = shutil.which("docker")
     if docker is None:
@@ -845,11 +859,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "--no-align",
             f"--username={root_role}",
             "--dbname=pinvi",
-            "--command="
-            f"SELECT has_table_privilege('{runtime_role}', 'app.attachment_upload_intents', "
-            "'SELECT, INSERT, UPDATE, DELETE')::text, "
-            f"has_table_privilege('{runtime_role}', 'app.attachment_gc_objects', "
-            "'SELECT, INSERT, UPDATE, DELETE')::text;",
+            "--command=" + _retention_runtime_privileges_sql(runtime_role),
         )
         assert retention_acl.stdout.strip() == "true|true"
         compose(

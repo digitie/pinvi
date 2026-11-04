@@ -1120,3 +1120,224 @@ async def test_deleted_poi_then_hard_deleted_day_cannot_restore_detached_file(
         assert row.deleted_at is not None
     files = await client.get("/users/me/files", cookies=cookies)
     assert files.json()["data"]["total"] == 0
+
+
+@pytest.mark.parametrize("creator", ["trip", "admin_trip", "admin_day", "admin_poi"])
+@pytest.mark.parametrize("already_deleted", [False, True])
+async def test_all_trip_copy_paths_reject_permanent_object_marker(
+    client, verified_user, auth_cookies, session_factory, creator, already_deleted
+):
+    from sqlalchemy import func, select
+
+    from app.models.user import User
+    from app.services.admin_trip_operations import (
+        AdminTripOperationConflictError,
+        copy_admin_day,
+        copy_admin_poi,
+    )
+    from tests.integration.test_pois_reorder import _add_poi
+
+    user_id, _ = verified_user
+    uid = uuid.UUID(user_id)
+    cookies = auth_cookies(user_id)
+    source = await _make_trip(client, cookies)
+    poi = await _add_poi(client, cookies, source, sort_order="a0", feature_id=None)
+    response = await client.post(
+        f"/trips/{source}/pois/{poi['attachment_id']}/attachments",
+        json=_attachment_payload(user_id, byte_size=60, purpose="poi_attachment"),
+        cookies=cookies,
+    )
+    assert response.status_code == 201, response.text
+    file = response.json()["data"]
+    target = await _make_trip(client, cookies)
+    async with session_factory() as db:
+        user = await db.get(User, uid)
+        user.roles = ["user", "admin"]
+        db.add(
+            AttachmentGcObject(
+                bucket=file["bucket"],
+                storage_key=file["storage_key"],
+                deleted_at=datetime.now(UTC) if already_deleted else None,
+            )
+        )
+        await db.commit()
+        before = await db.scalar(select(func.count()).select_from(CuratedPlanAttachment))
+    if creator in {"trip", "admin_trip"}:
+        body = {"scope": "all"}
+        prefix = "/admin" if creator == "admin_trip" else ""
+        if prefix:
+            body["access_reason"] = "object lifecycle guard"
+        result = await client.post(f"{prefix}/trips/{source}/copy", json=body, cookies=cookies)
+        assert result.status_code == (409 if prefix else 422), result.text
+    else:
+        async with session_factory() as db:
+            with pytest.raises(AdminTripOperationConflictError):
+                if creator == "admin_day":
+                    await copy_admin_day(
+                        db,
+                        source_trip_id=uuid.UUID(source),
+                        day_index=1,
+                        target_trip_id=uuid.UUID(target),
+                        target_day_index=2,
+                        admin_user_id=uid,
+                        include_pois=True,
+                        include_attachments=True,
+                    )
+                else:
+                    await copy_admin_poi(
+                        db,
+                        poi_id=uuid.UUID(poi["attachment_id"]),
+                        target_trip_id=uuid.UUID(target),
+                        target_day_index=2,
+                        admin_user_id=uid,
+                        include_attachments=True,
+                    )
+            await db.rollback()
+    async with session_factory() as db:
+        assert await db.scalar(select(func.count()).select_from(CuratedPlanAttachment)) == before
+
+
+@pytest.mark.parametrize("scope", ["plan", "poi"])
+async def test_curated_attachment_registration_rejects_permanent_marker(
+    client, verified_user, auth_cookies, session_factory, scope
+):
+    from app.models.user import User
+    from tests.integration.test_admin_curated_attachments_api import _body, _seed_plan_poi
+
+    user_id, _ = verified_user
+    async with session_factory() as db:
+        user = await db.get(User, uuid.UUID(user_id))
+        user.roles = ["user", "admin"]
+        await db.commit()
+    plan, poi = await _seed_plan_poi(session_factory, admin_id=user_id)
+    body = _body(user_id, purpose=f"curated_{scope}_attachment")
+    async with session_factory() as db:
+        db.add(AttachmentGcObject(bucket=body["bucket"], storage_key=body["storage_key"]))
+        await db.commit()
+    suffix = f"/pois/{poi}" if scope == "poi" else ""
+    response = await client.post(
+        f"/admin/notice-plans/{plan}{suffix}/attachments", json=body, cookies=auth_cookies(user_id)
+    )
+    assert response.status_code == 422, response.text
+
+
+async def test_notice_plan_copy_rejects_pending_object_and_rolls_back_new_trip(
+    client, verified_user, auth_cookies, session_factory
+):
+    from sqlalchemy import func, select
+
+    from app.models.curated_plan import CuratedPlanPoi
+    from tests.integration.test_notice_plan_copy import _admin_id, _seed_plan
+
+    user_id, _ = verified_user
+    plan = await _seed_plan(session_factory)
+    admin = await _admin_id(session_factory)
+    async with session_factory() as db:
+        poi = await db.scalar(select(CuratedPlanPoi).where(CuratedPlanPoi.curated_plan_id == plan))
+        db.add(
+            CuratedPlanAttachment(
+                curated_poi_id=poi.curated_poi_id,
+                uploaded_by_user_id=admin,
+                bucket="pinvi-media",
+                storage_key="retired/notice.png",
+                byte_size=1,
+                original_filename="notice.png",
+                content_type="image/png",
+            )
+        )
+        db.add(AttachmentGcObject(bucket="pinvi-media", storage_key="retired/notice.png"))
+        await db.commit()
+        before = await db.scalar(select(func.count()).select_from(Trip))
+    response = await client.post(
+        f"/notice-plans/{plan}/copy",
+        json={"trip_title": "cannot resurrect object"},
+        cookies=auth_cookies(user_id),
+    )
+    assert response.status_code == 409, response.text
+    async with session_factory() as db:
+        assert await db.scalar(select(func.count()).select_from(Trip)) == before
+
+
+async def test_cold_settings_url_and_attachment_do_not_invert_user_lock(
+    client, verified_user, auth_cookies, monkeypatch
+):
+    import asyncio
+
+    from app.api.v1 import storage
+    from app.services import storage_policy
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    settings_ready = asyncio.Event()
+    registration_ready = asyncio.Event()
+    release = asyncio.Event()
+    real = storage_policy.get_storage_settings
+
+    async def url_settings(db, **kwargs):
+        row = await real(db, **kwargs)
+        settings_ready.set()
+        await release.wait()
+        return row
+
+    async def registration_settings(db, **kwargs):
+        registration_ready.set()
+        return await real(db, **kwargs)
+
+    monkeypatch.setattr(storage, "get_storage_settings", url_settings)
+    monkeypatch.setattr(storage_policy, "get_storage_settings", registration_settings)
+    url = asyncio.create_task(
+        client.post(
+            "/storage/upload-urls",
+            cookies=cookies,
+            json={
+                "purpose": "trip_attachment",
+                "filename": "cold.jpg",
+                "content_type": "image/jpeg",
+                "content_length": 1,
+            },
+        )
+    )
+    registration = None
+    try:
+        await asyncio.wait_for(settings_ready.wait(), 10)
+        registration = asyncio.create_task(
+            client.post(
+                f"/trips/{trip}/attachments",
+                cookies=cookies,
+                json=_attachment_payload(user_id, byte_size=1),
+            )
+        )
+        await asyncio.wait_for(registration_ready.wait(), 10)
+    finally:
+        release.set()
+    assert registration is not None
+    responses = await asyncio.wait_for(
+        asyncio.gather(url, registration, return_exceptions=True), 15
+    )
+    assert [
+        getattr(response, "status_code", type(response).__name__) for response in responses
+    ] == [200, 201]
+
+
+async def test_runtime_retention_acl_probe_rejects_select_only_role(session_factory):
+    from sqlalchemy import text
+
+    from tests.integration.test_m05_migrator_login_lifecycle import (
+        _retention_runtime_privileges_sql,
+    )
+
+    role = "retention_select_" + uuid.uuid4().hex[:16]
+    async with session_factory() as db:
+        try:
+            await db.execute(text(f'CREATE ROLE "{role}" NOLOGIN'))
+            await db.execute(text(f'GRANT USAGE ON SCHEMA app TO "{role}"'))
+            await db.execute(
+                text(
+                    f'GRANT SELECT ON app.attachment_upload_intents, app.attachment_gc_objects TO "{role}"'
+                )
+            )
+            result = (await db.execute(text(_retention_runtime_privileges_sql(role)))).one()
+            assert tuple(result) == ("false", "false")
+        finally:
+            await db.rollback()

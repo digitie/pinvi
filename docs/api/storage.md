@@ -363,3 +363,5 @@ trip/day/poi/curated_plan/curated_poi 첨부의 URL 발급은 attachment_upload_
 proxy PUT은 시작 표식을 먼저 영속화한다. 같은 capability/키의 재사용은 422 UPLOAD_ALREADY_STARTED이며 새 URL을 발급해야 한다. 시작 뒤 중단·결과 불확실성도 키를 재사용하지 않는다. 영구 GC 표식이 있는 키의 PUT/등록/복사는 422 INVALID_ATTACHMENT_STORAGE_REF(관리자 복사409)로 거부한다.
 
 첨부가 삭제되거나 부모가 휴지통에 있어도 실제 파일이 남으면 과금한다. 파일 목록·다운로드 권한은 활성 부모 규칙을 유지한다. 물리 삭제 실패 원인은 관리자 상태 API의 비밀 없는 code:operation 집계에서 확인한다. 예약 없는 역사적 metadata 등록에는 기존 소유 prefix 계약을 유지하며, 기록 없는 저장소 객체를 일괄 추정 정리하지 않는다.
+
+저장소 설정 조회는 행이 없으면 기본값만 반환하고 INSERT하지 않는다. 명시적인 설정 변경만 singleton을 초기화하므로 최초 URL 발급과 첨부 등록 사이에 설정/사용자 잠금 순서가 역전되지 않는다.
