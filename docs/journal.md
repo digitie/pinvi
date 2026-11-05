@@ -1,6 +1,6 @@
 ## 2026-11-06 — #616·#621 WSL 증거 인계
 
-- 제품674602e의 전체unit2084PASS/기존9SKIP·mypy274·Ruff/format518과 관련실제PG/API134PASS를 확인했다. 실제3provider HTTP·공개503계약7PASS는 앞선134중3건과중복이며 임의합산하지않는다.
+- 최종고정f99e9b3의 전체unit2084PASS/기존9SKIP(104.59초)·sourcehash전후동일·mypy274·Ruff/format519와 제품674602e 관련실제PG/API134PASS를 확인했다. 실제3provider HTTP·공개503계약7PASS는 앞선134중3건과중복이며 임의합산하지않는다.
 - 포화/timeout/취소·회복·배치DB기록·한왕복counter·SKIPLOCKED청소·pool대기를 WSL소유fixture로검증했다. 기본pool로교체한negative는1FAIL로관측누락을잡았다. 공개오류초기4FAIL은새검사의잘못된envelope가정이며제품실패증거로계산하지않는다.
 - docs/reviews/pinvi-616-621-wsl-resilience.json에명령별sourcehash·증거·한계를남긴다. 직접resolve 서비스재설계와services/routes의plainhttpx OAuth·Telegram 전환·edge/운영flag/worker는잔여다.
 - DraftPR695·Closes616/Refs621로메인최종두전문적대리뷰·ready·merge에인계한다. 자체승인/ready/merge·새main통합·운영/SSH/실제provider/Telegram접근은하지않았다.

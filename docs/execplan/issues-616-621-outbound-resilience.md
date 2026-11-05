@@ -44,7 +44,7 @@
 - [x] GitHub 최신 본문·댓글 확인, 구현 전 실행계획 작성.
 - [x] 계획 commit·push·Draft PR 생성: 계획 4776d0d, Draft PR #695.
 - [x] 소유 범위 실패 우선 회귀·구현·실제 fixture 검증.
-- [ ] 정확 최종 SHA·source hash·WSL 증거·한계 인계.
+- [x] 정확 최종 검증 SHA f99e9b396b393a5d3e001bd39b7bec96502ff940·source hash·WSL 증거·한계 기록. 최종 문서 commit SHA는 PR head로 인계한다.
 
 PR 종료 문구는 #616 완료 검증 뒤에만 `Closes #616`을 사용하고, #621에는 `Refs #621`만 사용한다.
 
@@ -73,3 +73,5 @@ PR 종료 문구는 #616 완료 검증 뒤에만 `Closes #616`을 사용하고, 
 - pool 관측을 기본 pool로 교체한 별도 negative control은 실제PG1 FAIL이었다. 정상 구현에서는 acquisition 대기·timeout·취소 metric과 후속 연결을 모두 통과했다.
 - 최종 증거 JSON은 docs/reviews/pinvi-616-621-wsl-resilience.json에 source SHA-256·명령·집계·제약을 담는다.
 - 추가 plain httpx service/routes의 OAuth·Telegram 호출부 전환은 clients 소유 범위 밖이다. event hook만 부착한 client의 response 없는 실패 기록은 후속으로 남는다. 실제 Telegram 접근은 수행하지 않았다.
+
+최종 고정 f99e9b3에서 전체 API unit 재실행은 2084 PASS/기존9 SKIP(104.59초)이며 실행 전후 변경 source SHA-256이 전부 일치했다. 최종 Ruff/format519파일·strict mypy274파일·diff 검사도 통과했다.
