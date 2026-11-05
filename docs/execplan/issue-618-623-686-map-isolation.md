@@ -31,3 +31,10 @@ strict 진단으로 드러난 신규 첨부/Telegram read의 새 사용자·새 
 검증된 빌드 source361개와 BUILD_ID를 고정한 외부 진단 config로 전체195통과/기존3skip을 확인했다. 이 config는 테스트 파일만 반복할 때 사용하며 runtime source나 lock·artifact가 바뀌면 즉시 거절한다. 최종 후보는 정규 config의 fresh build와 전체 suite를 다시 실행한다.
 
 #658은 별도PR694/a5a2154로 2인 리뷰·CI8성공 뒤 병합했다. Claude가 병행한PR692/d02a35d의 운영SRCH-028 scripted 복귀는 보존한다. upstream의 미병합PR30(head3c09359)과 실제main(fb75475)을 혼동하지 않으며, 다른 Code의 Firefox 변경을 이번 source로 합치거나 되돌리지 않는다.
+
+### 2026-11-06 격리 정책 추가 검증
+
+- 추가 독립 소유 HTTP 서버의 redirect 회귀는 최초 실행에서 302 대신 200을 받아 실패했다. 상대 경로를 검사할 때의 baseURL과 Playwright request context의 내장 baseURL이 달랐다. 전송에도 검사한 절대 URL을 사용하도록 고쳤다.
+- 같은 회귀를 포함한 격리 정책·실제 module worker 10건은 모두 통과했다. 소유 redirect 수신 서버 0건이며, 호출자가 maxRedirects를 늘려도 자동 추적하지 않는다.
+- 이 결과는 앞서 원천 해시로 묶은 기존 앱 빌드를 사용한 진단 실행이다. 제품 지도 수정 이후 최종 새 빌드·전체 실행은 별도로 수행한다.
+- 최신 main의 PR692와 PR694를 통합했다. Claude Code의 운영 국립공원 영역 증거와 WSL #658 병합 내역을 보존한다.

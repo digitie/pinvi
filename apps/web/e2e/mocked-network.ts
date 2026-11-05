@@ -148,7 +148,8 @@ export function guardMockedRequest(request: APIRequestContext, baseURL: string):
       if (!methods.has(String(key))) return value.bind(target);
       return async (url: string | { url(): string }, options?: Record<string, unknown>) => {
         assertLocalRequest(typeof url === 'string' ? url : url.url(), baseURL);
-        return value.call(target, url, { ...options, maxRedirects: 0 });
+        const resolved = typeof url === 'string' ? new URL(url, baseURL).href : url;
+        return value.call(target, resolved, { ...options, maxRedirects: 0 });
       };
     },
   }) as APIRequestContext;
