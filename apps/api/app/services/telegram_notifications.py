@@ -23,6 +23,7 @@ from app.models.telegram_notification import (
     TelegramDelivery,
     TelegramNotification,
     TelegramPreferences,
+    TelegramWeatherObservation,
 )
 from app.models.telegram_target import TelegramTarget
 from app.models.trip import Trip
@@ -84,6 +85,7 @@ def preferences_body(row: TelegramPreferences | None) -> TelegramPreferencesBody
     if row is None:
         return TelegramPreferencesBody()
     return TelegramPreferencesBody(
+        weather_enabled=row.weather_enabled,
         daily_enabled=row.daily_enabled,
         weekly_enabled=row.weekly_enabled,
         send_time=row.send_time,
@@ -105,6 +107,8 @@ async def save_preferences(
     )
     row = await preferences(db, user_id, lock=True)
     assert row is not None
+    if "weather_enabled" not in body.model_fields_set:
+        body = body.model_copy(update={"weather_enabled": row.weather_enabled})
     if body.weekly_target_id is not None:
         target = await db.scalar(
             select(TelegramTarget)
@@ -117,7 +121,13 @@ async def save_preferences(
             or not target.is_enabled
             or target.last_verified_at is None
         ):
-            raise TripValidationError("활성·검증된 본인 Telegram 대상을 선택하세요.")
+            if row.weather_enabled and not body.weather_enabled:
+                # 유효하지 않은 별도 주간 목적지가 독립적인 특보 철회를 막지 않는다.
+                body = body.model_copy(update={"weekly_enabled": False, "weekly_target_id": None})
+            else:
+                raise TripValidationError("활성·검증된 본인 Telegram 대상을 선택하세요.")
+    if row.weather_enabled != body.weather_enabled:
+        row.weather_enabled_at = datetime.now(UTC) if body.weather_enabled else None
     if preferences_body(row) != body:
         for key, value in body.model_dump().items():
             setattr(row, key, value)
@@ -310,6 +320,7 @@ async def _guard(
     if row.consent_generation is not None:
         pref = await preferences(db, row.user_id, lock=True)
         flag = {
+            "weather_alert": "weather_enabled",
             "daily_brief": "daily_enabled",
             "weekly_summary": "weekly_enabled",
         }.get(row.category)
@@ -331,6 +342,30 @@ async def _guard(
         )
         if trip is None or trip.deleted_at is not None or trip.owner_user_id != row.user_id:
             return None, "destination_changed"
+        if row.category == "weather_alert":
+            snapshot = row.schedule_snapshot
+            if (
+                len(row.trip_ids) != 1
+                or snapshot.get("trip_version") != trip.version
+                or snapshot.get("bjd_code") != trip.primary_region_code
+                or trip.start_date is None
+                or trip.end_date is None
+                or not trip.start_date <= now.astimezone(KST).date() <= trip.end_date
+            ):
+                return None, "schedule_changed"
+            announcement = snapshot.get("announcement_id")
+            if not isinstance(announcement, str):
+                return None, "weather_observation_changed"
+            observation = await db.get(
+                TelegramWeatherObservation, (trip.trip_id, announcement), populate_existing=True
+            )
+            if (
+                observation is None
+                or str(observation.generation) != snapshot.get("observation_generation")
+                or observation.event_id != snapshot.get("event_id")
+                or (observation.ambiguous and not observation.cancelled)
+            ):
+                return None, "weather_observation_changed"
         if row.category in {"daily_brief", "weekly_summary"}:
             expected = row.schedule_snapshot["trips"][trip_id]
             if not isinstance(expected, dict) or (
@@ -420,7 +455,8 @@ async def process_one(db: AsyncSession, *, now: datetime | None = None) -> bool:
         delivery.status, delivery.error_code = "skipped", rejection
         delivery.error_message = {
             "account_inactive": "계정이 비활성화되어 알림을 보내지 않았습니다.",
-            "schedule_expired": "예약 기준 날짜가 지나 전송하지 않았습니다.",
+            "schedule_expired": "알림 유효 시간이 지나 전송하지 않았습니다.",
+            "weather_observation_changed": "공식 발표의 취소·상충 관측이 확인되어 이전 알림을 전송하지 않았습니다.",
             "schedule_changed": "여행·일자 날짜가 바뀌어 예약 알림을 전송하지 않았습니다.",
         }.get(rejection or "", "대상·연결·동의·여행 권한이 바뀌어 전송하지 않았습니다.")
     elif not settings.pinvi_telegram_bot_token_default:

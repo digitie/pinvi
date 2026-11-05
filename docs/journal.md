@@ -1,3 +1,25 @@
+## 2026-11-05 — #637 최종 제품 WSL UI·telemetry·두 리뷰
+
+- c1fad75의 실제 소유 PG/API·공개 Weather REST와 Telegram TCP fixture·프로덕션 웹 Chromium7흐름이 통과했고 pageerror0이다. 같은 API worker의 전송3·계획 실패3을 실제 Prometheus Docker가 scrape해 총8검증이 통과했다. 실제 수신자·원천·운영 접근은 없다.
+- c1fad75의 독립 전문 적대 코드 리뷰2인은 잔여P0/P1/P2가 없었다. 이전4FAIL→보완PG46PASS를 확인했다. 리뷰어가 테스트를 실행한 것으로 표시하지 않는다.
+- 같은 후보 API단위2020/9skip(92.50초), mypy271·전체Ruff/format·ETL81을 확인했다. 웹396/schema24·workspace타입/lint는 동일 웹 source의e710이며 프로덕션 빌드/실제 UI는c1fad75다. 0105 권한 복구/봉인1과anchor31의 실행 범위도 증거에 구분했다.
+- 증거 docs/reviews/pinvi-637-weather-alerts-wsl-live.json. Expo6개patch 진단은 mobile manifest/lock 미변경의 informational 검사이며 필수mobile타입/lint와 구분한다. 최종 문서 후보의 두 재확인과 정확 HEAD 적용 CI를 확인한 뒤 일반 squash merge한다. 아직 병합 완료 기록이 아니다.
+- 다음은641, 운영650/Map1450은Claude Code 담당이다.671/672와 보호stash는 건드리지 않는다.
+
+## 2026-11-05 — #637 두 적대 코드 리뷰 보완·실제 PG 검증
+
+- Weather201은d8534ae로 병합됐고 실제 OpenAPI bytes를 동기화했다. Pinvi689 제품은 기본 off 특보 동의·기간/대표 지역·안전한 상세 오류 이력·취소/상충 영속 fence를 연결한다. 원천 수집/회차 추정은 하지 않는다.
+- e710의 두 전문 리뷰가 수집 실패 응답의 긍정적 취소 누락과 무효 주간 대상의 특보 해제 차단을 지적했다. 실제 PG4실패를 먼저 기록한 뒤 보완했고, 신규22/기존24 합계46검사가 통과했다.
+- API 단위2020통과/기존9skip, mypy271·Ruff/format, workspace타입·웹396/스키마24·lint/프로덕션 빌드가 통과했다. 0105 실제 Docker 권한 복구/로그인 봉인1건125.08초, anchor/SELECT-only6표31건128.64초도 통과했다.
+- NTF-018의 기능 부재 기대값을 실제 동의·공식 발령/명시 해제·취소·오류·해제 경계로 갱신했다. 운영 실행은manual/Claude Code 담당으로 명시하며 미실행 운영 테스트를 통과로 표시하지 않는다.
+- 실제 소유 WSL API/PG·공개 Weather REST/Telegram TCP fixture·프로덕션 웹 Chromium·Prometheus와 정확 후보의 두 코드 재리뷰/전체 CI는 진행 중이다. 운영 접근·배포·실제 수신자 전송은 없다.
+
+## 2026-11-05 — #637 기상특보 소비자 초안
+
+-636/638 PR688은5602cf3으로 병합했다. #643 최신 본문을 다시 확인했고 남은 Code 범위는637과641이다. Weather201의 공식 발표·부분 지역 매핑 계약이 선행한다.
+-계획은 docs/execplan/issue-637-weather-alerts.md. owner 일반 병합 후 실제 OpenAPI 동기화→기본 off 설정·기존 발송 이력 연결을 진행한다. 두 전문 적대 리뷰·WSL 실제 UI·정확 HEAD CI 뒤 일반 squash merge한다.
+-운영 접근/배포/시험은 없으며650/Map1450은 Claude Code 담당이다.671/672와 보호 stash는 건드리지 않는다.
+
 ## 2026-11-05 — Telegram636/638 최종 제품 검증·0104 권한 복구
 
 - 제품 f1fc24f의 실제 WSL API·Postgres·프로덕션 웹 빌드·Chromium UI 8흐름이 통과했다. 수신자 없는 계획 실패의 상세 원인 UI까지 확인했고 pageerror는 0이다. Telegram은 소유 HTTP fixture이며 실제 수신자·운영 접근은 없다.

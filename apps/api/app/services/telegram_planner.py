@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime, timedelta
+from time import monotonic
 from typing import Any
 
 from sqlalchemy import or_, select
@@ -31,6 +32,7 @@ from app.services.telegram_notifications import (
     linked_targets,
     preferences,
 )
+from app.services.telegram_weather import plan_weather, prepare_weather
 from app.services.trip_weather_batch import (
     build_trip_weather_via_kor_travel_map,
     build_trip_weather_via_kor_travel_weather,
@@ -322,6 +324,7 @@ async def plan_due(
     weather_client: KorTravelWeatherClient | None = None,
 ) -> dict[str, int]:
     current = now or datetime.now(UTC)
+    started = monotonic()
     async with db_session.async_session_factory() as db:
         user_ids = list(
             (
@@ -329,6 +332,7 @@ async def plan_due(
                     select(TelegramPreferences.user_id)
                     .where(
                         or_(
+                            TelegramPreferences.weather_enabled.is_(True),
                             TelegramPreferences.daily_enabled.is_(True),
                             TelegramPreferences.weekly_enabled.is_(True),
                         )
@@ -340,6 +344,23 @@ async def plan_due(
     enqueued = failed = 0
     for user_id in user_ids:
         try:
+            weather_prepared = await prepare_weather(
+                user_id,
+                now=current + timedelta(seconds=monotonic() - started),
+                client=weather_client,
+            )
+            async with db_session.async_session_factory() as weather_db:
+                weather_count, weather_failed = await plan_weather(
+                    weather_db,
+                    user_id,
+                    weather_prepared,
+                    now=current + timedelta(seconds=monotonic() - started),
+                )
+                await weather_db.commit()
+            enqueued += weather_count
+            failed += weather_failed
+            if weather_failed:
+                PLANNING_FAILURES.labels(code="WEATHER_ALERT_CHECK_FAILED").inc(weather_failed)
             async with db_session.async_session_factory() as context_db:
                 contexts = await _prepare_daily_contexts(
                     context_db,

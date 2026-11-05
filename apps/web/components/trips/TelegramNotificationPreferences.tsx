@@ -52,6 +52,10 @@ export function TelegramNotificationPreferences({ targets }: { targets: Telegram
           시작하는 여행 목록을 보냅니다. 일간 알림은 본인 소유 여행에 연결한 검증된 대상으로만
           보냅니다.
         </p>
+        <p className="mb-3 text-sm text-muted">
+          특보는 예약 시각과 별개로 여행 기간·대표 지역이 확인되고 여행에 연결된 대상으로 보냅니다.
+          켠 뒤의 최근 공식 발표만 알리며 일부 구역은 확인되지 않습니다. 현재 안전 상태를 보장하지 않습니다.
+        </p>
         {error && (
           <p role="alert" className="mb-3 rounded-sm bg-error-bg p-3 text-sm text-error-text">
             {error}
@@ -66,6 +70,7 @@ export function TelegramNotificationPreferences({ targets }: { targets: Telegram
             <fieldset disabled={busy} className="space-y-3">
               {(
                 [
+                  ['weather_enabled', '여행 중 기상 특보 발표'],
                   ['daily_enabled', '일간 브리프'],
                   ['weekly_enabled', '주간 여행 요약'],
                 ] as const

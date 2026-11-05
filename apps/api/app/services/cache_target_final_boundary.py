@@ -44,7 +44,13 @@ PREFLIGHT_SCHEMA_REVISION = "20260801_0047"
 # head다. 20260917_0102(T-361, weather_location_links, ADR-068)가 그 뒤를 잇는 두
 # 번째 head다. 이 pin 목록과 DB CHECK (ck_ktm_ct_boundary_contract)는 새 final
 # migration마다 함께 갱신해야 finalize가 열린다 — fail-close by design.
-FINALIZE_SCHEMA_REVISIONS = ("20260824_0101", "20260917_0102", "20261105_0103", "20261105_0104")
+FINALIZE_SCHEMA_REVISIONS = (
+    "20260824_0101",
+    "20260917_0102",
+    "20261105_0103",
+    "20261105_0104",
+    "20261105_0105",
+)
 WRITER_REGISTRY_SHA256 = "526240609e2919357699b90244eb8cc8b9505f37db6c60552a98c7a37ed22d7c"
 _APPLICATION_NAME = "pinvi-cache-target-final-boundary"
 

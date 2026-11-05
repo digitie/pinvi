@@ -28,6 +28,7 @@ export const TelegramTargetSchema = z.object({
 export type TelegramTarget = z.infer<typeof TelegramTargetSchema>;
 
 export const TelegramPreferencesSchema = z.object({
+  weather_enabled: z.boolean(),
   daily_enabled: z.boolean(),
   weekly_enabled: z.boolean(),
   send_time: z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/),

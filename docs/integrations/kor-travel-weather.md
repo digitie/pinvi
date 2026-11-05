@@ -1152,3 +1152,9 @@ Map #1446 병합본은 a69d188d8c78ea573afc6e862f8ec9e0aa423ec0이다. 소비자
 
 
 최종 리뷰 보완: 알려진 SKY 코드가 숫자 또는 문자열이면 같은 설명을 표시하고 실제 설명·미지 문자열은 원문 우선이다. 관리자 행의 식별자는 provider·단위를 포함해 null dataset의 정규화 alias가 충돌하지 않게 하며 provider도 화면에 표시한다.
+
+## #637 공식 발표 관측 계약 동기화
+
+Weather201의 실제 병합 d8534aeae8852f9c514e39d625ea7dded956f3ed에서 OpenAPI 전체 bytes를 재동기화했다. SHA256은63ff8f07c0d51cfec7011f3f470f0ffc27392c0d8832b388d5368199ba645273이다. 기존 LocationOut/WeatherValueOut/MeasurementPointOut/NearbyOut 필드 계약은 같으며 별도 alert_events 공개 method와 DTO만 추가한다. 운영의 구형 weather에는 새 경로가 없을 수 있으므로 안전한 확인 실패로 표시하고 원천 API 직접 호출로 우회하지 않는다.
+
+소비자는 namespace/BJD·timezone-aware 시각·strict bool·완결성/최신성을 검증한다. absence_is_clear=false만 허용한다. 원천 회차는 unresolved이며 공식 발표·action 단위로만 중복을 제어한다. [알림 경계](telegram.md) §11을 따른다.
