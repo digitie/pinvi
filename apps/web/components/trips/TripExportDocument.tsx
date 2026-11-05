@@ -10,6 +10,8 @@ export const TRIP_PRINT_CSS = `
 .trip-print .trip-print-muted{color:#616161}
 .trip-print .trip-print-poi{border-top:1px solid #ddd;padding:10px 0;break-inside:auto}
 .trip-print .trip-print-poi p{orphans:2;widows:2}
+.trip-print .trip-print-poi-heading{break-inside:avoid}
+.trip-print .trip-print-with-note{break-after:avoid}
 .trip-print .trip-print-poi h3{font-size:14px;margin:0;font-weight:700;break-after:avoid}
 .trip-print .trip-print-map{width:100%;height:auto;max-height:280px;display:block}
 .trip-print figure{margin:12px 0;break-inside:avoid}
@@ -20,6 +22,8 @@ export const TRIP_PRINT_CSS = `
   .trip-print h1{font-size:21pt}
   .trip-print h2{font-size:14pt}
   .trip-print .trip-print-poi p{orphans:2;widows:2}
+.trip-print .trip-print-poi-heading{break-inside:avoid}
+.trip-print .trip-print-with-note{break-after:avoid}
 .trip-print .trip-print-poi h3{font-size:11pt}
 }
 `;
@@ -155,13 +159,21 @@ export function TripExportDocument({ model }: { model: TripExportModel }) {
           {!day.pois.length && <p className="trip-print-muted">등록한 장소가 없습니다.</p>}
           {day.pois.map((poi, index) => (
             <article key={poi.id} className="trip-print-poi">
-              <h3>
-                {index + 1}. {poi.name}
-              </h3>
-              <p className="trip-print-muted">
-                도착 {formatExportTime(poi.arrival)} / 출발 {formatExportTime(poi.departure)}
-              </p>
-              {poi.address && <p className="trip-print-muted">{poi.address}</p>}
+              <div
+                className={
+                  poi.note
+                    ? 'trip-print-poi-heading trip-print-with-note'
+                    : 'trip-print-poi-heading'
+                }
+              >
+                <h3>
+                  {index + 1}. {poi.name}
+                </h3>
+                <p className="trip-print-muted">
+                  도착 {formatExportTime(poi.arrival)} / 출발 {formatExportTime(poi.departure)}
+                </p>
+                {poi.address && <p className="trip-print-muted">{poi.address}</p>}
+              </div>
               {poi.note && <p>{poi.note}</p>}
             </article>
           ))}
