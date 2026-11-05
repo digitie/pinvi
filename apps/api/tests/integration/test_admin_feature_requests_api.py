@@ -867,9 +867,17 @@ async def test_relock_cannot_send_or_clear_a_replaced_dispatch(
 
     async def approve(label: str = "B") -> Any:
         race_label.set(label)
+        async with session_factory() as db:
+            current = await db.get(FeatureSuggestion, req_id)
+            ref = current.kor_travel_map_ref or {}
+            key = (
+                (ref.get("dispatch") or {}).get("command_key")
+                or ref.get("next_command_key")
+                or str(req_id)
+            )
         return await client.post(
             f"/admin/feature-requests/{req_id}/approve",
-            json={"access_reason": "검수", "name": "새 이름"},
+            json={"access_reason": "검수", "name": "새 이름", "expected_command_key": key},
             cookies=auth_cookies(str(admin_id)),
         )
 

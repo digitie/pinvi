@@ -60,6 +60,7 @@ class AdminFeatureRequestApprove(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
+    expected_command_key: uuid.UUID | None = None
     access_reason: str = Field(min_length=1, max_length=500)
     category: str | None = Field(default=None, max_length=32)
     marker_color: str | None = Field(default=None, pattern=r"^P-(0[1-9]|1[0-6])$")
@@ -87,6 +88,7 @@ class AdminFeatureRequestResult(BaseModel):
 
 class AdminFeatureRequestReconcile(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    expected_command_key: uuid.UUID
     access_reason: str = Field(min_length=5, max_length=500)
 
 

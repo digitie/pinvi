@@ -332,6 +332,43 @@ def _dispatch_error(code: str, message: str) -> HTTPException:
     return HTTPException(status_code=409, detail={"code": code, "message": message})
 
 
+def _command_attempt_key(suggestion: FeatureSuggestion) -> str:
+    ref = suggestion.kor_travel_map_ref or {}
+    dispatch = ref.get("dispatch")
+    raw = (
+        dispatch.get("command_key", str(suggestion.request_id))
+        if isinstance(dispatch, dict)
+        else ref.get("next_command_key", str(suggestion.request_id))
+    )
+    try:
+        return str(uuid.UUID(raw))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise _dispatch_error(
+            "MAP_COMMAND_PENDING", "저장된 명령 키의 운영 검토가 필요합니다."
+        ) from exc
+
+
+def _check_expected_attempt(
+    suggestion: FeatureSuggestion,
+    expected: uuid.UUID | None,
+) -> None:
+    current = _command_attempt_key(suggestion)
+    ref = suggestion.kor_travel_map_ref or {}
+    # 과거 소비자의 첫 시도만 호환한다. 한 번 전진한 시도는 명시 키 없이는 실행하지 않는다.
+    initial_compat = (
+        expected is None
+        and current == str(suggestion.request_id)
+        and "next_command_key" not in ref
+        and "last_resolution" not in ref
+        and "last_rejected_command" not in ref
+    )
+    if not initial_compat and (expected is None or str(expected) != current):
+        raise _dispatch_error(
+            "MAP_COMMAND_ATTEMPT_CHANGED",
+            "검토 중 명령 시도가 변경되었습니다. 최신 제안을 다시 열어 확인하세요.",
+        )
+
+
 def _dispatch_identity(
     suggestion: FeatureSuggestion,
     *,
@@ -384,7 +421,9 @@ async def _direct_submission(
     assert target_feature_id is not None
     approval_input = {
         key: value
-        for key, value in body.model_dump(mode="json", exclude_none=True).items()
+        for key, value in body.model_dump(
+            mode="json", exclude_none=True, exclude={"expected_command_key"}
+        ).items()
         if value != ""
     }
     ref = suggestion.kor_travel_map_ref or {}
@@ -492,9 +531,17 @@ async def _direct_submission(
             KorTravelMapBadRequest,
             KorTravelMapFeatureNotFound,
             KorTravelMapPreconditionFailed,
-        ):
-            # 명령 경계가 거부한 확정 4xx는 Map 변경이 없으므로 새 검토를 허용한다.
-            suggestion.kor_travel_map_ref = None
+        ) as exc:
+            # 확정 4xx 뒤에도 봉인 이력과 전진한 세대를 보존한다. 최초 request_id로 돌아가지 않는다.
+            next_ref = dict(suggestion.kor_travel_map_ref or {})
+            next_ref.pop("dispatch", None)
+            next_ref["next_command_key"] = str(uuid.uuid4())
+            next_ref["last_rejected_command"] = {
+                "command_key": command_key,
+                "actor": client.actor,
+                "code": exc.code,
+            }
+            suggestion.kor_travel_map_ref = next_ref
             await db.commit()
             raise
 
@@ -603,6 +650,8 @@ async def approve_feature_request_endpoint(
     audit_request_id = _request_correlation_id(request, x_request_id)
     suggestion = await _load_pending(db, request_id)
     stype = suggestion.suggestion_type
+    if stype != "new_place":
+        _check_expected_attempt(suggestion, body.expected_command_key)
     if stype == "new_place":
         try:
             FeatureRequestServiceClient.validate_submission(
@@ -711,8 +760,10 @@ async def reconcile_feature_request_command_endpoint(
     audit_request_id = _request_correlation_id(request, x_request_id)
     suggestion = await _load_request(db, request_id)
     known = _known_resolution(suggestion)
-    if known is not None:
+    saved_resolution = (suggestion.kor_travel_map_ref or {}).get("last_resolution") or {}
+    if known is not None and saved_resolution.get("command_key") == str(body.expected_command_key):
         return _reconciliation_result(suggestion, known)
+    _check_expected_attempt(suggestion, body.expected_command_key)
     if suggestion.status != "pending" or suggestion.suggestion_type not in {
         "correction",
         "closure",

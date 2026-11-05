@@ -337,6 +337,13 @@ function ReviewDialog({
   const isPending = request.status === 'pending';
   const canDelete = ['rejected', 'added', 'duplicate'].includes(request.status);
   const dispatch = request.kor_travel_map_ref?.dispatch;
+  const expectedCommandKey =
+    dispatch && typeof dispatch === 'object' && 'command_key' in dispatch &&
+    typeof dispatch.command_key === 'string'
+      ? dispatch.command_key
+      : typeof request.kor_travel_map_ref?.next_command_key === 'string'
+        ? request.kor_travel_map_ref.next_command_key
+        : request.request_id;
   const savedInput =
     dispatch &&
     typeof dispatch === 'object' &&
@@ -416,7 +423,10 @@ function ReviewDialog({
       : {}),
   });
   const approveMutation = useMutation({
-    mutationFn: () => adminApi(apiClient).approveFeatureRequest(request.request_id, approvalBody()),
+    mutationFn: () => adminApi(apiClient).approveFeatureRequest(request.request_id, {
+      ...approvalBody(),
+      ...(!isNewPlace ? { expected_command_key: expectedCommandKey } : {}),
+    }),
     onSuccess: () =>
       onDone(
         isNewPlace
@@ -442,6 +452,9 @@ function ReviewDialog({
         // 다시 불러와 저장 명령이 있으면 위의 렌더 중 동기화가 입력을 잠근다.
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
       }
+      if (!isNewPlace) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
+      }
       setErr(error instanceof ApiError ? error.message : '승인에 실패했습니다.');
     },
   });
@@ -450,6 +463,7 @@ function ReviewDialog({
     mutationFn: () =>
       adminApi(apiClient).reconcileFeatureRequestCommand(request.request_id, {
         access_reason: resolutionReason.trim(),
+        expected_command_key: expectedCommandKey,
       }),
     onSuccess: (result) => {
       setReconcileConfirmOpen(false);
@@ -780,7 +794,7 @@ function ReviewDialog({
                     disabled={busy || !hasSavedActor}
                     data-testid="admin-fr-reconcile-command"
                     onClick={() => {
-                      if (!AdminFeatureRequestReconcileSchema.safeParse({ access_reason: resolutionReason }).success) {
+                      if (!AdminFeatureRequestReconcileSchema.safeParse({ access_reason: resolutionReason, expected_command_key: expectedCommandKey }).success) {
                         setErr('실행 기록 확인 사유는 5~500자로 입력하세요.');
                         return;
                       }
