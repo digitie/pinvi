@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import Session, SessionTransaction
 
 from app.core.config import settings
+from app.core.db_pool import ObservedAsyncQueuePool
 
 #: 세션 GUC 타임아웃(T-341). 요청 경로·백그라운드 워커·retention이 **단일 글로벌 엔진**을 공유하므로
 #: (별도 커넥션 풀이 없다), 값은 "정상적인 배치 작업을 죽이지 않으면서 무한 대기를 막는" 쪽으로
@@ -28,6 +29,9 @@ SESSION_TIMEOUT_SERVER_SETTINGS: dict[str, str] = {
 engine = create_async_engine(
     settings.pinvi_database_url,
     pool_size=settings.pinvi_database_pool_size,
+    max_overflow=settings.pinvi_database_max_overflow,
+    pool_timeout=settings.pinvi_database_pool_timeout_seconds,
+    poolclass=ObservedAsyncQueuePool,
     pool_pre_ping=True,
     future=True,
     connect_args={"server_settings": SESSION_TIMEOUT_SERVER_SETTINGS},

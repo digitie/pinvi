@@ -56,3 +56,11 @@ PR 종료 문구는 #616 완료 검증 뒤에만 `Closes #616`을 사용하고, 
 - pool 구현은 core의 관측 pool을 사용하며 실제 생성 지점인 app/db/session.py에 최소 배선 4줄을 추가했다. 설정은 pool size 10, max_overflow 0, pool_timeout 5초가 기본이며 운영 적용/부하 튜닝은 미검증이다.
 - provider 회귀는 기존 코드에서 포화 대기·timeout 재전송·늦은 결과 회로 오염 7 FAIL을 확보했다. 구현 및 통합 검증은 진행 중이다.
 - 직접 weather resolve는 아직 서비스 요청 경로에서 inline await한다. 서비스 재설계는 이번 clients/middleware/core 소유 범위 밖이며 #621 잔여로 남긴다. edge HTTP/2·운영 flag·worker와 함께 #621 자동 종료를 금지한다.
+
+## 구현 중간 저장
+
+- 공통 기록 큐는 factory별 1개이며 대기 1024행 + 전송 중 최대100행이다. 0.25초/최대100행 배치, DB flush2초·종료3초 상한을 둔다. 실패·포화·종료 손실은 고정 outcome counter로 집계한다. 이 큐는 감사/업무 outbox가 아닌 손실 허용 관측이다.
+- provider factory의 ApiCallLoggingClient가 전송·body read 오류와 취소를 기록하고 원래 예외를 다시 올린다. endpoint는 기존 redaction을 적용하며 임의 예외 메시지는 저장하지 않는다. 기록 시각은 enqueue 시각이다.
+- 기존 최외곽 Map client lifespan에 logging drain과 rate-limit cleanup을 연결했다. main.py와 runtime/서명 guard는 변경하지 않았다.
+- Map·geo·weather 사용자 client의 독립 bulkhead 기본16, 회로120초, 단일 half-open·세대 fencing을 구현했다. Map weather는 기본 Map client의 bulkhead를 공유하고 로컬 포화/PoolTimeout은 회로 장애로 세지 않는다. admin/curation 등 별도 command client까지 하나의 전역 Map cap으로 묶지는 않았다.
+- 전체 API unit 2084 PASS/기존9 SKIP(98.32초), 전체 strict mypy274파일, Ruff/format518파일 통과. 세 provider 실제 loopback HTTP+소유PG 검사3 PASS(14.13초)이다. 공개 오류 계약을 포함한 확장 통합 검사는 진행 중이다.

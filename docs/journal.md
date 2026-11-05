@@ -1,3 +1,11 @@
+## 2026-11-06 — #616·#621 WSL 복원력 구현 중간 저장
+
+- Draft PR695에서 세 구현 작업자가 envelope·rate limit·provider를 병행했고 주 작업자가 logging·pool·lifecycle을 연결했다. 최종 전문 리뷰/승인으로 간주하지 않는다.
+- 필수키·타입·상태와 signed receipt/증명 exact 검사를 보존하면서 outer additive를 허용했다. rate limit은한 statement·독립청소, 관측은 bounded배치·실패/취소·안전한오류, provider는즉시포화·120초회로·늦은결과격리, pool은명시한도·실제 acquisition대기를 연결했다.
+- WSL전체단위2084PASS/기존9SKIP·mypy274·Ruff/format518, 실제소유PG/HTTP로깅·pool7와3provider실HTTP/PG3PASS. 확장공개API계약검사는진행중이다.
+- app/db/session.py는core pool구현을실제engine에연결하는최소배선만수정했다. 0105이하/보호stash/다른작업자/frontend는불변이다. 운영·SSH·실제provider·Telegram접근은없다.
+- 직접weatherresolve 배경화·느린5xx재시도와edge/운영flag/worker는#621잔여다. #621자동종료없이메인최종두리뷰·ready·merge에인계한다.
+
 ## 2026-11-06 — #616·#621 WSL 복원력 묶음 착수
 
 - 사용자 지정 ff5c2386 기준 전용 worktree에서 최신 두 이슈 본문·댓글과 지침을 확인했다. 실행계획은 docs/execplan/issues-616-621-outbound-resilience.md다.

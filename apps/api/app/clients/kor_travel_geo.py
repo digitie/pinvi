@@ -12,16 +12,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Mapping, Sequence
+import time
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 
+from app.clients._resilience import TransportCircuit
 from app.core.config import Settings, settings
 from app.db import session as db_session
-from app.middleware.api_call_logging import api_call_event_hooks
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,10 @@ class KorTravelGeoError(Exception):
 
 class KorTravelGeoUnavailable(KorTravelGeoError):
     """타임아웃 / 연결 실패 / 5xx (재시도 소진)."""
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        self.code = code
+        super().__init__(message)
 
 
 class KorTravelGeoBadRequest(KorTravelGeoError):
@@ -52,16 +58,62 @@ class KorTravelGeoClient:
         api_key: str | None = None,
         max_attempts: int = 3,
         backoff_base_seconds: float = 0.2,
+        max_concurrent_requests: int = 16,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._http = http
         self._api_key = (api_key or "").strip()
         self._max_attempts = max(1, max_attempts)
         self._backoff_base_seconds = backoff_base_seconds
+        if max_concurrent_requests < 1:
+            raise ValueError("max_concurrent_requests는 양수여야 합니다.")
+        self._slots = asyncio.Semaphore(max_concurrent_requests)
+        self._transport_circuit = TransportCircuit(clock=clock)
 
     async def aclose(self) -> None:
         await self._http.aclose()
 
     async def _post(
+        self,
+        path: str,
+        payload: Mapping[str, Any],
+        *,
+        max_attempts: int | None = None,
+        attempt_timeout_seconds: float | None = None,
+    ) -> dict[str, Any]:
+        if self._slots.locked():
+            raise KorTravelGeoUnavailable(
+                "kor-travel-geo 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
+            )
+        async with self._slots:
+            token = self._transport_circuit.acquire()
+            if token is None:
+                raise KorTravelGeoUnavailable(
+                    "kor-travel-geo 회로 열림 — 호출하지 않음", code="CIRCUIT_OPEN"
+                )
+            try:
+                result = await self._post_with_retries(
+                    path,
+                    payload,
+                    max_attempts=max_attempts,
+                    attempt_timeout_seconds=attempt_timeout_seconds,
+                )
+            except KorTravelGeoUnavailable as exc:
+                if exc.code in {"POOL_TIMEOUT", "AUTH_NOT_CONFIGURED"}:
+                    self._transport_circuit.release(token)
+                else:
+                    self._transport_circuit.failure(token)
+                raise
+            except KorTravelGeoBadRequest:
+                self._transport_circuit.success(token)
+                raise
+            except BaseException:
+                self._transport_circuit.release(token)
+                raise
+            self._transport_circuit.success(token)
+            return result
+
+    async def _post_with_retries(
         self,
         path: str,
         payload: Mapping[str, Any],
@@ -84,6 +136,10 @@ class KorTravelGeoClient:
                 resp = await self._http.post(
                     path, params=self._auth_params(), json=body, timeout=request_timeout
                 )
+            except httpx.PoolTimeout as exc:
+                raise KorTravelGeoUnavailable(
+                    f"kor-travel-geo 연결 풀 대기 초과({path})", code="POOL_TIMEOUT"
+                ) from exc
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelGeoUnavailable(f"kor-travel-geo 요청 실패({path}): {exc!r}")
             else:
@@ -108,7 +164,9 @@ class KorTravelGeoClient:
 
     def _auth_params(self) -> dict[str, str]:
         if not self._api_key:
-            raise KorTravelGeoUnavailable("kor-travel-geo v2 공개 API key가 설정되지 않았습니다.")
+            raise KorTravelGeoUnavailable(
+                "kor-travel-geo v2 공개 API key가 설정되지 않았습니다.", code="AUTH_NOT_CONFIGURED"
+            )
         return {"key": self._api_key}
 
     # ── v2 endpoint (docs/integrations/kor-travel-geo.md §3) ───────────────────
@@ -195,9 +253,15 @@ class KorTravelGeoClient:
         )
 
     async def healthz(self) -> dict[str, Any]:
-        resp = await self._http.get("/v1/healthz")
-        body = resp.json()
-        return body if isinstance(body, dict) else {"status": "unknown"}
+        # 진단 GET도 같은 provider 상한을 쓴다. 본 요청의 회로 판정은 변경하지 않는다.
+        if self._slots.locked():
+            raise KorTravelGeoUnavailable(
+                "kor-travel-geo 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
+            )
+        async with self._slots:
+            resp = await self._http.get("/v1/healthz")
+            body = resp.json()
+            return body if isinstance(body, dict) else {"status": "unknown"}
 
 
 def _error_code(resp: httpx.Response) -> str | None:
@@ -217,7 +281,7 @@ def _error_code(resp: httpx.Response) -> str | None:
 
 
 def create_kor_travel_geo_client(app_settings: Settings) -> KorTravelGeoClient:
-    http = httpx.AsyncClient(
+    http = ApiCallLoggingClient(
         base_url=app_settings.pinvi_kor_travel_geo_base_url,
         timeout=app_settings.pinvi_kor_travel_geo_timeout_seconds,
         event_hooks=api_call_event_hooks(

@@ -684,7 +684,9 @@ class Settings(BaseSettings):
     pinvi_database_url: str = Field(
         default="postgresql+asyncpg://pinvi:pinvi_dev_password@localhost:5432/pinvi"
     )
-    pinvi_database_pool_size: int = 10
+    pinvi_database_pool_size: int = Field(default=10, ge=1, le=100)
+    pinvi_database_max_overflow: int = Field(default=0, ge=0, le=100)
+    pinvi_database_pool_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
 
     # JWT / 세션
     pinvi_jwt_secret_key: str = Field(default="pinvi-local-jwt-secret-change-me", min_length=32)

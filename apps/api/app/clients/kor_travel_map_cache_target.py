@@ -16,6 +16,7 @@ from weakref import WeakKeyDictionary, WeakValueDictionary
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
+from app.clients.kor_travel_map import _note_additive_fields
 from app.services.cache_target_event_consumer import (
     CacheTargetAck,
     CacheTargetClaim,
@@ -77,7 +78,7 @@ class CacheTargetNetworkError(RuntimeError):
 
 
 class CacheTargetContractError(ValueError):
-    """Map service 응답이 pinned envelope/DTO 계약과 다름."""
+    """Map service 응답의 필수 envelope/DTO 계약이 다름."""
 
 
 class CacheTargetServiceProblem(RuntimeError):
@@ -394,10 +395,11 @@ def _unwrap_envelope(response: httpx.Response) -> tuple[Any, dict[str, Any]]:
         payload = response.json()
     except ValueError as exc:
         raise CacheTargetContractError("service response가 JSON이 아닙니다.") from exc
-    if not isinstance(payload, dict) or set(payload) != {"data", "meta"}:
-        raise CacheTargetContractError("service response envelope가 exact {data,meta}가 아닙니다.")
+    if not isinstance(payload, dict) or not {"data", "meta"}.issubset(payload):
+        raise CacheTargetContractError("service response envelope에 필수 data/meta가 없습니다.")
     if not isinstance(payload["meta"], dict):
         raise CacheTargetContractError("service response meta가 object가 아닙니다.")
+    _note_additive_fields(payload, frozenset({"data", "meta"}), what="cache_target.envelope")
     return payload["data"], payload["meta"]
 
 
@@ -450,6 +452,8 @@ def _active_wire_body(
     source_generation: int,
     occurred_at: datetime,
 ) -> dict[str, Any]:
+    # source payload는 canonical fingerprint와 인과 증명의 입력이다. outer envelope와 달리
+    # 모르는 필드를 버리면 증명한 내용이 달라지므로 exact v1 검사를 유지한다.
     if set(source_payload) != {"version", "state", "coord", "radius_m", "update_enabled"}:
         raise ValueError("active source payload field가 exact v1 계약과 다릅니다.")
     if (

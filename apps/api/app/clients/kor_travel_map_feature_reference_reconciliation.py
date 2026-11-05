@@ -15,7 +15,7 @@ from typing import Any, Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from app.clients.kor_travel_map import _error_code
+from app.clients.kor_travel_map import _error_code, _note_additive_fields
 
 _SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - header name
 _WORKER_ID_HEADER = "X-Reconciliation-Worker-Id"
@@ -66,6 +66,8 @@ class FeatureReference(_ClosedModel):
 
 
 class FeatureReferenceReconciliationEvent(_ClosedModel):
+    # event_sha256와 영속 local receipt에 결박되는 event에는 outer envelope의 additive
+    # 정책을 적용하지 않는다. 증명 payload의 모르는 필드는 계속 거부한다.
     payload_schema_version: Literal[1]
     event_id: uuid.UUID
     event_sequence: int = Field(ge=1)
@@ -250,7 +252,7 @@ def _success_envelope(response: httpx.Response) -> dict[str, object]:
         raise FeatureReferenceReconciliationContractError(
             "Map reconciliation response is not valid JSON"
         ) from exc
-    if not isinstance(payload, dict) or set(payload) != {"data", "meta"}:
+    if not isinstance(payload, dict) or not {"data", "meta"}.issubset(payload):
         raise FeatureReferenceReconciliationContractError(
             "Map reconciliation envelope shape is invalid"
         )
@@ -258,10 +260,15 @@ def _success_envelope(response: httpx.Response) -> dict[str, object]:
         raise FeatureReferenceReconciliationContractError(
             "Map reconciliation envelope data/meta is invalid"
         )
+    _note_additive_fields(
+        payload,
+        frozenset({"data", "meta"}),
+        what="feature_reference_reconciliation.envelope",
+    )
     try:
         FeatureReferenceReconciliationMeta.model_validate(payload["meta"])
     except ValidationError as exc:
         raise FeatureReferenceReconciliationContractError(
             "Map reconciliation response meta contract is invalid"
         ) from exc
-    return payload
+    return {"data": payload["data"], "meta": payload["meta"]}

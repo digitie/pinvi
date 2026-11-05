@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.config import Settings, settings
 from app.db import session as db_session
-from app.middleware.api_call_logging import api_call_event_hooks
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -606,7 +606,7 @@ def create_curation_snapshot_service_client(
     secret = app_settings.pinvi_kor_travel_map_curation_snapshot_token
     if secret is None:
         return None
-    http = httpx.AsyncClient(
+    http = ApiCallLoggingClient(
         base_url=app_settings.pinvi_kor_travel_map_api_base_url,
         timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
         event_hooks=api_call_event_hooks(
@@ -629,7 +629,7 @@ def create_curation_cutover_mapping_service_client(
     secret = app_settings.pinvi_kor_travel_map_curation_cutover_mapping_token
     if secret is None:
         return None
-    http = httpx.AsyncClient(
+    http = ApiCallLoggingClient(
         base_url=app_settings.pinvi_kor_travel_map_api_base_url,
         timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
         event_hooks=api_call_event_hooks(

@@ -18,7 +18,7 @@ from fastapi import Depends, FastAPI, Request, status
 
 from app.core.config import Settings, settings
 from app.db import session as db_session
-from app.middleware.api_call_logging import api_call_event_hooks
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ class NaverLocalClient:
 
 
 def create_naver_local_client(app_settings: Settings) -> NaverLocalClient:
-    http = httpx.AsyncClient(
+    http = ApiCallLoggingClient(
         base_url=app_settings.pinvi_naver_local_base_url,
         timeout=app_settings.pinvi_place_provider_timeout_seconds,
         event_hooks=api_call_event_hooks(db_session.async_session_factory, provider="naver_local"),

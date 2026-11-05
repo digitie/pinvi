@@ -41,7 +41,7 @@ from pydantic import ValidationError
 from app.clients.weather_alert_events import RegionalAlertEvents
 from app.core.config import Settings, settings
 from app.db import session as db_session
-from app.middleware.api_call_logging import api_call_event_hooks
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,8 @@ _NEARBY_LIMIT_MAX = 100  # 서버 스키마 상한(OpenAPI `nearby` limit maximu
 # 시험 호출 1회만 내보낸다. env·settings로 노출하지 않는다 — 값을 바꾸기로 하면(ADR-074 열린
 # 결정 2) 그때 settings로 승격한다. ETL `KorTravelWeatherResource`에는 적용하지 않는다.
 _CIRCUIT_FAILURE_THRESHOLD = 3
-_CIRCUIT_OPEN_SECONDS = 30.0
+# 30초보다 드문 view도 곧바로 새 timeout 시험을 만들지 않게 한다(#621).
+_CIRCUIT_OPEN_SECONDS = 120.0
 
 # host 회로(T-379) — 엔드포인트 회로 **앞에** 하나 더 둔다. connect 단계 실패(`ConnectError`, 또는 deadline이
 # 깎지 않은 상한에서 난 `ConnectTimeout`)만 세고 같은 임계·open 시간을 쓴다. 연결조차 안 되는 것은 엔드포인트가
@@ -651,26 +652,34 @@ class _CircuitBreaker:
         self._consecutive_failures = 0
         self._opened_at: float | None = None
         self._trial_in_flight = False
+        self._generation = 0
 
-    def acquire(self) -> bool:
-        """호출 허가. 거부면 `KorTravelWeatherUnavailable`. 반환값은 half-open 시험 호출 여부."""
+    def acquire(self) -> tuple[bool, int]:
+        """호출 허가. 거부면 `KorTravelWeatherUnavailable`. 반환값은 (half-open 시험 호출 여부, 출발 세대)다."""
         if self._opened_at is None:
-            return False
+            return False, self._generation
         if self._clock() - self._opened_at < self._open_seconds or self._trial_in_flight:
             raise KorTravelWeatherUnavailable("kor-travel-weather 회로 열림 — 호출하지 않음")
         self._trial_in_flight = True
-        return True
+        return True, self._generation
 
     def is_open(self) -> bool:
         """열린 채 open 시간이 아직 남았는가(읽기 전용 — half-open 시험 자리를 잡지 않는다)."""
         return self._opened_at is not None and self._clock() - self._opened_at < self._open_seconds
 
-    def record_success(self) -> None:
+    def record_success(self, *, trial: bool, generation: int) -> None:
+        # 열린 뒤 도착한 옛 호출은 현재 시험 결과를 대신할 수 없다.
+        if generation != self._generation:
+            return
+        if self._opened_at is not None:
+            self._generation += 1
         self._consecutive_failures = 0
         self._opened_at = None
         self._trial_in_flight = False
 
-    def record_failure(self, *, endpoint: str, trial: bool) -> None:
+    def record_failure(self, *, endpoint: str, trial: bool, generation: int) -> None:
+        if generation != self._generation:
+            return
         self._consecutive_failures += 1
         if trial or self._consecutive_failures >= self._failure_threshold:
             if self._opened_at is None or trial:
@@ -682,6 +691,7 @@ class _CircuitBreaker:
                     },
                 )
             self._opened_at = self._clock()
+            self._generation += 1
         if trial:
             # 시험 호출 자신의 실패만 시험 자리를 돌려준다. 회로가 열리기 전에 출발한 옛 호출의
             # 늦은 실패가 진행 중인 시험 자리를 비우면 half-open 시험이 동시에 둘이 된다.
@@ -713,11 +723,15 @@ class KorTravelWeatherClient:
         max_attempts: int = 3,
         backoff_base_seconds: float = 0.2,
         clock: Callable[[], float] = time.monotonic,
+        max_concurrent_requests: int = 16,
     ) -> None:
         self._http = http
         self._max_attempts = max(1, max_attempts)
         self._backoff_base_seconds = backoff_base_seconds
         self._clock = clock
+        if max_concurrent_requests < 1:
+            raise ValueError("max_concurrent_requests는 양수여야 합니다.")
+        self._slots = asyncio.Semaphore(max_concurrent_requests)
         self._circuits: dict[str, _CircuitBreaker] = {}
         self._host_circuit = _CircuitBreaker(
             failure_threshold=_CIRCUIT_FAILURE_THRESHOLD,
@@ -749,6 +763,20 @@ class KorTravelWeatherClient:
         endpoint: str,
         params: Mapping[str, Any] | None = None,
     ) -> httpx.Response:
+        if self._slots.locked():
+            raise KorTravelWeatherUnavailable("kor-travel-weather 동시 호출 상한 — 호출하지 않음")
+        # 포화는 원격 실패가 아니다. 회로 시험 자리도 잡기 전에 즉시 거부한다.
+        async with self._slots:
+            return await self._send_with_circuits(method, path, endpoint=endpoint, params=params)
+
+    async def _send_with_circuits(
+        self,
+        method: str,
+        path: str,
+        *,
+        endpoint: str,
+        params: Mapping[str, Any] | None = None,
+    ) -> httpx.Response:
         """논리 호출 1회 — 회로차단을 거쳐 `_send_with_retries`를 부른다.
 
         host 회로를 먼저, 그다음 그 엔드포인트의 회로를 본다 — 어느 쪽이든 열려 있으면 transport를 부르지
@@ -757,7 +785,7 @@ class KorTravelWeatherClient:
         host 실패로도 센다(T-379).
         """
         host = self._host_circuit
-        host_trial = host.acquire()
+        host_trial, host_generation = host.acquire()
         # 짧은 예산에서 센 엔드포인트(단건 카드의 `/resolve`)는 **별도 회로**를 쓴다 — trip view와 공유하는
         # 회로를, 카드 예산으로는 '느리지만 살아 있음'과 '응답 없음'을 가를 수 없는 실패로 열지 않게.
         call_scope = _call_scope.get()
@@ -771,7 +799,7 @@ class KorTravelWeatherClient:
             raise KorTravelWeatherUnavailable("kor-travel-weather 회로 열림 — 호출하지 않음")
         circuit = self._circuit_for(circuit_name)
         try:
-            trial = circuit.acquire()
+            trial, generation = circuit.acquire()
         except BaseException:
             host.release(trial=host_trial)
             raise
@@ -789,11 +817,11 @@ class KorTravelWeatherClient:
             else:
                 if scope is not None:
                     scope.state.counted_endpoints.add(endpoint)
-                circuit.record_failure(endpoint=circuit_name, trial=trial)
+                circuit.record_failure(endpoint=circuit_name, trial=trial, generation=generation)
             if not isinstance(exc, KorTravelWeatherConnectFailed) and host_trial:
                 # host 시험 호출이 연결은 됐다(read timeout·5xx) — host 회로를 닫는다. 슬롯만 돌려주면
                 # 연결은 되지만 오류를 내는 동안 host가 half-open에 머물러 호출이 하나씩 줄 선다.
-                host.record_success()
+                host.record_success(trial=host_trial, generation=host_generation)
             elif not isinstance(exc, KorTravelWeatherConnectFailed) or (
                 scope is not None and scope.state.host_counted and not host_trial
             ):
@@ -802,7 +830,9 @@ class KorTravelWeatherClient:
             else:
                 if scope is not None:
                     scope.state.host_counted = True
-                host.record_failure(endpoint=_HOST_CIRCUIT_NAME, trial=host_trial)
+                host.record_failure(
+                    endpoint=_HOST_CIRCUIT_NAME, trial=host_trial, generation=host_generation
+                )
             raise
         except BaseException:
             circuit.release(trial=trial)
@@ -811,8 +841,8 @@ class KorTravelWeatherClient:
         scope = _call_scope.get()
         if scope is not None:
             scope.state.succeeded_endpoints.add(endpoint)
-        circuit.record_success()
-        host.record_success()
+        circuit.record_success(trial=trial, generation=generation)
+        host.record_success(trial=host_trial, generation=host_generation)
         return resp
 
     async def _send_with_retries(
@@ -1133,7 +1163,7 @@ def kor_travel_weather_timeout(app_settings: Settings) -> httpx.Timeout:
 
 def create_kor_travel_weather_client(app_settings: Settings) -> KorTravelWeatherClient:
     """설정 기반 client 생성 (httpx.AsyncClient 1개, 인증 헤더 없음)."""
-    http = httpx.AsyncClient(
+    http = ApiCallLoggingClient(
         base_url=app_settings.pinvi_kor_travel_weather_base_url,
         timeout=kor_travel_weather_timeout(app_settings),
         event_hooks=api_call_event_hooks(

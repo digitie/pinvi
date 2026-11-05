@@ -549,8 +549,8 @@ async def test_circuit_half_open_trial_closes_on_success_and_reopens_on_failure(
             await client.latest("loc-1")
     assert attempts["n"] == 3
 
-    # 30 s 뒤 half-open 시험 1회 — 실패면 다시 30 s open.
-    clock.now += 30.0
+    # open 간격 뒤 half-open 시험 1회 — 실패면 다시 open 간격 동안 대기한다.
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     with pytest.raises(KorTravelWeatherUnavailable):
         await client.latest("loc-1")
     assert attempts["n"] == 4
@@ -558,8 +558,8 @@ async def test_circuit_half_open_trial_closes_on_success_and_reopens_on_failure(
         await client.latest("loc-1")
     assert attempts["n"] == 4
 
-    # 다시 30 s 뒤 시험이 성공하면 닫히고 이후 호출은 정상이다.
-    clock.now += 30.0
+    # 다시 open 간격 뒤 시험이 성공하면 닫히고 이후 호출은 정상이다.
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     fail["on"] = False
     assert len(await client.latest("loc-1")) == 1
     assert len(await client.latest("loc-1")) == 1
@@ -583,7 +583,7 @@ async def test_circuit_half_open_admits_only_one_trial_at_a_time() -> None:
     for _ in range(3):
         with pytest.raises(KorTravelWeatherUnavailable):
             await client.latest("loc-1")
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     trial = asyncio.create_task(client.latest("loc-1"))
     for _ in range(5):
         await asyncio.sleep(0)
@@ -616,7 +616,7 @@ async def test_cancelled_trial_releases_half_open_slot() -> None:
     for _ in range(3):
         with pytest.raises(KorTravelWeatherUnavailable):
             await client.latest("loc-1")
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     trial = asyncio.create_task(client.latest("loc-1"))
     for _ in range(5):
         await asyncio.sleep(0)
@@ -692,7 +692,7 @@ async def test_late_non_trial_failure_does_not_free_half_open_slot() -> None:
     for _ in range(3):
         with pytest.raises(KorTravelWeatherUnavailable):
             await client.latest("loc-1")
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     trial = asyncio.create_task(client.latest("loc-1"))
     for _ in range(5):
         await asyncio.sleep(0)
@@ -701,7 +701,7 @@ async def test_late_non_trial_failure_does_not_free_half_open_slot() -> None:
     release_old.set()
     with pytest.raises(KorTravelWeatherUnavailable):
         await old_call
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     # 시험 T가 아직 진행 중이므로 두 번째 시험은 허가되지 않는다.
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
         async with asyncio.timeout(2.0):
@@ -1229,7 +1229,7 @@ async def test_other_endpoint_success_does_not_reset_failing_endpoint_count() ->
     assert len(await client.latest("loc-1")) == 1
     assert calls == {"latest": 3, "forecast": 3}
 
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
         await client.forecast("loc-1")  # half-open 시험 — 실패해 다시 연다
     assert "회로 열림" not in str(exc_info.value)
@@ -1445,8 +1445,8 @@ async def test_host_half_open_trial_reopens_on_connect_failure_and_closes_on_res
     client = _client(handler, max_attempts=1, clock=clock)
     await _fail_each_endpoint_once(client)
 
-    # 30 s 뒤 host half-open 시험 1회 — connect 실패면 모든 엔드포인트가 다시 30 s 막힌다.
-    clock.now += 30.0
+    # open 간격 뒤 host half-open 시험 1회 — connect 실패면 모든 엔드포인트가 다시 open 간격 동안 막힌다.
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
         await client.forecast("loc-1")
     assert "회로 열림" not in str(exc_info.value)
@@ -1454,8 +1454,8 @@ async def test_host_half_open_trial_reopens_on_connect_failure_and_closes_on_res
         await client.latest("loc-2")
     assert sum(calls.values()) == 4
 
-    # 다시 30 s 뒤 시험이 응답을 받으면 host 회로가 닫히고 다른 엔드포인트도 transport에 닿는다.
-    clock.now += 30.0
+    # 다시 open 간격 뒤 시험이 응답을 받으면 host 회로가 닫히고 다른 엔드포인트도 transport에 닿는다.
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     refuse["on"] = False
     assert len(await client.forecast("loc-1")) == 1
     assert len(await client.latest("loc-1")) == 1
@@ -1509,7 +1509,7 @@ async def test_host_trial_answered_with_5xx_closes_host_circuit() -> None:
     clock = _FakeClock()
     client = _client(handler, max_attempts=1, clock=clock)
     await _fail_each_endpoint_once(client)
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     phase["v"] = "5xx"
     with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
         await client.forecast("loc-1")  # host 시험 — 연결은 됐다
