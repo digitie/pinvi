@@ -382,9 +382,9 @@
   steps: [근처 point 검색·선택 → area 토글, 설악산 area 실제 canvas hit 클릭, 목록 선택 → 카메라 이동 완료 → 상세]
   expected: [area kind·면 geometry 보존, 원래 fit zoom14 미만인 큰 fixture, 이동 완료 후 zoom14 이상·동일 popup ID·상세 유지]
   cleanup: [읽기 전용]
-  automation: blocked
+  automation: scripted
   spec: specs/search/search-geometry.live.spec.ts#SRCH-028
-  notes: "#635 spec은 있으나 데이터 blocked — 운영 Map에 area kind feature가 0건(2026-11-05 전국 in-bounds kind=area 0; KNPS 국립공원 경계 미적재). 적재 뒤 PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY를 주고 scripted로 되돌린다."
+  notes: "kor-travel-map#1450 해소 — 운영 Map에 KNPS 국립공원 경계 area 21건 적재(2026-11-06). anchor 기본 '설악산국립공원'(PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY로 교체)."
 
 - id: SRCH-029
   title: 수목원 — '국립수목원' → 라벨 수목원

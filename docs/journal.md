@@ -1,3 +1,11 @@
+## 2026-11-06 — #658 cleanup 경합 독립 구현·draft 인계
+
+**작업**: 별도 WSL worktree에서 소유 PG18 backend SIGSTOP으로 psql kill/wait 뒤 서버 lock 잔류와 조기 cleanup 반환을 1실패로 재현했다.
+**변경**: fence owner의 bounded 읽기 전용 관측으로 본인 backend와 정확 advisory lock 소멸을 확인한다. DB identity 재검증·정상0→미확인3·기존 실패/signal 상태·자격 출력 억제를 유지한다.
+**결정**: 다른 server 세션 terminate/ACL/schema/fence 복구를 추가하지 않는다. guard 조기 정의 결함도 별도 1실패를 먼저 확인해 정의 이동·생성 실패 전파로 보완했다.
+**검증**: 최종 PG18 통합18/단위12·Bash/Ruff/format 통과, ShellCheck는 원본과 같은7진단·신규0. 명령·source 지문·한계는 `docs/execplan/issue-658-hotswap-lock-release.md`.
+**다음**: draft PR694의 정확 최신 SHA를 메인의 별도 전문적 적대 리뷰2인과 CI 확인에 인계한다. ready/merge·새 main 통합은 하지 않는다. 운영/SSH/prod/Telegram 접근, 봉인 migration 변경, 타 작업자 변경 되돌리기, 보호 stash pop은 없었다.
+
 ## 2026-11-06 — #616·#621 WSL 증거 인계
 
 - 최종고정f99e9b3의 전체unit2084PASS/기존9SKIP(104.59초)·sourcehash전후동일·mypy274·Ruff/format519와 제품674602e 관련실제PG/API134PASS를 확인했다. 실제3provider HTTP·공개503계약7PASS는 앞선134중3건과중복이며 임의합산하지않는다.

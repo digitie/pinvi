@@ -409,6 +409,25 @@ ALTER SCHEMA app_restore_YYYYMMDDHHMMSS RENAME TO app;
 COMMIT;
 ```
 
+### 4.2.1 cleanup의 서버 세션 해제 확인 (#658)
+
+클라이언트 `psql`을 종료하고 `wait`한 것만으로 서버 backend 종료나 advisory lock
+해제가 완료되었다고 보지 않는다. runner는 lock 획득 응답에서 받은 본인 backend PID를
+기준으로, CONNECT가 유지되는 전용 fence owner 연결에서 `pg_stat_activity`와 해당
+database·두 정수 advisory key의 `pg_locks`를 직접 읽는다. 관측 연결에서도 기존
+DB identity guard로 DB 이름/OID·system identifier·주소/포트를 다시 확인한다. backend와 lock이 모두
+사라져야 확인이 끝난다. 통계 snapshot은 매 관측마다 갱신한다.
+
+새 관측 호출은 서버 반복 4초, statement 5초, 연결 2초, client 8초와 강제 종료
+유예 1초로 제한한다. 이 약 9초 상한은 기존 forensic 처리와 `psql` kill/wait를
+포함한 cleanup 전체 상한은 아니다. 확인 실패 시 고정 문구로 명시적 root escalation을 알리고, 원래 상태가
+정상이면 `3`으로 반환한다. 기존 nonzero 및 TERM/INT의 `143`은 보존한다.
+관측 실패를 성공으로 기록하거나 재실행으로 숨기지 않는다.
+
+이 확인은 읽기 전용이다. 다른 backend 종료, CONNECT/ACL 복구, schema 정리,
+fence 해제를 하지 않는다. PID 재사용은 보수적인 timeout을 낼 수 있으며, 이를
+타 세션 정리로 해결하지 않는다. 실패 시 아래 forensic 경계와 fence를 그대로 보존한다.
+
 ### 4.3 실패 시
 
 M05 schema-swap은 **자동 rollback, 자동 schema rename 되돌림, 자동 restore candidate
