@@ -1669,7 +1669,7 @@ async def create_share_token(
         expires_at=body.expires_at,
     )
     web_base_url = settings.pinvi_web_base_url.rstrip("/")
-    url = f"{web_base_url}/trips/{trip.trip_id}/shared/{raw}"
+    url = f"{web_base_url}/shared/{trip.trip_id}/{raw}"
     return Envelope.of(
         ShareLinkResponse(
             share_id=share.share_id,

@@ -387,7 +387,7 @@ Content-Type: application/json
   "data": {
     "share_id": "uuid",
     "token": "<43-char URL-safe base64>",
-    "url": "https://pinvi.example.com/trips/<trip_id>/shared/<token>",
+    "url": "https://pinvi.example.com/shared/<trip_id>/<token>",
     "visibility": "...",
     "expires_at": "...",
   },

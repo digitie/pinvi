@@ -71,6 +71,7 @@ export function TripExportButton({
         size="sm"
         aria-label="여행 내보내기"
         title="여행 내보내기"
+        leadingIcon={compact ? undefined : <Download className="h-4 w-4" aria-hidden="true" />}
         data-testid="trip-export-open"
         className={compact ? 'min-h-11 w-11 shrink-0 px-0' : undefined}
         onClick={() => {
@@ -78,8 +79,7 @@ export function TripExportButton({
           setError(null);
         }}
       >
-        <Download className="h-4 w-4" aria-hidden="true" />
-        {!compact && '내보내기'}
+        {compact ? <Download className="h-4 w-4" aria-hidden="true" /> : '내보내기'}
       </Button>
       <Dialog
         open={model !== null}
@@ -107,8 +107,8 @@ export function TripExportButton({
               loading={busy}
               onClick={() => void print()}
               data-testid="trip-export-print"
+              leadingIcon={<Printer className="h-4 w-4" aria-hidden="true" />}
             >
-              <Printer className="h-4 w-4" aria-hidden="true" />
               인쇄 / PDF 저장
             </Button>
           </>

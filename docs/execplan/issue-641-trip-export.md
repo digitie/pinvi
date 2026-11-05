@@ -31,3 +31,11 @@ SharedTripView의 여행/token identity가 바뀌면 이전 조회와 내보내�
 c87 후보의 두 독립 전문 리뷰 중 하나는 무차단, 다른 하나는 전체 일자 범위 안내와 같은 좌표 재방문 표식 겹침을 P2로 지적했다. 새 회귀2건을 수정 전 실패로 확인한 뒤, 안내를 선택/숨김과 관계없는 조회 전체 일자로 명시하고 정확히 같은 좌표의 번호를 한 표식에 함께 표시했다. 좌표를 이동시키지 않으며 다중 재방문의 작은 +N 표시는 캡션에 전체 번호를 남긴다. 보완 후 관련25검사·타입/lint가 통과했다.
 
 c87의 전체 웹419·workspace타입·프로덕션 빌드가 통과했다. 실제 UI 첫 실행은 fixture의 ORM PK 이름 혼동으로 seed 단계에서 멈췄으므로 제품 실패나 UI 통과로 주장하지 않는다. fixture를 실제 attachment_id로 수정하고 새 후보에서 실제 ICS/PDF를 재실행한다. 최종 전체 검증·PDF 시각 확인·두 코드 재리뷰·정확 CI는 남아 있다.
+
+## 실제 인쇄 경계와 공유 진입 보완
+
+실제 인쇄창의 CSS 준비 timeout은 Playwright의 전체 request interception이 초기 about:blank stylesheet 요청을 멈추는 fixture 간섭으로 좁혔다. 가로채기를 제거하고 외부 요청을 전달하지 않는 소유 deny proxy와 loopback bypass를 사용하자 같은 제품 source에서 실제 private PDF가 생성됐다. 제품 인쇄 코드를 추측 수정하지 않았다.
+
+그 뒤 실제 공유 진입에서 발급 API의 url이 구형 /trips/{id}/shared/{token}을 반환하지만 화면의 열기는 /shared/{id}/{token}인 실제 제품 경계 불일치를 확인했다. 실제 PG 회귀1FAIL 후 발급 url과 문서 예시를 화면의 정본 경로로 맞췄고1PASS했다. API 공개 read/comment/edit endpoint 경로 자체는 바꾸지 않는다. 같은 공유 내보내기 진입 범위의 수정으로 이 PR에 포함한다.
+
+기존 Button의 leadingIcon 슬롯으로 아이콘을 배치해 새 버튼에서 아이콘/라벨이 두 줄이 되는 화면 QA 문제도 정리한다. 새 정확 후보에서 전체 검증과 실제 private/shared/long PDF를 재실행한다.
