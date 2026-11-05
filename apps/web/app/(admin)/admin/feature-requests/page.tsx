@@ -33,7 +33,7 @@ import {
 } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import { AdminFeatureRequestApproveSchema, AdminFeatureRequestReconcileSchema, type AdminFeatureRequestSummary } from '@pinvi/schemas';
+import { AdminFeatureRequestApproveSchema, AdminFeatureRequestReconcileSchema, type AdminFeatureRequestReconcile, type AdminFeatureRequestSummary } from '@pinvi/schemas';
 import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterBar, FilterField } from '@/components/admin/filter-bar';
@@ -357,6 +357,7 @@ function ReviewDialog({
   const [commandPending, setCommandPending] = useState(Boolean(dispatch));
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [reconcileConfirmOpen, setReconcileConfirmOpen] = useState(false);
+  const [reconcileIntent, setReconcileIntent] = useState<AdminFeatureRequestReconcile | null>(null);
   const [resolutionReason, setResolutionReason] = useState('');
   const [resolutionNotice, setResolutionNotice] = useState<string | null>(null);
   const reconcileButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -460,11 +461,8 @@ function ReviewDialog({
   });
 
   const reconcileMutation = useMutation({
-    mutationFn: () =>
-      adminApi(apiClient).reconcileFeatureRequestCommand(request.request_id, {
-        access_reason: resolutionReason.trim(),
-        expected_command_key: expectedCommandKey,
-      }),
+    mutationFn: (intent: AdminFeatureRequestReconcile) =>
+      adminApi(apiClient).reconcileFeatureRequestCommand(request.request_id, intent),
     onSuccess: (result) => {
       setReconcileConfirmOpen(false);
       setErr(null);
@@ -794,11 +792,16 @@ function ReviewDialog({
                     disabled={busy || !hasSavedActor}
                     data-testid="admin-fr-reconcile-command"
                     onClick={() => {
-                      if (!AdminFeatureRequestReconcileSchema.safeParse({ access_reason: resolutionReason, expected_command_key: expectedCommandKey }).success) {
+                      const parsed = AdminFeatureRequestReconcileSchema.safeParse({
+                        access_reason: resolutionReason, expected_command_key: expectedCommandKey,
+                      });
+                      if (!parsed.success) {
                         setErr('실행 기록 확인 사유는 5~500자로 입력하세요.');
                         return;
                       }
                       setErr(null);
+                      // 확인창을 연 시점의 사유·명령 키를 보존한다. 재조회가 대상을 바꾸지 않는다.
+                      setReconcileIntent(parsed.data);
                       setReconcileConfirmOpen(true);
                     }}
                   >
@@ -937,7 +940,7 @@ function ReviewDialog({
             처리 중이거나 확인에 실패하면 대기 상태를 유지합니다.
           </AlertDialogDescription>
           <p className="mt-4 whitespace-pre-wrap text-sm text-ink [overflow-wrap:anywhere]">
-            {resolutionReason.trim()}
+            {reconcileIntent?.access_reason}
           </p>
           <AlertDialogFooter>
             <AdminButton
@@ -954,7 +957,7 @@ function ReviewDialog({
               type="button"
               disabled={busy}
               data-testid="admin-fr-reconcile-confirm-confirm"
-              onClick={() => reconcileMutation.mutate()}
+              onClick={() => { if (reconcileIntent) reconcileMutation.mutate(reconcileIntent); }}
             >
               실행 기록 확인
             </AdminButton>

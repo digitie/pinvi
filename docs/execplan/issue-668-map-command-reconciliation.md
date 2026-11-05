@@ -28,3 +28,9 @@ Map owner와 Pinvi 각각 draft를 먼저 열고 자주 push한다. 소비자 �
 ## 중간 구현·검증
 
 actor/attempt 키 선저장, 저장 명령 확인과 requested 감사 선커밋·재잠금 비교, 완료·대기·미실행 분기 및 새 키 영속화, 반복 응답의 로컬 재생을 추가했다. 실제 Pinvi PostgreSQL/auth와 SDK HTTP 경계 통합 26개, mypy261 source, SDK/웹 typecheck를 통과했다. 첫 검증에서 PATH에 alembic가 없어 fixture 시작이 실패했고 앱 venv PATH를 명시하여 재실행했다. UI는 기존 base-ui Dialog/AlertDialog·색상으로 사유와 확인창을 연결했다. 확장 경계·실제 owner HTTP/UI·최종 리뷰는 진행 중이다.
+
+## 적대 리뷰 수정과 실제 검증
+
+두 전문 리뷰어가 지연된 옛 승인/조정의 새 시도 승격(P1), 확정412 뒤 봉인 키 회귀(P2)를 지적했다. actual negative2 이후 expected_command_key를 lock 아래 대조하고 완료 재생도 요청 키에 한정했다. 확정4xx는 dispatch만 제거하고 새 키/봉인 이력을 보존한다. 초기 request_id만 구소비자의 키 생략을 호환하고 전진 후 생략은409다. 관련 통합50개(Event 실제행잠금대기·requested 감사 선커밋 포함)를 통과했다.
+
+추가 리뷰의 열린 확인창 대상 교체(P2)는 확인 시점의 키·사유 snapshot을 mutation 인자로 보내도록 수정했다. 기존 코드 negative1·수정 코드 확인창/SDK4개를 확인했다. 단위 전체1975pass9skip, 웹392pass(snapshot 추가 전)·schema24·타입·lint0error/기존5warning. Map86034cb·Pinvi d54b78f 실제 HTTP/로그인/UI9pass·owner실제상태 대조를 마쳤다. 최종 snapshot UI는 owner merge 뒤 재검증한다.
