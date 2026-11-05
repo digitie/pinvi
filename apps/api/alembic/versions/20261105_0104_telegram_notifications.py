@@ -1,4 +1,4 @@
-"""#636/#637/#638: 알림 동의·발생키·대상별 재개 지점."""
+"""#636/#638: 알림 동의·발생키·대상별 재개 지점."""
 
 from collections.abc import Sequence
 
@@ -50,7 +50,6 @@ def upgrade() -> None:
         ),
         sa.Column("daily_enabled", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("weekly_enabled", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("weather_enabled", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("send_time", sa.String(5), nullable=False, server_default="08:00"),
         sa.Column("weekly_day", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column(

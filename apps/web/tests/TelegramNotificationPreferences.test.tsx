@@ -18,7 +18,6 @@ vi.mock('@/lib/api', () => ({ apiClient: {} }));
 const initial: TelegramPreferences = {
   daily_enabled: false,
   weekly_enabled: false,
-  weather_enabled: false,
   send_time: '08:00',
   weekly_day: 0,
   weekly_target_id: null,

@@ -82,7 +82,6 @@ def preferences_body(row: TelegramPreferences | None) -> TelegramPreferencesBody
     return TelegramPreferencesBody(
         daily_enabled=row.daily_enabled,
         weekly_enabled=row.weekly_enabled,
-        weather_enabled=row.weather_enabled,
         send_time=row.send_time,
         weekly_day=row.weekly_day,
         weekly_target_id=row.weekly_target_id,
@@ -295,7 +294,6 @@ async def _guard(
         flag = {
             "daily_brief": "daily_enabled",
             "weekly_summary": "weekly_enabled",
-            "weather_alert": "weather_enabled",
         }.get(row.category)
         if (
             pref is None

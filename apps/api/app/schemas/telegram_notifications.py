@@ -24,7 +24,6 @@ class TelegramSendRequest(BaseModel):
 class TelegramPreferencesBody(BaseModel):
     daily_enabled: bool = False
     weekly_enabled: bool = False
-    weather_enabled: bool = False
     send_time: str = Field(default="08:00", pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
     weekly_day: int = Field(default=0, ge=0, le=6)
     weekly_target_id: uuid.UUID | None = None

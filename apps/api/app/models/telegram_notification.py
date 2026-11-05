@@ -38,9 +38,6 @@ class TelegramPreferences(Base):
     weekly_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
-    weather_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
     send_time: Mapped[str] = mapped_column(String(5), nullable=False, server_default="08:00")
     weekly_day: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     weekly_target_id: Mapped[uuid.UUID | None] = mapped_column(

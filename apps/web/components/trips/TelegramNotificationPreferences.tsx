@@ -49,7 +49,7 @@ export function TelegramNotificationPreferences({ targets }: { targets: Telegram
       <SettingsSection title="예약 알림">
         <p className="mb-3 text-sm text-muted">
           한국 표준시(KST) 기준입니다. 일간 브리프는 전날·당일 일정을, 주간 요약은 앞으로 7일 안에
-          시작하는 여행 목록을 보냅니다. 일간·특보 알림은 본인 소유 여행에 연결한 검증된 대상으로만
+          시작하는 여행 목록을 보냅니다. 일간 알림은 본인 소유 여행에 연결한 검증된 대상으로만
           보냅니다.
         </p>
         {error && (
@@ -68,7 +68,6 @@ export function TelegramNotificationPreferences({ targets }: { targets: Telegram
                 [
                   ['daily_enabled', '일간 브리프'],
                   ['weekly_enabled', '주간 여행 요약'],
-                  ['weather_enabled', '여행 중 기상 특보 발령·해제'],
                 ] as const
               ).map(([key, label]) => (
                 <label key={key} className="flex min-h-11 items-center gap-2 text-sm text-ink">
