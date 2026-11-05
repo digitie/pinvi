@@ -1880,3 +1880,122 @@ SELECT (SELECT oid::text FROM pg_namespace WHERE nspname = 'app'),
         )
     finally:
         container.stop()
+
+
+def test_restore_hotswap_cleanup_waits_for_server_lock_release(tmp_path: Path) -> None:
+    """psql kill/wait와 정지된 소유 PG18 backend의 lock 해제를 분리한다."""
+
+    import time
+
+    from testcontainers.postgres import PostgresContainer
+
+    tools = _require_tools()
+    source = HOTSWAP_SCRIPT.read_text(encoding="utf-8")
+    # Execute the actual runner functions against PostgreSQL, without running
+    # the unrelated snapshot/schema-swap setup in this lock-lifecycle probe.
+    harness = tmp_path / "cleanup.sh"
+    harness.write_text(
+        "set -euo pipefail\n"
+        + source[source.index('TMP_DIR=""') : source.index('TEST_MODE=')]
+        + source[source.index("phase() {") : source.index('if [[ "${1:-}"')]
+        + source[source.index("cleanup() {") : source.index("copy_tool_to_private_dir() {")]
+        + source[source.index("start_advisory_lock() {") : source.index("configure_forensics() {")]
+        + """
+TMP_DIR="$(mktemp -d)"
+PSQL_BIN="${PROBE_PSQL}"
+DATABASE_URL="${PROBE_URL}"
+FENCE_DATABASE_URL="${PROBE_URL}"
+start_advisory_lock
+printf 'PROBE_READY\n'
+read -r requested_status
+exit "${requested_status}"
+""",
+        encoding="utf-8",
+    )
+    container = PostgresContainer(
+        "postgres:18-alpine",
+        username="m05_root",
+        password=TEST_PASSWORD,
+        dbname="m05_root",
+    )
+    container.start()
+    process = None
+    backend_pid = None
+    try:
+        database_url = _database_url(
+            host=container.get_container_host_ip(),
+            port=container.get_exposed_port(5432),
+            role="m05_root",
+            database="m05_root",
+        )
+        env = os.environ.copy()
+        env.update(PROBE_PSQL=tools["psql"], PROBE_URL=database_url)
+        with (tmp_path / "output").open("w+") as output:
+            process = subprocess.Popen(  # noqa: S603
+                [tools["bash"], str(harness)],
+                stdin=subprocess.PIPE,
+                stdout=output,
+                stderr=output,
+                text=True,
+                env=env,
+            )
+            deadline = time.monotonic() + 10
+            while "PROBE_READY" not in (tmp_path / "output").read_text():
+                assert process.poll() is None, (tmp_path / "output").read_text()
+                assert time.monotonic() < deadline
+                time.sleep(0.02)
+            owned_backend = _psql(
+                tools,
+                database_url,
+                """
+SELECT activity.pid::text
+FROM pg_stat_activity activity
+JOIN pg_locks lock ON lock.pid = activity.pid
+WHERE activity.datname = current_database()
+  AND activity.usename = current_user
+  AND lock.locktype = 'advisory'
+  AND lock.classid = 1414679892 AND lock.objid = 1213421392
+  AND lock.objsubid = 2 AND lock.granted;
+""",
+            )
+            _require_success(owned_backend)
+            assert owned_backend.stdout.strip().isdigit()
+            backend_pid = int(owned_backend.stdout.strip())
+            # Only this test's freshly created container and exact lock owner.
+            stopped = container.exec(["kill", "-STOP", str(backend_pid)])
+            assert stopped.exit_code == 0
+            assert process.stdin is not None
+            process.stdin.write("0\n")
+            process.stdin.flush()
+            # The old cleanup exits here even though this backend is frozen.
+            time.sleep(0.3)
+            held = _psql(
+                tools,
+                database_url,
+                f"SELECT count(*) FROM pg_locks WHERE pid = {backend_pid} "
+                "AND locktype = 'advisory' AND granted;",
+            )
+            _require_success(held)
+            assert held.stdout.strip() == "1"
+            assert process.poll() is None, "cleanup returned while its server backend still held the lock"
+            assert container.exec(["kill", "-CONT", str(backend_pid)]).exit_code == 0
+            backend_pid = None
+            assert process.wait(timeout=12) == 0
+            gone = _psql(
+                tools,
+                database_url,
+                "SELECT NOT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' "
+                "AND classid = 1414679892 AND objid = 1213421392 AND granted);",
+            )
+            _require_success(gone)
+            assert gone.stdout.strip() == "t"
+    finally:
+        if backend_pid is not None:
+            container.exec(["kill", "-CONT", str(backend_pid)])
+        if process is not None:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=12)
+            if process.stdin is not None:
+                process.stdin.close()
+        container.stop()
