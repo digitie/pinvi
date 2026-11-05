@@ -258,6 +258,11 @@ async def update_poi(
 
 
 async def soft_delete_poi(db: AsyncSession, *, poi: TripDayPoi) -> None:
+    # 일자 기준 유지/추가/이동과 같은 Trip→POI 순서로 직렬화한다.
+    trip = await _lock_active_trip(db, poi.trip_id)
+    await db.refresh(poi, with_for_update=True)
+    if trip is None or poi.deleted_at is not None:
+        raise PoiNotFoundError("POI를 찾을 수 없습니다.")
     poi.deleted_at = datetime.now(UTC)
     await db.commit()
 

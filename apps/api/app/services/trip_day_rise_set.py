@@ -83,7 +83,11 @@ async def sync_trip_day_rise_sets(*, trip_id: uuid.UUID) -> None:
 
 
 async def _sync_trip_day_rise_sets(db: AsyncSession, *, trip_id: uuid.UUID) -> None:
-    trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id))
+    # POI 추가/이동·일자/여행 변경과 같은 Trip→child 잠금 순서.
+    # 입력을 읽은 뒤 늦게 저장하는 sync가 더 최신 기준을 덮어쓰지 못하게 한다.
+    trip = await db.scalar(
+        select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)).with_for_update()
+    )
     if trip is None:
         return
     days = list(

@@ -164,21 +164,21 @@ async def test_sync_does_not_commit_or_rollback_caller_writes(
     async with session_factory() as db:
         trip = await db.get(Trip, trip_id)
         assert trip is not None
-        trip.title = "아직 커밋하지 않은 변경"
+        owner_id = trip.owner_user_id
+        user = await db.get(User, owner_id)
+        assert user is not None
+        user.nickname = "아직 커밋하지 않은 변경"
         if flushed:
             await db.flush()
         await sync_trip_day_rise_sets(trip_id=trip_id)
-        assert trip.title == "아직 커밋하지 않은 변경"
+        assert user.nickname == "아직 커밋하지 않은 변경"
         async with session_factory() as observer:
             assert (
-                await observer.scalar(select(Trip.title).where(Trip.trip_id == trip_id))
-                == "일출 여행"
+                await observer.scalar(select(User.nickname).where(User.user_id == owner_id)) is None
             )
         await db.rollback()
     async with session_factory() as observer:
-        assert (
-            await observer.scalar(select(Trip.title).where(Trip.trip_id == trip_id)) == "일출 여행"
-        )
+        assert await observer.scalar(select(User.nickname).where(User.user_id == owner_id)) is None
 
 
 async def _trip_owner_and_poi(session_factory: Any, trip_id: uuid.UUID) -> tuple[str, str]:
@@ -201,22 +201,23 @@ async def test_concurrent_gets_atomically_create_one_cache_row_per_day(
 
     trip_id = await _seed_trip_with_poi(session_factory)
     owner, _ = await _trip_owner_and_poi(session_factory, trip_id)
-    original_execute = AsyncSession.execute
+    original_scalar = AsyncSession.scalar
     ready = asyncio.Event()
     contenders: set[int] = set()
 
-    async def concurrent_insert(db: AsyncSession, statement: Any, *args: Any, **kwargs: Any) -> Any:
+    async def concurrent_lock(db: AsyncSession, statement: Any, *args: Any, **kwargs: Any) -> Any:
         if (
-            str(statement).startswith("INSERT INTO app.trip_day_rise_sets")
+            "FROM app.trips" in str(statement)
+            and "FOR UPDATE" in str(statement)
             and id(db) not in contenders
         ):
             contenders.add(id(db))
             if len(contenders) == 2:
                 ready.set()
             await asyncio.wait_for(ready.wait(), timeout=5)
-        return await original_execute(db, statement, *args, **kwargs)
+        return await original_scalar(db, statement, *args, **kwargs)
 
-    monkeypatch.setattr(AsyncSession, "execute", concurrent_insert)
+    monkeypatch.setattr(AsyncSession, "scalar", concurrent_lock)
     responses = await asyncio.wait_for(
         asyncio.gather(
             client.get(f"/trips/{trip_id}", cookies=auth_cookies(owner)),
@@ -439,3 +440,79 @@ async def test_unchanged_input_preserves_etl_success_and_null_transitions_mark_s
         row = await db.get(TripDayRiseSet, {"trip_id": trip_id, "day_index": 1})
         assert row is not None and row.stale and row.status == "pending_date"
         assert row.locdate is None
+
+
+async def test_older_sync_cannot_overwrite_a_newer_poi_move(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    trip_id = await _seed_trip_with_poi(session_factory)
+    owner, poi_id = await _trip_owner_and_poi(session_factory, trip_id)
+    original_execute = AsyncSession.execute
+    old_ready = asyncio.Event()
+    release_old = asyncio.Event()
+    first_session: int | None = None
+
+    async def pause_old_sync(db: AsyncSession, statement: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal first_session
+        if str(statement).startswith("INSERT INTO app.trip_day_rise_sets"):
+            if first_session is None:
+                first_session = id(db)
+                old_ready.set()
+                await asyncio.wait_for(release_old.wait(), timeout=10)
+        return await original_execute(db, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", pause_old_sync)
+    old = asyncio.create_task(sync_trip_day_rise_sets(trip_id=trip_id))
+    move = None
+    try:
+        await asyncio.wait_for(old_ready.wait(), timeout=5)
+        move = asyncio.create_task(
+            client.patch(
+                f"/trips/{trip_id}/pois/{poi_id}",
+                cookies=auth_cookies(owner),
+                headers={"If-Match": "1"},
+                json={"day_index": 2},
+            )
+        )
+        # 정정 전에는 이동+새 sync가 먼저 끝난다. Trip fence 도입 후에는 실제
+        # PostgreSQL Lock wait를 확인한 다음 먼저 시작한 sync를 풀어준다.
+        for _ in range(200):
+            if move.done():
+                break
+            async with session_factory() as observer:
+                blocked = await observer.scalar(
+                    text(
+                        "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() "
+                        "AND wait_event_type='Lock' AND query LIKE '%app.trips%FOR UPDATE%'"
+                    )
+                )
+            if blocked:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            pytest.fail("neither completed move nor database lock wait observed")
+    finally:
+        release_old.set()
+        await old
+        if move is not None:
+            response = await asyncio.wait_for(move, timeout=5)
+            assert response.status_code == 200, response.text
+    async with session_factory() as db:
+        rows = {
+            row.day_index: row
+            for row in await db.scalars(
+                select(TripDayRiseSet).where(TripDayRiseSet.trip_id == trip_id)
+            )
+        }
+    assert rows[1].status == "pending_coord" and rows[1].longitude is None
+    assert rows[2].status == "pending_fetch"
+    assert rows[2].longitude == 129.118
+    assert str(rows[2].reference_poi_id) == poi_id
