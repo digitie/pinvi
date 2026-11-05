@@ -194,7 +194,6 @@ scripted 케이스의 spec 파일·id 존재). 목록 검증은 `test:e2e:live-c
 | TRIP-054 | blocked | 일자 메모 UI 없음(API 는 있음, #640) |
 | TRIP-055 | manual | 동선 최적화 시작/끝 고정 옵션 없음 — 서버 동작 관찰 후 승격 |
 | SRCH-016/026/029/030/032/047 | manual | 편향 효과 없음(장소 없는 여행), 중복 스팟체크, 수목원·휴양림 적재 미확인, 휴게소 이름 불안정, 먼바다 이동 API 없음 |
-| SRCH-028 | blocked | 운영 Map area kind 0건(KNPS 국립공원 경계 미적재, 2026-11-05) — spec 있음, `PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY`로 켠다. SRCH-023/024는 #635(#665)로 scripted |
 | SRCH-040 | blocked | `unverified` 는 Map 장애 유도가 필요 — 격리 스택 하네스에서만 |
 | SRCH-041 | blocked | detail-card 계약에 이미지/요금/설명 없음 |
 | NEAR-031/037 | manual | KNPS 화장실 prod 적재 미확인, 신선도 tick 은 2분 고정 대기 |
@@ -337,8 +336,9 @@ env 1(SHR-027), 데이터/타이밍 2(SRCH-048 이벤트 없음, POI-032 마커 
   `PINVI_E2E_GEOMETRY_BUKHAN_ANCHOR_QUERY`로 받는다(기본 `북한산성`).
 - 기본값은 운영 Map 데이터로 확인했다(2026-11-05, 줌 15 화면에 대상 route 여럿). 검색 결과 중
   anchor 이름을 담은 point feature 행으로 이동한다(같은 이름의 route 행은 고르지 않는다).
-- SRCH-028(area)은 `PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY`가 있을 때만 돈다. 운영 Map에 area
-  kind가 0건이라 현재 blocked다.
+- SRCH-028(area)은 설악산 국립공원 area와 교차하는 point의 검색어를
+  `PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY`로 받는다(기본 `설악산국립공원`). 운영 Map의 KNPS 국립공원
+  경계 21건은 kor-travel-map#1450으로 적재했다(2026-11-06).
 - 도형에 없는 coord를 만들지 않는다. point는 카메라 이동용 fixture다.
 - 운영 origin guard는 유지한다. 격리 WSL 실제 HTTP/WebGL 검증은 별도 fixture에서 실행하며 운영 통과로 기록하지 않는다.
 
