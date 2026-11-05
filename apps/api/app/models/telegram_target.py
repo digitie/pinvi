@@ -49,3 +49,7 @@ class TelegramTarget(Base, TimestampMixin):
     last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_send_status: Mapped[str | None] = mapped_column(String(32))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    generation: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), nullable=False, server_default=text("gen_random_uuid()")
+    )

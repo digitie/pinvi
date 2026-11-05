@@ -265,3 +265,38 @@ async def test_no_target_is_skipped_terminal(
     rows = await _outbox_rows(session_factory)
     assert rows[0].status == "skipped"  # 재시도하지 않는다.
     assert fake_telegram.sent == []
+
+
+async def test_provider_retry_after_is_not_retried_early(
+    verified_user: tuple[str, str],
+    session_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core.config import settings
+    from app.services import telegram_notify
+    from app.services.telegram_outbox import (
+        enqueue_user_notification,
+        process_pending_telegram_batch,
+    )
+
+    user_id, _ = verified_user
+    await _seed_target(session_factory, user_id=user_id, chat_id="-100777")
+    fake = _RecordingTelegram(
+        error=TelegramError(
+            "Too Many Requests", code="rate_limited", status_code=429, retry_after=3600
+        )
+    )
+    monkeypatch.setattr(settings, "pinvi_telegram_bot_token_default", "111:system_token")
+    monkeypatch.setattr(telegram_notify, "_make_client", lambda: fake)
+    now = datetime.now(UTC)
+    async with session_factory() as db:
+        await enqueue_user_notification(
+            db, category="trip_created", user_id=uuid.UUID(user_id), text="일정"
+        )
+        await db.commit()
+        await process_pending_telegram_batch(db, now=now + timedelta(seconds=1))
+    rows = await _outbox_rows(session_factory)
+    assert rows[0].scheduled_at >= now + timedelta(seconds=3600)
+    async with session_factory() as db:
+        result = await process_pending_telegram_batch(db, now=now + timedelta(seconds=3599))
+    assert result.claimed == 0

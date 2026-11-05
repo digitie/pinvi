@@ -31,3 +31,12 @@
 - Geo623은305777d로 병합했다. 보존202605 공식67행의 실제COPY/MV/인증HTTP·두브라우저를 검증했고 정확b1f9 두리뷰무차단·CI5SUCCESS였다. runtime은d46과같으며 운영650은재현/원인미확정이라열어둔다. 읽기전용대조가이드는Geo docs/runbooks/pinvi-650-read-only-diagnosis.md에 있다.
 - #643 최신 본문을 다시 읽고684완료와650운영확인후속을 반영했다.
 - 이 묶음 뒤641내보내기를 진행한다. Map1450의 실제prod area적재/확인은Claude담당이다.
+
+
+## 1차 구현 체크포인트
+
+- 시스템 outbox와 분리한 발생키·대상별 chunk 진행 큐, 기본 off 예약 동의, 소유자 수동 발송/결과 API와0104 migration을 추가했다.
+- chunk마다 동의→여행→대상 검사와 row lock을 수행한다. 검증·연결 변경은 generation으로 구분한다. Telegram 수락 후 ACK commit 유실은 중복 가능하며 exactly-once가 아니다.
+- 기존 worker의 Retry-After 무시를 실제 PG 실패로 재현한 뒤 양의 retry 간격을 적용했다.
+- WSL 실제 migration/HTTP/DB 관련26건과 요약·UTF-16 분할4건 통과, mypy266개 통과. 최초 테스트6건은 누락된 테스트 사용자 fixture 문제였으며 보완 후 전체26건 통과했다.
+- 아직 UI·예약 planner·Dagster 연결·명시적 특보 이벤트 owner 계약과 최종 리뷰/검증은 남아 있다. #636/#637/#638 완료 또는 병합 준비로 간주하지 않는다.

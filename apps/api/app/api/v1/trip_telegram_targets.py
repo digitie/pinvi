@@ -14,6 +14,7 @@ from app.api.v1.telegram_targets import _response  # 공통 응답 매퍼 재사
 from app.core.deps import CurrentUserId, DbSession
 from app.schemas.envelope import Envelope
 from app.schemas.telegram import TelegramTargetResponse, TripTelegramTargetLink
+from app.services.telegram_notifications import owned_trip_locked
 from app.services.telegram_targets import (
     TelegramTargetNotFoundError,
     TripTargetConflictError,
@@ -64,7 +65,7 @@ async def link_trip_telegram_target(
 ) -> Envelope[TelegramTargetResponse]:
     user_id = uuid.UUID(current_user_id)
     try:
-        await get_trip_owned_by_user(db, trip_id=trip_id, user_id=user_id)
+        await owned_trip_locked(db, trip_id, user_id)
         target = await link_trip_target(
             db, trip_id=trip_id, target_id=body.telegram_target_id, user_id=user_id
         )
@@ -98,7 +99,7 @@ async def unlink_trip_telegram_target(
 ) -> None:
     user_id = uuid.UUID(current_user_id)
     try:
-        await get_trip_owned_by_user(db, trip_id=trip_id, user_id=user_id)
+        await owned_trip_locked(db, trip_id, user_id)
         await unlink_trip_target(db, trip_id=trip_id, target_id=target_id)
     except (TripNotFoundError, TripPermissionError) as exc:
         raise _raise_trip(exc) from exc
