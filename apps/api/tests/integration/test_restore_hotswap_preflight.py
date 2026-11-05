@@ -6,7 +6,9 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -1882,10 +1884,22 @@ SELECT (SELECT oid::text FROM pg_namespace WHERE nspname = 'app'),
         container.stop()
 
 
-def test_restore_hotswap_cleanup_waits_for_server_lock_release(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("requested_status", "resume_backend"),
+    [
+        (0, True),
+        (37, True),
+        ("TERM", True),
+        ("INT", True),
+        (0, False),
+        (37, False),
+        ("TERM", False),
+    ],
+)
+def test_restore_hotswap_cleanup_waits_for_server_lock_release(
+    tmp_path: Path, requested_status: int | str, resume_backend: bool
+) -> None:
     """psql kill/wait와 정지된 소유 PG18 backend의 lock 해제를 분리한다."""
-
-    import time
 
     from testcontainers.postgres import PostgresContainer
 
@@ -1896,7 +1910,7 @@ def test_restore_hotswap_cleanup_waits_for_server_lock_release(tmp_path: Path) -
     harness = tmp_path / "cleanup.sh"
     harness.write_text(
         "set -euo pipefail\n"
-        + source[source.index('TMP_DIR=""') : source.index('TEST_MODE=')]
+        + source[source.index('TMP_DIR=""') : source.index("TEST_MODE=")]
         + source[source.index("phase() {") : source.index('if [[ "${1:-}"')]
         + source[source.index("cleanup() {") : source.index("copy_tool_to_private_dir() {")]
         + source[source.index("start_advisory_lock() {") : source.index("configure_forensics() {")]
@@ -1906,6 +1920,7 @@ PSQL_BIN="${PROBE_PSQL}"
 DATABASE_URL="${PROBE_URL}"
 FENCE_DATABASE_URL="${PROBE_URL}"
 start_advisory_lock
+printf 'PROBE_CLIENT|%s\n' "${LOCK_HOLDER_PID}"
 printf 'PROBE_READY\n'
 read -r requested_status
 exit "${requested_status}"
@@ -1948,39 +1963,80 @@ exit "${requested_status}"
                 tools,
                 database_url,
                 """
-SELECT activity.pid::text
+SELECT activity.pid::text, activity.backend_start::text
 FROM pg_stat_activity activity
 JOIN pg_locks lock ON lock.pid = activity.pid
 WHERE activity.datname = current_database()
   AND activity.usename = current_user
   AND lock.locktype = 'advisory'
   AND lock.classid = 1414679892 AND lock.objid = 1213421392
-  AND lock.objsubid = 2 AND lock.granted;
+  AND lock.objsubid = 2 AND lock.granted
+  AND lock.database = (SELECT oid FROM pg_database WHERE datname = current_database());
 """,
             )
             _require_success(owned_backend)
-            assert owned_backend.stdout.strip().isdigit()
-            backend_pid = int(owned_backend.stdout.strip())
+            owner_pid, backend_start = owned_backend.stdout.strip().split("|")
+            assert owner_pid.isdigit() and backend_start
+            backend_pid = int(owner_pid)
+            client_pid = next(
+                int(line.split("|")[1])
+                for line in (tmp_path / "output").read_text().splitlines()
+                if line.startswith("PROBE_CLIENT|")
+            )
             # Only this test's freshly created container and exact lock owner.
             stopped = container.exec(["kill", "-STOP", str(backend_pid)])
             assert stopped.exit_code == 0
-            assert process.stdin is not None
-            process.stdin.write("0\n")
-            process.stdin.flush()
-            # The old cleanup exits here even though this backend is frozen.
-            time.sleep(0.3)
+            stopped_state = container.exec(["cat", f"/proc/{backend_pid}/status"])
+            assert stopped_state.exit_code == 0
+            assert b"State:\tT" in stopped_state.output
+            cleanup_started = time.monotonic()
+            if isinstance(requested_status, str):
+                process.send_signal(getattr(signal, f"SIG{requested_status}"))
+            else:
+                assert process.stdin is not None
+                process.stdin.write(f"{requested_status}\n")
+                process.stdin.flush()
+            # Wait for actual client death, never infer it from elapsed time.
+            deadline = time.monotonic() + 3
+            while Path(f"/proc/{client_pid}").exists():
+                assert time.monotonic() < deadline, "psql client was not reaped"
+                time.sleep(0.02)
             held = _psql(
                 tools,
                 database_url,
-                f"SELECT count(*) FROM pg_locks WHERE pid = {backend_pid} "
+                f"SELECT count(*) FROM pg_locks WHERE pid = {backend_pid} "  # noqa: S608 - verified integer PID.
                 "AND locktype = 'advisory' AND granted;",
             )
             _require_success(held)
             assert held.stdout.strip() == "1"
-            assert process.poll() is None, "cleanup returned while its server backend still held the lock"
-            assert container.exec(["kill", "-CONT", str(backend_pid)]).exit_code == 0
-            backend_pid = None
-            assert process.wait(timeout=12) == 0
+            assert process.poll() is None, (
+                "cleanup returned while its server backend still held the lock"
+            )
+            # A second signal during cleanup must not discard the first status
+            # or cut the bounded server observation short.
+            process.send_signal(signal.SIGTERM)
+            if resume_backend:
+                assert container.exec(["kill", "-CONT", str(backend_pid)]).exit_code == 0
+            expected_status = 143 if isinstance(requested_status, str) else requested_status
+            if not resume_backend and expected_status == 0:
+                expected_status = 3
+            assert process.wait(timeout=12) == expected_status
+            assert time.monotonic() - cleanup_started < 12
+            probe_output = (tmp_path / "output").read_text()
+            assert TEST_PASSWORD not in probe_output
+            assert database_url not in probe_output
+            if not resume_backend:
+                assert "advisory lock holder release could not be confirmed" in probe_output
+                still_held = _psql(
+                    tools,
+                    database_url,
+                    "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' "
+                    "AND classid = 1414679892 AND objid = 1213421392 AND granted;",
+                )
+                _require_success(still_held)
+                assert still_held.stdout.strip() == "1"
+                return
+            assert "advisory lock holder release could not be confirmed" not in probe_output
             gone = _psql(
                 tools,
                 database_url,

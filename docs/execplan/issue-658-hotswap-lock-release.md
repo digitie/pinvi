@@ -13,7 +13,7 @@
 1. [x] 별도 Linux worktree 생성, 지침·복원 런북 및 Linux native CodeGraph explore/impact 확인.
 2. [x] 이 한국어 계획을 감사 후 commit/push하고 draft PR을 먼저 생성한다.
 3. [x] 소유 disposable PostgreSQL 18에서 기존 경합을 실패 우선으로 재현한다. 정확히 소유한 backend를 식별하고 클라이언트 종료와 서버 lock 정리를 결정적으로 분리한다.
-4. [ ] 재현된 경우에만 최소 변경한다. 해제 확인이 필요하면 서버 상태를 직접 확인하고 시간을 제한한다.
+4. [x] 재현된 경우에만 최소 변경한다. 해제 확인이 필요하면 서버 상태를 직접 확인하고 시간을 제한한다.
 5. [ ] 기존 timeout·실패 status·signal cleanup·자격 출력 억제·DB fencing 불변식을 회귀 검증한다.
 6. [ ] PG·lint·source hash·한계를 기록하고 정확 SHA의 완성 draft PR을 메인에 인계한다.
 
@@ -26,3 +26,9 @@
 - 기존 canonical PG18 검사는 1통과(11.35초).
 - 실제 runner의 lock 획득·cleanup 함수를 소유 PG18에서 실행하고 해당 backend를 SIGSTOP한 신규 회귀는 기존 script에서 1실패(6.69초): cleanup이 서버 정리 전 상태 0으로 반환했다.
 - 기존 즉시 lock 부재 단언은 그대로 유지한다. 병행 읽기 전용 검토는 fence URL·전체 deadline·원래 status·타 세션 비간섭을 지적했다.
+
+## 첫 보완 검증
+
+- 수정 script의 신규 delay+기존 canonical 2통과(13.93초). 정상·원래37·TERM/INT143, 2차 TERM, 정지 backend timeout을 포함한 PG18 생명주기 7통과(45.63초).
+- observer는 fence URL의 읽기 전용 catalog 질의만 수행하며 server4/statement5/connect2/client8+kill유예1초 상한을 둔다. nonzero는 보존하고 확인할 수 없는 정상0만3으로 바꾼다.
+- 동일 key의 다른 세션 비간섭과 관측 연결 실패, 전체 관련 PG/lint 검증은 후속 확인한다.
