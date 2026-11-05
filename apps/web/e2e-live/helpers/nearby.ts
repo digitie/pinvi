@@ -215,8 +215,8 @@ export async function searchAndFly(page: Page, query: string): Promise<void> {
 
 /**
  * Click an individually rendered transport marker of `layer` (cluster markers have other labels).
- * Tries legend titles in order until a `.maplibregl-marker[aria-label=title]` inside the canvas box
- * opens the transport dialog. Returns the title clicked.
+ * legend의 layer/feature ID에 해당하는 실제 마커를 정상 클릭하고 같은 ID의 상세 HTTP를 검증한다.
+ * 동명 feature나 숨은 cluster를 대신 누르지 않는다. 반환값은 클릭한 이름이다.
  */
 export async function clickTransportMarker(page: Page, layer: Layer): Promise<string> {
   const items = await legendMarkers(page, layer).evaluateAll((elements) =>
@@ -250,6 +250,7 @@ export async function clickTransportMarker(page: Page, layer: Layer): Promise<st
     const body = await res.json();
     expect(body.data.item.feature_id).toBe(item.id);
     await expect(detailDialog(page)).toBeVisible();
+    await expect(detailDialog(page).locator('[data-layer]')).toHaveAttribute('data-layer', layer);
     return item.title;
   }
   throw new Error(`no individually rendered ${layer} marker could open the transport dialog`);

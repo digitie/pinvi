@@ -47,7 +47,7 @@
     "react-hook-form": "7.91.0",
     "tailwind-merge": "3.7.0",
     "vworld-map-core": "file:../mobile/vendor/vworld-map-core-1.0.0.tgz",
-    "vworld-map-web": "file:vendor/vworld-map-web-1.0.0.tgz",
+    "vworld-map-web": "file:vendor/vworld-map-web-1.0.2.tgz",
     "zod": "4.6.7",
     "zustand": "5.0.16",
     "@kor-travel/ui": "file:vendor/kor-travel-ui-0.1.0-dev.9.tgz",

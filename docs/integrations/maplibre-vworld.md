@@ -29,7 +29,7 @@ MapLibre GL JS 채택 결정은 유지하되, 기존 Web 의존성 `maplibre-vwo
 {
   "dependencies": {
     "vworld-map-core": "file:../mobile/vendor/vworld-map-core-1.0.0.tgz",
-    "vworld-map-web": "file:vendor/vworld-map-web-1.0.0.tgz",
+    "vworld-map-web": "file:vendor/vworld-map-web-1.0.2.tgz",
     "maplibre-gl": "^6.9.0",
     "zod": "^4.4.3"
   }
@@ -58,7 +58,7 @@ mkdir -p /tmp/mvr-tarballs
 #    npm이 신경 쓰는 건 tarball 내용의 해시지 파일명이 아니다)
 cp /tmp/mvr-tarballs/vworld-map-core-1.0.0.tgz apps/mobile/vendor/
 cp /tmp/mvr-tarballs/vworld-map-rn-1.0.0.tgz   apps/mobile/vendor/
-cp /tmp/mvr-tarballs/vworld-map-web-1.0.0.tgz  apps/web/vendor/
+cp /tmp/mvr-tarballs/vworld-map-web-1.0.2.tgz  apps/web/vendor/
 
 # 4) package-lock.json을 완전히 지우고 node_modules 없는 상태에서 처음부터 재설치한다.
 #    `npm install`/`--package-lock-only`를 lockfile이 남은 채로 돌리면 npm이 file:
@@ -643,3 +643,10 @@ Pinvi 클라이언트 정책:
 - `docs/api/features.md` — viewport / nearby endpoint
 - `docs/design/marker-palette.md` — P-01~P-16
 - `docs/decisions.md` ADR-015 (Kakao 폐기), ADR-046 (Web `vworld-map-web` 전환)
+
+### 2026-11-06 #623 선택 마커 수정 동기화
+
+- upstream [PR31](https://github.com/digitie/maplibre-vworld-react/pull/31)의 실제 병합9c46c57181d433c91f7e8837c4e4396204e9b583에서 강제 build/pack한 web1.0.2를 사용한다. root 위치 대신 내부 SVG/portal만 확대해 선택해도 좌표가 이동하지 않는다.
+- web tarball SHA256: aaee266dddca63e1b68bb3cd2eeb0583b74153fa13511ab09cc30d0c3bc5fe02. 정확 리뷰/CI후보16f6e3e와 병합본 tree998f7ee2cbe39083d82ebf0f4a44bb904468f647 및 전체 tarball 바이트가 동일하다.
+- 공유 core1.0.0은 기존 파일과 새 병합본 tarball SHA256 0b4c444667a1e25ec2dc2637cc4ef3dab183e4fd436ad2505b60c2f1fc3d3554가 같아 그대로 유지한다.
+- upstream의 별도 Firefox PR30은 아직 OPEN이며 이번 동기화에는 포함하지 않았다.

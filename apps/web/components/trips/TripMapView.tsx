@@ -311,7 +311,7 @@ export function TripMapView({
       const container = map.getContainer().getBoundingClientRect();
       const stack = overlayStackRef.current;
       const padding = fitPaddingForOverlay(container, fitOverlayRect(stack), TRIP_MAP_PIN_HEIGHT);
-      const panel = transportVisibleRef.current ? fitPanelRect(stack) : null;
+      const panel = fitPanelRect(stack);
       lastFitWithPanelRef.current = panel != null;
       const bottom = fitBottomRect(map.getContainer());
       const only = points[0];
@@ -372,6 +372,11 @@ export function TripMapView({
     [points],
   );
 
+  const fitToPointsRef = useRef(fitToPoints);
+  useEffect(() => {
+    fitToPointsRef.current = fitToPoints;
+  }, [fitToPoints]);
+
   const onViewportBboxChangeRef = useRef(onViewportBboxChange);
   useEffect(() => {
     onViewportBboxChangeRef.current = onViewportBboxChange;
@@ -388,13 +393,18 @@ export function TripMapView({
       fitObserverRef.current?.disconnect();
       const stack = overlayStackRef.current;
       if (stack && typeof ResizeObserver !== 'undefined') {
+        let previousLayout = '';
         const observer = new ResizeObserver(() => {
-          if (userMovedRef.current || lastFitWithPanelRef.current) {
-            observer.disconnect();
-          } else if (transportVisibleRef.current && fitPanelRect(stack)) {
-            fitToPoints(map);
-            observer.disconnect();
-          }
+          if (userMovedRef.current || stack.querySelector('input')?.value.trim()) return;
+          const anchor = fitOverlayRect(stack);
+          const panel = fitPanelRect(stack);
+          const bottom = fitBottomRect(map.getContainer());
+          const layout = JSON.stringify([anchor?.bottom, panel?.top, panel?.bottom, bottom?.top]);
+          if (layout === previousLayout) return;
+          previousLayout = layout;
+          // 동적 컨트롤이 확정된 뒤 최신 POI 목록으로 한 번 맞춘다.
+          // 펼친 사건 목록은 fitPanelRect가 빼므로 같은 상시 layout에서 반복하지 않는다.
+          fitToPointsRef.current(map);
         });
         fitObserverRef.current = observer;
         observer.observe(stack);
@@ -492,7 +502,7 @@ export function TripMapView({
       const stack = overlayStackRef.current;
       const centerX = container.left + container.width / 2;
       const half = TRIP_MAP_MARKER_SIZE / 2;
-      const panel = transportVisibleRef.current ? fitPanelRect(stack) : null;
+      const panel = fitPanelRect(stack);
       const bottom = fitBottomRect(map.getContainer());
       const coversCenter = (rect: NonNullable<typeof panel>) =>
         rect.left < centerX + half && rect.right > centerX - half;
@@ -616,7 +626,7 @@ export function TripMapView({
           >
             <div className="pointer-events-auto">{overlayTopLeft}</div>
             {showFeatures && (
-              <div className="pointer-events-auto mt-2 w-64 max-w-[80%]">
+              <div className="pointer-events-auto mt-2 w-64 max-w-[80%]" data-map-fit-panel="">
                 <FeatureGeometryControls state={geometry} />
               </div>
             )}

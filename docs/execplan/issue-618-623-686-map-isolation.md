@@ -47,3 +47,11 @@ strict 진단으로 드러난 신규 첨부/Telegram read의 새 사용자·새 
 - 원래 2핀/4핀·desktop/mobile을 모두 기록했다. 최초 harness의 자연키 casefold 누락·로그인 완료 URL의 느슨한 정규식 및 새 회귀 테스트의 build 타입 오류를 고쳤다. 이 harness 오류를 제품 실패 근거에 세지 않는다.
 - panel이 동적으로 렌더되기 전 맞춤을 완료로 취급하던 경계를 보완한다. 통계 칩은 실제 핀과 겹칠 때만 하단 여백에 누적하고, 선택 이동도 검색/교통 패널을 피하는 offset을 사용한다. 관련 단위18건과 typecheck가 통과했으나 실제 제품 수정 후 UI 재검증은 진행 중이다.
 - upstream PR31은 정확16f6e3e에서 독립 전문 리뷰 Feynman/Zeno 잔여P0/P1/P2없음·CI성공(기존21/브라우저17/소비17) 뒤9c46c57181d433c91f7e8837c4e4396204e9b583으로 일반 squash 병합했다. 실제 병합본 재포장·Pinvi 통합은 다음 단계다.
+
+### 선택 라이브러리 병합본과 상시 영역 보완
+
+병합본의 web1.0.2 전체 바이트·설치된 Marker.js 해시가 CI 검증본과 같고 공유 core도 기존과 같다. lockfile 변경은 web의 spec/version/resolved/integrity 4줄뿐이며 무결성1220/1220을 유지한다.
+
+4핀뿐 아니라 2핀 모바일에서 실제 fit 호출과 resize/moveend를 추적했다. 2핀의 꼬리207은 교통 패널214 위라 패널과는 교차하지 않지만, 핀 머리는 경로/영역 카드152~206에 가려졌다. 두 상시 컨트롤을 하나의 피할 영역으로 묶어 계산한다. 수정 후 해당 회귀를 포함한 단위19건과 typecheck는 통과했고 실제 UI 재실행을 진행 중이다.
+
+live helper는 마커의 기존 interactionId를 feature/transport/POI의 정본 ID로 연결한다. CORE025는 클릭 전 대상 ID와 실제 응답·본문을 비교하고, NEAR025는 클릭 뒤 새 요청의 bbox를 최종 native viewport에 결박한다. NEAR024는 서울과 임의 중심 거리 대신 실제 네 좌표·native/API 경계·투영 점유율·컨트롤/칩 가림을 확인한다. 이름·좌표와 원래 입력은 바꾸지 않는다.

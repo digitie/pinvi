@@ -148,3 +148,19 @@ describe('하단 통계 칩 맞춤 여백', () => {
     expect(padding.top + padding.bottom).toBeLessThan(400);
   });
 });
+
+it('검색 아래 경로·영역 컨트롤과 교통 패널 사이의 숨은 핀도 피한다', () => {
+  const stack = document.createElement('div');
+  const geometry = document.createElement('div');
+  const transport = document.createElement('div');
+  geometry.setAttribute('data-map-fit-panel', '');
+  transport.setAttribute('data-map-fit-panel', '');
+  geometry.getBoundingClientRect = domBox(152, 54);
+  transport.getBoundingClientRect = domBox(214, 152);
+  stack.append(geometry, transport);
+  const panel = fitPanelRect(stack)!;
+  expect(panel.top).toBe(152);
+  expect(panel.bottom).toBe(366);
+  // 실제 2핀 mobile 회귀: 꼬리207은 교통 패널214 위지만 머리는 경로/영역 카드에 가렸다.
+  expect(pinBoxIntersects(198, 207, 27, PIN_HEIGHT, panel)).toBe(true);
+});

@@ -40,23 +40,28 @@ export function fitOverlayRect(stack: Element | null): VerticalRect | null {
 }
 
 /**
- * 스택 안 교통 정보 패널(`[data-map-fit-panel]`)의 상시 부분. 잠깐 펼쳐지는 사건 목록
+ * 스택 안 경로/영역 컨트롤·교통 정보 패널(`[data-map-fit-panel]`)의 상시 부분. 잠깐 펼쳐지는 사건 목록
  * (`[data-map-fit-transient]`)은 아래 끝에서 뺀다.
  */
 export function fitPanelRect(stack: Element | null): BoxRect | null {
-  const panel = stack?.querySelector('[data-map-fit-panel]');
-  if (!panel) return null;
-  const rect = panel.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return null;
-  const transient = panel.querySelector('[data-map-fit-transient]');
-  let bottom = transient
-    ? Math.min(rect.bottom, transient.getBoundingClientRect().top)
-    : rect.bottom;
-  // 스택은 max-height + 세로 스크롤이다 — 검색 결과가 펼쳐져 패널이 밀려 내려가도 보이는 부분까지만.
-  const stackRect = stack?.getBoundingClientRect();
-  if (stackRect && stackRect.height > 0) bottom = Math.min(bottom, stackRect.bottom);
-  if (bottom <= rect.top) return null;
-  return { left: rect.left, right: rect.right, top: rect.top, bottom, height: bottom - rect.top };
+  if (!stack) return null;
+  const stackRect = stack.getBoundingClientRect();
+  const rects = Array.from(stack.querySelectorAll('[data-map-fit-panel]')).flatMap(panel => {
+    const rect = panel.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return [];
+    const transient = panel.querySelector('[data-map-fit-transient]');
+    let bottom = transient ? Math.min(rect.bottom, transient.getBoundingClientRect().top) : rect.bottom;
+    if (stackRect.height > 0) bottom = Math.min(bottom, stackRect.bottom);
+    return bottom > rect.top ? [{ left: rect.left, right: rect.right, top: rect.top, bottom }] : [];
+  });
+  if (rects.length === 0) return null;
+  const top = Math.min(...rects.map(rect => rect.top));
+  const bottom = Math.max(...rects.map(rect => rect.bottom));
+  return {
+    left: Math.min(...rects.map(rect => rect.left)),
+    right: Math.max(...rects.map(rect => rect.right)),
+    top, bottom, height: bottom - top,
+  };
 }
 
 /** 앵커(아래 꼭짓점)가 `(anchorX, anchorY)`인 핀 상자가 `rect`와 겹치는가. */
