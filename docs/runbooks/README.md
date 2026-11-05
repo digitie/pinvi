@@ -31,6 +31,8 @@ Pinvi 로컬 개발 / Docker / ETL / Admin / N150 배포 / 백업 / 파일 저�
 | [secrets.md](./secrets.md)                                     | GitHub Actions secrets 카탈로그 (ADR-021)                        | 4 (상시) |
 | [cache-target-causal-canary.md](./cache-target-causal-canary.md) | Map paired PUT/event/ACK/DELETE causal production canary       | 6        |
 
+[Claude Code 운영 검증 인계](./claude-prod-e2e-handoff.md): #643 후속 머지 내역, #650 주소 검색·Map #1450 경계 적재와 별도 열린 이슈.
+
 ## 2. 공통 정책
 
 ### 2.1 작업 흐름

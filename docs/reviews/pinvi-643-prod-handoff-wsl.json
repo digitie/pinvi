@@ -1,0 +1,267 @@
+{
+  "as_of": "2026-11-06 Asia/Seoul",
+  "base_revision": "efc01affd4267e4e6c75411db3cb902e38d2c7aa",
+  "runner_revision": "ecdcaa875b86d4a89f94514671d589212b973386",
+  "source_sha256": {
+    "scripts/n150-playwright-runner.sh": "3ecd34e9a3523637128cdc9e07118617a5e47553bbfccdefa0c34fc1fcb97480",
+    "apps/api/tests/unit/test_playwright_geometry_env.py": "08a6d7ea1c7c48f101bbcd11595dae03d1b8d21d3985407500e6641e222d99ab",
+    "apps/api/tests/integration/test_telegram_weather.py": "295bf08722272e1d47e19eb25954f852c0493d9835df593a9488ad3767cc5df1"
+  },
+  "production_access": false,
+  "production_executor": "Claude Code",
+  "codex_scope": "WSL work, verification and ordinary merge",
+  "bug": "geometry area/seorak/bukhan anchor names missing from Docker env allowlist",
+  "wsl": {
+    "negative_failed": 3,
+    "negative_passed": 1,
+    "related_passed": 26,
+    "unit_passed": 2024,
+    "unit_skipped": 9,
+    "unit_seconds": 91.21,
+    "ruff": true,
+    "format": true,
+    "bash_syntax": true,
+    "catalog_cases": 349,
+    "catalog_scripted": 298,
+    "catalog_manual": 27,
+    "catalog_blocked": 24,
+    "playwright_list_only": {
+      "cases": ["SRCH-004", "SRCH-028", "WX-004"],
+      "count": 3,
+      "browser_or_production_run": false
+    },
+    "boundary": "runs original allowlist/argv Bash segment; no N150 hostname impersonation, Docker execution or guard bypass",
+    "weather_clock_regression": {
+      "remote_failed_before": 12,
+      "remote_revision": "d8ae0c2de270e7ee70488c33ae767a84177b8e6c",
+      "remote_job_url": "https://github.com/digitie/pinvi/actions/runs/42111890236/job/127541281491",
+      "local_reproduced_failed": 1,
+      "related_pg_passed": 46,
+      "seconds": 61.71,
+      "cause": "fixed worker NOW=2026-11-05T12:00Z preceded real DB scheduled_at default after noon UTC",
+      "fix": "function-scope autouse before_insert listener sets only unset new test delivery scheduled_at to fixture NOW; removed in finally",
+      "runtime_unchanged": true,
+      "explicit_schedules_and_updates_preserved": true,
+      "scope": "controlled weather fixture does not test DB real-time default; ordinary notifications suite is unchanged"
+    }
+  },
+  "merged_prs": [
+    {
+      "repo": "digitie/pinvi",
+      "number": 665,
+      "url": "https://github.com/digitie/pinvi/pull/665",
+      "title": "탐색·여행 지도에 경로·영역 레이어와 상세 선택 추가",
+      "merge": "613a05530ed1526cc37c9d4fa74ca0ae3306ff44",
+      "merged": true
+    },
+    {
+      "repo": "digitie/pinvi",
+      "number": 677,
+      "url": "https://github.com/digitie/pinvi/pull/677",
+      "title": "지도 선택·모바일 맞춤·팝업과 상세 병렬 보강 회귀 수정",
+      "merge": "0b8bb6a5b93515fae079e1526b6a0a82f7023e9c",
+      "merged": true
+    },
+    {
+      "repo": "digitie/pinvi",
+      "number": 678,
+      "url": "https://github.com/digitie/pinvi/pull/678",
+      "title": "보안: 공유 토큰을 로그인 복귀 경로에서 제거(#671)·로그아웃이 access JWT까지 끊는다(#672)",
+      "merge": "9e8459eb03c8d6478d10387ddb40fe30c9f788b0",
+      "merged": true
+    },
+    {
+      "repo": "digitie/pinvi",
+      "number": 679,
+      "url": "https://github.com/digitie/pinvi/pull/679",
+      "title": "날짜 날씨 핵심 지표·단위 표시와 관리자 날씨 소스 정합성",
+      "merge": "128373663f5d76b260a634bd55de55fd08b118f0",
+      "merged": true
+    },
+    {
+      "repo": "digitie/pinvi",
+      "number": 680,
+      "url": "https://github.com/digitie/pinvi/pull/680",
+      "title": "fix: enforce permanent bounded request limits for configured users",
+      "merge": "bbabe45ada9bf3247a428170dfe419c38730ab45",
+      "merged": true
+    },
+    {
+      "repo": "digitie/pinvi",
+      "number": 681,
+      "url": "https://github.com/digitie/pinvi/pull/681",
+      "title": "feat: retain trash for 30 days and collect attachment objects safely",
+      "merge": "cb3b2f6933e29f36bd886e0414da52007618e778",
+      "merged": true
+    },
+    {
+      "repo": "digitie/pinvi",
+      "number": 683,
+      "url": "https://github.com/digitie/pinvi/pull/683",
+      "title": "feat(admin): reconcile uncertain Map approvals with bound attempts",
+      "merge": "a1b2f5324b64a912e40d48dc5c7130646c04e8be",
+      "merged": true
+    },
+    {
+      "repo": "digitie/pinvi",
+      "number": 687,
+      "url": "https://github.com/digitie/pinvi/pull/687",
+      "title": "fix(api): isolate quota errors and synchronize day rise-set safely",
+      "merge": "6f47dad57bb968da0468c3c1e15fbb24aaec8367",
+      "merged": true
+    },
+    {
+      "repo": "digitie/pinvi",
+      "number": 688,
+      "url": "https://github.com/digitie/pinvi/pull/688",
+      "title": "feat: Telegram 일정 전송과 KST 일간·주간 브리프",
+      "merge": "5602cf3dc112d15e48aa31dbbfb4b19e0ebb0da2",
+      "merged": true
+    },
+    {
+      "repo": "digitie/pinvi",
+      "number": 689,
+      "url": "https://github.com/digitie/pinvi/pull/689",
+      "title": "feat: 여행 기상특보 Telegram 알림",
+      "merge": "22d3577803e78d09bcedcd5e05194c67aa1b1e43",
+      "merged": true
+    },
+    {
+      "repo": "digitie/pinvi",
+      "number": 690,
+      "url": "https://github.com/digitie/pinvi/pull/690",
+      "title": "feat: 여행 인쇄·PDF 저장·ICS 내보내기와 공유 진입 정합성",
+      "merge": "efc01affd4267e4e6c75411db3cb902e38d2c7aa",
+      "merged": true
+    },
+    {
+      "repo": "digitie/kor-travel-map",
+      "number": 1448,
+      "url": "https://github.com/digitie/kor-travel-map/pull/1448",
+      "title": "MCST SDK 승인형 CSV와 데이터셋별 적재 결과를 반영",
+      "merge": "dd0238c3f988b03dc02a2deb13e06e5258e85313",
+      "merged": true
+    },
+    {
+      "repo": "digitie/kor-travel-map",
+      "number": 1451,
+      "url": "https://github.com/digitie/kor-travel-map/pull/1451",
+      "title": "fix(admin): safely reconcile uncertain feature commands",
+      "merge": "27033b116d8d7328689b19a20de830417937dd73",
+      "merged": true
+    },
+    {
+      "repo": "digitie/kor-travel-geo",
+      "number": 623,
+      "url": "https://github.com/digitie/kor-travel-geo/pull/623",
+      "title": "test(search): 공식 Juso 원천으로 Pinvi 전체 주소 회귀 확인",
+      "merge": "305777d561a98588e310756981d3a984908be2ee",
+      "merged": true
+    },
+    {
+      "repo": "digitie/kor-travel-weather",
+      "number": 201,
+      "url": "https://github.com/digitie/kor-travel-weather/pull/201",
+      "title": "feat: 명시적 기상특보 이벤트 조회 계약",
+      "merge": "d8534aeae8852f9c514e39d625ea7dded956f3ed",
+      "merged": true
+    },
+    {
+      "repo": "digitie/kor-travel-docker-manager",
+      "number": 582,
+      "url": "https://github.com/digitie/kor-travel-docker-manager/pull/582",
+      "title": "fix(pinvi): deliver bounded user rate limit settings",
+      "merge": "20868ab3aab1efd5ab1a5458de7e8a3c433041f0",
+      "merged": true
+    }
+  ],
+  "open_pinvi": [
+    {
+      "number": 616,
+      "title": "Map 응답 envelope 정확-집합 검사 3곳을 런타임 검증으로 (additive 변경 내성)",
+      "state": "open",
+      "url": "https://github.com/digitie/pinvi/issues/616"
+    },
+    {
+      "number": 618,
+      "title": "N150 mocked e2e: mock 안 된 API 호출이 localhost:12801(운영 PinVi API)로 샌다",
+      "state": "open",
+      "url": "https://github.com/digitie/pinvi/issues/618"
+    },
+    {
+      "number": 621,
+      "title": "PinVi 의존 서비스 지연 대비 복원력 — 남은 항목(로깅 outbox·rate limit·동시성 상한·풀 설정·edge HTTP/2)",
+      "state": "open",
+      "url": "https://github.com/digitie/pinvi/issues/621"
+    },
+    {
+      "number": 623,
+      "title": "여행 지도 기존 결함 3건 — 모바일 통계 칩이 남쪽 핀을 가림·선택 마커 CSS scale 위치 이동 의심·선택 POI flyTo offset 없음",
+      "state": "open",
+      "url": "https://github.com/digitie/pinvi/issues/623"
+    },
+    {
+      "number": 650,
+      "title": "통합 검색: 전체 도로명 주소(시·도 약칭) 질의에 주소 행 0건",
+      "state": "open",
+      "url": "https://github.com/digitie/pinvi/issues/650"
+    },
+    {
+      "number": 658,
+      "title": "restore hotswap cleanup 반환 직후 advisory lock 해제 검증 경합 조사",
+      "state": "open",
+      "url": "https://github.com/digitie/pinvi/issues/658"
+    },
+    {
+      "number": 686,
+      "title": "#677 이후 운영 지도 케이스 잔여 실패 — NEAR-024(desktop 맞춤 중심)·CORE-025/NEAR-025(mobile)·NEAR-006(휴게소 상세 미오픈)",
+      "state": "open",
+      "url": "https://github.com/digitie/pinvi/issues/686"
+    }
+  ],
+  "open_map": [
+    {
+      "number": 1440,
+      "state": "open",
+      "reason": "reopened after deployment; past summaries/source retention diagnosis"
+    },
+    {
+      "number": 1450,
+      "state": "open",
+      "reason": "official park boundary ingestion/serving/UI verification pending"
+    }
+  ],
+  "closed_but_operational_followup": [
+    {
+      "repo": "digitie/kor-travel-map",
+      "number": 1438,
+      "followup": "MCST/MOIS reprojection and original category tests; preserve unclassified facilities without official evidence"
+    }
+  ],
+  "adversarial_reviews": {
+    "Hubble": "no remaining P0/P1/P2 at ecdcaa8 runner code",
+    "Hume": "no remaining P0/P1/P2 at ecdcaa8 runner code",
+    "reviewers_ran_tests": false,
+    "final_documentation_candidate": "review and exact CI recorded on PR after this snapshot",
+    "test_clock_review": "Hubble/Hume read-only uncommitted test-only diff: no remaining P0/P1/P2; exact final candidate recheck follows"
+  },
+  "critical_boundaries": [
+    "Geo original 40 input, nullable coordinates, request/worker/DB/MV/release distinction",
+    "Map national park dataset differs from protected areas; actual provider_dataset_id must be resolved",
+    "zoom7 cluster zero is not proof of all area rows being zero; public_features is an ordinary VIEW",
+    "authoritative load does not enable absent-row retirement by default",
+    "do not close product issues or change blocked/test.fail before actual prod success"
+  ],
+  "cache_sha256": {
+    "pinvi643-geometry-env-negative.log": "acbfaf37d61ff256d0954404b58d717a12b640d5adc5f8218c58b1dd861f3e2d",
+    "pinvi643-runner-related.log": "c7925a67761f3bba34b7616978415c6a53008d37ca168bfe7f44a9b0e3dd23d3",
+    "pinvi643-handoff-api-unit.log": "94b3327430c2ab6fab532c3656bbe560ad1f459ee6ab266451c6cb2c21e79b26",
+    "pinvi643-handoff-e2e-list.log": "dd8a3dbf52e8377efe297de7f4a2f8154ee3a2477d48f0c734443bd56ba59f81",
+    "pinvi643-runner-impact.json": "cfa58910a3ddeb997504d0d0b9c945d511358b075d19b74c7458a6c9f46a9de1",
+    "pinvi643-handoff-merged-prs.json": "7434ae0e914d1a954d2d0d4884b54d039c10574a80c378b55e6a4c7324d734f2",
+    "pinvi643-handoff-open-pinvi.json": "d7899537b5f899b2ece0d9c40dbacbe4d86556201c6361eef476a00c0a49bc5c",
+    "pinvi643-weather-clock-negative.log": "a42a265f1b5bd4a8819bea15d156685a17cc21c101b29071e1555e2b0936bea4",
+    "pinvi643-weather-clock-positive.log": "8068ab62e391829072cc89d21b5f1aa7b09d7cd17c6b5b114cbc0bdf8cd53aeb",
+    "pinvi643-weather-clock-impact.json": "cca9a1901d56bf9919e88f19f5c82da83aa3d95b24d3726fa0a1808520024833"
+  }
+}

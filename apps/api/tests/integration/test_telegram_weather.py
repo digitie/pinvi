@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from app.clients.kor_travel_weather import KorTravelWeatherClient
 from app.models.telegram_notification import (
@@ -25,6 +26,21 @@ from tests.integration.test_telegram_notifications import provider as provider
 pytestmark = pytest.mark.asyncio
 NOW = datetime(2026, 11, 5, 12, tzinfo=UTC)
 PREFERENCES = "/users/me/telegram-notification-preferences"
+
+
+@pytest.fixture(autouse=True)
+def delivery_clock() -> Iterator[None]:
+    """주입한 worker 시계와 신규 delivery의 DB 예약 시각을 같은 기준에 둔다."""
+
+    def set_initial_clock(_mapper: Any, _connection: Any, row: TelegramDelivery) -> None:
+        if row.scheduled_at is None:
+            row.scheduled_at = NOW
+
+    event.listen(TelegramDelivery, "before_insert", set_initial_clock)
+    try:
+        yield
+    finally:
+        event.remove(TelegramDelivery, "before_insert", set_initial_clock)
 
 
 class Weather:
