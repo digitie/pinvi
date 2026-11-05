@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const adminUser = {
   user_id: '77777777-7777-4777-8777-777777777777',

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('admin 로그인: 잘못된 이메일 제출 시 필드 오류 + aria-invalid + 포커스', async ({ page }) => {
   await page.goto('/admin/login');

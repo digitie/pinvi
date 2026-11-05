@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('회원가입 화면이 필수 약관 동의를 register payload에 포함한다', async ({ page }) => {
   let registerPayload: unknown = null;

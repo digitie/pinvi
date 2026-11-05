@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const tripId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
@@ -51,7 +51,7 @@ test('trip 상세에서 Telegram 대상을 연결하고 해제한다', async ({ 
   const ALL = [target(targetA, '가족 단톡', '-100111', true), target(targetB, '친구방', '-100222')];
 
   await page.route(/.*\/auth\/me$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: { user_id: userId } }),
@@ -61,7 +61,7 @@ test('trip 상세에서 Telegram 대상을 연결하고 해제한다', async ({ 
     await page.route(
       new RegExp(`.*/trips/[0-9a-f-]{36}/${sub}(\\?.*)?$`),
       async (route, request) => {
-        if (!isFetch(request.resourceType())) return route.continue();
+        if (!isFetch(request.resourceType())) return route.fallback();
         await route.fulfill({
           contentType: 'application/json',
           body: JSON.stringify({ data: [] }),
@@ -70,12 +70,12 @@ test('trip 상세에서 Telegram 대상을 연결하고 해제한다', async ({ 
     );
   }
   await page.route(/.*\/users\/me\/telegram-targets$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: ALL }) });
   });
   // trip-link 목록/연결/해제 (stateful).
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/telegram-targets$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     if (request.method() === 'POST') {
       const body = JSON.parse(request.postData() ?? '{}');
       linked.push(body.telegram_target_id);
@@ -93,7 +93,7 @@ test('trip 상세에서 Telegram 대상을 연결하고 해제한다', async ({ 
   await page.route(
     /.*\/trips\/[0-9a-f-]{36}\/telegram-targets\/[0-9a-f-]{36}$/,
     async (route, request) => {
-      if (request.method() !== 'DELETE') return route.continue();
+      if (request.method() !== 'DELETE') return route.fallback();
       const id = request.url().split('/').pop() ?? '';
       const idx = linked.indexOf(id);
       if (idx >= 0) linked.splice(idx, 1);
@@ -101,7 +101,7 @@ test('trip 상세에서 Telegram 대상을 연결하고 해제한다', async ({ 
     },
   );
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: TRIP_VIEW }),

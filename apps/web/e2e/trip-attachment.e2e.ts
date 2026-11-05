@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const tripId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
@@ -51,7 +51,7 @@ test('첨부 업로드: presigned PUT 후 목록에 파일이 나타난다', asy
   let uploaded = false;
 
   await page.route(/.*\/auth\/me$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: { user_id: userId } }),
@@ -59,13 +59,13 @@ test('첨부 업로드: presigned PUT 후 목록에 파일이 나타난다', asy
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/comments(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
 
   // 첨부 GET/POST 를 한 라우트에서 메서드로 분기(POST 후 GET 은 업로드된 파일 반환).
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/attachments$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     if (request.method() === 'POST') {
       uploaded = true;
       await route.fulfill({
@@ -81,7 +81,7 @@ test('첨부 업로드: presigned PUT 후 목록에 파일이 나타난다', asy
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: TRIP_VIEW }),
@@ -89,7 +89,7 @@ test('첨부 업로드: presigned PUT 후 목록에 파일이 나타난다', asy
   });
 
   await page.route(/.*\/storage\/upload-urls$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

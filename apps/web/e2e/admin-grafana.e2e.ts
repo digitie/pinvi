@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('Admin Grafana embed shell이 admin guard 뒤에서 iframe을 렌더링한다', async ({ page }) => {
   const requests: string[] = [];
@@ -27,13 +27,13 @@ test('Admin Grafana embed shell이 admin guard 뒤에서 iframe을 렌더링한�
       contentType: 'application/json',
       body: JSON.stringify({
         status: 'ok',
-        origin: 'http://localhost:12205',
+        origin: 'http://pinvi-grafana.e2e.invalid:12205',
         status_code: 200,
         message: 'Grafana health 확인',
       }),
     });
   });
-  await page.route('http://localhost:12205/**', async (route) => {
+  await page.route('http://pinvi-grafana.e2e.invalid:12205/**', async (route) => {
     await route.fulfill({
       contentType: 'text/html',
       body: '<!doctype html><title>Grafana</title>',
@@ -45,7 +45,7 @@ test('Admin Grafana embed shell이 admin guard 뒤에서 iframe을 렌더링한�
   await expect(page.getByRole('heading', { name: 'Grafana' })).toBeVisible();
   await expect(page.getByTestId('admin-grafana-health-status')).toContainText('정상');
   await expect(page.getByTestId('admin-grafana-frame')).toBeVisible();
-  await expect(page.getByTestId('admin-grafana-origin')).toContainText('http://localhost:12205');
+  await expect(page.getByTestId('admin-grafana-origin')).toContainText('http://pinvi-grafana.e2e.invalid:12205');
   await expect(page.getByTestId('admin-grafana-dashboard-list')).toContainText('DB pool');
   await expect(page.getByTestId('admin-nav--admin-grafana')).toBeVisible();
 
@@ -62,6 +62,10 @@ test('Admin Grafana embed shell이 admin guard 뒤에서 iframe을 렌더링한�
 });
 
 test('Admin Grafana embed health가 실패하면 degraded 상태를 표시한다', async ({ page }) => {
+  await page.route('http://pinvi-grafana.e2e.invalid:12205/**', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Offline Grafana</title>' }),
+  );
+
   await page.route(/.*\/auth\/me$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
@@ -86,7 +90,7 @@ test('Admin Grafana embed health가 실패하면 degraded 상태를 표시한다
       contentType: 'application/json',
       body: JSON.stringify({
         status: 'degraded',
-        origin: 'http://localhost:12205',
+        origin: 'http://pinvi-grafana.e2e.invalid:12205',
         status_code: null,
         message: 'Grafana health 확인 필요',
       }),

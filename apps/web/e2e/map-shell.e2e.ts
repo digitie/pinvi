@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('지도 shell이 kor-travel-map feature 조회 없이 렌더링된다', async ({ page }) => {
   const requests: string[] = [];

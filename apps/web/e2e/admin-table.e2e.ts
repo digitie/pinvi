@@ -1,4 +1,4 @@
-import { type Page, expect, test } from '@playwright/test';
+import { type Page, expect, test } from './fixtures';
 
 // AdminTable(@tanstack/react-table + react-virtual) 동작 세부 검증.
 // /admin/users(비가상)로 헤더/정렬/empty/loading/sticky를, /admin/api-calls(가상)로 가상화를 본다.

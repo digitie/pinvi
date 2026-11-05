@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 const tripId = '11111111-1111-4111-8111-111111111111';
 const token = 'share-token-abc';
@@ -7,7 +7,7 @@ const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType
 
 async function routeSharedView(page: Page): Promise<void> {
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/shared\/[^/]+$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

@@ -15,3 +15,11 @@ mocked 빌드는 전용 API origin을 고정하고 공용 fixture가 미등록 A
 ## 병행 범위
 
 별도 worktree의 worker는 #616/#621 API 클라이언트·복원력과 #658 복원 cleanup을 진행한다. 메인과 각 worker의 코드 쓰기 경계는 분리하고 제품 묶음은 순서대로 검토·머지한다. 운영/SSH·실제 제공자/Telegram 접근은 없으며 prod 진단·적재·최종 테스트는 Claude Code 담당이다. #671/#672와 보호 stash는 건드리지 않는다.
+
+## #618 격리 체크포인트
+
+기존 빌드·실제 Chromium의 미등록 요청4건이 소유 WSL HTTP 수신 서버에 닿는 실패를 먼저 확인했다. 운영 API에는 접속하지 않았다. mocked 빌드 API/Grafana origin을 reserved .invalid로 고정하고 지도 키를 상속하지 않는다. 기본 웹 포트도13805로 분리하고 live/서비스 URL은 webServer probe 전에 거절한다.
+
+공용 test fixture가 context/popups·추가 협업 context·WebSocket·APIRequestContext에 격리 경계를 적용한다. page mock은 우선하며 미처리 요청은 fallback으로 최종 차단한다. endpoint 이름만 진단에 남기고 ID/token/query는 가린다. 교통 검사가 아닌 화면의 명시적 초기 transport/status fixture는 off다.
+
+원래 수신 서버 요청4→0을 실제 빌드로 확인했고 reserved API 요청도 관측했다. 실브라우저 네트워크 정책5검사·URL정책15단위가 통과했다. 첫 strict 전체 진단은148통과/10미등록mock실패/2skip으로 멈췄으며 기존 숨은 누락을 명시 fixture로 보완 중이다. 이는 전체 검증 완료가 아니다. 실제 UI/지도 source는 아직 바꾸지 않았다.

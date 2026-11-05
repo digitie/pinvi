@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 const tripId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
@@ -28,7 +28,7 @@ function trip(title = '서울 주말 산책', overrides: Record<string, unknown>
 
 async function mockTripDetail(page: Page) {
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -94,7 +94,7 @@ async function expectTripMapSurface(page: Page) {
 
 test('/trips는 meta null 목록 응답과 전체 지도 POI를 렌더링한다', async ({ page }) => {
   await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -154,7 +154,7 @@ test('/trips는 예정 여행을 날짜 오름차순으로 보여주고 지난 �
   ];
 
   await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: trips }),
@@ -194,7 +194,7 @@ test.describe('/trips Samsung Internet 모바일 레이아웃', () => {
     page,
   }) => {
     await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
-      if (!isFetch(request.resourceType())) return route.continue();
+      if (!isFetch(request.resourceType())) return route.fallback();
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({ data: [trip()] }),
@@ -219,7 +219,7 @@ test('/trips에서 날짜가 없는 초안 여행을 저장할 수 있다', asyn
   let created = false;
 
   await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     if (request.method() === 'POST') {
       const body = request.postDataJSON();
       expect(body).toMatchObject({

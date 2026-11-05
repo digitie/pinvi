@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 const tripId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
@@ -270,7 +270,7 @@ async function mockTripDetailRoutes(
   options: MockTripDetailOptions = {},
 ) {
   await page.route(/.*\/auth\/refresh$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: { user_id: userId } }),
@@ -278,7 +278,7 @@ async function mockTripDetailRoutes(
   });
 
   await page.route(/.*\/auth\/me$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: { user_id: userId } }),
@@ -286,12 +286,12 @@ async function mockTripDetailRoutes(
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/comments(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/.*attachments(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     const pathname = new URL(request.url()).pathname;
     await route.fulfill({
       contentType: 'application/json',
@@ -300,7 +300,7 @@ async function mockTripDetailRoutes(
   });
 
   await page.route(/.*\/features\/[^/]+\/weather(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     const url = new URL(request.url());
     options.onWeatherRequest?.(url);
     const parts = url.pathname.split('/');
@@ -321,7 +321,7 @@ async function mockTripDetailRoutes(
   });
 
   await page.route(/.*\/features\/in-bounds(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     const data =
       typeof options.featuresInBounds === 'function'
         ? options.featuresInBounds()
@@ -333,17 +333,17 @@ async function mockTripDetailRoutes(
   });
 
   await page.route(/.*\/users\/me\/telegram-targets$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/telegram-targets$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: typeof tripView === 'function' ? tripView() : tripView }),
@@ -665,7 +665,7 @@ test('여행 지도는 feature를 보이고 빈 좌표에서 주소 포함 POI�
   };
 
   await page.route(/.*\/geo\/reverse(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -695,7 +695,7 @@ test('여행 지도는 feature를 보이고 빈 좌표에서 주소 포함 POI�
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/pois$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     createdBody = request.postDataJSON() as Record<string, unknown>;
     const snapshot = createdBody.feature_snapshot as Record<string, unknown>;
     const createdPoi = {
@@ -846,7 +846,7 @@ test('날짜가 없는 여행도 Day Plan 내부 버튼으로 일자를 추가�
   };
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/days$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     const body = request.postDataJSON() as { day_index: number; date?: string | null };
     const day = {
       trip_id: tripId,
@@ -904,7 +904,7 @@ test('삭제로 비어 있는 가장 빠른 일자를 다시 생성한다', asyn
   };
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/days$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     createdBody = request.postDataJSON() as { day_index?: number; date?: string | null };
     const day = {
       trip_id: tripId,
@@ -951,8 +951,8 @@ test('일자 설정에서 날짜를 수정할 수 있다', async ({ page }) => {
   };
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
-    if (request.method() !== 'PATCH') return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
+    if (request.method() !== 'PATCH') return route.fallback();
     patchedBody = request.postDataJSON() as Record<string, unknown>;
     expect(request.headers()['if-match']).toBe('1');
     const currentDay = currentView.days[0] as typeof BASE_MARKER_DAY;
@@ -995,8 +995,8 @@ test('일자 설정 저장이 실패하면 다이얼로그가 열린 채 모달 
   };
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
-    if (request.method() !== 'PATCH') return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
+    if (request.method() !== 'PATCH') return route.fallback();
     await route.fulfill({
       status: 500,
       contentType: 'application/json',
@@ -1026,8 +1026,8 @@ test('일자 설정 오류는 그 다이얼로그 세션에서만 보인다', as
   };
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
-    if (request.method() !== 'PATCH') return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
+    if (request.method() !== 'PATCH') return route.fallback();
     await route.fulfill({
       status: 500,
       contentType: 'application/json',
@@ -1060,8 +1060,8 @@ test('일자 설정은 연 시점 version으로 저장해 동시 변경을 409�
   };
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
-    if (request.method() !== 'PATCH') return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
+    if (request.method() !== 'PATCH') return route.fallback();
     ifMatchHeaders.push(request.headers()['if-match'] ?? '');
     await route.fulfill({
       status: 409,
@@ -1104,8 +1104,8 @@ test('일자 설정 409 뒤 한 번 더 저장하면 최신 version으로 덮어
   };
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
-    if (request.method() !== 'PATCH') return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
+    if (request.method() !== 'PATCH') return route.fallback();
     const ifMatch = request.headers()['if-match'] ?? '';
     ifMatchHeaders.push(ifMatch);
     if (ifMatch !== String(serverVersion)) {
@@ -1284,7 +1284,7 @@ test('실시간 rate limit close는 backoff 안내를 보여준다', async ({ pa
 // 둘은 한 세로 스택이어야 한다.
 async function mockTransportEnabled(page: Page) {
   await page.route(/.*\/transport\/status$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

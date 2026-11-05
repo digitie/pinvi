@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const tripId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
@@ -10,7 +10,7 @@ test('Trip 사용자 shell이 Trip API만 조회한다', async ({ page }) => {
 
   await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
     if (!['fetch', 'xhr'].includes(request.resourceType())) {
-      await route.continue();
+      await route.fallback();
       return;
     }
     await route.fulfill({
@@ -54,7 +54,7 @@ test('notice plan 사용자 shell이 추천 plan API만 조회한다', async ({ 
 
   await page.route(/.*\/notice-plans(\?.*)?$/, async (route, request) => {
     if (!['fetch', 'xhr'].includes(request.resourceType())) {
-      await route.continue();
+      await route.fallback();
       return;
     }
     await route.fulfill({

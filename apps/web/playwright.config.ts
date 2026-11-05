@@ -1,7 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
+import { MOCKED_SERVICE_ENV, mockedAppURL } from './e2e/mocked-origins';
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:12805';
-const webPort = new URL(baseURL).port || '80';
+const appURL = mockedAppURL(process.env.PLAYWRIGHT_BASE_URL);
+const baseURL = appURL.origin;
+const webPort = appURL.port;
+const webHost = appURL.hostname.replace(/^\[|\]$/g, '');
 
 export default defineConfig({
   testDir: './e2e',
@@ -15,6 +18,7 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'retain-on-failure',
+    serviceWorkers: 'block',
   },
   projects: [
     {
@@ -24,7 +28,8 @@ export default defineConfig({
   ],
   // 모든 e2e 는 page.route 로 API 를 mock 하므로 백엔드 없이 Next 앱만 띄우면 된다.
   webServer: {
-    command: `npm run build && npx next start -p ${webPort}`,
+    command: `npm run build && npx next start -H ${webHost} -p ${webPort}`,
+    env: MOCKED_SERVICE_ENV,
     url: baseURL,
     // NTFS worktree의 production build는 compile 뒤 static optimization까지 180초를 넘길 수 있다.
     // reuse는 금지하되, isolated server가 정상 기동할 시간을 충분히 준다.

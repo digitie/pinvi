@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page, type Route } from './fixtures';
 
 const operatorUser = {
   user_id: '77777777-7777-4777-8777-777777777777',
@@ -32,7 +32,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 async function continueIfWebRequest(route: Route) {
   const url = new URL(route.request().url());
   if (url.port !== '12801') {
-    await route.continue();
+    await route.fallback();
     return true;
   }
   return false;

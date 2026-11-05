@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 // 로그인 페이지는 마운트 시 oauth providers를 조회하므로 mock해 둔다.
 async function mockProviders(page: import('@playwright/test').Page) {

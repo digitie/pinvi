@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('알 수 없는 경로는 not-found 페이지를 보여준다', async ({ page }) => {
   const res = await page.goto('/this-route-does-not-exist-9z9z');

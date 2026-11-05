@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const tripId = '11111111-1111-4111-8111-111111111111';
 const newTripId = '99999999-9999-4999-8999-999999999999';
@@ -27,18 +27,18 @@ function tripResponse(id: string, title: string) {
 
 async function commonRoutes(page: import('@playwright/test').Page) {
   await page.route(/.*\/auth\/me$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: { user_id: userId } }),
     });
   });
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/comments(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/attachments$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
@@ -46,7 +46,7 @@ async function commonRoutes(page: import('@playwright/test').Page) {
       await route.fulfill({ status: 204, body: '' });
       return;
     }
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -66,7 +66,7 @@ test('여행 복사 → 새 여행으로 이동', async ({ page }) => {
   await commonRoutes(page);
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/copy$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -91,7 +91,7 @@ test('여행 복사 → 새 여행으로 이동', async ({ page }) => {
 test('여행 삭제(확인) → 목록으로 이동', async ({ page }) => {
   await commonRoutes(page);
   await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
 

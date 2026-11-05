@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import type { AttachmentLibraryItem } from '@pinvi/schemas';
 
 const userId = '22222222-2222-4222-8222-222222222222';
@@ -53,7 +53,7 @@ test('파일 목록 로드 실패는 원인 + 다시 시도를 준다', async ({
   // T-316: 회복 행동 없는 오류 배너를 role=alert + 재시도로 바꿨다.
   let attempts = 0;
   await page.route(/.*\/users\/me\/files(\?.*)?$/, async (route, request) => {
-    if (!['fetch', 'xhr'].includes(request.resourceType())) return route.continue();
+    if (!['fetch', 'xhr'].includes(request.resourceType())) return route.fallback();
     attempts += 1;
     if (attempts === 1) {
       await route.fulfill({

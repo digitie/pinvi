@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
 
@@ -12,7 +12,7 @@ const FRESHNESS = {
 
 async function mockMapReads(page: Page) {
   await page.route(/.*\/features\/in-bounds(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -30,7 +30,7 @@ async function mockMapReads(page: Page) {
 
 async function mockTransportStatus(page: Page, enabled: boolean) {
   await page.route(/.*\/transport\/status$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

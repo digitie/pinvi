@@ -1,10 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('사용자 MCP 토큰 발급 폼이 시각적 라벨을 갖는다(label↔input 연결)', async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/users/me/mcp-tokens',
     async (route, request) => {
-      if (request.method() !== 'GET') return route.continue();
+      if (request.method() !== 'GET') return route.fallback();
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
     },
   );

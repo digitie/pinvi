@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
 
@@ -6,7 +6,7 @@ const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType
 test('탐색 지도가 검색·내 위치 컨트롤과 함께 렌더링된다', async ({ page }) => {
   // 키가 있으면 onLoad 에서 in-bounds 를 부르므로 mock(없으면 호출 안 됨 — 둘 다 허용).
   await page.route(/.*\/features\/in-bounds(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -39,7 +39,7 @@ test('탐색 지도가 검색·내 위치 컨트롤과 함께 렌더링된다', 
 test('탐색 지도는 데스크톱에서 지도 상자 높이를 채운다', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.route(/.*\/features\/in-bounds(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

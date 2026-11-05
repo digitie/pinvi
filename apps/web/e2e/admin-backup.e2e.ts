@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 const adminUserId = '55555555-5555-4555-8555-555555555555';
 const restoreUiEnabled = process.env.NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED === '1';
