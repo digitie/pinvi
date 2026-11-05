@@ -1,3 +1,11 @@
+## 2026-11-05 — #668 최종 계약·WSL 검증 완료
+
+- owner Map PR1451 candidate0afad07의 admin 계약을 vendor했다. user/service bytes는 불변이며 byte pin·pair v2 파생 계약을 정합화했다.
+- 미확정 명령의 원래 actor/input/key·감사 선commit/relock·완료/대기/미실행 분기·새 nonce·expected key·확인창 snapshot을 구현했다. 두 전문 리뷰의 P1/P2/추가 확인창P2를 negative 재현 후 수정했다.
+- Pinvi7707628: 단위1976pass9skip·관련DB/API50·웹393·schema24·SDK/확인창4·모킹E2E19·mypy261·Ruff/format·타입/lint(기존5warning)·OpenAPI export 확인. 실제 Map0afad07/Pinvi7707628 UI10와 owner DB 수정2/폐쇄1/보존4/봉인2 대조를 통과했다. 소유 스택은 종료했다.
+- 두 최종 리뷰·정확 HEAD CI 뒤 Map 먼저 병합하고, 실제 병합본 sync·vendor bytes/제품 tree 일치를 PR 댓글에 기록한 뒤 Pinvi를 병합한다. 증거: docs/reviews/pinvi-668-command-reconciliation-wsl-live.json.
+- 과거 actor 누락·PATCHv1은 운영 검토를 안내하며 자동 해제하지 않는다. 운영 접근/배포/시험은 없다. 최종 prod는 Claude Code 담당이다.
+
 ## 2026-11-05 — #667 완료·#668 Map 명령 조정 착수
 
 - #667/PR681을 최종35f84c8 두 독립 리뷰 무차단·CI15성공 뒤 squash cb3b2f6로 병합했다. #643 체크를 갱신했다. 운영 접근/배포/시험은 없다.

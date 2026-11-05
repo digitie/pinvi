@@ -1,0 +1,204 @@
+{
+  "issue": "digitie/pinvi#668",
+  "pr": 683,
+  "owner_pr": "digitie/kor-travel-map#1451",
+  "recorded_at": "2026-11-05T01:22:41.068680+00:00",
+  "scope": "WSL 소유 fixture; prod 접근·배포·시험 없음",
+  "product_checkpoint": "770762822972e50533c31765b14bfd9f64e3a240",
+  "source_sha256": {
+    "apps/api/app/api/v1/admin/feature_requests.py": "bb08ea52b7cd7f182830b68466ab10c63d182a6cffa8097b91ceade83c2b76b9",
+    "apps/api/app/clients/kor_travel_map_admin.py": "e458c5753254c50c86f7a6978b6f4c82b55704f36554aec4f8e3129004202c84",
+    "apps/api/app/schemas/admin_feature_request.py": "775661a36a98773aa5a2db89797a3991f245a88db37c58023f715d387b6df81e",
+    "apps/api/tests/integration/test_admin_feature_requests_api.py": "abd8c27eb03611a47fc7bdaadae7654d487b847b4df1d37e548fc1d9f1db5937",
+    "apps/api/tests/integration/test_feature_command_reconciliation.py": "ecf9318f926bf2efd7caae7004924bc8c1aa2459e4e15972e932c00cb58601f5",
+    "apps/api/tests/unit/_kor_travel_map_snapshot_pin.py": "a4d93984f28667d06d157267efd8118f394d254642eecf7aea6a4d053f2751d0",
+    "apps/api/tests/unit/test_kor_travel_map_admin_contract.py": "99e6bf60a08e6bbc40e7d963f3026a23ba080ae0419f19f2f1eaafd6703df6ce",
+    "apps/web/app/(admin)/admin/feature-requests/page.tsx": "5b0a1176d1a6ef0629526a62ef32ab5648a58f9ad8306657c95ccea3e5bf9519",
+    "apps/web/e2e/admin-feature-requests.e2e.ts": "addf04ed2adfe87321ed4d017cb3ad8288708929e4ac6ce5057088ae63018f62",
+    "apps/web/tests/featureCommandReconcileClient.test.ts": "638a889f461b3aa131e53366c5d19b065145f54e7124eac3c7d2784e8ee2f653",
+    "apps/web/tests/featureCommandReconcileDialog.test.tsx": "96509bbb5d0e6664c0de85f355ed5a8730a2cca76b83bd14fcac651f5f0cb35e",
+    "packages/api-client/src/endpoints/admin.ts": "a533b12d6ba293b40952a25f2fb4272ced6f6d03119db6fa8724768368ce8ba1",
+    "packages/schemas/src/admin_feature_request.ts": "a293aea92f5c498a04b4aedd00f5ad40a7dc077f61aeeb836080f495ecb4392f",
+    "packages/schemas/src/index.ts": "668b8ec9ca8169482644c9b20835e7818646cae1ac1bd0beec95287232628265"
+  },
+  "checks": [
+    {
+      "name": "API 전체 단위",
+      "passed": 1976,
+      "skipped": 9,
+      "log": "668-pinvi-unit-contract-final.log",
+      "scope": "7707628의 최종 vendor·byte pin·pair 파생·새 owner 계약 gate 포함",
+      "log_sha256": "8df43b39caecda0f8df0976ab698cd9ab267e5f95541a5d19a39a79d56ec5c0c"
+    },
+    {
+      "name": "실제 PostgreSQL/auth·SDK HTTP 및 Event 행 잠금 경합",
+      "passed": 50,
+      "log": "668-pinvi-related-contract-final.log",
+      "log_sha256": "68538d460c786c76ded664d50261098928fe32ff5900c4adbd638b3f0d519756",
+      "scope": "7707628에서 원래 actor·immutable dispatch·세대/nonce·요청 감사·실제 행 잠금 경합 확인"
+    },
+    {
+      "name": "웹 전체 단위",
+      "passed": 393,
+      "log": "668-pinvi-web-final.log",
+      "log_sha256": "3eeecdc3553e95707bacd3935476f2f728ef595bc2c9632d42ca34baa2a42283"
+    },
+    {
+      "name": "공유 schema",
+      "passed": 24,
+      "log": "668-pinvi-schema.log",
+      "log_sha256": "e9a74698413a493a46f24c2cf6b950c52648e24b463fe539c8f3c658c71eedae"
+    },
+    {
+      "name": "별도 SDK·확인창 재조회 회귀",
+      "passed": 4,
+      "log": "668-pinvi-dialog-generation.log",
+      "log_sha256": "7e84109b4105b11dd74744e24fc143e9bf2ba103f72e8e629afa10302e63ae33"
+    },
+    {
+      "name": "기존 모킹 브라우저",
+      "passed": 19,
+      "log": "668-pinvi-mocked-browser.log",
+      "scope": "별도 Next/모킹 API 경계; 실제서비스 UI 결과와 구분",
+      "log_sha256": "dbc829d93fbb7e09d18301b72ceaf5ee69fd57b1a9af835b64380eb11c7bc936"
+    },
+    {
+      "name": "mypy",
+      "sources": 261,
+      "log": "668-pinvi-mypy-final.log",
+      "log_sha256": "85c2a3cf816b125399bd523aa8226d9cbb42d81b770d50e3f144b0e1bcc5b8f2"
+    },
+    {
+      "name": "웹 lint",
+      "errors": 0,
+      "baseline_warnings": 5,
+      "log": "668-pinvi-web-lint.log",
+      "log_sha256": "a8935626ab881e93b1e6174066b95ed9aed63725c130bb78cde63df3c5aab330"
+    },
+    {
+      "name": "Pinvi OpenAPI export 및 새 경로·필수 키·상태/승인 optional 키 확인",
+      "passed": true,
+      "log": "668-pinvi-openapi-export.log",
+      "log_sha256": "3d98a00aa792242a4be2b7cf51113353a2bb2ac96803a6201400e24086bb4214"
+    }
+  ],
+  "real_ui": {
+    "checks": [
+      "실제 관리자 로그인·역할 인증",
+      "봉인 commit 뒤 확인 응답도 유실→dispatch 보존·재확인",
+      "전송 전 유실→미실행 영구 봉인·새 키1회·짧은 사유/확인 포커스",
+      "새 시도 키로 실제 Map 수정 승인",
+      "실제 PATCH 커밋 뒤 응답 유실→typed receipt 회수·반영 완료",
+      "실제 DELETE 커밋 뒤 응답 유실→폐쇄 receipt 회수",
+      "claim-only 처리 중은 입력/거절 잠금 보존",
+      "원래 actor 없는 과거 명령은 확인/해제 차단",
+      "모호한 v1 PATCH는 안전한 오류·잠금 유지·390px 가로넘침 없음",
+      "미실행 봉인 후 안전한 거절"
+    ],
+    "real_ui": true,
+    "map_business_response_mocked": false,
+    "map_head": "0afad078eae3405efc7fa375d66d771c95d5b049",
+    "pinvi_head": "770762822972e50533c31765b14bfd9f64e3a240",
+    "fault_event_count": 17,
+    "console_errors": []
+  },
+  "owner_db_state": {
+    "feature_states": [
+      {
+        "label": "미실행 뒤 새 승인",
+        "name": "새 검토 승인668",
+        "lifecycle_state": "active",
+        "revision": 3
+      },
+      {
+        "label": "완료 응답 유실",
+        "name": "유실된 완료668",
+        "lifecycle_state": "active",
+        "revision": 3
+      },
+      {
+        "label": "폐쇄 완료 응답 유실",
+        "name": "base",
+        "lifecycle_state": "retired",
+        "revision": 3
+      },
+      {
+        "label": "처리 중 원장",
+        "name": "base",
+        "lifecycle_state": "active",
+        "revision": 2
+      },
+      {
+        "label": "실행 계정 없는 과거 명령",
+        "name": "base",
+        "lifecycle_state": "active",
+        "revision": 2
+      },
+      {
+        "label": "과거 지문 명령",
+        "name": "base",
+        "lifecycle_state": "active",
+        "revision": 2
+      },
+      {
+        "label": "미실행 뒤 거절",
+        "name": "base",
+        "lifecycle_state": "active",
+        "revision": 2
+      }
+    ],
+    "sealed_keys": 2
+  },
+  "screenshots": {
+    "command-668-pending-desktop.png": "3bc01cec7b246ff761e0b9905eda8fe9aa243e8e7016e5658b1b0d45a478f0db",
+    "command-668-legacy-mobile.png": "e931063df52f81189121b533bebaa9cab9b56f4edd79dcc74c6515d8c2ad19f5"
+  },
+  "fixture_sources": {
+    "command_reconcile_live_stack.py": "0131fe8598eea4313cee5864e066fdb3617c8a07a3abe29c8abc08707df246d5",
+    "command_reconcile_live_browser.cjs": "08902ec646a02ed18d381c1d6865b1c38a9711c7abc1b6cb2ebccf005a1647d2"
+  },
+  "negative_and_repairs": [
+    "최초 소비자 확인 route404 negative1",
+    "두 전문 리뷰의 지연된 옛 요청 승격 P1·412 봉인키 회귀 P2: 실제 negative2 이후 세대 결박·nonce 보존, 관련50pass",
+    "추가 전문 리뷰의 열린 확인창 대상 교체 P2: 기존 d54 source negative1 이후 snapshot·실제 QueryClient 재조회4pass",
+    "기존 CI 모킹 E2E exact body 기대값2실패: 명령 키/저장 입력을 함께 확인하도록 정합화 후 WSL19·6aad GitHub e2e SUCCESS",
+    "최초 integration fixture에 alembic PATH 누락으로 시작 오류; 앱 venv PATH 명시 후26pass",
+    "소유 proxy의 Request annotation fixture 오류422; fixture 수정 후 실제 UI9pass",
+    "최종 UI 기능 흐름 뒤 상태 조회429; prod 제한을 변경하지 않고 Retry-After40초 준수 후 전체 실제 UI10pass",
+    "새 owner 계약 gate는 이전 vendored 계약에서 KeyError로 실패했고, reviewed candidate vendor 뒤 전체 단위1976pass9skip으로 통과"
+  ],
+  "catalog": {
+    "total": 349,
+    "scripted": 298,
+    "manual": 23,
+    "blocked": 28,
+    "new_manual": [
+      "ADM-042",
+      "ADM-043"
+    ]
+  },
+  "limits": [
+    "원래 actor 누락·변경이나 과거 PATCHv1의 모호한 지문은 자동 해제하지 않고 운영 검토 안내",
+    "현재 확인 API는 강제 취소가 아니며 Map claim-only는 계속 pending",
+    "초기 request_id 키에만 기존 승인 소비자의 expected key 생략을 호환; 전진 뒤 생략/옛 키는409",
+    "최종 실제 UI는 Map0afad07·Pinvi7707628의 실제 앱/DB/SDK/브라우저이며 제품 business 응답 mock은 없다. 이후 문서만 추가한다.",
+    "최종 두 전문 소스 리뷰·정확 최종 HEAD CI·owner merge와 병합본 sync·바이트 동등성은 PR에 별도 기록한다."
+  ],
+  "upstream_source": {
+    "kind": "최종 검토 owner candidate의 immutable source pin",
+    "revision": "0afad078eae3405efc7fa375d66d771c95d5b049",
+    "owner_pr": "https://github.com/digitie/kor-travel-map/pull/1451",
+    "admin_snapshot_sha256": "0027b8e8a6c1c88250ae562bb4ac04fa1b10fd17e278177a4089871dda87a072",
+    "pair_contract": "v2; source revision을 runtime pair 계약에 다시 선언하지 않고 정본 generator로 digest16개 유도",
+    "consumer_merge_gate": "owner PR을 먼저 merge한 뒤 실제 병합본으로 최종 sync하고, candidate Git tree·vendored admin bytes·제품 지문의 동등성을 확인한다.",
+    "merge_confirmation_location": "PR683의 최종 병합 확인 댓글에 실제 owner merge SHA와 대조 결과를 기록한다."
+  },
+  "contract_artifact_sha256": {
+    "apps/api/tests/contract/kor-travel-map-openapi-admin.json": "0027b8e8a6c1c88250ae562bb4ac04fa1b10fd17e278177a4089871dda87a072",
+    "contracts/kor-travel-map-m05-pair-provenance-v1.json": "f50f5a328e24be097d8dbe8b7b260bdf89bf2f4d96a05291615f2491a37e7906"
+  },
+  "unchanged_user_service_sha256": {
+    "user": "3a847c8a53f36044080839855d634fbfa2c5b18fa769bcf95bcbbaa614f72da4",
+    "service": "fd2aaa9e8c38e8a7f1a54550233b1b5af5a7aea1089c5432100d7464e5e4aaff"
+  }
+}
