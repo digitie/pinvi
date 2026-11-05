@@ -42,8 +42,17 @@
 
 - [x] 지정 기준 worktree 생성, Linux native 도구 확인, CodeGraph 인덱스 초기화·explore/impact.
 - [x] GitHub 최신 본문·댓글 확인, 구현 전 실행계획 작성.
-- [ ] 계획 commit·push·Draft PR 생성.
+- [x] 계획 commit·push·Draft PR 생성: 계획 4776d0d, Draft PR #695.
 - [ ] 실패 우선 회귀·구현·실제 fixture 검증.
 - [ ] 정확 최종 SHA·source hash·WSL 증거·한계 인계.
 
 PR 종료 문구는 #616 완료 검증 뒤에만 `Closes #616`을 사용하고, #621에는 `Refs #621`만 사용한다.
+
+## 중간 검증
+
+- #616 담당 작업: additive 세 경로 수정 전 3 FAIL, 관련·보안·설정 검사 148 PASS. receipt·event·fingerprint exact 검사는 보존했다.
+- rate limit 담당 작업: 실제 소유 PG에서 기존 3 statement 반례 1 FAIL → 한 statement와 관련 unit/PG 70 PASS(26.51초). concurrent 12요청·override 우선순위·만료/철회·SKIP LOCKED·취소·공개429/503/fail-open·handler 1회 계약을 확인했다.
+- logging/runtime 주 작업: inline DB 대기 반례 실패 후 신규 unit 12 PASS. 실제 소유 PG와 loopback HTTP의 성공/503·read timeout·connect failure 기록 및 pool 대기/timeout/취소 7 PASS(14.55초).
+- pool 구현은 core의 관측 pool을 사용하며 실제 생성 지점인 app/db/session.py에 최소 배선 4줄을 추가했다. 설정은 pool size 10, max_overflow 0, pool_timeout 5초가 기본이며 운영 적용/부하 튜닝은 미검증이다.
+- provider 회귀는 기존 코드에서 포화 대기·timeout 재전송·늦은 결과 회로 오염 7 FAIL을 확보했다. 구현 및 통합 검증은 진행 중이다.
+- 직접 weather resolve는 아직 서비스 요청 경로에서 inline await한다. 서비스 재설계는 이번 clients/middleware/core 소유 범위 밖이며 #621 잔여로 남긴다. edge HTTP/2·운영 flag·worker와 함께 #621 자동 종료를 금지한다.

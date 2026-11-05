@@ -166,10 +166,10 @@ async def test_allowed_override_never_catches_or_replays_handler_db_error(
         expires_at=datetime.now(UTC) + timedelta(minutes=1),
     )
 
-    async def override(**_: object) -> module.RateLimitOverrideDecision:
-        return decision
+    async def check(_self: object, **_: object) -> module.RateLimitStoreResult:
+        return module.RateLimitStoreResult(count=0, override=decision)
 
-    monkeypatch.setattr(module, "_active_override_decision", override)
+    monkeypatch.setattr(module.PostgresRateLimitBackend, "check", check)
     calls = 0
     sent = []
     failure = SQLAlchemyError("handler fixture database error")
@@ -211,14 +211,15 @@ def test_allowed_handler_failure_is_server_error_not_store_unavailable(
     monkeypatch.setattr(settings, "pinvi_rate_limit_backend", "postgres")
     monkeypatch.setattr(settings, "pinvi_rate_limit_fail_open", fail_open)
 
-    async def override(**_: object) -> module.RateLimitOverrideDecision:
-        return module.RateLimitOverrideDecision(
+    async def check(_self: object, **_: object) -> module.RateLimitStoreResult:
+        decision = module.RateLimitOverrideDecision(
             override_id=uuid.uuid4(),
             action="allowed",
             expires_at=datetime.now(UTC) + timedelta(minutes=1),
         )
+        return module.RateLimitStoreResult(count=0, override=decision)
 
-    monkeypatch.setattr(module, "_active_override_decision", override)
+    monkeypatch.setattr(module.PostgresRateLimitBackend, "check", check)
     app = FastAPI()
     app.add_middleware(RateLimitMiddleware)
     calls = 0
@@ -250,14 +251,15 @@ async def test_blocked_response_send_error_never_runs_handler_or_sends_fallback(
     monkeypatch.setattr(settings, "pinvi_rate_limit_backend", "postgres")
     monkeypatch.setattr(settings, "pinvi_rate_limit_fail_open", fail_open)
 
-    async def override(**_: object) -> module.RateLimitOverrideDecision:
-        return module.RateLimitOverrideDecision(
+    async def check(_self: object, **_: object) -> module.RateLimitStoreResult:
+        decision = module.RateLimitOverrideDecision(
             override_id=uuid.uuid4(),
             action="blocked",
             expires_at=datetime.now(UTC) + timedelta(minutes=1),
         )
+        return module.RateLimitStoreResult(count=0, override=decision)
 
-    monkeypatch.setattr(module, "_active_override_decision", override)
+    monkeypatch.setattr(module.PostgresRateLimitBackend, "check", check)
     calls = 0
     statuses = []
     failure = SQLAlchemyError("fixture send failure")
@@ -283,12 +285,10 @@ async def test_blocked_response_send_error_never_runs_handler_or_sends_fallback(
 
 
 @pytest.mark.parametrize("fail_open", [False, True])
-@pytest.mark.parametrize("store_stage", ["override", "counter"])
 def test_only_real_store_failures_use_fallback_and_log_safe_exception_class(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     fail_open: bool,
-    store_stage: str,
 ) -> None:
     from sqlalchemy.exc import SQLAlchemyError
 
@@ -297,16 +297,10 @@ def test_only_real_store_failures_use_fallback_and_log_safe_exception_class(
     monkeypatch.setattr(settings, "pinvi_rate_limit_backend", "postgres")
     monkeypatch.setattr(settings, "pinvi_rate_limit_fail_open", fail_open)
 
-    async def override(**_: object) -> None:
-        if store_stage == "override":
-            raise SQLAlchemyError("fixture-private-sql-param")
+    async def check(_self: object, **_: object) -> module.RateLimitStoreResult:
+        raise SQLAlchemyError("fixture-private-sql-param")
 
-    class Backend:
-        async def hit(self, **_: object) -> int:
-            raise SQLAlchemyError("fixture-private-sql-param")
-
-    monkeypatch.setattr(module, "_active_override_decision", override)
-    monkeypatch.setattr(module, "_POSTGRES_BACKEND", Backend())
+    monkeypatch.setattr(module.PostgresRateLimitBackend, "check", check)
     app = FastAPI()
     app.add_middleware(RateLimitMiddleware)
     calls = 0

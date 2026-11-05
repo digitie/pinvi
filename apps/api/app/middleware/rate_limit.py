@@ -14,12 +14,13 @@ import json
 import logging
 import re
 import uuid
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from math import ceil
 from typing import Final, Literal, Protocol, cast
 
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -95,6 +96,12 @@ class RateLimitOverrideDecision:
     expires_at: datetime
 
 
+@dataclass(frozen=True)
+class RateLimitStoreResult:
+    count: int
+    override: RateLimitOverrideDecision | None = None
+
+
 class RateLimitBackend(Protocol):
     async def hit(
         self,
@@ -157,7 +164,77 @@ class PostgresRateLimitBackend:
         RETURNING count
         """
     )
-    _CLEANUP_SQL: Final = text("DELETE FROM app.rate_limit_buckets WHERE expires_at < :cutoff")
+    # override와 증가는 같은 statement snapshot에서 결정한다. configured cap이 있으면
+    # 과거 allowed는 우회가 아니며 blocked는 생성 순서와 무관하게 우선한다.
+    _CHECK_SQL: Final = text(
+        """
+        WITH active_override AS MATERIALIZED (
+          SELECT override_id, action, expires_at
+          FROM app.rate_limit_overrides
+          WHERE bucket_hash = :bucket_hash AND limit_name = :limit_name
+            AND revoked_at IS NULL AND expires_at > :now
+          ORDER BY CASE WHEN :prefer_blocked THEN action = 'blocked' ELSE false END DESC,
+                   created_at DESC
+          LIMIT 1
+        ), incremented AS (
+          INSERT INTO app.rate_limit_buckets (
+            bucket_hash, window_start, limit_name, count, expires_at
+          )
+          SELECT :bucket_hash, :window_start, :limit_name, 1, :expires_at
+          WHERE NOT EXISTS (
+            SELECT 1 FROM active_override
+            WHERE action = 'blocked' OR NOT :prefer_blocked
+          )
+          ON CONFLICT (bucket_hash, window_start)
+          DO UPDATE SET
+            count = app.rate_limit_buckets.count + 1,
+            limit_name = EXCLUDED.limit_name,
+            expires_at = GREATEST(app.rate_limit_buckets.expires_at, EXCLUDED.expires_at),
+            updated_at = now()
+          RETURNING count
+        )
+        SELECT COALESCE((SELECT count FROM incremented), 0) AS count,
+               active_override.override_id, active_override.action, active_override.expires_at
+        FROM (VALUES (1)) AS one_row(value)
+        LEFT JOIN active_override ON true
+        """
+    )
+
+    async def check(
+        self,
+        *,
+        bucket_hash: str,
+        limit_name: str,
+        window_start: datetime,
+        expires_at: datetime,
+        now: datetime,
+        prefer_blocked: bool = False,
+    ) -> RateLimitStoreResult:
+        async with db_session.async_session_factory() as session:
+            row = (
+                await session.execute(
+                    self._CHECK_SQL,
+                    {
+                        "bucket_hash": bucket_hash,
+                        "limit_name": limit_name,
+                        "window_start": window_start,
+                        "expires_at": expires_at,
+                        "now": now,
+                        "prefer_blocked": prefer_blocked,
+                    },
+                )
+            ).one()
+            decision = (
+                RateLimitOverrideDecision(
+                    override_id=row.override_id,
+                    action=cast(Literal["blocked", "allowed"], row.action),
+                    expires_at=row.expires_at,
+                )
+                if row.override_id is not None
+                else None
+            )
+            await session.commit()
+            return RateLimitStoreResult(count=int(row._mapping["count"]), override=decision)
 
     async def hit(
         self,
@@ -178,7 +255,6 @@ class PostgresRateLimitBackend:
                 },
             )
             count = int(result.scalar_one())
-            await session.execute(self._CLEANUP_SQL, {"cutoff": datetime.now(UTC)})
             await session.commit()
             return count
 
@@ -230,19 +306,16 @@ class RateLimitMiddleware:
         # 재분류하면 fail-open에서 이미 실행한 사용자 mutation을 다시 실행할 수 있다.
         try:
             if self._uses_postgres_store():
-                override_decision = await _active_override_decision(
+                result = await _POSTGRES_BACKEND.check(
                     bucket_hash=bucket_hash,
                     limit_name=policy.name,
+                    window_start=window_start,
+                    expires_at=expires_at,
                     now=now,
                     prefer_blocked=configured_limit is not None,
                 )
-            blocked = override_decision is not None and override_decision.action == "blocked"
-            allowed = (
-                override_decision is not None
-                and override_decision.action == "allowed"
-                and configured_limit is None
-            )
-            if not blocked and not allowed:
+                override_decision, count = result.override, result.count
+            else:
                 count = await self._backend_for_settings().hit(
                     bucket_hash=bucket_hash,
                     limit_name=policy.name,
@@ -536,38 +609,74 @@ def rate_limit_bucket_hash(policy_name: str, raw_key: str) -> str:
     return _bucket_hash(policy_name, raw_key)
 
 
-async def _active_override_decision(
-    *,
-    bucket_hash: str,
-    limit_name: str,
-    now: datetime,
-    prefer_blocked: bool = False,
-) -> RateLimitOverrideDecision | None:
-    from app.models.rate_limit import RateLimitOverride
-
-    async with db_session.async_session_factory() as session:
-        statement = select(
-            RateLimitOverride.override_id,
-            RateLimitOverride.action,
-            RateLimitOverride.expires_at,
-        ).where(
-            RateLimitOverride.bucket_hash == bucket_hash,
-            RateLimitOverride.limit_name == limit_name,
-            RateLimitOverride.revoked_at.is_(None),
-            RateLimitOverride.expires_at > now,
-        )
-        if prefer_blocked:
-            statement = statement.order_by((RateLimitOverride.action == "blocked").desc())
-        row = (
-            await session.execute(statement.order_by(RateLimitOverride.created_at.desc()).limit(1))
-        ).one_or_none()
-    if row is None:
-        return None
-    return RateLimitOverrideDecision(
-        override_id=row.override_id,
-        action=cast(Literal["blocked", "allowed"], row.action),
-        expires_at=row.expires_at,
+_CLEANUP_SQL: Final = text(
+    """
+    WITH expired AS (
+      SELECT bucket_hash, window_start
+      FROM app.rate_limit_buckets
+      WHERE expires_at < :cutoff
+      ORDER BY expires_at
+      LIMIT :batch_size
+      FOR UPDATE SKIP LOCKED
     )
+    DELETE FROM app.rate_limit_buckets AS bucket
+    USING expired
+    WHERE bucket.bucket_hash = expired.bucket_hash
+      AND bucket.window_start = expired.window_start
+    RETURNING 1
+    """
+)
+
+
+async def cleanup_expired_rate_limit_buckets(*, batch_size: int = 1000) -> int:
+    """요청과 독립된 짧은 transaction에서 만료 bucket만 제한 수량 정리한다."""
+    if batch_size < 1:
+        raise ValueError("batch_size는 양수여야 합니다.")
+    async with db_session.async_session_factory() as session:
+        result = await session.execute(
+            _CLEANUP_SQL, {"cutoff": datetime.now(UTC), "batch_size": batch_size}
+        )
+        count = len(result.all())
+        await session.commit()
+        return count
+
+
+class RateLimitBucketCleanup:
+    """API lifespan 소유 task. 한도 요청은 이 task나 청소를 기다리지 않는다."""
+
+    def __init__(self, *, interval_seconds: float = 60.0, timeout_seconds: float = 5.0) -> None:
+        if interval_seconds <= 0 or timeout_seconds <= 0:
+            raise ValueError("청소 주기와 timeout은 양수여야 합니다.")
+        self._interval_seconds = interval_seconds
+        self._timeout_seconds = timeout_seconds
+        self._task: asyncio.Task[None] | None = None
+
+    def start(self) -> None:
+        if self._task is None:
+            self._task = asyncio.create_task(self._run(), name="rate-limit-bucket-cleanup")
+
+    async def stop(self) -> None:
+        if self._task is None:
+            return
+        task = self._task
+        task.cancel()
+        try:
+            with suppress(asyncio.CancelledError):
+                await task
+        finally:
+            self._task = None
+
+    async def _run(self) -> None:
+        while True:
+            await asyncio.sleep(self._interval_seconds)
+            try:
+                async with asyncio.timeout(self._timeout_seconds):
+                    await cleanup_expired_rate_limit_buckets()
+            except (SQLAlchemyError, TimeoutError) as exc:
+                logger.warning(
+                    "rate_limit.cleanup_failed",
+                    extra={"error_type": type(exc).__name__},
+                )
 
 
 async def _collect_body(receive: Receive) -> list[Message]:
