@@ -15,3 +15,13 @@
 초안 PR 먼저, 기능별 원격 커밋을 남긴다. 시간대/미정/문자 주입/긴 한글·빈 일정·공유 권한을 단위와 실제 WSL PG/API/프로덕션 웹 Chromium으로 검사한다. 실제 다운로드 ICS와 PDF 출력 파일을 확인하고 PDF는 페이지 PNG로 렌더해 겹침·잘림·글꼴을 시각 검증한다.
 
 두 독립 전문 적대 리뷰→보완→정확 최종HEAD 모든 적용 CI 성공 후 일반 squash merge한다. 운영 접근/배포/시험은 하지 않으며 최종 prod는 Claude Code 담당이다. #650/Map1450은 Claude의 운영 확인, #671/#672와 보호 stash는 건드리지 않는다.
+
+## 구현 체크포인트
+
+초기 calendar 변환12검사가 통과했다. 미리보기 개방 시 명시적인 export DTO를 깊게 복사한다. 전체 조회 일정 범위를 사용하며 선택/숨김 일자와 혼동하지 않도록 설명한다. 모든 출력이 같은 snapshot을 사용한다. POI UID는 trip_id/poi_id로 고정해 일자 간 이동에도 유지한다.
+
+인쇄는 Dialog의 높이/스크롤 wrapper가 아닌 전용 정적 본문만 about:blank에 DOM clone한다. opener를 끊고 요청 전 no-referrer를 설정하며 승인된 Next static CSS만 사용한다. 사용자 문자열의 innerHTML/document.write나 외부 이미지/URL을 사용하지 않는다. popup 차단·8초 글꼴 대기·명시 취소를 처리하고 원래 공유 URL의 print로 fallback하지 않는다.
+
+SharedTripView의 여행/token identity가 바뀌면 이전 조회와 내보내기 component를 즉시 언마운트한다. TripDetail은 알려진 permission-denied와 다른 trip_id에 내보내기를 노출하지 않는다. 공유 철회와 동시에 이미 전달된 내용을 회수한다고 보장하지 않는다.
+
+미리보기/공유 identity/위치도 방문 번호/안전한 텍스트/팝업·취소와 ICS13 경계를 포함해 현재23검사가 통과했다. 타입·lint 확인 뒤 코드 후보를 원격에 남기고 두 전문 코드 리뷰·실제 DB/API/UI/PDF 시각 검증을 진행한다. 이 기록은 전체 검증 완료나 병합 완료가 아니다.

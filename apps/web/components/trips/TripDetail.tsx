@@ -50,6 +50,7 @@ import { ConflictDialog, type ConflictField } from '@/components/trips/ConflictD
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { TripDayHeader } from '@/components/trips/TripDayHeader';
 import { TripActions } from '@/components/trips/TripActions';
+import { TripExportButton } from '@/components/trips/TripExportButton';
 import { TripEditDialog } from '@/components/trips/TripEditDialog';
 import { TripAttachments } from '@/components/trips/TripAttachments';
 import { TripComments } from '@/components/trips/TripComments';
@@ -1358,6 +1359,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                 </span>
               </p>
             </div>
+            {view.trip.trip_id === tripId && realtimeStatus !== 'permission-denied' && <TripExportButton key={tripId} view={view} compact />}
             <button
               type="button"
               onClick={() => setMobilePanelOpen((open) => !open)}
@@ -1478,6 +1480,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
               >
                 편집
               </button>
+              {view.trip.trip_id === tripId && realtimeStatus !== 'permission-denied' && <TripExportButton key={tripId} view={view} />}
               <TripActions tripId={tripId} />
             </div>
           </div>

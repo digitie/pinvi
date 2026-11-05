@@ -114,3 +114,16 @@ describe('여행 내보내기와 RFC5545 경계', () => {
     expect(formatExportTime(null)).toBe('미정');
   });
 });
+
+it('POI를 다른 일자로 옮겨도 캘린더 UID가 유지된다', () => {
+  const source = exportSource();
+  const first = unfold(buildTripCalendar(buildTripExport(source), generated).content).match(
+    /^UID:.+$/m,
+  )?.[0];
+  source.days[0]!.day_index = 2;
+  source.days[0]!.effective_date = '2026-11-06';
+  const moved = unfold(buildTripCalendar(buildTripExport(source), generated).content).match(
+    /^UID:.+$/m,
+  )?.[0];
+  expect(moved).toBe(first);
+});
