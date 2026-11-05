@@ -1,3 +1,9 @@
+## 2026-11-05 — #637 기상특보 소비자 초안
+
+-636/638 PR688은5602cf3으로 병합했다. #643 최신 본문을 다시 확인했고 남은 Code 범위는637과641이다. Weather201의 공식 발표·부분 지역 매핑 계약이 선행한다.
+-계획은 docs/execplan/issue-637-weather-alerts.md. owner 일반 병합 후 실제 OpenAPI 동기화→기본 off 설정·기존 발송 이력 연결을 진행한다. 두 전문 적대 리뷰·WSL 실제 UI·정확 HEAD CI 뒤 일반 squash merge한다.
+-운영 접근/배포/시험은 없으며650/Map1450은 Claude Code 담당이다.671/672와 보호 stash는 건드리지 않는다.
+
 ## 2026-11-05 — Telegram636/638 최종 제품 검증·0104 권한 복구
 
 - 제품 f1fc24f의 실제 WSL API·Postgres·프로덕션 웹 빌드·Chromium UI 8흐름이 통과했다. 수신자 없는 계획 실패의 상세 원인 UI까지 확인했고 pageerror는 0이다. Telegram은 소유 HTTP fixture이며 실제 수신자·운영 접근은 없다.
