@@ -61,6 +61,27 @@ class SortOrderConflictError(PoiError):
     code = "SORT_ORDER_CONFLICT"
 
 
+async def _lock_poi_in_observed_trip(db: AsyncSession, poi: TripDayPoi) -> TripDayPoi:
+    """권한을 확인한 여행을 고정한다. 잠금 대기 중 관리자 이동을 따라가지 않는다."""
+    source_trip_id = poi.trip_id
+    poi_id = poi.attachment_id
+    if await _lock_active_trip(db, source_trip_id) is None:
+        raise PoiNotFoundError("POI를 찾을 수 없습니다.")
+    locked = await db.scalar(
+        select(TripDayPoi)
+        .where(
+            TripDayPoi.attachment_id == poi_id,
+            TripDayPoi.trip_id == source_trip_id,
+            TripDayPoi.deleted_at.is_(None),
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked is None:
+        raise PoiNotFoundError("POI를 찾을 수 없습니다.")
+    return locked
+
+
 async def ensure_trip_day(db: AsyncSession, *, trip_id: uuid.UUID, day_index: int) -> TripDay:
     day = await db.scalar(
         select(TripDay).where(TripDay.trip_id == trip_id, TripDay.day_index == day_index)
@@ -189,10 +210,7 @@ async def update_poi(
     expected_version: int,
     patch: dict[str, Any],
 ) -> TripDayPoi:
-    trip = await _lock_active_trip(db, poi.trip_id)
-    await db.refresh(poi, with_for_update=True)
-    if trip is None or poi.deleted_at is not None:
-        raise PoiNotFoundError("POI를 찾을 수 없습니다.")
+    poi = await _lock_poi_in_observed_trip(db, poi)
     if poi.version != expected_version:
         raise PoiVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
     destination = patch.get("day_index")
@@ -259,10 +277,7 @@ async def update_poi(
 
 async def soft_delete_poi(db: AsyncSession, *, poi: TripDayPoi) -> None:
     # 일자 기준 유지/추가/이동과 같은 Trip→POI 순서로 직렬화한다.
-    trip = await _lock_active_trip(db, poi.trip_id)
-    await db.refresh(poi, with_for_update=True)
-    if trip is None or poi.deleted_at is not None:
-        raise PoiNotFoundError("POI를 찾을 수 없습니다.")
+    poi = await _lock_poi_in_observed_trip(db, poi)
     poi.deleted_at = datetime.now(UTC)
     await db.commit()
 

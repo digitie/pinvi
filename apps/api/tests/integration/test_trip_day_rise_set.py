@@ -516,3 +516,78 @@ async def test_older_sync_cannot_overwrite_a_newer_poi_move(
     assert rows[2].status == "pending_fetch"
     assert rows[2].longitude == 129.118
     assert str(rows[2].reference_poi_id) == poi_id
+
+
+@pytest.mark.parametrize("method", ["DELETE", "PATCH"])
+async def test_delayed_poi_write_cannot_follow_admin_move_into_another_users_trip(
+    client: Any,
+    session_factory: Any,
+    auth_cookies: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+) -> None:
+    import asyncio
+
+    import app.services.poi as poi_service
+
+    trip_id = await _seed_trip_with_poi(session_factory)
+    target_id = await _seed_trip_with_poi(session_factory)
+    owner, poi_id = await _trip_owner_and_poi(session_factory, trip_id)
+    target_owner, _ = await _trip_owner_and_poi(session_factory, target_id)
+    assert owner != target_owner
+    async with session_factory() as db:
+        admin = User(
+            email="admin684@pinvi.test",
+            status="active",
+            roles=["user", "admin"],
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(admin)
+        await db.commit()
+        admin_id = str(admin.user_id)
+    original_lock = poi_service._lock_active_trip
+    observed = asyncio.Event()
+    resume = asyncio.Event()
+
+    async def delayed_lock(db: Any, source_id: uuid.UUID) -> Any:
+        observed.set()
+        await asyncio.wait_for(resume.wait(), timeout=10)
+        return await original_lock(db, source_id)
+
+    monkeypatch.setattr(poi_service, "_lock_active_trip", delayed_lock)
+    # 관리자 이동 뒤 버전(2)을 추측해도 기존 여행의 권한만으로 PATCH할 수 없어야 한다.
+    kwargs = (
+        {"headers": {"If-Match": "2"}, "json": {"user_note": "타인 여행에 쓰면 안 됨"}}
+        if method == "PATCH"
+        else {}
+    )
+    pending = asyncio.create_task(
+        client.request(
+            method,
+            f"/trips/{trip_id}/pois/{poi_id}",
+            cookies=auth_cookies(owner),
+            **kwargs,
+        )
+    )
+    try:
+        await asyncio.wait_for(observed.wait(), timeout=5)
+        moved = await client.post(
+            f"/admin/pois/{poi_id}/move",
+            cookies=auth_cookies(admin_id),
+            json={
+                "target_trip_id": str(target_id),
+                "target_day_index": 2,
+                "attachment_policy": "move",
+                "comment_policy": "move",
+                "access_reason": "권한 경합 회귀 시험",
+            },
+        )
+        assert moved.status_code == 200, moved.text
+    finally:
+        resume.set()
+        response = await asyncio.wait_for(pending, timeout=5)
+    assert response.status_code == 404, response.text
+    async with session_factory() as db:
+        poi = await db.get(TripDayPoi, uuid.UUID(poi_id))
+        assert poi is not None and poi.trip_id == target_id
+        assert poi.deleted_at is None and poi.user_note is None and poi.version == 2
