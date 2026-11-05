@@ -43,7 +43,7 @@
 - [x] 지정 기준 worktree 생성, Linux native 도구 확인, CodeGraph 인덱스 초기화·explore/impact.
 - [x] GitHub 최신 본문·댓글 확인, 구현 전 실행계획 작성.
 - [x] 계획 commit·push·Draft PR 생성: 계획 4776d0d, Draft PR #695.
-- [ ] 실패 우선 회귀·구현·실제 fixture 검증.
+- [x] 소유 범위 실패 우선 회귀·구현·실제 fixture 검증.
 - [ ] 정확 최종 SHA·source hash·WSL 증거·한계 인계.
 
 PR 종료 문구는 #616 완료 검증 뒤에만 `Closes #616`을 사용하고, #621에는 `Refs #621`만 사용한다.
@@ -64,3 +64,12 @@ PR 종료 문구는 #616 완료 검증 뒤에만 `Closes #616`을 사용하고, 
 - 기존 최외곽 Map client lifespan에 logging drain과 rate-limit cleanup을 연결했다. main.py와 runtime/서명 guard는 변경하지 않았다.
 - Map·geo·weather 사용자 client의 독립 bulkhead 기본16, 회로120초, 단일 half-open·세대 fencing을 구현했다. Map weather는 기본 Map client의 bulkhead를 공유하고 로컬 포화/PoolTimeout은 회로 장애로 세지 않는다. admin/curation 등 별도 command client까지 하나의 전역 Map cap으로 묶지는 않았다.
 - 전체 API unit 2084 PASS/기존9 SKIP(98.32초), 전체 strict mypy274파일, Ruff/format518파일 통과. 세 provider 실제 loopback HTTP+소유PG 검사3 PASS(14.13초)이다. 공개 오류 계약을 포함한 확장 통합 검사는 진행 중이다.
+
+## 최종 WSL 검증
+
+- 제품 코드 기준674602e00f1a269970db4e7c695e30773062da52. 추가 공개 계약 검사는 동일 제품 소스에 테스트만 보강했다.
+- 관련 API/실제PG 통합134 PASS(88.55초), 실제3provider HTTP·공개503 오류계약7 PASS(15.54초, 앞선134중3건과중복)이다.
+- 공개 계약 신규 검사의 초기 data/meta 가정은 현재 error-only 계약과 달라4건 실패했고 문서/handler 확인 후 테스트만 정정했다. 이 실패를 제품 결함의 실패 우선 증거로 계산하지 않는다.
+- pool 관측을 기본 pool로 교체한 별도 negative control은 실제PG1 FAIL이었다. 정상 구현에서는 acquisition 대기·timeout·취소 metric과 후속 연결을 모두 통과했다.
+- 최종 증거 JSON은 docs/reviews/pinvi-616-621-wsl-resilience.json에 source SHA-256·명령·집계·제약을 담는다.
+- 추가 plain httpx service/routes의 OAuth·Telegram 호출부 전환은 clients 소유 범위 밖이다. event hook만 부착한 client의 response 없는 실패 기록은 후속으로 남는다. 실제 Telegram 접근은 수행하지 않았다.

@@ -354,3 +354,48 @@ HTTPS로 redirect한다.
 - [ ] OpenAPI export (코드 작성 단계 진입 후 자동) — 변경 시 `.github/workflows/openapi.yml`에서 drift 검사
 - [ ] 관련 문서 갱신: 본 API 문서 + `docs/journal.md` + (도메인 변경 시)
       `docs/data-model.md`
+
+## 외부 호출 복원력과 관측 (#616·#621)
+
+Map outer envelope는 필수 `data`/`meta`와 기존 타입·상태 의미를 검사하고 추가 키는
+무시한다. 무시한 키는 위치·키 집합별 한 번 경고한다. 서명·인과 증명·immutable receipt의
+exact 검사는 별도 보안 경계이므로 그대로 유지한다.
+
+사용자 Map·geo·weather client는 worker별 독립 동시 호출 한도16을 가진다. Map weather와
+transport는 기본 Map client 한도를 공유한다. 포화 시 기다리지 않고 기존 unavailable로
+강등한다. timeout 등 전송 장애가 3회 연속 발생하면 회로를120초 열고 시험 호출 하나만
+허용한다. 직접 weather의 endpoint/host·짧은 deadline 판단은 유지하며 이전 세대의 늦은
+결과는 새 회로 상태에 반영하지 않는다. 로컬 포화·연결 풀 대기는 원격 장애로 세지 않는다.
+별도 admin/curation/command client를 하나의 전역 Map cap으로 합친 것은 아니다.
+
+HTTP 오류 공개 계약은 그대로다. Map·geo의 포화/열린 회로는 공개503의
+`FEATURE_SERVICE_UNAVAILABLE`/`GEOCODING_SERVICE_UNAVAILABLE`로 투영하고 내부 code나
+예외 문자열을 응답하지 않는다. rate limit은 기존429·Retry-After·저장소503·fail-open
+정책을 유지한다. Postgres backend의 override 결정과 atomic counter 증가는 하나의
+statement를 쓰며, 만료 bucket 정리는 요청과 독립된60초 주기 task가 최대1000행씩
+`SKIP LOCKED`로 처리한다.
+
+`api_call_log`는 감사/업무 outbox와 달리 손실 허용 관측이다. session factory마다 메모리
+큐 하나(대기1024행 + 전송 중 최대100행)를 쓰고0.25초/최대100행으로 배치한다. 요청은
+DB 저장을 기다리지 않는다. flush는2초, 종료 drain은3초 상한이며 실패/포화/종료 손실은
+`pinvi_api_call_log_rows_total{outcome=...}`, 대기는 `pinvi_api_call_log_queued`로 집계한다.
+성공 여부를 확인하기 전 응답을 반환하므로 관리자 조회에 짧은 지연이나 누락이 있을 수 있다.
+
+`ApiCallLoggingClient`를 사용하는 provider factory는 timeout·연결 실패·body read 실패·취소도
+기록하고 원래 예외를 유지한다. endpoint는 공통 redaction을 적용하고 임의 예외 문자열은
+저장하지 않는다. 기록의 `occurred_at`은 enqueue 시각이다. 외부에서 plain
+`httpx.AsyncClient`에 event hook만 부착하면 response 없는 실패를 잡을 수 없으므로
+실패 관측이 필요한 추가 호출부는 같은 client를 사용해야 한다. 이 PR은 clients 소유
+factory를 연결하며 services/routes에서 직접 생성하는 OAuth·Telegram 등의 plain client
+전환은 소유 범위 밖 후속이다.
+
+DB 기본값은 `PINVI_DATABASE_POOL_SIZE=10`, `PINVI_DATABASE_MAX_OVERFLOW=0`,
+`PINVI_DATABASE_POOL_TIMEOUT_SECONDS=5`이다. 대기 metric
+`pinvi_api_db_pool_wait_seconds{outcome=acquired|timeout|cancelled|error}`는 실제 queue
+acquisition을 측정하고 새 연결 생성 시간도 포함한다. SQL 실행·pre-ping 시간은 포함하지
+않는다. worker가 늘면 이 한도가 worker 수만큼 곱해진다. 운영 설정 전달·부하 검증과
+edge HTTP/2·worker 증설은 별도 운영 담당 범위다.
+
+직접 weather `/resolve`의 서비스 요청 경로 배경화·single-flight·음성 캐시·긴 호출별
+timeout과 느린5xx 재시도 재분류는 #621 잔여다. 이번 변경은 이를 완료했다고 표시하지
+않는다. 운영 검증 전 #621 자동 종료는 하지 않는다.

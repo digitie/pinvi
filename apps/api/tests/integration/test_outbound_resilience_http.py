@@ -133,3 +133,58 @@ async def test_real_http_saturation_timeout_trial_and_log_batch(session_factory,
         None,
     ]
     assert "fixture-private" not in repr([row.endpoint for row in rows])
+
+
+@pytest.mark.parametrize(
+    "provider,upstream_code,public_code,path",
+    [
+        (
+            "map",
+            "BULKHEAD_FULL",
+            "FEATURE_SERVICE_UNAVAILABLE",
+            "/features/in-bounds?bbox=129.0,35.0,129.2,35.2&zoom=12",
+        ),
+        (
+            "map",
+            "CIRCUIT_OPEN",
+            "FEATURE_SERVICE_UNAVAILABLE",
+            "/features/in-bounds?bbox=129.0,35.0,129.2,35.2&zoom=12",
+        ),
+        ("geo", "BULKHEAD_FULL", "GEOCODING_SERVICE_UNAVAILABLE", "/geo/search?query=fixture"),
+        ("geo", "CIRCUIT_OPEN", "GEOCODING_SERVICE_UNAVAILABLE", "/geo/search?query=fixture"),
+    ],
+)
+async def test_public_unavailable_contract_hides_internal_resilience_code(
+    client,
+    verified_user,
+    auth_cookies,
+    provider,
+    upstream_code,
+    public_code,
+    path,
+) -> None:
+    from app.clients.kor_travel_geo import get_kor_travel_geo_client
+    from app.clients.kor_travel_map import get_kor_travel_map_client
+    from app.main import app
+
+    class Unavailable:
+        async def features_in_bounds(self, **_kwargs):
+            raise KorTravelMapUnavailable("fixture-private", code=upstream_code)
+
+        async def search(self, **_kwargs):
+            raise KorTravelGeoUnavailable("fixture-private", code=upstream_code)
+
+    dependency = get_kor_travel_map_client if provider == "map" else get_kor_travel_geo_client
+    app.dependency_overrides[dependency] = Unavailable
+    try:
+        response = await client.get(path, cookies=auth_cookies(verified_user[0]))
+    finally:
+        app.dependency_overrides.pop(dependency, None)
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["error"]["code"] == public_code
+    assert set(payload) == {"error"}
+    assert set(payload["error"]) == {"code", "message"}
+    assert response.headers["x-request-id"]
+    assert "fixture-private" not in response.text
+    assert upstream_code not in response.text

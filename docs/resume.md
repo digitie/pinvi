@@ -1,3 +1,12 @@
+## #616·#621 전용 Draft PR695 인계 (2026-11-06)
+
+이 worktree는 사용자 지정 ff5c2386 기준이며 새 main은 아직 통합하지 않았다.
+WSL 소유 envelope·rate limit·logging·provider·pool 구현과 관련 검증을 끝냈다.
+증거는 docs/reviews/pinvi-616-621-wsl-resilience.json, 계획은
+docs/execplan/issues-616-621-outbound-resilience.md다. 메인이 최종 두 전문 적대리뷰·ready·merge를
+수행한다. #616만 종료 대상이며 #621 직접 resolve/일부 service 호출부/edge·운영 flag·worker는
+잔여다. 운영·SSH·실제 provider·Telegram에는 접근하지 않았다.
+
 ## 2026-11-06 — 원격 통합 검사의 고정 시계 혼용 보완
 
 - PR691 d8 후보의 원격integration4가 특보12검사 실패를 포착했다. 고정worker NOW는11/5 12UTC인데 DB scheduled_at default는실제21UTC라선택대상이없었다. WSL에서같은1FAIL을재현했다. 제품큐/worker/guard는바꾸지않는다.
