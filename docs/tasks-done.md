@@ -1,5 +1,9 @@
 # tasks-done.md — 완료·아카이브
 
+## 2026-11-05 — 미확정 Map 명령 확인 (#668)
+
+- [x] Map [PR1451](https://github.com/digitie/kor-travel-map/pull/1451)27033b1 선병합·실제병합본 sync/동등성 대조 뒤 Pinvi [PR683](https://github.com/digitie/pinvi/pull/683)a1b2f53 병합. 각 두 독립 전문 리뷰 무차단, Map 정확0afad CI9·Pinvi 정확537 CI15 성공. 실제UI10·API1976/관련50·웹393 등 구성요소 검증과 한계는 source proof에 구분했다. 운영 접근/배포/시험은 없다.
+
 ## 2026-10-27 — Common 최신 main 채택
 
 - [x] [PR #606](https://github.com/digitie/pinvi/pull/606) — API·ETL의 Common Python 핀을 `c289b462`로, Web `@kor-travel/ui`를 정규 dev.9 tarball로 올렸다.

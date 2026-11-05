@@ -14,7 +14,7 @@
 > 근거를 남긴다. `kor-travel-map` 저장소 `docs/tasks-done.md`에도 별도로
 > **line 577에 미해결 git merge conflict marker(`|||||||`, commit `ae547dead7`,
 > 2026-08-31)가 그대로 커밋돼 있다** — Pinvi가 고칠 파일이 아니라 여기 기록만 남긴다.
-- [/] #668 — 미확정 Map 명령 확인 구현·WSL 검증 완료; Map1451 선병합·실제 merge sync/바이트 대조·Pinvi683 최종 리뷰/CI/병합이 남았다.
+- [/] #684 — 요청 한도 저장소 예외와 handler 실행을 분리하고 일자 rise/set 동시 upsert·caller 세션 보존을 검증한다.
 - [/] T-VN-OPS-GRID-REFRESH-POLICY — `/admin/provider-sync` 502(Map `ProviderRefreshPolicyRecord.provider_dataset_id`
   미수용) 수정. 소유자 claude, 브랜치 `fix/ops-grid-refresh-policy-provider-dataset-id`, 충돌 회피 범위
   `apps/api/app/services/kor_travel_map_ops_projection.py`·`apps/api/tests/unit/test_kor_travel_map_ops_{projection,contract}.py`·

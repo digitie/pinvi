@@ -1,3 +1,9 @@
+## 2026-11-05 — #668 병합 완료·#684 실패 경계 수정 착수
+
+- Map1451을27033b1, Pinvi683을a1b2f53로 일반 squash merge했다. 각 정확 최종 두 전문 리뷰 무차단·Map CI9/Pinvi CI15 성공, 실제병합본 sync·Git tree/계약 bytes 동등성을 확인했다. #668은 닫혔고 최신#643 체크/후속도 갱신했다.
+- 새684는 allowed override의 handler가 저장소 예외 try 안에 있고, 일자 rise/set의 조회 뒤 INSERT/전체rollback이 동시GET을 깨는 문제다. 초안·실패 우선 회귀부터 진행한다.
+- 계획: docs/execplan/issue-684-rate-limit-rise-set.md. WSL·실제UI·두 적대리뷰·정확HEAD CI 후 머지한다. 운영 접근/배포/시험은 없고 최종prod는 Claude Code 담당이다.
+
 ## 2026-11-05 — #668 최신 main의 live E2E 보완 보존
 
 - main07f90f9(PR685)의 geometry 클릭·여행 지도 검색 scope·ADM-038 redirect 검증과 두 후속 이슈 표를 충돌 없이 통합했다. 외부 TS3개와 ADM-038 stanza가 원본과 같고 runbook 추가2행도 보존했다.
