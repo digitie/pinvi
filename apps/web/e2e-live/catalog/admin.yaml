@@ -702,15 +702,15 @@
     - 관리자 로그인 상태
   data_sources: [map:admin-proxy]
   steps:
-    - /admin/features/change-requests → GET /admin/features/change-requests 응답 대기
+    - /admin/features/change-requests 진입
   expected:
-    - 둘 중 하나로 안정: (a) admin-fcr-error 에 '대상 feature를 kor_travel_map에서 찾을 수 없습니다.'(Map 404 → PinVi 404) 또는 502/503 문구, (b) 목록/admin-fcr-detail-empty 렌더
-    - 어느 쪽이든 Next 오류 화면 없음; 결과 분기를 annotation 으로 남긴다
+    - /admin/feature-requests 로 redirect, 제목 'Feature 제안 검토' 렌더(#659/#631)
+    - Next 오류 화면 없음, 제거된 GET /admin/features/change-requests fetch 0회
   cleanup:
     - 없음
   automation: scripted
   spec: specs/admin/admin-features.live.spec.ts#ADM-038
-  notes: Map docs/architecture/rest-api.md §2.5 "T-VN-36(0104)이 whole-row 변경요청 모델을 제거했다" / Map routers 에 change-requests 없음. PinVi kor_travel_map_admin.py 는 여전히 호출.
+  notes: '#659(#631)가 옛 경로를 제안 검토로 redirect — 2026-11-05 운영 실행에서 옛 응답 대기 spec이 60 s timeout(spec drift)이라 갱신.'
 
 - id: ADM-039
   title: 같은 실체가 이미 있을 때 승인이 exact_conflict → PinVi 상태 '중복'

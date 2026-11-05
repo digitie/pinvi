@@ -79,7 +79,8 @@ test.describe('NEAR trip map — four-place trip', () => {
     await page.goto(`/trips/${tripId}`);
     for (const place of PLACES) {
       await selectDay(page,1);
-      const scope=page.locator('#trip-panel-plan').getByTestId('map-search').first();
+      // runSearch·searchRows가 scope 안에서 map-search를 찾는다 — 상자 자체가 아니라 패널을 넘긴다.
+      const scope=page.locator('#trip-panel-plan');
       const outcome=await runSearch(page,place,{scope});
       expect(outcome.status).toBe(200);
       const key=normalizeFixtureName(place.replace(/^\S+\s/,''));

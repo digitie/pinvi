@@ -261,6 +261,8 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | kor-travel-map#1438 | bug | feature 카테고리 오분류(숙박·카페·마트·캠핑장·주차장) | SRCH-019/020/022, NEAR-030 (`test.fail`) |
 | kor-travel-map#1439 | bug | event 기간·장소 누락, 축제 category·중복 | SRCH-027 (`test.fail`) |
 | kor-travel-map#1440 | bug | 과거 날짜 날씨 daily_summaries 미제공 | WX-004 (`test.fail`) |
+| #684 | bug | 요청 한도 미들웨어가 핸들러 DB 오류를 503 "한도 저장소 사용 불가"로 바꿈 + 여행 조회 rise/set 동시 INSERT 경합 | TRIP-003 (2026-11-05 경합, 재실행 통과) |
+| kor-travel-map#1450 | data | 운영 Map area kind 0건(KNPS 국립공원 경계 미적재) | SRCH-028 (blocked) |
 
 #624 는 prod 재확인(2026-11-03) 때 **500 INTERNAL_ERROR** 였고 #654 가 422 로 바꿨다. 리뷰 PR 이 다이얼로그에서
 요청 전에 종료일 필드로 안내하고 API 문구를 한국어('종료일은 시작일 이후여야 합니다.')로 맞췄다. 이 표의
