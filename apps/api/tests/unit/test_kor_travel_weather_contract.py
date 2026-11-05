@@ -38,10 +38,11 @@ from app.clients.kor_travel_weather import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-weather-openapi.json"
-_UPSTREAM_COMMIT = "3411ecc"
-_SNAPSHOT_SHA256 = "e3edfd22f166262dc21162f1d366d017331d869b416f03c74a699278e78c8154"
+_UPSTREAM_COMMIT = "d8534aeae8852f9c514e39d625ea7dded956f3ed"
+_SNAPSHOT_SHA256 = "63ff8f07c0d51cfec7011f3f470f0ffc27392c0d8832b388d5368199ba645273"
 
 _CLIENT_PATHS = [
+    "/v1/weather/alert-events",
     "/v1/weather/resolve",
     "/v1/weather/markers",
     "/v1/weather/locations/{location_id}/latest",

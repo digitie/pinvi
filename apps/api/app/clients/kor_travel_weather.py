@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager
@@ -35,7 +36,9 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from pydantic import ValidationError
 
+from app.clients.weather_alert_events import RegionalAlertEvents
 from app.core.config import Settings, settings
 from app.db import session as db_session
 from app.middleware.api_call_logging import api_call_event_hooks
@@ -983,6 +986,29 @@ class KorTravelWeatherClient:
         return payload["data"]
 
     # ── 공개 표면 (설계 문서 §2.1) ────────────────────────────────────────────
+
+    async def alert_events(self, *, bjd_code: str, since: datetime) -> RegionalAlertEvents:
+        """공식 발표 관측만 조회한다. 지역/원천 의미 재해석은 하지 않는다."""
+        if not re.fullmatch(r"(?:[0-9]{2}|[0-9]{5}|[0-9]{10})", bjd_code):
+            raise ValueError("확인할 BJD 코드 형식이 올바르지 않습니다.")
+        if since.tzinfo is None or since.utcoffset() is None:
+            raise ValueError("since에는 UTC offset이 필요합니다.")
+        path = "/v1/weather/alert-events"
+        resp = await self._send(
+            "GET",
+            path,
+            endpoint="alert_events",
+            params={"bjd_code": bjd_code, "since": since.isoformat()},
+        )
+        try:
+            result = RegionalAlertEvents.model_validate(self._unwrap_data(resp, path=path))
+        except ValidationError:
+            raise KorTravelWeatherContractError(
+                "특보 발표 응답 계약이 올바르지 않습니다."
+            ) from None
+        if result.bjd_code != bjd_code or result.absence_is_clear is not False:
+            raise KorTravelWeatherContractError("특보 발표 응답 범위가 일치하지 않습니다.")
+        return result
 
     async def resolve(
         self, *, lat: float, lon: float, radius_km: float | None = None

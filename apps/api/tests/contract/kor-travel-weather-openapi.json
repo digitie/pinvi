@@ -72,6 +72,66 @@
         "operationId": "list_locations_v1_weather_locations_get",
         "parameters": [
           {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "minItems": 1,
+                  "maxItems": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "날씨 제공처. 여러 번 지정하면 OR로 선택",
+              "title": "Provider"
+            },
+            "description": "날씨 제공처. 여러 번 지정하면 OR로 선택"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WeatherKind"
+                  },
+                  "minItems": 1,
+                  "maxItems": 6
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "종류. alert/nowcast/ultra_short/short/mid/observed를 OR로 선택",
+              "title": "Kind"
+            },
+            "description": "종류. alert/nowcast/ultra_short/short/mid/observed를 OR로 선택"
+          },
+          {
+            "name": "weather_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "특보 외 일반값이 있는 위치만 선택",
+              "default": false,
+              "title": "Weather Only"
+            },
+            "description": "특보 외 일반값이 있는 위치만 선택"
+          },
+          {
             "name": "search",
             "in": "query",
             "required": false,
@@ -203,6 +263,54 @@
               "type": "string",
               "title": "Location Id"
             }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "minItems": 1,
+                  "maxItems": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "날씨 제공처. 여러 번 지정하면 OR로 선택",
+              "title": "Provider"
+            },
+            "description": "날씨 제공처. 여러 번 지정하면 OR로 선택"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WeatherKind"
+                  },
+                  "minItems": 1,
+                  "maxItems": 6
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "종류. alert/nowcast/ultra_short/short/mid/observed를 OR로 선택",
+              "title": "Kind"
+            },
+            "description": "종류. alert/nowcast/ultra_short/short/mid/observed를 OR로 선택"
           },
           {
             "name": "limit",
@@ -345,6 +453,54 @@
               "title": "History"
             },
             "description": "수정 revision까지 반환"
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "minItems": 1,
+                  "maxItems": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "날씨 제공처. 여러 번 지정하면 OR로 선택",
+              "title": "Provider"
+            },
+            "description": "날씨 제공처. 여러 번 지정하면 OR로 선택"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WeatherKind"
+                  },
+                  "minItems": 1,
+                  "maxItems": 6
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "종류. alert/nowcast/ultra_short/short/mid/observed를 OR로 선택",
+              "title": "Kind"
+            },
+            "description": "종류. alert/nowcast/ultra_short/short/mid/observed를 OR로 선택"
           },
           {
             "name": "limit",
@@ -568,6 +724,54 @@
               ],
               "title": "Location Id"
             }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "minItems": 1,
+                  "maxItems": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "날씨 제공처. 여러 번 지정하면 OR로 선택",
+              "title": "Provider"
+            },
+            "description": "날씨 제공처. 여러 번 지정하면 OR로 선택"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WeatherKind"
+                  },
+                  "minItems": 1,
+                  "maxItems": 6
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "종류. alert/nowcast/ultra_short/short/mid/observed를 OR로 선택",
+              "title": "Kind"
+            },
+            "description": "종류. alert/nowcast/ultra_short/short/mid/observed를 OR로 선택"
           }
         ],
         "responses": {
@@ -1196,10 +1400,948 @@
           }
         ]
       }
+    },
+    "/v1/admin/address-refresh": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Address Refresh Summary",
+        "operationId": "address_refresh_summary_v1_admin_address_refresh_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AddressRefreshSummary_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Admin authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "AdminToken": []
+          }
+        ]
+      }
+    },
+    "/v1/service/exports/locations": {
+      "get": {
+        "tags": [
+          "service exports"
+        ],
+        "summary": "Export Locations",
+        "description": "활성 catalog 전체 reference. 원천 조회 시각 미확인은 null/stale로 표시한다.",
+        "operationId": "export_locations_v1_service_exports_locations_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "default": 500,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportPage_ExportLocation_"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "고정 snapshot TTL 만료. 첫 페이지부터 재시작",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportUnavailable"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "데이터/vector/페이지/상태가 변경되지 않음"
+          },
+          "503": {
+            "description": "code=EXPORT_NOT_READY: 완결된 성공 export가 없습니다. code=EXPORT_TEMPORARILY_UNAVAILABLE: DB/artifact 읽기 경합으로 상한 안에 끝나지 않았습니다. Retry-After 초 뒤 같은 요청(같은 cursor)을 다시 보내세요. 둘 다 빈 정상 집합으로 해석하지 마세요.",
+            "headers": {
+              "Retry-After": {
+                "description": "EXPORT_TEMPORARILY_UNAVAILABLE일 때만. 재시도까지 최소 초",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportUnavailable"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Admin authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "AdminToken": []
+          }
+        ]
+      }
+    },
+    "/v1/service/exports/current": {
+      "get": {
+        "tags": [
+          "service exports"
+        ],
+        "summary": "Export Current",
+        "description": "활성 관측 제공처의 실제 승인 합집합. 필수 source 최초 미승인은503이다.\n\n해양처럼 예보만 있는 제공처와 catalog dataset은 제외한다. quota 밖 이전 승인은\n보존하고 실패·부분 응답·미확인 청정넷 coverage는 stale로 표시한다. export 경로가\n없는 provider가 활성이면 축소 성공 대신503이다.",
+        "operationId": "export_current_v1_service_exports_current_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "default": 500,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportPage_ExportCurrentValue_"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "고정 snapshot TTL 만료. 첫 페이지부터 재시작",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportUnavailable"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "데이터/vector/페이지/상태가 변경되지 않음"
+          },
+          "503": {
+            "description": "code=EXPORT_NOT_READY: 완결된 성공 export가 없습니다. code=EXPORT_TEMPORARILY_UNAVAILABLE: DB/artifact 읽기 경합으로 상한 안에 끝나지 않았습니다. Retry-After 초 뒤 같은 요청(같은 cursor)을 다시 보내세요. 둘 다 빈 정상 집합으로 해석하지 마세요.",
+            "headers": {
+              "Retry-After": {
+                "description": "EXPORT_TEMPORARILY_UNAVAILABLE일 때만. 재시도까지 최소 초",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportUnavailable"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Admin authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "AdminToken": []
+          }
+        ]
+      }
+    },
+    "/v1/service/exports/status": {
+      "get": {
+        "tags": [
+          "service exports"
+        ],
+        "summary": "Export Status",
+        "description": "최대 128개의 작은 상태 목록. 전체를 한 응답으로 반환한다.",
+        "operationId": "export_status_v1_service_exports_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportPage_ExportSourceStatus_"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "고정 snapshot TTL 만료. 첫 페이지부터 재시작",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportUnavailable"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "데이터/vector/페이지/상태가 변경되지 않음"
+          },
+          "503": {
+            "description": "code=EXPORT_NOT_READY: 완결된 성공 export가 없습니다. code=EXPORT_TEMPORARILY_UNAVAILABLE: DB/artifact 읽기 경합으로 상한 안에 끝나지 않았습니다. Retry-After 초 뒤 같은 요청(같은 cursor)을 다시 보내세요. 둘 다 빈 정상 집합으로 해석하지 마세요.",
+            "headers": {
+              "Retry-After": {
+                "description": "EXPORT_TEMPORARILY_UNAVAILABLE일 때만. 재시도까지 최소 초",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportUnavailable"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Admin authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "AdminToken": []
+          }
+        ]
+      }
+    },
+    "/v1/service/exports/forecasts": {
+      "get": {
+        "tags": [
+          "service exports"
+        ],
+        "summary": "Export Forecasts",
+        "description": "활성 예보 제공처의 승인 집합. external에는 KHOA 해양 예보를 포함한다.\n\nknown_at은 원천 시각이며 since에는 모든 페이지 반영 뒤 meta.next_since를 사용한다.\nultra_short·short·mid는 KMA만 공급하므로 다른 활성 provider와 무관하고, external은\nexport 경로가 없는 provider가 활성이면503이다. 최신 승인 예보에 미래 시각이 없는\n위치는 빼고 stale로 표시한다.",
+        "operationId": "export_forecasts_v1_service_exports_forecasts_get",
+        "parameters": [
+          {
+            "name": "style",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "ultra_short",
+                "short",
+                "mid",
+                "external"
+              ],
+              "type": "string",
+              "title": "Style"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "default": 500,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "공개 publication watermark. 이전 응답 meta.next_since를 사용",
+              "title": "Since"
+            },
+            "description": "공개 publication watermark. 이전 응답 meta.next_since를 사용"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportPage_ExportForecastGroup_"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "고정 snapshot TTL 만료. 첫 페이지부터 재시작",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportUnavailable"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "데이터/vector/페이지/상태가 변경되지 않음"
+          },
+          "503": {
+            "description": "code=EXPORT_NOT_READY: 완결된 성공 export가 없습니다. code=EXPORT_TEMPORARILY_UNAVAILABLE: DB/artifact 읽기 경합으로 상한 안에 끝나지 않았습니다. Retry-After 초 뒤 같은 요청(같은 cursor)을 다시 보내세요. 둘 다 빈 정상 집합으로 해석하지 마세요.",
+            "headers": {
+              "Retry-After": {
+                "description": "EXPORT_TEMPORARILY_UNAVAILABLE일 때만. 재시도까지 최소 초",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportUnavailable"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Admin authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "AdminToken": []
+          }
+        ]
+      }
+    },
+    "/v1/service/exports/daily-summaries": {
+      "get": {
+        "tags": [
+          "service exports"
+        ],
+        "summary": "Export Daily Summaries",
+        "description": "승인 관측의 사전 요약. 미계산은 이전 완전 집합stale/이전 집합이 없으면503.\n\n전체 목록에서 한 번도 승인되지 않은 관측 anchor는 stale로 표시하고, 단일 위치 최초\n조회의 필수 원천 미승인만503이다. AirKorea는 요약 지표가 없어 필수 원천이 아니다.\n강수 합계와 강수 없음(false)은 구간6시간 RN1이 모두 있을 때만 확정한다.",
+        "operationId": "export_daily_summaries_v1_service_exports_daily_summaries_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 31,
+              "minimum": 1,
+              "default": 14,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "location_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Location Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "default": 500,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportPage_ExportDailySummary_"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "고정 snapshot TTL 만료. 첫 페이지부터 재시작",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportUnavailable"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "데이터/vector/페이지/상태가 변경되지 않음"
+          },
+          "503": {
+            "description": "code=EXPORT_NOT_READY: 완결된 성공 export가 없습니다. code=EXPORT_TEMPORARILY_UNAVAILABLE: DB/artifact 읽기 경합으로 상한 안에 끝나지 않았습니다. Retry-After 초 뒤 같은 요청(같은 cursor)을 다시 보내세요. 둘 다 빈 정상 집합으로 해석하지 마세요.",
+            "headers": {
+              "Retry-After": {
+                "description": "EXPORT_TEMPORARILY_UNAVAILABLE일 때만. 재시도까지 최소 초",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportUnavailable"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Admin authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "AdminToken": []
+          }
+        ]
+      }
+    },
+    "/v1/weather/alert-events": {
+      "get": {
+        "tags": [
+          "weather"
+        ],
+        "summary": "공식 기상특보 발표 관측 조회",
+        "description": "BJD namespace의 시도/시군구/검증된 개별 코드로 전체 행정구역 교집합을 조회한다. 확인 전 과거 매핑·산지·일부/제외 구역은 추정하지 않는다. 관측 부재는 해제가 아니다. since는 최초 관측 시각 기준이며 31일 이내다. 이벤트의 회차 연결은 미확정이다.",
+        "operationId": "alert_events_v1_weather_alert_events_get",
+        "parameters": [
+          {
+            "name": "bjd_code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10,
+              "pattern": "^(?:[0-9]{2}|[0-9]{5}|[0-9]{10})$",
+              "title": "Bjd Code"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AlertEventsOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AddressRefreshSummary": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "due": {
+            "type": "integer",
+            "title": "Due"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "last_resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Resolved At"
+          },
+          "in_progress": {
+            "type": "boolean",
+            "title": "In Progress"
+          },
+          "manual_cycle": {
+            "type": "boolean",
+            "title": "Manual Cycle"
+          },
+          "refresh_months": {
+            "type": "integer",
+            "title": "Refresh Months"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "auto_enabled": {
+            "type": "boolean",
+            "title": "Auto Enabled"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "due",
+          "failed",
+          "last_resolved_at",
+          "in_progress",
+          "manual_cycle",
+          "refresh_months",
+          "configured",
+          "auto_enabled",
+          "items"
+        ],
+        "title": "AddressRefreshSummary"
+      },
+      "AlertEventsOut": {
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "const": "kr_bjd",
+            "title": "Namespace"
+          },
+          "bjd_code": {
+            "type": "string",
+            "title": "Bjd Code"
+          },
+          "region_status": {
+            "type": "string",
+            "enum": [
+              "known",
+              "unknown"
+            ],
+            "title": "Region Status"
+          },
+          "mapping_version": {
+            "type": "string",
+            "title": "Mapping Version"
+          },
+          "mapping_valid_from": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Mapping Valid From"
+          },
+          "mapping_coverage": {
+            "type": "string",
+            "const": "partial",
+            "title": "Mapping Coverage"
+          },
+          "unverified_scope_count": {
+            "type": "integer",
+            "title": "Unverified Scope Count"
+          },
+          "collection_status": {
+            "type": "string",
+            "title": "Collection Status"
+          },
+          "last_attempt_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempt At"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "fresh": {
+            "type": "boolean",
+            "title": "Fresh"
+          },
+          "events_complete": {
+            "type": "boolean",
+            "title": "Events Complete"
+          },
+          "retained_since": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retained Since"
+          },
+          "history_available_since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History Available Since"
+          },
+          "queried_since": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Queried Since"
+          },
+          "absence_is_clear": {
+            "type": "boolean",
+            "const": false,
+            "title": "Absence Is Clear"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ScopedAlertEventOut"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "namespace",
+          "bjd_code",
+          "region_status",
+          "mapping_version",
+          "mapping_valid_from",
+          "mapping_coverage",
+          "unverified_scope_count",
+          "collection_status",
+          "last_attempt_at",
+          "last_success_at",
+          "last_error_code",
+          "fresh",
+          "events_complete",
+          "retained_since",
+          "history_available_since",
+          "queried_since",
+          "absence_is_clear",
+          "events"
+        ],
+        "title": "AlertEventsOut"
+      },
       "BundleMeta": {
         "properties": {
           "latest_per_location": {
@@ -1238,6 +2380,40 @@
           "longitude"
         ],
         "title": "CoordinateRequestOut"
+      },
+      "Envelope_AddressRefreshSummary_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AddressRefreshSummary"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "Envelope[AddressRefreshSummary]"
+      },
+      "Envelope_AlertEventsOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AlertEventsOut"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "Envelope[AlertEventsOut]"
       },
       "Envelope_LocationOut_": {
         "properties": {
@@ -1457,6 +2633,725 @@
           "meta"
         ],
         "title": "Envelope[list[WeatherValueOut]]"
+      },
+      "ExportCurrentValue": {
+        "properties": {
+          "location_id": {
+            "type": "string",
+            "title": "Location Id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "metric_key": {
+            "type": "string",
+            "title": "Metric Key"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "target_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Target At"
+          },
+          "known_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Known At"
+          },
+          "forecast_style": {
+            "type": "string",
+            "enum": [
+              "observed",
+              "nowcast"
+            ],
+            "title": "Forecast Style"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "location_id",
+          "provider",
+          "metric_key",
+          "value",
+          "unit",
+          "target_at",
+          "known_at",
+          "forecast_style"
+        ],
+        "title": "ExportCurrentValue"
+      },
+      "ExportDailySummary": {
+        "properties": {
+          "location_id": {
+            "type": "string",
+            "title": "Location Id"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "slot": {
+            "type": "string",
+            "enum": [
+              "morning",
+              "noon",
+              "evening"
+            ],
+            "title": "Slot"
+          },
+          "temp_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temp Min"
+          },
+          "temp_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temp Max"
+          },
+          "temp_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temp Avg"
+          },
+          "humidity_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Humidity Avg"
+          },
+          "precip_sum_mm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precip Sum Mm"
+          },
+          "precip_occurred": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precip Occurred"
+          },
+          "sky_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sky Code"
+          },
+          "wind_speed_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wind Speed Avg"
+          },
+          "sample_count": {
+            "type": "integer",
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Sample Count"
+          },
+          "source_providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Providers"
+          },
+          "partial": {
+            "type": "boolean",
+            "title": "Partial"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "location_id",
+          "date",
+          "slot",
+          "temp_min",
+          "temp_max",
+          "temp_avg",
+          "humidity_avg",
+          "precip_sum_mm",
+          "precip_occurred",
+          "sky_code",
+          "wind_speed_avg",
+          "sample_count",
+          "source_providers",
+          "partial"
+        ],
+        "title": "ExportDailySummary"
+      },
+      "ExportForecastGroup": {
+        "properties": {
+          "location_id": {
+            "type": "string",
+            "title": "Location Id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "forecast_style": {
+            "type": "string",
+            "enum": [
+              "ultra_short",
+              "short",
+              "mid",
+              "external"
+            ],
+            "title": "Forecast Style"
+          },
+          "known_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Known At"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          },
+          "target_at": {
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "type": "array",
+            "title": "Target At"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Metrics"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "location_id",
+          "provider",
+          "forecast_style",
+          "known_at",
+          "published_at",
+          "target_at",
+          "metrics"
+        ],
+        "title": "ExportForecastGroup"
+      },
+      "ExportLocation": {
+        "properties": {
+          "location_id": {
+            "type": "string",
+            "title": "Location Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "legal_dong_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{10}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Dong Code"
+          },
+          "sido_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sido Name"
+          },
+          "sigungu_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sigungu Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "location_id",
+          "name",
+          "latitude",
+          "longitude"
+        ],
+        "title": "ExportLocation"
+      },
+      "ExportMeta": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "source_collected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Collected At"
+          },
+          "source_status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "failed"
+            ],
+            "title": "Source Status"
+          },
+          "item_count": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 0.0,
+            "title": "Item Count"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "snapshot_generated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Generated At"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "default": false
+          },
+          "next_since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Since"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "generated_at",
+          "source_collected_at",
+          "source_status",
+          "item_count"
+        ],
+        "title": "ExportMeta"
+      },
+      "ExportPage_ExportCurrentValue_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExportCurrentValue"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ExportMeta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "ExportPage[ExportCurrentValue]"
+      },
+      "ExportPage_ExportDailySummary_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExportDailySummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ExportMeta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "ExportPage[ExportDailySummary]"
+      },
+      "ExportPage_ExportForecastGroup_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExportForecastGroup"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ExportMeta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "ExportPage[ExportForecastGroup]"
+      },
+      "ExportPage_ExportLocation_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExportLocation"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ExportMeta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "ExportPage[ExportLocation]"
+      },
+      "ExportPage_ExportSourceStatus_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExportSourceStatus"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ExportMeta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "meta"
+        ],
+        "title": "ExportPage[ExportSourceStatus]"
+      },
+      "ExportSourceStatus": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "dataset_key": {
+            "type": "string",
+            "title": "Dataset Key"
+          },
+          "forecast_style": {
+            "type": "string",
+            "enum": [
+              "observed",
+              "nowcast",
+              "ultra_short",
+              "short",
+              "mid",
+              "external"
+            ],
+            "title": "Forecast Style"
+          },
+          "last_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Status"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "last_failed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Failed At"
+          },
+          "last_attempt_failed": {
+            "type": "boolean",
+            "title": "Last Attempt Failed"
+          },
+          "next_scheduled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Scheduled At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "dataset_key",
+          "forecast_style",
+          "last_status",
+          "last_success_at",
+          "last_failed_at",
+          "last_attempt_failed",
+          "next_scheduled_at"
+        ],
+        "title": "ExportSourceStatus"
+      },
+      "ExportUnavailable": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": "about:blank"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "integer",
+            "title": "Status"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "errors": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Errors"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ExportMeta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "status",
+          "detail",
+          "code",
+          "request_id",
+          "meta"
+        ],
+        "title": "ExportUnavailable"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2218,6 +4113,186 @@
         ],
         "title": "ResolvedWeatherOut"
       },
+      "ScopedAlertEventOut": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "announcement_id": {
+            "type": "string",
+            "title": "Announcement Id"
+          },
+          "area_code": {
+            "type": "string",
+            "title": "Area Code"
+          },
+          "area_name": {
+            "type": "string",
+            "title": "Area Name"
+          },
+          "warn_var": {
+            "type": "string",
+            "title": "Warn Var"
+          },
+          "warning_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning Name"
+          },
+          "warn_stress": {
+            "type": "string",
+            "title": "Warn Stress"
+          },
+          "stress_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress Name"
+          },
+          "command": {
+            "type": "string",
+            "title": "Command"
+          },
+          "cancel": {
+            "type": "string",
+            "title": "Cancel"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "issued",
+              "released",
+              "extended",
+              "corrected",
+              "changed_issue",
+              "changed_release",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Action"
+          },
+          "issued_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issued At"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "all_ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "All Ends At"
+          },
+          "occurrence_id": {
+            "type": "null",
+            "title": "Occurrence Id"
+          },
+          "correlation_status": {
+            "type": "string",
+            "const": "unresolved",
+            "title": "Correlation Status",
+            "default": "unresolved"
+          },
+          "normalization_version": {
+            "type": "string",
+            "title": "Normalization Version",
+            "default": "datagokr-pwncd-260601-v1"
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At"
+          },
+          "source_record_key": {
+            "type": "string",
+            "title": "Source Record Key"
+          },
+          "scope_status": {
+            "type": "string",
+            "const": "verified",
+            "title": "Scope Status"
+          },
+          "bjd_prefixes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Bjd Prefixes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id",
+          "announcement_id",
+          "area_code",
+          "area_name",
+          "warn_var",
+          "warning_name",
+          "warn_stress",
+          "stress_name",
+          "command",
+          "cancel",
+          "action",
+          "issued_at",
+          "starts_at",
+          "ends_at",
+          "all_ends_at",
+          "first_seen_at",
+          "source_record_key",
+          "scope_status",
+          "bjd_prefixes"
+        ],
+        "title": "ScopedAlertEventOut"
+      },
       "SourceRecordSummary": {
         "properties": {
           "source_record_key": {
@@ -2421,6 +4496,19 @@
         ],
         "title": "ValidationError"
       },
+      "WeatherKind": {
+        "type": "string",
+        "enum": [
+          "alert",
+          "nowcast",
+          "ultra_short",
+          "short",
+          "mid",
+          "observed"
+        ],
+        "title": "WeatherKind",
+        "description": "지도 종류. 특보는 forecast_style과 별도로 판정한다."
+      },
       "WeatherMarkerOut": {
         "properties": {
           "location_id": {
@@ -2443,6 +4531,13 @@
             },
             "type": "array",
             "title": "Latest"
+          },
+          "forecast": {
+            "items": {
+              "$ref": "#/components/schemas/WeatherValueOut"
+            },
+            "type": "array",
+            "title": "Forecast"
           },
           "alerts": {
             "items": {
