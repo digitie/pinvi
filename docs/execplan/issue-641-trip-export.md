@@ -58,7 +58,7 @@ d31 후보의 실제 WSL private/shared/long UI7흐름은 통과했고 pageerror
 
 제품 dffec531c566eb20ff6aeb5b812f351c2d010cb6에서 웹421·관련25와 실제 WSL PG/API/프로덕션 웹 Chromium7흐름이 통과했다. 해외 기기 시간대에서도 KST를 표시하고 실제 ICS2파일을 독립 icalendar로 읽어 각5이벤트·안정 UID·UTC/종일·UTF-8 접기·문자 주입 방지를 확인했다.
 
-실제 PDF는 private2/shared2/long5페이지다. Poppler/pypdf의 text bbox·metadata·URI 검사와 메모80줄·마지막 표식을 확인했고9페이지를 렌더했다. private/shared2쌍 PNG가 byte동일하여7개 고유 페이지를 열어 확인했다. 두 페이지 회귀 실패가 모두 성공으로 바뀌었으며 제목 단독 페이지·메타정보만 앞 페이지 끝에 남는 현상이 해소됐다. 본문 PDF는 header/footer off이며 native 머리말/바닥글의 설정/잘림 해결은 검증 범위가 아니다.
+실제 PDF는 private2/shared2/long5페이지다. Poppler/pypdf의 text bbox·metadata·URI 검사와 메모80줄·마지막 표식을 확인했고9페이지를 렌더했다. private/shared2쌍 PNG가 byte동일하여7페이지 파일을 열어 확인했다(long 첫 페이지도 동일하여 고유 이미지 내용은6개). 두 페이지 회귀 실패가 모두 성공으로 바뀌었으며 제목 단독 페이지·메타정보만 앞 페이지 끝에 남는 현상이 해소됐다. 본문 PDF는 header/footer off이며 native 머리말/바닥글의 설정/잘림 해결은 검증 범위가 아니다.
 
 API단위2020/9skip·실제 공유권한 PG8·mypy271/Ruff/format은 d31에서 실행했으며 API는 dff와 동일하다. workspace타입/lint도 d31에서 통과했고 출력 문서 마크업/CSS 변경 외의 제품 source는 같다. 최신 후보의 타입/lint도 최종 확인한다. 두 독립 전문 코드 리뷰는 정확dff에서 잔여P0/P1/P2 없음이다. 리뷰어가 실행 검증을 수행했다고 표시하지 않는다.
 

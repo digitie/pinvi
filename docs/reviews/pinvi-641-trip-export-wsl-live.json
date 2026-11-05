@@ -116,12 +116,14 @@
     "ownedStackStopped": true,
     "pdfVisualReview": {
       "pages": 9,
-      "unique_pages_viewed": 7,
       "private_shared_pngs_byte_identical": true,
       "inspected": ["private-1", "private-2", "long-1", "long-2", "long-3", "long-4", "long-5"],
       "result": "한글·시간·번호·같은 좌표 방문·빈 일자·긴 메모·마지막 표식 확인; 본문 잘림/겹침/제목 단독 페이지 없음",
       "native_header_footer": false,
-      "scope": "Chromium 출력 본문; 사용자 브라우저 기본 머리말/바닥글 설정 제어 또는 해당 잘림 해결을 주장하지 않음"
+      "scope": "Chromium 출력 본문; 사용자 브라우저 기본 머리말/바닥글 설정 제어 또는 해당 잘림 해결을 주장하지 않음",
+      "rendered_page_files_viewed": 7,
+      "unique_image_contents": 6,
+      "long_first_page_also_byte_identical_to_private_first": true
     }
   },
   "independent_artifact_verification": {
@@ -194,12 +196,14 @@
     "visualReviewPending": false,
     "visualReview": {
       "pages": 9,
-      "unique_pages_viewed": 7,
       "private_shared_pngs_byte_identical": true,
       "inspected": ["private-1", "private-2", "long-1", "long-2", "long-3", "long-4", "long-5"],
       "result": "한글·시간·번호·같은 좌표 방문·빈 일자·긴 메모·마지막 표식 확인; 본문 잘림/겹침/제목 단독 페이지 없음",
       "native_header_footer": false,
-      "scope": "Chromium 출력 본문; 사용자 브라우저 기본 머리말/바닥글 설정 제어 또는 해당 잘림 해결을 주장하지 않음"
+      "scope": "Chromium 출력 본문; 사용자 브라우저 기본 머리말/바닥글 설정 제어 또는 해당 잘림 해결을 주장하지 않음",
+      "rendered_page_files_viewed": 7,
+      "unique_image_contents": 6,
+      "long_first_page_also_byte_identical_to_private_first": true
     }
   },
   "artifact_cache": "/home/digitie/.cache/pinvi-643",
@@ -213,8 +217,8 @@
     "pinvi641-final-api-ruff.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
     "pinvi641-final-api-format.log": "50bcb15941476b922fe2c939b016a3f9880b4d26609c5774bc39f23df8e9f699",
     "pinvi641-final-shared-api-pg.log": "6b4ba30a6efd29dc9a31c93f20b1e8fc8ed43d9ba6d4dc36502e79d4176eea90",
-    "pinvi641-live-result.json": "a3c084d55858ad0ca0945e10fd8ac32fd92bb1e581f24fbfcee21e9b0c4dba02",
-    "pinvi641-artifact-verification.json": "e16a926d7d4d86b6a7b824a89a7bc7220b525983d885500af1bac0685fe87c46",
+    "pinvi641-live-result.json": "579eefb1f598d673aacea9488d2c3d5c060d76e398289b654e3f6678a79e5e8f",
+    "pinvi641-artifact-verification.json": "2bcd78818a5a8556cd3156d06346c9ac3bfd1b4406712f9009180da7f91b9862",
     "pinvi641-artifacts.log": "52c3e6323fae106276fa46c80e0f598f41b923ddbf144224b96ca667c93d280e",
     "pinvi641-review-negative.log": "91cbfe5320bf4b7a72890aab0d06508b7a88ad3d778e18754d7a297009bbae42",
     "pinvi641-share-url-negative.log": "765ef9e910789f94d582be042a00c695c5f6bc77481ca470c125b1dc2a648517",
