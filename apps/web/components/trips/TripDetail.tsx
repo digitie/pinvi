@@ -1905,7 +1905,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
                     onChanged={reload}
                   />
                 </div>
-                <TripTelegramTargets tripId={tripId} />
+                <TripTelegramTargets tripId={tripId} dayIndexes={view.days.map(day => day.day_index)} />
               </div>
             )}
 

@@ -952,6 +952,7 @@ class Settings(BaseSettings):
 
     # Telegram Bot 알림 (T-106) — `docs/integrations/telegram.md`.
     # bot token 원본은 DB 저장 X(§1), 로그는 mask_token으로만(§9).
+    pinvi_telegram_planner_key: str = ""
     pinvi_telegram_api_base: str = "https://api.telegram.org"
     pinvi_telegram_timeout_seconds: float = 5.0
     pinvi_telegram_bot_token_default: str = ""  # 시스템/Admin 봇

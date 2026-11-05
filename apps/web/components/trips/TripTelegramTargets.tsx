@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Send, Star, Trash2 } from 'lucide-react';
 import { ApiError, telegramApi } from '@pinvi/api-client';
 import type { TelegramTarget } from '@pinvi/schemas';
+import { TelegramNotificationHistory } from './TelegramNotificationHistory';
 import { apiClient } from '@/lib/api';
 
 function targetName(target: TelegramTarget): string {
@@ -13,9 +14,37 @@ function targetName(target: TelegramTarget): string {
 
 export interface TripTelegramTargetsProps {
   tripId: string;
+  dayIndexes?: number[];
 }
 
-export function TripTelegramTargets({ tripId }: TripTelegramTargetsProps) {
+export function TripTelegramTargets({ tripId, dayIndexes = [] }: TripTelegramTargetsProps) {
+  const [scopeDay, setScopeDay] = useState('');
+  const [sending, setSending] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const request = useRef<{ scope: string; id: string } | null>(null);
+  const send = async () => {
+    setSending(true);
+    setError(null);
+    if (request.current?.scope !== `${tripId}:${scopeDay}`)
+      request.current = { scope: `${tripId}:${scopeDay}`, id: crypto.randomUUID() };
+    try {
+      await telegramApi(apiClient).sendItinerary(
+        tripId,
+        request.current.id,
+        scopeDay ? Number(scopeDay) : undefined,
+      );
+      request.current = null;
+      setRefreshKey((key) => key + 1);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : '전송 요청에 실패했습니다. 다시 누르면 같은 요청으로 재시도합니다.',
+      );
+    } finally {
+      setSending(false);
+    }
+  };
   const [all, setAll] = useState<TelegramTarget[]>([]);
   const [linked, setLinked] = useState<TelegramTarget[]>([]);
   const [selected, setSelected] = useState('');
@@ -191,6 +220,44 @@ export function TripTelegramTargets({ tripId }: TripTelegramTargetsProps) {
               ))}
             </ul>
           )}
+        </>
+      )}
+      {!loading && (
+        <>
+          <div className="flex flex-wrap items-end gap-2 border-t border-hairline pt-3">
+            <label className="text-sm text-ink">
+              보낼 일정
+              <select
+                value={scopeDay}
+                onChange={(event) => setScopeDay(event.target.value)}
+                disabled={sending}
+                className="ml-2 min-h-11 rounded-sm border border-hairline bg-canvas px-3"
+              >
+                <option value="">여행 전체</option>
+                {dayIndexes.map((index) => (
+                  <option key={index} value={index}>
+                    {index}일차
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => void send()}
+              disabled={
+                sending || !linked.some((target) => target.is_enabled && target.last_verified_at)
+              }
+              className="focus-ring min-h-11 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-50"
+              data-testid="telegram-send-itinerary"
+            >
+              {sending ? '요청 중…' : '알람으로 보내기'}
+            </button>
+          </div>
+          <p className="text-xs text-muted">
+            연결된 활성·검증 대상에 장소·시각·메모 요약을 보냅니다. 그룹의 다른 사람도 내용을 볼 수
+            있습니다.
+          </p>
+          <TelegramNotificationHistory tripId={tripId} refreshKey={refreshKey} targets={linked} />
         </>
       )}
     </section>

@@ -13,10 +13,10 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | weather | 29 | 24 | 2 | 3 |
 | share | 35 | 30 | 1 | 4 |
 | poi | 32 | 25 | 5 | 2 |
-| notify | 26 | 18 | 0 | 8 |
+| notify | 26 | 18 | 2 | 6 |
 | admin | 43 | 37 | 4 | 2 |
 | core | 31 | 30 | 1 | 0 |
-| **all** | **349** | **298** | **23** | **28** |
+| **all** | **349** | **298** | **25** | **26** |
 
 Spec files: 55.
 
@@ -291,8 +291,8 @@ Spec files: 55.
 | NTF-016 | notify | bot_forbidden — 봇이 추방된 chat 등록/재검증 → 403, 'telegram verify 실패: bot_forbidden', 저장 안 됨(재검증이면 failed:bot_forbidden·비활성) | P2 | desktop, telegram | scripted | `specs/notify/notify-settings.live.spec.ts#NTF-016` |
 | NTF-017 | notify | rate_limited(429) — Retry-After 헤더 전달·alert 'telegram verify 실패: rate_limited' | P3 | telegram | blocked |  |
 | NTF-018 | notify | 날씨 특보 Telegram 알림 | P3 | telegram, weather | blocked |  |
-| NTF-019 | notify | 예약 리마인더 — 1주 전 weekly_summary / 1일 전 daily_brief | P3 | telegram | blocked |  |
-| NTF-020 | notify | '일정 정보 알람으로 보내기' 수동 전송(여행/일자 요약을 즉시 Telegram으로) | P3 | telegram | blocked |  |
+| NTF-019 | notify | KST 일간·주간 브리프 설정과 예약 회차 발송 | P3 | telegram, mutating | manual |  |
+| NTF-020 | notify | 일정 정보 알람으로 보내기 — 여행 전체·특정 일자 수동 전송 요청 | P3 | telegram, mutating | manual |  |
 | NTF-021 | notify | 이메일 알림 수신 — 동반자 초대 메일(Resend email_queue) 실제 수신·본문 | P3 | share, mutating | blocked |  |
 | NTF-022 | notify | admin /admin/emails 이메일 큐 smoke — 제목·deliverability·상태 필터·새로고침 | P2 | desktop, admin | scripted | `specs/notify/notify-admin.live.spec.ts#NTF-022` |
 | NTF-023 | notify | admin /admin/etl Telegram outbox 카드 — due/backoff/stuck/retry exhausted·sent/skipped/failed·임계값·카테고리 | P2 | desktop, admin | scripted | `specs/notify/notify-admin.live.spec.ts#NTF-023` |

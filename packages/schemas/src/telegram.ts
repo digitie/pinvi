@@ -26,3 +26,35 @@ export const TelegramTargetSchema = z.object({
   created_at: Iso8601Schema,
 });
 export type TelegramTarget = z.infer<typeof TelegramTargetSchema>;
+
+export const TelegramPreferencesSchema = z.object({
+  daily_enabled: z.boolean(),
+  weekly_enabled: z.boolean(),
+  send_time: z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/),
+  weekly_day: z.number().int().min(0).max(6),
+  weekly_target_id: z.string().uuid().nullable(),
+});
+export type TelegramPreferences = z.infer<typeof TelegramPreferencesSchema>;
+
+export const TelegramNotificationSchema = z.object({
+  id: z.string().uuid(),
+  category: z.string(),
+  trip_ids: z.array(z.string().uuid()),
+  created_at: Iso8601Schema,
+  error_code: z.string().nullable(),
+  error_message: z.string().nullable(),
+  deliveries: z.array(
+    z.object({
+      id: z.string().uuid(),
+      target_id: z.string().uuid().nullable(),
+      status: z.enum(['pending', 'sent', 'skipped', 'failed']),
+      sent_chunks: z.number().int().nonnegative(),
+      total_chunks: z.number().int().positive(),
+      attempts: z.number().int().nonnegative(),
+      retry_at: Iso8601Schema.nullable(),
+      error_code: z.string().nullable(),
+      error_message: z.string().nullable(),
+    }),
+  ),
+});
+export type TelegramNotification = z.infer<typeof TelegramNotificationSchema>;

@@ -70,3 +70,13 @@ class KorTravelWeatherResource(ConfigurableResource[Any]):
 
     def create_client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout)
+
+
+class PinviNotificationPlannerResource(ConfigurableResource[Any]):
+    """API의 예약 알림 적재 경계만 호출한다. Bot token·DB 사업 로직은 받지 않는다."""
+
+    base_url: str = "http://app-api:8000"
+    planner_key: str = ""
+
+    def create_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(base_url=self.base_url, timeout=120)

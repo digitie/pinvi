@@ -54,7 +54,22 @@ pinvi_weather_retention_horizon_job = define_asset_job(
     tags=job_tags("pinvi_weather_retention_horizon_job"),
 )
 
+pinvi_telegram_notification_planner_job = define_asset_job(
+    "pinvi_telegram_notification_planner_job",
+    selection=["pinvi_telegram_notification_planner"],
+    tags=job_tags("pinvi_telegram_notification_planner_job"),
+)
+
 schedules = [
+    coalescing_schedule(
+        project=PINVI_PROJECT,
+        location_name=PINVI_LOCATION_NAME,
+        name="pinvi_telegram_notification_planner_schedule",
+        job=pinvi_telegram_notification_planner_job,
+        cron_schedule="* * * * *",
+        execution_timezone="Asia/Seoul",
+        default_status=DefaultScheduleStatus.RUNNING,
+    ),
     coalescing_schedule(
         project=PINVI_PROJECT,
         location_name=PINVI_LOCATION_NAME,

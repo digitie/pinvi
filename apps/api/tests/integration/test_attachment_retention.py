@@ -1324,7 +1324,7 @@ async def test_runtime_retention_acl_probe_rejects_select_only_role(session_fact
     from sqlalchemy import text
 
     from tests.integration.test_m05_migrator_login_lifecycle import (
-        _retention_runtime_privileges_sql,
+        _app_feature_runtime_privileges_sql,
     )
 
     role = "retention_select_" + uuid.uuid4().hex[:16]
@@ -1334,10 +1334,12 @@ async def test_runtime_retention_acl_probe_rejects_select_only_role(session_fact
             await db.execute(text(f'GRANT USAGE ON SCHEMA app TO "{role}"'))
             await db.execute(
                 text(
-                    f'GRANT SELECT ON app.attachment_upload_intents, app.attachment_gc_objects TO "{role}"'
+                    f"GRANT SELECT ON app.attachment_upload_intents, app.attachment_gc_objects, "
+                    "app.telegram_notification_preferences, app.telegram_notifications, "
+                    f'app.telegram_notification_deliveries TO "{role}"'
                 )
             )
-            result = (await db.execute(text(_retention_runtime_privileges_sql(role)))).one()
-            assert tuple(result) == ("false", "false")
+            result = (await db.execute(text(_app_feature_runtime_privileges_sql(role)))).one()
+            assert tuple(result) == ("false",) * 5
         finally:
             await db.rollback()

@@ -1,0 +1,296 @@
+{
+  "schema": "pinvi.telegram-notifications-wsl-evidence/v1",
+  "issues": [636, 638],
+  "excluded_follow_up": {
+    "637": "Weather201 공식 지역별 발령/해제와 행정구역 매핑 선행. 현재 PR에 특보 동의 없음."
+  },
+  "api_web_product_checkpoint": "f1fc24f5e6ee5f89f1e3a711928d85e68658f92c",
+  "base": "6f47dad57bb968da0468c3c1e15fbb24aaec8367",
+  "runtime_source_sha256": {
+    ".env.example": "b884491ef046b7dba56ecca9ba5b7f0e4da2a4b18510875d7762d4bac829e0eb",
+    "apps/api/alembic/versions/20261105_0104_telegram_notifications.py": "1183459f4070f45119df386dbd7ec8cb2a31be9cca7e4eb0100dfb77c34033dd",
+    "apps/api/app/api/v1/__init__.py": "f95cbe34cf992d94be5ce402721558207da6edadb33b60ec0387dcc8c4a96b74",
+    "apps/api/app/api/v1/telegram_notifications.py": "ea65fe5f82c9f588b597b54b470e624491842600f67f535aecaa97b1cd80dafe",
+    "apps/api/app/api/v1/telegram_planner.py": "882d6e7f0c49c7d84b5c84e6160e39ca3809cf2a0628a7cf4e68e57135eb98bf",
+    "apps/api/app/api/v1/trip_telegram_targets.py": "bd2c6d838ffb2d592425c857eb489e89bc2e2b21db1b4b0716f660df583446fc",
+    "apps/api/app/clients/telegram.py": "45d37def721f10e359177f7c454ff10696c7fe0579135e174939461712aad78d",
+    "apps/api/app/core/config.py": "2a8c3823c7dc13bceb3c73c69a0a17edb320863796f8a2ac46894c4b9231a1f8",
+    "apps/api/app/db/base.py": "32fb390a4fc6c219a62f57403e1c49957e25ec4b7ff0829e52bae0f8cb167c8f",
+    "apps/api/app/models/cache_target_sync.py": "13668a1bdcd8066fb9208723527e58884ec88a51140535a75f3185322ea271dc",
+    "apps/api/app/models/telegram_notification.py": "1912da51cc58d451109a6fecc2174d11596549e602e5ed748ef4051e3a24066f",
+    "apps/api/app/models/telegram_target.py": "de7f304ad288d9091fd8f260b85c9f5a66a018c9e637ac935dc7d065edc234bb",
+    "apps/api/app/models/trip_telegram_target.py": "9db427b600123ddc7ec7d64dc282be006ec1119b6c4737694e1d6baef33825f8",
+    "apps/api/app/schemas/telegram_notifications.py": "d1513e0f7cd3b1f48936dbe0f02fad7898f6883a7050ed2a01259d72ac5192e1",
+    "apps/api/app/services/admin_etl.py": "b951d2430820be2ed50411705416ad7d3a2ce613a566f6c3cdd45d49aab6c751",
+    "apps/api/app/services/cache_target_final_boundary.py": "05ba937cf3d933cbf860cf697712f542c8f1d3f61fab0e44a5b963fbb1d67038",
+    "apps/api/app/services/telegram_itinerary.py": "0eee4f18f887bc6f31edb119069a1e2eff6e74dcd857a25ec71bb635fc0c05ed",
+    "apps/api/app/services/telegram_metrics.py": "38e4051709fa74cd2e102406e0aa8661286b35af150de0f7ddb01dfa32e2ee37",
+    "apps/api/app/services/telegram_notifications.py": "5bed57dfc8b1e0cd5be15ddd89df38ba43861404c7e067c8ef9648bee8791c3a",
+    "apps/api/app/services/telegram_outbox.py": "d2cddad98f693ced26ac49b93028b462d2f93421271c444e610609e2546b1665",
+    "apps/api/app/services/telegram_planner.py": "314a0b3165e2be7837dabe14089347e28625a79b7faf82caf035dbc4e4c21e10",
+    "apps/api/app/services/telegram_targets.py": "082f5e273ac8bf5639c912f585cf6794f5fe18599aa3591927f59bef3f7ef20e",
+    "apps/etl/pinvi/etl/assets/__init__.py": "459243fe179bc4061f54c74a00393472cc730ef105d999bbd607637110b2a222",
+    "apps/etl/pinvi/etl/assets/pinvi_telegram_notification_planner.py": "20659f31963fce2598fb1134e34efd73b23224fb41e01e05badcf704efae0f28",
+    "apps/etl/pinvi/etl/definitions.py": "f306271c3cbeb5edf9a4df9cd89051116712f85494798c3e7a89358a9682d3b4",
+    "apps/etl/pinvi/etl/resources.py": "6479dc953795624226c73fe0024f731c1c7c0bfbaef9e6cbb5dfdfcb7234e95c",
+    "apps/etl/pinvi/etl/schedules.py": "c6be2df2620cf33050a7f497f621273f9bca2ba21e5a2c5a81bc90b285df46f8",
+    "apps/etl/pinvi/etl/sensors.py": "a7648d09d45484d7d76a0b1ffac260df83b4201ab8c0de26aa8e89eb21930745",
+    "apps/etl/pinvi/etl/sql/outbox.py": "7976de34bf2723d543d5eaace3b97719760fe68622721998a2a23065eb8452bd",
+    "apps/web/app/(app)/settings/telegram/page.tsx": "5ce29770895453ed2e7348f08ba782e747e2023cac3dcae46a71bd87aef62869",
+    "apps/web/components/trips/TelegramNotificationHistory.tsx": "503daf315e92e4dc90f351d1363ba0d792019a344bfd1e41f730e3e04051c764",
+    "apps/web/components/trips/TelegramNotificationPreferences.tsx": "efc36644ed569fe0d2957b4a34bf9a427cf1c9af53d091f44787a4f221f6e8c5",
+    "apps/web/components/trips/TripDetail.tsx": "cbc1208fa96a45de8d1bfcf6529fd66c129045e026a7c80a43851f37dd216d2f",
+    "apps/web/components/trips/TripTelegramTargets.tsx": "611aa40cd96688b6cd4cf050ee6e75bdfd2b4dc03697758823e2c6d735ca9e78",
+    "infra/docker-compose.app.yml": "5a69fe5b596c045754fe5ecf7835621f71620fb367d2cd25048931f48bfa84b4",
+    "infra/docker-compose.yml": "87ec5ed53736911c68ca42d8a5093c990aa324a7ceaa3373855cbd23d1009455",
+    "infra/postgres/bootstrap-pinvi-runtime-role.sh": "9e5ba07318135d832fd9eed862b172cd90ea393b5a72ccfa94e2b1ee09104b9d",
+    "packages/api-client/src/endpoints/telegram.ts": "0582b48b62357c97747c31b34605801ceb9679afd3e5ac4ffa7bbbd140fc06e5",
+    "packages/schemas/src/index.ts": "040fbc3608156cb6d42af711e1aedd671cc6084893099998ce495094f013a90d",
+    "packages/schemas/src/telegram.ts": "47b82259674d40f48a9a822362c4268848449e458979186f11951f72df125ce8",
+    "scripts/deploy-node.sh": "33cfb02f44c506d62eb099bbc4cfbc0f2dcd2ec2ea4feb10a6253c414d8dc7bb"
+  },
+  "runtime_source_difference_from_ui_checkpoint": [
+    "infra/postgres/bootstrap-pinvi-runtime-role.sh"
+  ],
+  "source_boundary": "최종 후보의 API·웹·ETL·0104 로직은 f1과 같다. 별도 변경은0104 runtime ACL 복구 caller이며 실제 Docker 역할 lifecycle로 검증한다. 최종 정확HEAD 리뷰·전체CI는 PR688 기록을 따른다.",
+  "tests": {
+    "api_unit": {
+      "passed": 2009,
+      "skipped": 9,
+      "checkpoint": "f1fc24f5e6ee5f89f1e3a711928d85e68658f92c",
+      "receipt": {
+        "file": "telegram-f1-full-unit.log",
+        "sha256": "e0d6a2fc41e945c406ad15e39c83ea110bb881da306a543b1d9717341915952d"
+      }
+    },
+    "related_postgres_api": {
+      "passed": 44,
+      "receipt": {
+        "file": "telegram-review2-closed-pg.log",
+        "sha256": "ddf73da2763675cd2ef84a56f72b23276dac9d417db9dbed7e4e703262f5fb09"
+      }
+    },
+    "mypy": {
+      "files": 269,
+      "receipt": {
+        "file": "telegram-review2-closed-mypy.log",
+        "sha256": "0cd7d57009bff4cb08705bacc58186e91d9cf5df87c3f3661204761f80a2fc2a"
+      }
+    },
+    "web": {
+      "passed": 395,
+      "schemas_passed": 24,
+      "receipt": {
+        "file": "telegram-round2-web-tests.log",
+        "sha256": "85069d0fc833ec5620117169ea99612a8a763965d82a3c4089908690fd42beb4"
+      }
+    },
+    "workspace_types": {
+      "file": "telegram-round2-all-types.log",
+      "sha256": "85dd66c98ddd0078437e3b75ad7714b25f8ce5892bb7a02a65b00e66f2be1524"
+    },
+    "web_lint": {
+      "errors": 0,
+      "baseline_warnings": 5,
+      "receipt": {
+        "file": "telegram-round2-web-lint.log",
+        "sha256": "a8935626ab881e93b1e6174066b95ed9aed63725c130bb78cde63df3c5aab330"
+      }
+    },
+    "etl": {
+      "passed": 81,
+      "receipt": {
+        "file": "telegram-review2-closed-etl.log",
+        "sha256": "a83c8962ab42bcbbdd470b5ccc0e2c4bde48af72090c954c400bbd930363451b"
+      }
+    },
+    "ci_contract_expectations": {
+      "passed_before_acl_fix": 3,
+      "prior_acl_repair_failed": 1,
+      "receipt": {
+        "file": "telegram-ci-expected-head-positive.log",
+        "sha256": "fa52480cd2d1686a4d2b3212bbf90201166db0af0b30e3ebe7935a2c6d8b69d2"
+      }
+    },
+    "runtime_0104_acl": {
+      "passed_after_caller_fix": 1,
+      "scope": "권한 회수 후 복구·로그인 봉인, runtime의 기존2/알림3테이블 CRUD와 Alembic UPDATE 거부",
+      "receipt": {
+        "file": "telegram-0104-runtime-acl-positive.log",
+        "sha256": "f23e602154b4ad9b3354618355d722fd6311bdb4320ed2b1b251d9cb8c750072"
+      }
+    },
+    "runtime_select_only_rejection": {
+      "passed": 1,
+      "scope": "5개 테이블에 SELECT만 부여한 실제 PG 역할은 각각 CRUD 검사 false. 558의 테스트 helper import 누락을 수정했다.",
+      "receipt": {
+        "file": "telegram-558-acl-probe-positive.log",
+        "sha256": "7db5d7ed696a41a819ba9c1e30e54b80df4e3699a314c3f6bd5a68bae5a6a7b9"
+      }
+    }
+  },
+  "live_ui": {
+    "sourceRevision": "f1fc24f5e6ee5f89f1e3a711928d85e68658f92c",
+    "checks": [
+      "실제 로그인·GET chat 검증·대상 등록·예약 기본off",
+      "지연된 실제PUT 중 입력 비활성화·예약 시각/요일 DB 저장·reload 보존",
+      "공유 탭 연결·특정일자 실제POST·긴 일정2chunk·KST/메모·대상별 완료UI",
+      "실제HTTP429 오류·재시도 시각UI·조기 재시도 없음·backoff후 복구",
+      "실제HTTP403 영구 실패·안전한 상세 원인 표시·대상 비활성화",
+      "비활성 주간 대상이 남아 있어도 opt-out 실제저장·reload 확인",
+      "실제 대용량 일정 planner 실패·수신자 없는 실패 원인UI",
+      "실제HTTP Prometheus 고정차원 전송/재시도/실패 계측"
+    ],
+    "pageErrors": [],
+    "production": false,
+    "actualApi": true,
+    "actualPostgres": true,
+    "actualChromium": true,
+    "productionWebBuild": true,
+    "provider": "owned local Telegram HTTP fixture only; no real recipients",
+    "caveats": "Map/weather/tiles not asserted; 637 out of this PR; one delayed request was continued to the real API without response fulfillment"
+  },
+  "live_receipt": {
+    "file": "telegram688-result.json",
+    "sha256": "aaabc51105614c41bf8ae3e5b2b6dad11d0807322ce0f3caed7b119646c95e29"
+  },
+  "screenshots": {
+    "telegram688-itinerary.png": {
+      "file": "telegram688-itinerary.png",
+      "sha256": "f7b5014ff7960d84717e6f7e9d784dde7fb14082e0e711406784adb7823df913"
+    },
+    "telegram688-retry.png": {
+      "file": "telegram688-retry.png",
+      "sha256": "c0b442daaf20fa301629b0acfb1e9d90dda549530dfd24428e63850a4e0e514b"
+    },
+    "telegram688-forbidden.png": {
+      "file": "telegram688-forbidden.png",
+      "sha256": "7857dd119cfe7f1bc7c1d48dae0da40332d0a732e121b91c6e4ce00d162bdbbd"
+    },
+    "telegram688-planning-error.png": {
+      "file": "telegram688-planning-error.png",
+      "sha256": "71854fa77db93c5a6d9b89a776986ae55da46ff441284fbc7131ca070a625048"
+    }
+  },
+  "negative_controls": [
+    {
+      "scope": "수정 전 client의 malformed ACK6/느린 hook1",
+      "receipt": {
+        "file": "telegram-review-client-negative.log",
+        "sha256": "0fdaf42a541b5a3bd712de7b98076e7c3d2cb3211a54b0d7d0962f492b25b0e5"
+      }
+    },
+    {
+      "scope": "기존 enqueue 잠금 컴포넌트가 실제 NO KEY UPDATE와 대기. 전체legacy 교착을 직접 재현했다는 주장은 아님.",
+      "receipt": {
+        "file": "telegram-review-lock-corrected-negative.log",
+        "sha256": "82b50332125ea18a35705af33fb750d661a00dec77cd28aac946e58c3d914654"
+      }
+    },
+    {
+      "scope": "지연된429 응답2건의 수정 전 기준시각",
+      "receipt": {
+        "file": "telegram-review-clock-negative.log",
+        "sha256": "5132eab735491794ba1efddd8bfe1dcd5d38f27e9f398f698154a944fad84ce7"
+      }
+    },
+    {
+      "scope": "삭제·비활성 주간 대상의 수신 해제2건",
+      "receipt": {
+        "file": "telegram-opt-out-negative.log",
+        "sha256": "ba1bfe4c4da6408b27d3c66736fbc37e1cfd8861eab1b7094ad88d6ed30d6049"
+      }
+    },
+    {
+      "scope": "9914 저장 UI 컴포넌트 지연응답 대조",
+      "receipt": {
+        "file": "telegram-ui-save-negative.log",
+        "sha256": "d4abff35e29d9f757a0a4756348fee7130c5b72cf00f13e439caac53a5a5501f"
+      }
+    },
+    {
+      "scope": "날씨 보강 중 수신 해제 잠금 대기",
+      "receipt": {
+        "file": "telegram-enrichment-lock-negative.log",
+        "sha256": "50e52e73a28bc802898be034b6fa135e5349abfe8aaf40fded94a9b94417c473"
+      }
+    },
+    {
+      "scope": "신규 pending 큐를 빼던 quiescence",
+      "receipt": {
+        "file": "telegram-quiescence-negative.log",
+        "sha256": "0f89bed3a000a10699fe9b495f80f91d169f8d439289ac090e51eb7d107faa6d"
+      }
+    },
+    {
+      "scope": "예약 Trip날짜·일자삭제·KST경과·주간날짜4건",
+      "receipt": {
+        "file": "telegram-schedule-dates-negative.log",
+        "sha256": "b8997c55fae769844fb766564ecf337e84752c1fcd23d684304399d0ab961ba1"
+      }
+    },
+    {
+      "scope": "실제 pool1 해석 캐시·예보 대조",
+      "receipt": {
+        "file": "telegram-single-pool-negative.log",
+        "sha256": "b974d23998c603207c86e724399b21d6791acfe53446411874801896243b5b19"
+      }
+    },
+    {
+      "scope": "실제 관리자 비활성화 후 전송·과대 입력의 뒤 사용자 중단2건",
+      "receipt": {
+        "file": "telegram-account-isolation-negative.log",
+        "sha256": "ac4b1d9e51dc044c2550047e23df54e98a5aac4b190e340bfc6611ea2619cdb6"
+      }
+    },
+    {
+      "scope": "57f UI 컴포넌트의 수신자 없는 부모 오류",
+      "receipt": {
+        "file": "telegram-planning-ui-negative.log",
+        "sha256": "27f2e9835d6ea0edbf3753ad81611e2249fd2a15897e80794374f9da82c68947"
+      }
+    },
+    {
+      "scope": "미래 backoff 만료와 Trip잠금 대기 중 자정 경과",
+      "receipts": [
+        {
+          "file": "telegram-expired-future-retry-negative.log",
+          "sha256": "ec3df3396722fbd718c1fe03ae1a21f5a9aaa2520fc66454a22a85c2832f3c57"
+        },
+        {
+          "file": "telegram-expiry-lock-clock-negative.log",
+          "sha256": "f74cde78d7cc288d2350c8e31847ae20118d59140d1bdae9b8c6791567b81959"
+        }
+      ]
+    }
+  ],
+  "product_reviews": [
+    {
+      "reviewer": "Hubble",
+      "agent": "01a1a138-9fe3-75e2-b6ab-0db48958ee69",
+      "checkpoint": "f1fc24f5e6ee5f89f1e3a711928d85e68658f92c",
+      "remaining_P0_P1_P2": 0,
+      "method": "정적 소스·Git·기존 로그 검토. 직접 테스트 재실행 아님."
+    },
+    {
+      "reviewer": "Hume",
+      "agent": "01a1a138-a047-7430-850b-85a11f40d451",
+      "checkpoint": "f1fc24f5e6ee5f89f1e3a711928d85e68658f92c",
+      "remaining_P0_P1_P2": 0,
+      "method": "독립 정적 소스·Git 검토. 미완료 UI/CI를 통과로 간주하지 않음."
+    }
+  ],
+  "ci_f1": {
+    "run": 41976561569,
+    "failed_shards": [1, 3],
+    "cause": "작업 레지스트리/현재 head 기대값4건. 기대값 갱신 뒤 실제0104 ACL repair caller 누락도 추가 발견해 보완. 최종 후보CI에서 재확인한다."
+  },
+  "limitations": [
+    "Telegram의 외부 idempotency가 없어 수락 후 DB ACK 유실은 해당chunk중복 가능",
+    "운영·실수신자·외부 Map/weather·타일 검증 없음",
+    "단일 지연PUT은 실제 API로 continue했고 응답을 fulfill하지 않음",
+    "초기 exact-label 테스트 선택자 오류는 regex로 고쳐 f1 최종8흐름을 검증함"
+  ],
+  "owned_stacks_stopped": true,
+  "candidate_558_follow_up": "두 최종 리뷰 무차단. 원격 CI에서 test_attachment_retention의 이전 helper import 1건 누락을 발견하여 호출부·5개 SELECT-only 반례를 동기화했다. runtime source는558과 같다. 새 정확HEAD CI를 기다린다."
+}

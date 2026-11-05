@@ -93,11 +93,14 @@ async def get_target(
     db: AsyncSession, *, target_id: uuid.UUID, user_id: uuid.UUID
 ) -> TelegramTarget:
     row = await db.scalar(
-        select(TelegramTarget).where(
+        select(TelegramTarget)
+        .where(
             TelegramTarget.id == target_id,
             TelegramTarget.user_id == user_id,
             TelegramTarget.deleted_at.is_(None),
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if row is None:
         raise TelegramTargetNotFoundError("telegram target을 찾을 수 없습니다.")
@@ -131,6 +134,7 @@ async def _apply_verify(
         raise _verify_error(exc) from exc
     target.telegram_chat_type = info.get("telegram_chat_type")
     target.title_snapshot = info.get("title_snapshot")
+    target.generation = uuid.uuid4()
     target.last_verified_at = datetime.now(UTC)
     target.last_send_status = "ok"
     target.is_enabled = True
@@ -180,6 +184,7 @@ async def verify_existing(
         target.last_send_status = f"failed:{exc.telegram_code}"
         if exc.telegram_code == "bot_forbidden":
             target.is_enabled = False
+            target.generation = uuid.uuid4()
         await db.flush()
         raise
     await db.flush()
@@ -188,6 +193,7 @@ async def verify_existing(
 
 async def delete_target(db: AsyncSession, *, target_id: uuid.UUID, user_id: uuid.UUID) -> None:
     target = await get_target(db, target_id=target_id, user_id=user_id)
+    target.generation = uuid.uuid4()
     target.deleted_at = datetime.now(UTC)
     target.is_enabled = False
     await db.flush()

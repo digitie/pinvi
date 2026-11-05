@@ -1,3 +1,27 @@
+## 2026-11-05 — Telegram636/638 최종 제품 검증·0104 권한 복구
+
+- 제품 f1fc24f의 실제 WSL API·Postgres·프로덕션 웹 빌드·Chromium UI 8흐름이 통과했다. 수신자 없는 계획 실패의 상세 원인 UI까지 확인했고 pageerror는 0이다. Telegram은 소유 HTTP fixture이며 실제 수신자·운영 접근은 없다.
+- 두 독립 전문 리뷰어의 f1 제품 검토에서 잔여 P0/P1/P2는 없었다. API 단위 2009통과/기존9skip, 관련 PG44, ETL81, web395/schema24, mypy269와 전체 workspace 타입 검증을 완료했다.
+- f1 원격 CI의 이전 작업 목록·0103 head 기대값 4건을 갱신했다. 확장한 실제 Docker 권한 검사가 0104 ACL 복구 호출 누락을 포착해 exact0104 분기를 추가했고, 재실행에서 기존2/신규3테이블 CRUD·권한 복구·로그인 봉인이 통과했다.
+- 558 최종 두 리뷰는 무차단이었다. 원격 CI가 다른 테스트의 이전 ACL helper import 1건을 포착해 호출부를 동기화하고 5개 SELECT-only 반례를 실제 PG에서 재검증했다(1통과). runtime source는558과 같다. 새 정확 HEAD 전체 CI를 확인한다.
+- 증거는 docs/reviews/pinvi-636-638-telegram-wsl-live.json. API·웹·ETL은 f1과 같고 별도 bootstrap 변경만 실제 lifecycle로 재검증했다. 최종 후보의 두 리뷰와 정확 HEAD CI를 확인한 뒤 일반 squash merge한다. 아직 병합 완료 기록은 아니다.
+- 후속은 Weather201 선행의 #637 → #641이다. #650/Map1450 운영 최종 시험은 Claude Code 담당이며 #671/#672 다른 Code 작업과 보호 stash를 건드리지 않는다.
+
+## 2026-11-05 — Telegram636/638 리뷰 경계 보완
+
+- draft688은636/638만 먼저 완료한다.637은공식getPwnCd/특보구역매핑이필요해Weather201선행후분리하며미구현특보설정은노출하지않는다.
+- 57f의 실제PG/API/프로덕션웹/Chromium·소유Telegram HTTP fixture UI7흐름이통과했고pageerror0이다. 실제수신자·운영·외부Map/weather/타일검증은아니다.
+- Hubble/Hume의57f리뷰P2네건을실제실패로재현했다:계정철회대기경합·과대입력사용자간전파·예약날짜/자정변경·단일풀날씨보강.현재User최신잠금·사용자별안전한실패UI·날짜snapshot/만료·동일읽기세션으로보완했다.
+- 추가futureRetryAt만료대기와잠금대기중자정경과도실패우선회귀로막았다.현재관련PG/API44,mypy269,web395/schema24,전체workspace타입,lint0error/기존5warning이다.ETL81은새failed집계전파까지확인했다.
+- 아직정확최신제품재리뷰·새실패UI를포함한최종실제UI·정확HEAD전체CI가남아있다.초안상태이며승인·병합완료로간주하지않는다.후속은637→641이고운영최종시험은Claude Code담당이다.
+
+## 2026-11-05 — Telegram636/637/638 묶음 착수
+
+- Pinvi684/PR687을6f47dad로, Geo공식주소검증623을305777d로 일반squash병합했다. 각 두최종리뷰와정확HEAD CI9/5SUCCESS·후보/병합tree동일성을확인했다.
+- 운영650은보존202605자료/최신코드에서재현되지않아열어둔다. 원래40/약칭/정식·실제COPY/MV/HTTP·Chromium/Firefox각5검색 증거와운영담당Claude의읽기전용코드/DB/MV대조가이드를남겼다.
+- 다음은수동일정·특보발령/해제·사용자opt-in일간/주간을기존대상/outbox와한PR로묶는다. 계획 docs/execplan/telegram-notification-bundle-636-638.md. 초안/자주push·WSL/소유provider fixture UI·두적대리뷰·정확CI후merge한다.
+- 실제Telegram수신자에게메시지를보내지않으며운영접근/배포/시험도없다. 최종prod는Claude담당이다. 이후641을진행한다.
+
 ## 2026-11-05 — #684 한도 오류 격리·출몰 캐시/권한 경합 수정
 
 - draft#687부터 단계별 push했다. storage-only 예외 경계·handler최대1회, 독립 cache transaction·조건부upsert·Trip 선행 fence를 구현했다. 두 전문 리뷰의 snapshot역전P2와 관리자이동뒤지연DELETE/PATCH 권한P1을 실제 실패 우선으로 재현해 보완했다.

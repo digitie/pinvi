@@ -1,5 +1,8 @@
 # tasks.md — 활성 작업
 
+- [/] #636/#638 — PR688 일정 수동 전송·사용자 opt-in 일간/주간 예약의 최종 WSL UI·두 전문 적대리뷰·정확HEAD CI 후 일반 merge. 운영·실수신자 전송 없음.
+- [ ] #637 — Weather201의 공식 지역별 발령/해제·행정구역 매핑 계약을 선병합하고 Pinvi 대표지역 특보 알림을 후속 구현한다.
+
 
 이 문서는 완료되지 않은 작업만 의존 순서대로 한 줄씩 나열한다. lane, 담당자 구분,
 계층형 하위 작업은 사용하지 않는다. 완료·퇴역 이력은
@@ -14,7 +17,6 @@
 > 근거를 남긴다. `kor-travel-map` 저장소 `docs/tasks-done.md`에도 별도로
 > **line 577에 미해결 git merge conflict marker(`|||||||`, commit `ae547dead7`,
 > 2026-08-31)가 그대로 커밋돼 있다** — Pinvi가 고칠 파일이 아니라 여기 기록만 남긴다.
-- [/] #684 — Pinvi draft#687 제품ef69f74 구현·WSL단위1988/관련PG88/실제UI5·두제품적대리뷰무차단 완료; 최종 문서 리뷰·정확HEAD 전체CI 후 일반 squash merge. 운영 접근/배포/시험 없음.
 - [/] T-VN-OPS-GRID-REFRESH-POLICY — `/admin/provider-sync` 502(Map `ProviderRefreshPolicyRecord.provider_dataset_id`
   미수용) 수정. 소유자 claude, 브랜치 `fix/ops-grid-refresh-policy-provider-dataset-id`, 충돌 회피 범위
   `apps/api/app/services/kor_travel_map_ops_projection.py`·`apps/api/tests/unit/test_kor_travel_map_ops_{projection,contract}.py`·

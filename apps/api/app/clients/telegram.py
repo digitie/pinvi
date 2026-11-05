@@ -10,6 +10,7 @@ DB에 저장하지 않고(§1), 로그에는 `mask_token`으로만 남긴다(§9
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import Any
@@ -48,15 +49,19 @@ def _retry_after_seconds(response: httpx.Response, body: dict[str, Any]) -> int 
     params = body.get("parameters")
     if isinstance(params, dict):
         candidate = params.get("retry_after")
-        if isinstance(candidate, int):
+        if type(candidate) is int and candidate > 0:
             return candidate
     header = response.headers.get("retry-after")
-    if header and header.isdigit():
-        return int(header)
+    if header and header.isascii() and header.isdigit():
+        try:
+            seconds = int(header)
+        except ValueError:
+            return None
+        return seconds if seconds > 0 else None
     return None
 
 
-def _classify(response: httpx.Response) -> TelegramError:
+def _classify(response: httpx.Response, *, token: str | None = None) -> TelegramError:
     """HTTP 응답을 §5 실패 코드로 변환한다 (token은 노출하지 않음)."""
     status = response.status_code
     try:
@@ -67,7 +72,10 @@ def _classify(response: httpx.Response) -> TelegramError:
         body = {}
     description = str(body.get("description") or "").strip()
     desc_lower = description.lower()
-    safe = mask_token(description) or f"telegram error {status}"
+    # 설정된 값은 길이/형식과 무관하게 숨긴다. provider가 credential을 되비춰도
+    # UI 오류·outbox 기록에 원문이 남지 않는다.
+    safe = mask_token(description.replace(token, "***") if token else description)
+    safe = safe or f"telegram error {status}"
 
     if status == 429:
         return TelegramError(
@@ -102,18 +110,26 @@ class TelegramClient:
     ) -> dict[str, Any]:
         path = f"/bot{token}/{telegram_method}"
         try:
-            response = await self._http.request(method, path, timeout=self._timeout, **kwargs)
-        except httpx.TimeoutException as exc:
+            async with asyncio.timeout(self._timeout):
+                response = await self._http.request(method, path, timeout=self._timeout, **kwargs)
+        except (httpx.TimeoutException, TimeoutError) as exc:
             raise TelegramError("telegram timeout", code="network_error") from exc
         except httpx.TransportError as exc:
             raise TelegramError("telegram connection error", code="network_error") from exc
 
         if response.status_code != 200:
-            raise _classify(response)
-        body = response.json()
-        if not isinstance(body, dict) or not body.get("ok"):
+            raise _classify(response, token=token)
+        try:
+            body = response.json()
+        except ValueError:
+            raise TelegramError(
+                "Telegram 응답 형식이 올바르지 않습니다.",
+                code="unknown_error",
+                status_code=response.status_code,
+            ) from None
+        if not isinstance(body, dict) or body.get("ok") is not True:
             # 200 + ok:false (희귀) — 분류 시도 후 unknown fallback.
-            raise _classify(response)
+            raise _classify(response, token=token)
         result = body.get("result")
         return result if isinstance(result, dict) else {}
 
@@ -122,6 +138,12 @@ class TelegramClient:
         if not chat_id:
             raise TelegramError("chat_id required", code="missing_chat_id")
         result = await self._call("GET", "getChat", token, params={"chat_id": chat_id})
+        if result.get("type") not in {"private", "group", "supergroup", "channel"}:
+            raise TelegramError(
+                "Telegram 대상 확인 응답 형식이 올바르지 않습니다.",
+                code="unknown_error",
+                status_code=200,
+            )
         return {
             "telegram_chat_type": result.get("type"),
             "title_snapshot": result.get("title")
@@ -149,4 +171,12 @@ class TelegramClient:
             payload["parse_mode"] = parse_mode
         if thread_id is not None:
             payload["message_thread_id"] = thread_id
-        return await self._call("POST", "sendMessage", token, json=payload)
+        result = await self._call("POST", "sendMessage", token, json=payload)
+        message_id = result.get("message_id")
+        if type(message_id) is not int or message_id <= 0:
+            raise TelegramError(
+                "Telegram 전송 확인 응답 형식이 올바르지 않습니다.",
+                code="unknown_error",
+                status_code=200,
+            )
+        return result

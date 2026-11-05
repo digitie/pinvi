@@ -189,3 +189,97 @@ async def test_classify_does_not_leak_token_in_message() -> None:
     with pytest.raises(TelegramError) as exc:
         await _client(handler).send_to_target("1:tok", "5", "x")
     assert "AAEjQ_l0Nq7Rabcdefghijklmnopqrstuvwx" not in str(exc.value)
+
+
+@pytest.mark.parametrize("value", [True, False, 0, -1, 1.5, "12"])
+async def test_retry_after_requires_positive_integer_seconds(value: object) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            429,
+            json={
+                "ok": False,
+                "description": "Too Many Requests",
+                "parameters": {"retry_after": value},
+            },
+        )
+
+    with pytest.raises(TelegramError) as raised:
+        await _client(handler).send_to_target("1:tok", "5", "x")
+    assert raised.value.retry_after is None
+
+
+async def test_zero_retry_after_header_is_not_an_immediate_retry() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"ok": False}, headers={"Retry-After": "0"})
+
+    with pytest.raises(TelegramError) as raised:
+        await _client(handler).send_to_target("1:tok", "5", "x")
+    assert raised.value.retry_after is None
+
+
+async def test_success_with_invalid_json_has_a_safe_provider_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"<html>unexpected proxy response</html>")
+
+    with pytest.raises(TelegramError) as raised:
+        await _client(handler).send_to_target("1:tok", "5", "x")
+    assert raised.value.code == "unknown_error"
+    assert "proxy response" not in str(raised.value)
+
+
+async def test_missing_chat_type_does_not_verify_an_invalid_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"ok": True, "result": {}})
+
+    with pytest.raises(TelegramError) as raised:
+        await _client(handler).verify_target("1:tok", "5")
+    assert raised.value.code == "unknown_error"
+
+
+async def test_provider_error_never_echoes_the_configured_token() -> None:
+    token = "1:short-fixture-token"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"ok": False, "description": f"invalid credential {token}"})
+
+    with pytest.raises(TelegramError) as raised:
+        await _client(handler).send_to_target(token, "5", "x")
+    assert token not in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"ok": 1, "result": {"message_id": 1}},
+        {"ok": "true", "result": {"message_id": 1}},
+        {"ok": True},
+        {"ok": True, "result": {}},
+        {"ok": True, "result": {"message_id": False}},
+        {"ok": True, "result": {"message_id": 0}},
+    ],
+)
+async def test_send_requires_positive_message_ack(body: dict[str, object]) -> None:
+    with pytest.raises(TelegramError) as error:
+        await _client(lambda request: httpx.Response(200, json=body)).send_to_target(
+            "1:token", "42", "일정"
+        )
+    assert error.value.code == "unknown_error"
+
+
+async def test_wall_clock_timeout_includes_response_hook() -> None:
+    import asyncio
+
+    async def hook(response: httpx.Response) -> None:
+        await asyncio.sleep(0.05)
+
+    http = httpx.AsyncClient(
+        base_url="https://telegram.test",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})
+        ),
+        event_hooks={"response": [hook]},
+    )
+    async with http:
+        with pytest.raises(TelegramError) as error:
+            await TelegramClient(http, timeout_seconds=0.01).send_to_target("1:token", "42", "일정")
+    assert error.value.code == "network_error"

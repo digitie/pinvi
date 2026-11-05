@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
@@ -91,6 +92,7 @@ async def process_pending_telegram_batch(
 ) -> TelegramBatchResult:
     """pending 알림을 `FOR UPDATE SKIP LOCKED`로 claim해 한 batch 전송한다."""
     current = now or datetime.now(UTC)
+    started = time.monotonic()
     result = await db.execute(
         select(TelegramNotificationOutbox)
         .where(
@@ -118,8 +120,20 @@ async def process_pending_telegram_batch(
                 row.status = "failed"
                 failed += 1
             else:
-                row.scheduled_at = current + timedelta(seconds=_retry_delay(row.attempts))
-                retried += 1
+                retry_after = exc.retry_after
+                delay = max(
+                    _retry_delay(row.attempts),
+                    retry_after if type(retry_after) is int and retry_after > 0 else 0,
+                )
+                try:
+                    row.scheduled_at = current + timedelta(
+                        seconds=time.monotonic() - started + delay
+                    )
+                except OverflowError:
+                    row.status = "failed"
+                    failed += 1
+                else:
+                    retried += 1
             row.last_error = str(exc)
             logger.warning(
                 "telegram outbox 전송 실패 id=%s category=%s attempts=%s code=%s",
@@ -160,6 +174,12 @@ async def _drain_loop(interval: float, batch_size: int) -> None:
         try:
             async with db_session.async_session_factory() as session:
                 result = await process_pending_telegram_batch(session, limit=batch_size)
+            from app.services.telegram_notifications import process_one
+
+            for _ in range(batch_size):
+                async with db_session.async_session_factory() as session:
+                    if not await process_one(session):
+                        break
             # 배치가 가득이면 즉시 한 번 더, 아니면 interval 대기.
             if result.claimed < batch_size:
                 await asyncio.sleep(interval)
