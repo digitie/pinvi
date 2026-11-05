@@ -98,12 +98,9 @@ test.describe('경로·영역 실제 geometry', () => {
 
   test('SRCH-028 국립공원 영역·큰 bounds 선택 후 상세 유지', async ({ page }) => {
     desktopOnly();
-    const anchor = process.env.PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY ?? '';
-    // 운영 Map에 area kind가 아직 0건이다(2026-11-05 전국 in-bounds kind=area 0) — 적재 뒤 env로 켠다.
-    test.skip(
-      !anchor,
-      '설악산 영역과 교차하는 근처 point 검색 fixture(PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY)가 필요하다',
-    );
+    // 운영 Map에 KNPS 국립공원 경계 21건이 적재됐다(2026-11-06, kor-travel-map#1450).
+    // '설악산국립공원' point의 줌 15 화면이 '설악산 국립공원' area와 교차한다. 다른 환경은 env로 바꾼다.
+    const anchor = process.env.PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY || SEORAK_ANCHOR;
     await loginAsUser(page);
     const rows = await showGeometry(page, 'area', anchor);
     const area = rows.find((row) => row.kind === 'area' && row.name.includes('설악산'));
