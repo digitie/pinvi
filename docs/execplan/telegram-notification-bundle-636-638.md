@@ -40,3 +40,14 @@
 - 기존 worker의 Retry-After 무시를 실제 PG 실패로 재현한 뒤 양의 retry 간격을 적용했다.
 - WSL 실제 migration/HTTP/DB 관련26건과 요약·UTF-16 분할4건 통과, mypy266개 통과. 최초 테스트6건은 누락된 테스트 사용자 fixture 문제였으며 보완 후 전체26건 통과했다.
 - 아직 UI·예약 planner·Dagster 연결·명시적 특보 이벤트 owner 계약과 최종 리뷰/검증은 남아 있다. #636/#637/#638 완료 또는 병합 준비로 간주하지 않는다.
+
+
+## 2차 구현 체크포인트
+
+- 공유 탭에 전체/일자 발송과 대상별 진행·재시도·정제 오류 내역, 설정에 기본 off 일간·주간·특보 동의를 연결했다. 기존 색상 토큰을 유지한다.
+- 일간은 KST 전날/당일, 주간은 앞으로7일 여행 목록이다. 사용자 시각/요일과 발생키로 중복 planner를 제어한다. 날씨는 기존 투영 경계를 별도 세션으로 사용하고, 일출은 해당 날짜의 성공·비stale 캐시만 넣는다.
+- Dagster 매분 schedule은 전용 key의 내부 HTTP 적재 경계만 호출한다. 미설정은 no-op이며 사용자 JWT로는 호출할 수 없다. 관리자 정적 정의/실패 sensor/큐 집계를 함께 동기화했다.
+- Hubble의a3ffc17 검토에서 P1대상 다중잠금 교착과 P2응답 ACK·전송 전체시간·Retry-After 기준시각을 지적받았다. 기존 잠금 컴포넌트는 수정된 실제 NO KEY UPDATE 경계 테스트에서 실패했고 새 enqueue는 대상 잠금을 잡지 않는다. 실제 전송은 개별 대상 generation을 잠그고 검사한다.
+- malformed ACK6건·느린 response hook1건은 이전 client에서 실패 후 수정, 지연429 계산2건도 이전 코드에서 실패 후 수정했다. 일반 취소는 전파한다. HTTP request+hook은 wall-clock timeout으로 제한한다.
+- 현재 WSL: client/메시지41건, 관련 HTTP·PG21건(예약/권한/동의/집계 포함), ETL81건, API mypy269개, 웹 typecheck 통과. 웹 lint는 신규 오류 수정 후0error/기존5warning이다. 최종 전체검증과 live UI·최종 두리뷰는 아직이다.
+- Weather 리뷰에서도 활성 특보 목록만으로 명시적 해제·검증된 적용 지역을 알 수 없음을 확인했다. #637 owner 이벤트 계약을 먼저 보완한다. 아직 특보 planner를 연결하지 않았으며 완료 처리하지 않는다.

@@ -24,6 +24,7 @@ from pinvi.etl.schedules import (
     pinvi_email_outbox_job,
     pinvi_location_log_archive_job,
     pinvi_pii_retention_job,
+    pinvi_telegram_notification_planner_job,
     pinvi_telegram_system_outbox_job,
     pinvi_trip_day_rise_sets_job,
     pinvi_weather_retention_horizon_job,
@@ -38,6 +39,7 @@ _MONITORED_JOBS = [
     pinvi_pii_retention_job,
     pinvi_location_log_archive_job,
     pinvi_telegram_system_outbox_job,
+    pinvi_telegram_notification_planner_job,
     pinvi_weather_retention_horizon_job,
     pinvi_trip_day_rise_sets_job,
 ]

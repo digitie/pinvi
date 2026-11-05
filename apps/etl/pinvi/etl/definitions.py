@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from dagster import Definitions, EnvVar, multiprocess_executor
 from kortravelcommon.dagster import infrastructure_retry_sensor
 
@@ -10,18 +12,25 @@ from pinvi.etl.assets import (
     pinvi_kasi_special_days,
     pinvi_location_log_archive,
     pinvi_pii_retention,
+    pinvi_telegram_notification_planner,
     pinvi_telegram_system_outbox,
     pinvi_trip_day_rise_sets,
     pinvi_weather_retention_horizon_guard,
 )
 from pinvi.etl.jobs import kasi_poi_rise_set_job
-from pinvi.etl.resources import KasiResource, KorTravelWeatherResource, PinviDatabaseResource
+from pinvi.etl.resources import (
+    KasiResource,
+    KorTravelWeatherResource,
+    PinviDatabaseResource,
+    PinviNotificationPlannerResource,
+)
 from pinvi.etl.run_tags import INFRA_RETRY_JOBS, PINVI_LOCATION_NAME, PINVI_PROJECT, recovery_policy
 from pinvi.etl.schedules import (
     kasi_special_days_job,
     pinvi_email_outbox_job,
     pinvi_location_log_archive_job,
     pinvi_pii_retention_job,
+    pinvi_telegram_notification_planner_job,
     pinvi_telegram_system_outbox_job,
     pinvi_trip_day_rise_sets_job,
     pinvi_weather_retention_horizon_job,
@@ -36,6 +45,7 @@ defs = Definitions(
         pinvi_location_log_archive,
         pinvi_pii_retention,
         pinvi_telegram_system_outbox,
+        pinvi_telegram_notification_planner,
         pinvi_trip_day_rise_sets,
         pinvi_weather_retention_horizon_guard,
     ],
@@ -49,6 +59,7 @@ defs = Definitions(
         pinvi_pii_retention_job,
         pinvi_location_log_archive_job,
         pinvi_telegram_system_outbox_job,
+        pinvi_telegram_notification_planner_job,
         pinvi_trip_day_rise_sets_job,
         pinvi_weather_retention_horizon_job,
     ],
@@ -56,6 +67,14 @@ defs = Definitions(
     sensors=[pinvi_run_failure_sensor],
     executor=multiprocess_executor.configured({"max_concurrent": 1}),
     resources={
+        "notification_planner": PinviNotificationPlannerResource(
+            base_url=EnvVar("PINVI_NOTIFICATION_PLANNER_API_URL")
+            if os.environ.get("PINVI_NOTIFICATION_PLANNER_API_URL")
+            else "http://app-api:8000",
+            planner_key=EnvVar("PINVI_TELEGRAM_PLANNER_KEY")
+            if os.environ.get("PINVI_TELEGRAM_PLANNER_KEY")
+            else "",
+        ),
         "db": PinviDatabaseResource(
             dsn=EnvVar("PINVI_DATABASE_URL"),
             pool_size=1,

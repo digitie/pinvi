@@ -10,6 +10,7 @@ DB에 저장하지 않고(§1), 로그에는 `mask_token`으로만 남긴다(§9
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import Any
@@ -109,8 +110,9 @@ class TelegramClient:
     ) -> dict[str, Any]:
         path = f"/bot{token}/{telegram_method}"
         try:
-            response = await self._http.request(method, path, timeout=self._timeout, **kwargs)
-        except httpx.TimeoutException as exc:
+            async with asyncio.timeout(self._timeout):
+                response = await self._http.request(method, path, timeout=self._timeout, **kwargs)
+        except (httpx.TimeoutException, TimeoutError) as exc:
             raise TelegramError("telegram timeout", code="network_error") from exc
         except httpx.TransportError as exc:
             raise TelegramError("telegram connection error", code="network_error") from exc
@@ -125,7 +127,7 @@ class TelegramClient:
                 code="unknown_error",
                 status_code=response.status_code,
             ) from None
-        if not isinstance(body, dict) or not body.get("ok"):
+        if not isinstance(body, dict) or body.get("ok") is not True:
             # 200 + ok:false (희귀) — 분류 시도 후 unknown fallback.
             raise _classify(response, token=token)
         result = body.get("result")
@@ -169,4 +171,12 @@ class TelegramClient:
             payload["parse_mode"] = parse_mode
         if thread_id is not None:
             payload["message_thread_id"] = thread_id
-        return await self._call("POST", "sendMessage", token, json=payload)
+        result = await self._call("POST", "sendMessage", token, json=payload)
+        message_id = result.get("message_id")
+        if type(message_id) is not int or message_id <= 0:
+            raise TelegramError(
+                "Telegram 전송 확인 응답 형식이 올바르지 않습니다.",
+                code="unknown_error",
+                status_code=200,
+            )
+        return result

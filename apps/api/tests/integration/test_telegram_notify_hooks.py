@@ -281,7 +281,14 @@ async def test_provider_retry_after_is_not_retried_early(
 
     user_id, _ = verified_user
     await _seed_target(session_factory, user_id=user_id, chat_id="-100777")
-    fake = _RecordingTelegram(
+    import asyncio
+
+    class DelayedProvider(_RecordingTelegram):
+        async def send_to_target(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            await asyncio.sleep(0.05)
+            return await super().send_to_target(*args, **kwargs)
+
+    fake = DelayedProvider(
         error=TelegramError(
             "Too Many Requests", code="rate_limited", status_code=429, retry_after=3600
         )
@@ -296,7 +303,7 @@ async def test_provider_retry_after_is_not_retried_early(
         await db.commit()
         await process_pending_telegram_batch(db, now=now + timedelta(seconds=1))
     rows = await _outbox_rows(session_factory)
-    assert rows[0].scheduled_at >= now + timedelta(seconds=3600)
+    assert rows[0].scheduled_at >= now + timedelta(seconds=3601.04)
     async with session_factory() as db:
         result = await process_pending_telegram_batch(db, now=now + timedelta(seconds=3599))
     assert result.claimed == 0

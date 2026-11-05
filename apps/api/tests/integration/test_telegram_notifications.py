@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -23,6 +23,7 @@ class Provider:
     def __init__(self) -> None:
         self.sent: list[str] = []
         self.error: TelegramError | None = None
+        self.delay = 0.0
         self.block: asyncio.Event | None = None
         self.started = asyncio.Event()
 
@@ -33,6 +34,7 @@ class Provider:
         self.started.set()
         if self.block is not None:
             await self.block.wait()
+        await asyncio.sleep(self.delay)
         if self.error is not None:
             raise self.error
         self.sent.append(message)
@@ -198,6 +200,7 @@ async def test_chunks_resume_and_retry_after_safe_ui_error(
     async with session_factory() as db:
         await process_one(db, now=now)
     assert provider.sent == ["첫 chunk"]
+    provider.delay = 0.05
     provider.error = TelegramError(
         "429 token=111:owned-test-token target=-100636", code="rate_limited", retry_after=3600
     )
@@ -205,7 +208,7 @@ async def test_chunks_resume_and_retry_after_safe_ui_error(
         await process_one(db, now=now + timedelta(seconds=4))
     status = await delivery(session_factory)
     assert status.next_chunk == 1 and status.status == "pending"
-    assert status.scheduled_at >= now + timedelta(seconds=3604)
+    assert status.scheduled_at >= now + timedelta(seconds=3604.04)
     history = await client.get("/users/me/telegram-notifications", cookies=cookies)
     assert history.status_code == 200
     assert "rate_limited" in history.text and "재시도" in history.text
@@ -293,3 +296,104 @@ async def test_owner_only_and_preferences_validation(
     )
     assert good.status_code == 200, good.text
     assert good.json()["data"]["send_time"] == "07:30"
+
+
+async def test_enqueue_does_not_take_multiple_destination_locks(
+    client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any
+) -> None:
+    trip_id, target_id, cookies = await setup_trip(
+        client, verified_user, auth_cookies, session_factory
+    )
+    async with session_factory() as holder:
+        locked_target = await holder.get(TelegramTarget, uuid.UUID(target_id))
+        assert locked_target is not None
+        locked_target.last_send_status = "failed:bot_forbidden"
+        await holder.flush()  # legacy ORM UPDATE와 같은 NO KEY UPDATE 잠금
+        try:
+            response = await asyncio.wait_for(send(client, trip_id, cookies), timeout=1)
+            assert response.status_code == 202, response.text
+        finally:
+            await holder.rollback()
+
+
+async def test_kst_daily_weekly_dedup_and_consent_revocation(
+    client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any, provider: Provider
+) -> None:
+    from app.models.kasi import TripDayRiseSet
+    from app.services.telegram_planner import plan_due
+
+    trip_id, target_id, cookies = await setup_trip(
+        client, verified_user, auth_cookies, session_factory
+    )
+    body = {
+        "daily_enabled": True,
+        "weekly_enabled": True,
+        "weekly_target_id": target_id,
+        "weekly_day": 3,
+        "send_time": "08:00",
+    }
+    endpoint = "/users/me/telegram-notification-preferences"
+    assert (await client.put(endpoint, json=body, cookies=cookies)).status_code == 200
+    async with session_factory() as db:
+        db.add(
+            TripDayRiseSet(
+                trip_id=uuid.UUID(trip_id),
+                day_index=1,
+                locdate=date(2026, 11, 5),
+                sunrise_at=datetime(2026, 11, 4, 21, 30, tzinfo=UTC),
+                status="success",
+                stale=False,
+            )
+        )
+        await db.commit()
+    before = await plan_due(now=datetime(2026, 11, 4, 22, 59, tzinfo=UTC))
+    assert before["enqueued"] == 0
+    now = datetime(2026, 11, 4, 23, 0, tzinfo=UTC)  # 한국 11/5 목요일08:00
+    first, second = await asyncio.gather(plan_due(now=now), plan_due(now=now))
+    assert first["enqueued"] + second["enqueued"] == 3
+    async with session_factory() as db:
+        rows = list((await db.scalars(select(TelegramNotification))).all())
+        assert len(rows) == 3
+        daily = [row for row in rows if row.category == "daily_brief"]
+        assert len(daily) == 2
+        assert any("일출: 06:30" in "".join(row.chunks) for row in daily)
+        assert all("날씨:" in "".join(row.chunks) for row in daily)
+        assert all(
+            "2026-11-05" in row.occurrence_key or "2026-11-06" in row.occurrence_key for row in rows
+        )
+    # 실제 변경 없는 저장은 기존 동의를 폐기하지 않는다.
+    assert (await client.put(endpoint, json=body, cookies=cookies)).status_code == 200
+    assert (
+        await client.put(endpoint, json={"send_time": "08:00"}, cookies=cookies)
+    ).status_code == 200
+    async with session_factory() as db:
+        while await process_one(db, now=datetime.now(UTC) + timedelta(hours=1)):
+            pass
+    assert provider.sent == []
+    async with session_factory() as db:
+        statuses = list((await db.scalars(select(TelegramDelivery.status))).all())
+        assert statuses == ["skipped"] * 3
+    # off→on으로 바뀌어도 같은 일간·주간 occurrence를 다시 만들지 않는다.
+    await client.put(endpoint, json=body, cookies=cookies)
+    assert (await plan_due(now=now))["enqueued"] == 0
+
+
+async def test_planner_principal_is_separate_from_user_login(
+    client: Any, verified_user: Any, auth_cookies: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "pinvi_telegram_planner_key", "owned-planner-test-key")
+    cookies = auth_cookies(verified_user[0])
+    assert (await client.post("/internal/telegram/plan", cookies=cookies)).status_code == 404
+    assert (
+        await client.post(
+            "/internal/telegram/plan", headers={"X-Pinvi-Notification-Planner-Key": "wrong"}
+        )
+    ).status_code == 404
+    good = await client.post(
+        "/internal/telegram/plan",
+        headers={"X-Pinvi-Notification-Planner-Key": "owned-planner-test-key"},
+    )
+    assert good.status_code == 200
+    assert good.json()["data"]["enqueued"] == 0

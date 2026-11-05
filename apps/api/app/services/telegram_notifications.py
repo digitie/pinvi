@@ -8,6 +8,7 @@ Telegram에 idempotency key가 없어 provider 수락 후 DB ACK 유실은 중�
 from __future__ import annotations
 
 import hashlib
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -36,6 +37,7 @@ from app.schemas.telegram_notifications import (
 )
 from app.services import telegram_notify
 from app.services.telegram_itinerary import itinerary_text, split_message
+from app.services.telegram_metrics import record_step
 from app.services.telegram_outbox import MAX_TELEGRAM_ATTEMPTS, _retry_delay
 from app.services.trip import TripNotFoundError, TripPermissionError, TripValidationError
 
@@ -132,7 +134,6 @@ async def linked_targets(
             TelegramTarget.last_verified_at.is_not(None),
         )
         .order_by(TelegramTarget.id)
-        .with_for_update(of=TelegramTarget)
     )
     return [(target, link) for target, link in result.all()]
 
@@ -340,6 +341,7 @@ async def _guard(
 async def process_one(db: AsyncSession, *, now: datetime | None = None) -> bool:
     """한 chunk만 claim한다. DB commit 실패·취소는 호출자 rollback으로 잠금을 반납한다."""
     current = now or datetime.now(UTC)
+    started = time.monotonic()
     delivery = await db.scalar(
         select(TelegramDelivery)
         .where(TelegramDelivery.status == "pending", TelegramDelivery.scheduled_at <= current)
@@ -388,7 +390,9 @@ async def process_one(db: AsyncSession, *, now: datetime | None = None) -> bool:
             else:
                 try:
                     delivery.scheduled_at = current + timedelta(
-                        seconds=max(_retry_delay(delivery.attempts), retry)
+                        seconds=time.monotonic()
+                        - started
+                        + max(_retry_delay(delivery.attempts), retry)
                     )
                 except OverflowError:
                     delivery.status = "failed"
@@ -411,5 +415,13 @@ async def process_one(db: AsyncSession, *, now: datetime | None = None) -> bool:
                 delivery.scheduled_at = current + timedelta(seconds=3)
         finally:
             await client.aclose()
+    category, final_status, has_error = (
+        row.category,
+        delivery.status,
+        delivery.error_code is not None,
+    )
     await db.commit()
+    record_step(
+        category, status=final_status, has_error=has_error, duration=time.monotonic() - started
+    )
     return True

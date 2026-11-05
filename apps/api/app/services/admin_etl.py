@@ -125,6 +125,11 @@ LOCATION_LOG_ARCHIVE_PURPOSE_STATS_LIMIT = 10
 # 빨개진다(T-377; description·trigger는 대조하지 않는다).
 PINVI_ETL_ASSETS = [
     AdminEtlDefinitionAsset(
+        key="pinvi_telegram_notification_planner",
+        group_name="pinvi_telegram",
+        description="명시적 동의를 받은 예약 알림을 API에서 중복 없이 적재합니다.",
+    ),
+    AdminEtlDefinitionAsset(
         key="pinvi_kasi_special_days",
         group_name="pinvi_kasi",
         description="KASI 특일·공휴일 기준 데이터를 Pinvi app schema로 적재합니다.",
@@ -162,6 +167,12 @@ PINVI_ETL_ASSETS = [
 ]
 
 PINVI_ETL_JOBS = [
+    AdminEtlDefinitionJob(
+        name="pinvi_telegram_notification_planner_job",
+        trigger="schedule",
+        description="매분 KST 사용자 예약 시각을 확인하고 알림을 적재합니다.",
+        asset_keys=["pinvi_telegram_notification_planner"],
+    ),
     AdminEtlDefinitionJob(
         name="kasi_special_days_job",
         trigger="schedule",
@@ -213,6 +224,12 @@ PINVI_ETL_JOBS = [
 ]
 
 PINVI_ETL_SCHEDULES = [
+    AdminEtlDefinitionSchedule(
+        name="pinvi_telegram_notification_planner_schedule",
+        job_name="pinvi_telegram_notification_planner_job",
+        cron_schedule="* * * * *",
+        execution_timezone="Asia/Seoul",
+    ),
     AdminEtlDefinitionSchedule(
         name="kasi_special_days_job_schedule",
         job_name="kasi_special_days_job",
@@ -1406,7 +1423,14 @@ _TELEGRAM_OUTBOX_SUMMARY_SQL = text(
         WHERE status = 'failed' OR (status = 'pending' AND attempts >= :max_attempts)
       )::int AS retry_exhausted,
       min(scheduled_at) FILTER (WHERE status = 'pending') AS oldest_pending_scheduled_at
-    FROM app.telegram_system_notification_outbox
+    FROM (
+        SELECT category, status, attempts, scheduled_at, created_at
+        FROM app.telegram_system_notification_outbox
+        UNION ALL
+        SELECT n.category, d.status, d.attempts, d.scheduled_at, n.created_at
+        FROM app.telegram_notification_deliveries AS d
+        JOIN app.telegram_notifications AS n ON n.id = d.notification_id
+    ) AS telegram_outbox
     """
 )
 
@@ -1422,7 +1446,14 @@ _TELEGRAM_OUTBOX_CATEGORY_SQL = text(
       count(*) FILTER (
         WHERE status = 'failed' OR (status = 'pending' AND attempts >= :max_attempts)
       )::int AS retry_exhausted
-    FROM app.telegram_system_notification_outbox
+    FROM (
+        SELECT category, status, attempts, scheduled_at, created_at
+        FROM app.telegram_system_notification_outbox
+        UNION ALL
+        SELECT n.category, d.status, d.attempts, d.scheduled_at, n.created_at
+        FROM app.telegram_notification_deliveries AS d
+        JOIN app.telegram_notifications AS n ON n.id = d.notification_id
+    ) AS telegram_outbox
     WHERE created_at >= :category_window_start
     GROUP BY category
     ORDER BY total DESC, category ASC

@@ -799,8 +799,18 @@ export type {
   PlaceSearchResult,
   PlaceSearchResponse,
 } from './geo';
-export { TelegramTargetCreateSchema, TelegramTargetSchema } from './telegram';
-export type { TelegramTarget, TelegramTargetCreate } from './telegram';
+export {
+  TelegramTargetCreateSchema,
+  TelegramTargetSchema,
+  TelegramPreferencesSchema,
+  TelegramNotificationSchema,
+} from './telegram';
+export type {
+  TelegramTarget,
+  TelegramTargetCreate,
+  TelegramPreferences,
+  TelegramNotification,
+} from './telegram';
 export {
   AirportItemSchema,
   FuelPriceHistoryPointSchema,
@@ -840,7 +850,6 @@ export type {
   TransportStatusResponse,
   TransportUnavailableReason,
 } from './transport';
-
 
 export {
   StorageRetentionStatusSchema,

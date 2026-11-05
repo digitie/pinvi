@@ -7,6 +7,7 @@ import type { TelegramTarget } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { SettingsList, SettingsSection } from '@/components/app/SettingsSurface';
 import { FormField } from '@/components/forms/FormField';
+import { TelegramNotificationPreferences } from '@/components/trips/TelegramNotificationPreferences';
 import { buttonClassName } from '@/components/ui/Button';
 
 function targetStatus(target: TelegramTarget): string {
@@ -183,6 +184,8 @@ export default function TelegramTargetsSettingsPage() {
           </button>
         </form>
       </SettingsSection>
+
+      <TelegramNotificationPreferences targets={targets} />
 
       <SettingsSection title="연결된 대상">
         <SettingsList

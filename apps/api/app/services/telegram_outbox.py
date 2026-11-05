@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
@@ -91,6 +92,7 @@ async def process_pending_telegram_batch(
 ) -> TelegramBatchResult:
     """pending 알림을 `FOR UPDATE SKIP LOCKED`로 claim해 한 batch 전송한다."""
     current = now or datetime.now(UTC)
+    started = time.monotonic()
     result = await db.execute(
         select(TelegramNotificationOutbox)
         .where(
@@ -124,7 +126,9 @@ async def process_pending_telegram_batch(
                     retry_after if type(retry_after) is int and retry_after > 0 else 0,
                 )
                 try:
-                    row.scheduled_at = current + timedelta(seconds=delay)
+                    row.scheduled_at = current + timedelta(
+                        seconds=time.monotonic() - started + delay
+                    )
                 except OverflowError:
                     row.status = "failed"
                     failed += 1

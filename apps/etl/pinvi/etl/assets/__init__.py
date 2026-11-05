@@ -11,6 +11,7 @@ from .pinvi_email_outbox import pinvi_email_outbox
 from .pinvi_kasi_special_days import pinvi_kasi_special_days
 from .pinvi_location_log_archive import pinvi_location_log_archive
 from .pinvi_pii_retention import pinvi_pii_retention
+from .pinvi_telegram_notification_planner import pinvi_telegram_notification_planner
 from .pinvi_telegram_system_outbox import pinvi_telegram_system_outbox
 from .pinvi_trip_day_rise_sets import pinvi_trip_day_rise_sets
 from .pinvi_weather_retention_horizon import pinvi_weather_retention_horizon_guard
@@ -20,6 +21,7 @@ __all__ = [
     "pinvi_kasi_special_days",
     "pinvi_location_log_archive",
     "pinvi_pii_retention",
+    "pinvi_telegram_notification_planner",
     "pinvi_telegram_system_outbox",
     "pinvi_trip_day_rise_sets",
     "pinvi_weather_retention_horizon_guard",

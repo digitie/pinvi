@@ -75,7 +75,14 @@ TELEGRAM_OUTBOX_SUMMARY_SQL = text(
         WHERE status = 'failed' OR (status = 'pending' AND attempts >= :max_attempts)
       )::int AS retry_exhausted,
       min(scheduled_at) FILTER (WHERE status = 'pending') AS oldest_pending_scheduled_at
-    FROM app.telegram_system_notification_outbox
+    FROM (
+        SELECT category, status, attempts, scheduled_at, created_at
+        FROM app.telegram_system_notification_outbox
+        UNION ALL
+        SELECT n.category, d.status, d.attempts, d.scheduled_at, n.created_at
+        FROM app.telegram_notification_deliveries AS d
+        JOIN app.telegram_notifications AS n ON n.id = d.notification_id
+    ) AS telegram_outbox
     """
 )
 
@@ -91,7 +98,14 @@ TELEGRAM_OUTBOX_CATEGORY_SQL = text(
       count(*) FILTER (
         WHERE status = 'failed' OR (status = 'pending' AND attempts >= :max_attempts)
       )::int AS retry_exhausted
-    FROM app.telegram_system_notification_outbox
+    FROM (
+        SELECT category, status, attempts, scheduled_at, created_at
+        FROM app.telegram_system_notification_outbox
+        UNION ALL
+        SELECT n.category, d.status, d.attempts, d.scheduled_at, n.created_at
+        FROM app.telegram_notification_deliveries AS d
+        JOIN app.telegram_notifications AS n ON n.id = d.notification_id
+    ) AS telegram_outbox
     WHERE created_at >= :category_window_start
     GROUP BY category
     ORDER BY total DESC, category ASC
