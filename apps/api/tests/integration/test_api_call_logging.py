@@ -12,8 +12,10 @@ from sqlalchemy import select, text
 from app.clients.resend import create_resend_client
 from app.core.config import settings
 from app.middleware.api_call_logging import (
+    ApiCallLoggingClient,
     ApiCallTracker,
     api_call_event_hooks,
+    close_api_call_logs,
     sanitize_api_call_endpoint,
 )
 from app.models.api_call_log import ApiCallLog
@@ -40,6 +42,7 @@ async def test_api_call_tracker_persists_httpx_response(session_factory) -> None
             },
         )
 
+    await close_api_call_logs(session_factory)
     assert response.status_code == 202
 
     async with session_factory() as db:
@@ -61,6 +64,7 @@ async def test_api_call_event_hooks_tag_provider_and_sanitize_endpoint(session_f
     ) as client:
         await client.get("https://geo.example.test/v2/geocode?key=secret-key&q=서울")
 
+    await close_api_call_logs(session_factory)
     async with session_factory() as db:
         row = await db.scalar(select(ApiCallLog).where(ApiCallLog.provider == "kor_travel_geo"))
         assert row is not None
@@ -91,6 +95,7 @@ async def test_resend_client_persists_provider_log(
             }
         )
 
+    await close_api_call_logs(session_factory)
     assert resend_id == "email_mocked"
     async with session_factory() as db:
         row = await db.scalar(select(ApiCallLog).where(ApiCallLog.provider == "resend"))
@@ -109,7 +114,7 @@ async def test_sanitize_api_call_endpoint_masks_telegram_token() -> None:
 
 
 async def test_cancelled_log_insert_releases_session_and_pool(session_factory) -> None:
-    """실제 PG INSERT 잠금 대기 중 취소해도 이후 요청이 같은 pool을 사용한다."""
+    """실제 PG 로그 잠금이 HTTP를 막지 않고 flush 취소 뒤에도 기록을 계속한다."""
     tracker = ApiCallTracker(session_factory)
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -121,7 +126,11 @@ async def test_cancelled_log_insert_releases_session_and_pool(session_factory) -
             transport=httpx.MockTransport(handler),
             event_hooks={"request": [tracker.on_request], "response": [tracker.on_response]},
         ) as client:
-            pending = asyncio.create_task(client.get("https://provider.pinvi.test/cancelled"))
+            response = await asyncio.wait_for(
+                client.get("https://provider.pinvi.test/cancelled"), 1
+            )
+            assert response.status_code == 200
+            pending = asyncio.create_task(tracker.outbox.flush())
             try:
                 async with session_factory() as observer:
                     for _ in range(200):
@@ -153,6 +162,7 @@ async def test_cancelled_log_insert_releases_session_and_pool(session_factory) -
                 client.get("https://provider.pinvi.test/after-cancellation"), 2
             )
             assert response.status_code == 200
+    await close_api_call_logs(session_factory)
     async with session_factory() as db:
         assert await db.scalar(text("SELECT 1")) == 1
         assert (
@@ -163,3 +173,75 @@ async def test_cancelled_log_insert_releases_session_and_pool(session_factory) -
             )
             is not None
         )
+
+
+async def test_real_loopback_http_failures_are_batched_in_owned_postgres(session_factory) -> None:
+    """실제 TCP HTTP response·read timeout·연결 실패와 요청 ID·비밀 제거를 함께 확인한다."""
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def fixture_server():
+        connections = set()
+
+        async def handle(reader, writer):
+            task = asyncio.current_task()
+            connections.add(task)
+            try:
+                data = await reader.readuntil(b"\r\n\r\n")
+                if b"/hang" in data.split(b"\r\n", 1)[0]:
+                    await reader.read()  # client timeout/close 때 종료한다.
+                else:
+                    writer.write(
+                        b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}"
+                    )
+                    await writer.drain()
+            finally:
+                writer.close()
+                await writer.wait_closed()
+                connections.discard(task)
+
+        server = await asyncio.start_server(handle, "127.0.0.1", 0)
+        try:
+            port = server.sockets[0].getsockname()[1]
+            yield f"http://127.0.0.1:{port}"
+        finally:
+            server.close()
+            await server.wait_closed()
+            if connections:
+                await asyncio.wait_for(asyncio.gather(*connections), 2)
+
+    request_id = uuid.uuid4()
+    async with fixture_server() as base:
+        async with ApiCallLoggingClient(
+            timeout=0.05,
+            event_hooks=api_call_event_hooks(session_factory, provider="owned_http"),
+        ) as client:
+            response = await client.get(
+                f"{base}/response?key=fixture-secret",
+                extensions={"request_id": str(request_id)},
+            )
+            assert response.status_code == 503
+            with pytest.raises(httpx.ReadTimeout):
+                await client.get(f"{base}/hang")
+    # 명시적으로 닫힌 같은 소유 loopback listener에 연결한다. 실제 provider가 아니다.
+    async with ApiCallLoggingClient(
+        timeout=0.2,
+        event_hooks=api_call_event_hooks(session_factory, provider="owned_http"),
+    ) as client:
+        with pytest.raises(httpx.ConnectError):
+            await client.get(f"{base}/closed")
+    await close_api_call_logs(session_factory)
+    async with session_factory() as db:
+        rows = list(
+            (
+                await db.scalars(
+                    select(ApiCallLog)
+                    .where(ApiCallLog.provider == "owned_http")
+                    .order_by(ApiCallLog.log_id)
+                )
+            ).all()
+        )
+    assert [row.error_class for row in rows] == ["HTTPStatusError", "ReadTimeout", "ConnectError"]
+    assert rows[0].request_id == request_id
+    assert all(row.latency_ms is not None for row in rows)
+    assert "fixture-secret" not in repr([row.endpoint for row in rows])

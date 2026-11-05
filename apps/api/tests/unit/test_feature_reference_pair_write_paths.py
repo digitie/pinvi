@@ -105,6 +105,8 @@ def test_bulk_updates_that_set_one_axis_are_enumerated() -> None:
         ("feature_request.py", "feature_id"),
         # `weather_location_links` upsert(ADR-077) — 이 표에는 UUID 축이 없다(weather 해석 캐시 키일 뿐).
         ("weather_location_resolver.py", "feature_id"),
+        # #621의 같은 weather cache 표 배경 insert — POI 참조 짝을 쓰는 경로가 아니다.
+        ("weather_resolve_worker.py", "feature_id"),
     }
     found: set[tuple[str, str]] = set()
     for filename in sorted(p.name for p in _SERVICES.glob("*.py")):

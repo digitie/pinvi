@@ -979,7 +979,7 @@ T-374 사양의 단일 정본이다 — ADR-074 결정 4와 `tasks.md` T-374는 
     - trip view의 Map 호출 직전
     - resolver의 캐시 조회 뒤(직접·Map 경로)
   - **프론트엔드**: 상세·날씨를 따로 로드하고, 선택이 바뀌면 직전 요청을 abort한다.
-  - **남은 한계**: `/resolve`(17~22 s)는 read timeout(10 s)보다 길어 직접 경로의 캐시 미스는 지금도 채워지지 않는다. 배경 해석(별도 세션·긴 timeout·feature별 single-flight)은 #621에서 다룬다. 플래그를 켜면 해석은 Map 경로가 맡는다.
+  - **#621 WSL 보완**: 직접 요청은 캐시만 읽고 미스는 즉시 빈 카드/trip unavailable로 끝낸다. 별도 세션·독립 context의 배경 worker(실행2/대기128, feature별 single-flight)가 resolve에만 read45초를 사용해 채운다. 실패/반경 없음은30초 음성 캐시를 쓰고 좌표/Map/로컬 삭제 경합은 version으로 차단한다. 직접 카드4초/관리자10초는 각각 설정이며 긴 resolve timeout을 요청에 상속하지 않는다. 플래그를 켜면 해석은 계속 Map 경로가 맡는다. 운영 flag/latency 검증은 Claude Code 담당이다.
 
 ### 8.4 바뀌지 않는 것
 
@@ -1158,3 +1158,17 @@ Map #1446 병합본은 a69d188d8c78ea573afc6e862f8ec9e0aa423ec0이다. 소비자
 Weather201의 실제 병합 d8534aeae8852f9c514e39d625ea7dded956f3ed에서 OpenAPI 전체 bytes를 재동기화했다. SHA256은63ff8f07c0d51cfec7011f3f470f0ffc27392c0d8832b388d5368199ba645273이다. 기존 LocationOut/WeatherValueOut/MeasurementPointOut/NearbyOut 필드 계약은 같으며 별도 alert_events 공개 method와 DTO만 추가한다. 운영의 구형 weather에는 새 경로가 없을 수 있으므로 안전한 확인 실패로 표시하고 원천 API 직접 호출로 우회하지 않는다.
 
 소비자는 namespace/BJD·timezone-aware 시각·strict bool·완결성/최신성을 검증한다. absence_is_clear=false만 허용한다. 원천 회차는 unresolved이며 공식 발표·action 단위로만 중복을 제어한다. [알림 경계](telegram.md) §11을 따른다.
+
+### #621 WSL 재개 보완의 검증 경계
+
+직접 해석 첫 미스의 빈 응답→별도 배경 채움→다음 hit를 실제 소유 PG/API/loopback HTTP로
+확인했다. 같은 feature의 중복 예약·좌표 변경·commit 중 새 예약·Map/로컬 행 삭제 뒤 늦은
+완료·30초 음성 캐시·종료 취소를 회귀로 고정한다. 외부 feature 삭제는 캐시 표에 FK/삭제
+marker가 없으므로 추정하지 않는다.
+
+resolve 전용 read45초 override는 client 기본 timeout을 수정하지 않는다. 느린5xx의 재시도
+임계는 기본/override read 중 짧은 값의 절반이며, 실제 전송 trace로 풀 대기 뒤 남은 원격
+예산을 판정한다. 기존 host/endpoint·짧은 budget·세대·half-open·취소 계약을 유지한다.
+API 생성부와 독립 CLI의 실패/취소 관측도 공통 bounded queue로 연결했다. 공개 오류
+응답과 schema는 바뀌지 않는다. 정확 source hash·명령별 증거는
+`docs/reviews/pinvi-616-621-wsl-resilience.json`이 정본이다.

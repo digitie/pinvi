@@ -32,7 +32,7 @@ from app.clients.kor_travel_map import (
 )
 from app.core.config import Settings, settings
 from app.db import session as db_session
-from app.middleware.api_call_logging import api_call_event_hooks
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 from app.services.kor_travel_map_ops_projection import (
     KorTravelMapOpsContractError,
     validate_pipeline_cancellation_detail,
@@ -1058,7 +1058,7 @@ def create_kor_travel_map_admin_client(app_settings: Settings) -> KorTravelMapAd
         app_settings.pinvi_kor_travel_map_admin_service_token
         or app_settings.pinvi_kor_travel_map_service_token
     )
-    http = httpx.AsyncClient(
+    http = ApiCallLoggingClient(
         base_url=app_settings.pinvi_kor_travel_map_admin_base_url,
         timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
         event_hooks=api_call_event_hooks(

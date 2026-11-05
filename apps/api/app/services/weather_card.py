@@ -52,6 +52,7 @@ from app.clients.kor_travel_weather import (
     WeatherValueOut,
     kor_travel_weather_call_deadline,
 )
+from app.core.config import settings
 from app.db.session import release_read_connection
 from app.schemas.feature import FeatureWeatherCard
 from app.services.weather_location_resolver import (
@@ -72,8 +73,6 @@ from app.services.weather_metrics import (
 
 logger = logging.getLogger(__name__)
 _SEOUL = ZoneInfo("Asia/Seoul")
-#: 직접 경로 단건 카드 예산(Map 경로 기본 5 s보다 짧게 — 사용자가 마커를 고른 뒤 기다리는 시간).
-DIRECT_CARD_BUDGET_SECONDS = 4.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +125,7 @@ async def resolve_and_collect_deduped_values(
     lon: float,
     asof: datetime | None,
     weather_client: KorTravelWeatherClient,
-    budget_seconds: float = DIRECT_CARD_BUDGET_SECONDS,
+    budget_seconds: float | None = None,
 ) -> tuple[list[WeatherValueOut], datetime | None]:
     """`feature_id`의 좌표로 location을 해석하고 사실을 모아 dedupe한다 — 단건(T-362)과
     Admin(T-364) weather 카드 조립이 공유하는 pipeline. asof 축소·location 해석 실패
@@ -134,12 +133,14 @@ async def resolve_and_collect_deduped_values(
 
     요청 하나는 `budget_seconds` 안에 끝난다 — 넘기면 빈 카드다(2026-11-02 점검: 예산이 없어 read
     10 s x 3회 + backoff ≈ 31 s를 붙잡았다). client 호출 deadline을 같은 예산으로 걸어 attempt
-    timeout이 바깥 취소보다 먼저 나게 한다. 예산이 read의 절반보다 짧아도 `/resolve`가 예산의 절반 이상을
-    받고도 응답하지 않으면 **카드 전용 회로**(`resolve@short`)의 실패로 센다 — 응답하지 않는 `/resolve`를 카드
-    트래픽만으로도 끊되, trip view와 공유하는 회로는 열지 않는다(`kor_travel_weather_call_deadline`).
+    timeout이 바깥 취소보다 먼저 나게 한다. 캐시 미스는 provider를 기다리지 않고 배경 해석을
+    예약한 뒤 빈 값으로 끝난다. 배경은 별도 context의 긴 resolve timeout을 쓰므로 이 요청의
+    deadline을 상속하지 않는다. 캐시 적중 후 latest/forecast 조회에만 요청 예산을 쓴다.
 
     반환: `(deduped_values, latest_known_at)`. 빈 값이면 `latest_known_at`도 `None`.
     """
+    if budget_seconds is None:
+        budget_seconds = settings.pinvi_kor_travel_weather_request_budget_seconds
     now = datetime.now(UTC)
     window = _asof_window(asof, now=now)
     if window.no_data:
@@ -317,6 +318,7 @@ async def collect_weather_values(
     weather_client: KorTravelWeatherClient | None,
     map_weather_client: KorTravelMapWeatherClient | None = None,
     map_budget_seconds: float = 5.0,
+    direct_budget_seconds: float | None = None,
 ) -> tuple[Sequence[WeatherFact], datetime | None]:
     """사용자·관리자가 같은 소스 선택·예산·취소 경계로 정본 사실을 읽는다."""
     deduped: Sequence[WeatherFact]
@@ -335,7 +337,13 @@ async def collect_weather_values(
         if weather_client is None:
             raise ValueError("직접 경로에는 weather_client가 필요합니다.")
         deduped, latest_known = await resolve_and_collect_deduped_values(
-            db, feature_id=feature_id, lat=lat, lon=lon, asof=asof, weather_client=weather_client
+            db,
+            feature_id=feature_id,
+            lat=lat,
+            lon=lon,
+            asof=asof,
+            weather_client=weather_client,
+            budget_seconds=direct_budget_seconds,
         )
     return deduped, latest_known
 

@@ -577,7 +577,7 @@ async def test_probe_disposes_client_with_separate_budget_and_preserves_cancel(
                 raise
 
     client = httpx.AsyncClient(transport=SlowCloseTransport(lambda _: httpx.Response(200)))
-    monkeypatch.setattr(admin_etl.httpx, "AsyncClient", lambda **_: client)
+    monkeypatch.setattr(admin_etl, "ApiCallLoggingClient", lambda **_: client)
     monkeypatch.setattr(admin_etl.settings, "pinvi_dagster_base_url", "http://dagster.test")
     monkeypatch.setattr(admin_etl, "PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS", 0.02)
 

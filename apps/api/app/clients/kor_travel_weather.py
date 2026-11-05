@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import re
 import time
 from collections.abc import AsyncIterator, Callable, Collection, Iterator, Mapping, Sequence
@@ -41,7 +42,7 @@ from pydantic import ValidationError
 from app.clients.weather_alert_events import RegionalAlertEvents
 from app.core.config import Settings, settings
 from app.db import session as db_session
-from app.middleware.api_call_logging import api_call_event_hooks
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,8 @@ _NEARBY_LIMIT_MAX = 100  # 서버 스키마 상한(OpenAPI `nearby` limit maximu
 # 시험 호출 1회만 내보낸다. env·settings로 노출하지 않는다 — 값을 바꾸기로 하면(ADR-074 열린
 # 결정 2) 그때 settings로 승격한다. ETL `KorTravelWeatherResource`에는 적용하지 않는다.
 _CIRCUIT_FAILURE_THRESHOLD = 3
-_CIRCUIT_OPEN_SECONDS = 30.0
+# 30초보다 드문 view도 곧바로 새 timeout 시험을 만들지 않게 한다(#621).
+_CIRCUIT_OPEN_SECONDS = 120.0
 
 # host 회로(T-379) — 엔드포인트 회로 **앞에** 하나 더 둔다. connect 단계 실패(`ConnectError`, 또는 deadline이
 # 깎지 않은 상한에서 난 `ConnectTimeout`)만 세고 같은 임계·open 시간을 쓴다. 연결조차 안 되는 것은 엔드포인트가
@@ -651,26 +653,34 @@ class _CircuitBreaker:
         self._consecutive_failures = 0
         self._opened_at: float | None = None
         self._trial_in_flight = False
+        self._generation = 0
 
-    def acquire(self) -> bool:
-        """호출 허가. 거부면 `KorTravelWeatherUnavailable`. 반환값은 half-open 시험 호출 여부."""
+    def acquire(self) -> tuple[bool, int]:
+        """호출 허가. 거부면 `KorTravelWeatherUnavailable`. 반환값은 (half-open 시험 호출 여부, 출발 세대)다."""
         if self._opened_at is None:
-            return False
+            return False, self._generation
         if self._clock() - self._opened_at < self._open_seconds or self._trial_in_flight:
             raise KorTravelWeatherUnavailable("kor-travel-weather 회로 열림 — 호출하지 않음")
         self._trial_in_flight = True
-        return True
+        return True, self._generation
 
     def is_open(self) -> bool:
         """열린 채 open 시간이 아직 남았는가(읽기 전용 — half-open 시험 자리를 잡지 않는다)."""
         return self._opened_at is not None and self._clock() - self._opened_at < self._open_seconds
 
-    def record_success(self) -> None:
+    def record_success(self, *, trial: bool, generation: int) -> None:
+        # 열린 뒤 도착한 옛 호출은 현재 시험 결과를 대신할 수 없다.
+        if generation != self._generation:
+            return
+        if self._opened_at is not None:
+            self._generation += 1
         self._consecutive_failures = 0
         self._opened_at = None
         self._trial_in_flight = False
 
-    def record_failure(self, *, endpoint: str, trial: bool) -> None:
+    def record_failure(self, *, endpoint: str, trial: bool, generation: int) -> None:
+        if generation != self._generation:
+            return
         self._consecutive_failures += 1
         if trial or self._consecutive_failures >= self._failure_threshold:
             if self._opened_at is None or trial:
@@ -682,6 +692,7 @@ class _CircuitBreaker:
                     },
                 )
             self._opened_at = self._clock()
+            self._generation += 1
         if trial:
             # 시험 호출 자신의 실패만 시험 자리를 돌려준다. 회로가 열리기 전에 출발한 옛 호출의
             # 늦은 실패가 진행 중인 시험 자리를 비우면 half-open 시험이 동시에 둘이 된다.
@@ -713,11 +724,15 @@ class KorTravelWeatherClient:
         max_attempts: int = 3,
         backoff_base_seconds: float = 0.2,
         clock: Callable[[], float] = time.monotonic,
+        max_concurrent_requests: int = 16,
     ) -> None:
         self._http = http
         self._max_attempts = max(1, max_attempts)
         self._backoff_base_seconds = backoff_base_seconds
         self._clock = clock
+        if max_concurrent_requests < 1:
+            raise ValueError("max_concurrent_requests는 양수여야 합니다.")
+        self._slots = asyncio.Semaphore(max_concurrent_requests)
         self._circuits: dict[str, _CircuitBreaker] = {}
         self._host_circuit = _CircuitBreaker(
             failure_threshold=_CIRCUIT_FAILURE_THRESHOLD,
@@ -748,6 +763,28 @@ class KorTravelWeatherClient:
         *,
         endpoint: str,
         params: Mapping[str, Any] | None = None,
+        read_timeout_seconds: float | None = None,
+    ) -> httpx.Response:
+        if self._slots.locked():
+            raise KorTravelWeatherUnavailable("kor-travel-weather 동시 호출 상한 — 호출하지 않음")
+        # 포화는 원격 실패가 아니다. 회로 시험 자리도 잡기 전에 즉시 거부한다.
+        async with self._slots:
+            return await self._send_with_circuits(
+                method,
+                path,
+                endpoint=endpoint,
+                params=params,
+                read_timeout_seconds=read_timeout_seconds,
+            )
+
+    async def _send_with_circuits(
+        self,
+        method: str,
+        path: str,
+        *,
+        endpoint: str,
+        params: Mapping[str, Any] | None = None,
+        read_timeout_seconds: float | None = None,
     ) -> httpx.Response:
         """논리 호출 1회 — 회로차단을 거쳐 `_send_with_retries`를 부른다.
 
@@ -757,7 +794,7 @@ class KorTravelWeatherClient:
         host 실패로도 센다(T-379).
         """
         host = self._host_circuit
-        host_trial = host.acquire()
+        host_trial, host_generation = host.acquire()
         # 짧은 예산에서 센 엔드포인트(단건 카드의 `/resolve`)는 **별도 회로**를 쓴다 — trip view와 공유하는
         # 회로를, 카드 예산으로는 '느리지만 살아 있음'과 '응답 없음'을 가를 수 없는 실패로 열지 않게.
         call_scope = _call_scope.get()
@@ -771,12 +808,18 @@ class KorTravelWeatherClient:
             raise KorTravelWeatherUnavailable("kor-travel-weather 회로 열림 — 호출하지 않음")
         circuit = self._circuit_for(circuit_name)
         try:
-            trial = circuit.acquire()
+            trial, generation = circuit.acquire()
         except BaseException:
             host.release(trial=host_trial)
             raise
         try:
-            resp = await self._send_with_retries(method, path, params=params, endpoint=endpoint)
+            resp = await self._send_with_retries(
+                method,
+                path,
+                params=params,
+                endpoint=endpoint,
+                read_timeout_seconds=read_timeout_seconds,
+            )
         except KorTravelWeatherDeadlineExhausted:
             circuit.release(trial=trial)
             host.release(trial=host_trial)
@@ -789,11 +832,11 @@ class KorTravelWeatherClient:
             else:
                 if scope is not None:
                     scope.state.counted_endpoints.add(endpoint)
-                circuit.record_failure(endpoint=circuit_name, trial=trial)
+                circuit.record_failure(endpoint=circuit_name, trial=trial, generation=generation)
             if not isinstance(exc, KorTravelWeatherConnectFailed) and host_trial:
                 # host 시험 호출이 연결은 됐다(read timeout·5xx) — host 회로를 닫는다. 슬롯만 돌려주면
                 # 연결은 되지만 오류를 내는 동안 host가 half-open에 머물러 호출이 하나씩 줄 선다.
-                host.record_success()
+                host.record_success(trial=host_trial, generation=host_generation)
             elif not isinstance(exc, KorTravelWeatherConnectFailed) or (
                 scope is not None and scope.state.host_counted and not host_trial
             ):
@@ -802,7 +845,9 @@ class KorTravelWeatherClient:
             else:
                 if scope is not None:
                     scope.state.host_counted = True
-                host.record_failure(endpoint=_HOST_CIRCUIT_NAME, trial=host_trial)
+                host.record_failure(
+                    endpoint=_HOST_CIRCUIT_NAME, trial=host_trial, generation=host_generation
+                )
             raise
         except BaseException:
             circuit.release(trial=trial)
@@ -811,8 +856,8 @@ class KorTravelWeatherClient:
         scope = _call_scope.get()
         if scope is not None:
             scope.state.succeeded_endpoints.add(endpoint)
-        circuit.record_success()
-        host.record_success()
+        circuit.record_success(trial=trial, generation=generation)
+        host.record_success(trial=host_trial, generation=host_generation)
         return resp
 
     async def _send_with_retries(
@@ -822,9 +867,11 @@ class KorTravelWeatherClient:
         *,
         endpoint: str,
         params: Mapping[str, Any] | None = None,
+        read_timeout_seconds: float | None = None,
     ) -> httpx.Response:
-        """transient 실패 중 **연결 실패(연결 거부·connect timeout)·5xx·그 밖의 전송 오류**만 지수 백오프로
-        재시도한다. 연결 뒤의 timeout(read·write·pool·attempt 전체)은 재시도하지 않는다(2026-11-02).
+        """transient 실패 중 **연결 실패(연결 거부·connect timeout)·빠른 5xx·그 밖의 전송 오류**만 지수 백오프로
+        재시도한다. read 예산 절반 이상 걸린 5xx와 연결 뒤 timeout(read·write·pool·attempt 전체)은
+        재시도하지 않는다.
 
         호출자 deadline(`kor_travel_weather_call_deadline`)이 있으면: attempt마다 timeout을 남은
         시간으로 깎고 attempt 전체를 `asyncio.timeout`으로 묶는다; backoff가 남은 시간 이상이면 자지
@@ -837,7 +884,15 @@ class KorTravelWeatherClient:
         cleaned = {k: v for k, v in (params or {}).items() if v is not None}
         scope = _call_scope.get()
         base = self._http.timeout
+        if read_timeout_seconds is not None:
+            base = httpx.Timeout(
+                connect=base.connect, read=read_timeout_seconds, write=base.write, pool=base.pool
+            )
         floor = 0.0 if base.read is None else base.read * _DEADLINE_MEANINGFUL_READ_FRACTION
+        retry_reads = [value for value in (self._http.timeout.read, base.read) if value is not None]
+        slow_retry_floor = (
+            min(retry_reads) * _DEADLINE_MEANINGFUL_READ_FRACTION if retry_reads else None
+        )
         loop = asyncio.get_running_loop()
 
         def exhausted() -> KorTravelWeatherDeadlineExhausted:
@@ -848,9 +903,11 @@ class KorTravelWeatherClient:
             remaining: float | None = None
             applied: httpx.Timeout | None = None
             request_kwargs: dict[str, Any] = {}
+            if read_timeout_seconds is not None:
+                request_kwargs["timeout"] = base
             # 연결은 됐는데 응답이 늦어 난 timeout(read·write·pool·attempt 전체)은 재시도하지 않는다 —
             # 2026-11-02 점검: 단건 카드가 read 10 s x 3회 + backoff ≈ 31 s를 붙잡았다. 다시 보내도 같은
-            # 피호출자가 같은 만큼 느리다. 연결 실패·5xx는 빨리 끝나므로 계속 재시도한다.
+            # 피호출자가 같은 만큼 느리다. 연결 실패·빠른 5xx만 계속 재시도한다.
             retry_allowed = True
             if scope is not None:
                 remaining = scope.deadline - loop.time()
@@ -865,10 +922,38 @@ class KorTravelWeatherClient:
                     pool=_cap(base.pool, max(remaining - _POOL_TIMEOUT_GRACE_SECONDS, 0.001)),
                 )
                 request_kwargs["timeout"] = applied
+            request = self._http.build_request(method, path, params=cleaned, **request_kwargs)
+            previous_trace = request.extensions.get("trace")
+            sent_started_at: float | None = None
+
+            async def trace(
+                name: str, info: dict[str, Any], *, prior_trace: Any = previous_trace
+            ) -> None:
+                nonlocal sent_started_at
+                # httpcore는 풀 자리를 받은 뒤 새 연결을 만들거나 재사용 연결에 headers를 보낸다.
+                # HTTP/1.1 keep-alive·HTTP/2와 기존 request trace callback을 모두 보존한다.
+                if sent_started_at is None and name.endswith(
+                    (
+                        "connect_tcp.started",
+                        "connect_unix_socket.started",
+                        "send_request_headers.started",
+                    )
+                ):
+                    sent_started_at = loop.time()
+                if prior_trace is not None:
+                    await prior_trace(name, info)
+
+            request.extensions["trace"] = trace
+            attempt_started = loop.time()
             try:
                 async with asyncio.timeout(remaining):  # None이면 상한 없음
-                    resp = await self._http.request(method, path, params=cleaned, **request_kwargs)
+                    resp = await self._http.send(request)
             except (httpx.TimeoutException, TimeoutError) as exc:
+                # 전송 직전에 남은 예산만 원격 서비스에 주어진 시간이다. trace가 없는 transport
+                # (기존 MockTransport 포함)는 종전의 attempt 예산 판정을 유지한다.
+                remote_remaining = remaining
+                if scope is not None and sent_started_at is not None:
+                    remote_remaining = max(scope.deadline - sent_started_at, 0.0)
                 if isinstance(exc, httpx.PoolTimeout):
                     # PinVi 쪽 httpx 연결 풀이 붐볐다 — 연결을 시도조차 못 했으니 피호출자 장애의 증거가
                     # 아니다(회로 미집계). 앞선 attempt의 진짜 실패가 있으면 그것을 남긴다.
@@ -882,14 +967,14 @@ class KorTravelWeatherClient:
                     )
                 elif (
                     scope is not None
-                    and remaining is not None
+                    and remote_remaining is not None
                     and applied is not None
                     and (
                         (
-                            remaining < floor
+                            remote_remaining < floor
                             and not (
                                 endpoint in scope.count_short_timeouts_for
-                                and remaining >= scope.min_counted_remaining
+                                and remote_remaining >= scope.min_counted_remaining
                             )
                         )
                         or endpoint in scope.state.succeeded_endpoints
@@ -924,6 +1009,14 @@ class KorTravelWeatherClient:
                 last = KorTravelWeatherUnavailable(f"kor-travel-weather 요청 실패({path}): {exc!r}")
             if resp is not None:
                 if resp.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
+                    # long read는 성공 기회를 늘릴 뿐 무거운 실패의 재시도를 늘리지 않는다.
+                    # native·호출별 read 중 짧은 값의 절반을 쓰며 풀 대기 시간은 제외한다.
+                    remote_started = attempt_started if sent_started_at is None else sent_started_at
+                    if (
+                        slow_retry_floor is not None
+                        and loop.time() - remote_started >= slow_retry_floor
+                    ):
+                        retry_allowed = False
                     last = KorTravelWeatherUnavailable(
                         f"kor-travel-weather {resp.status_code} ({path})"
                     )
@@ -1015,13 +1108,23 @@ class KorTravelWeatherClient:
         return result
 
     async def resolve(
-        self, *, lat: float, lon: float, radius_km: float | None = None
+        self,
+        *,
+        lat: float,
+        lon: float,
+        radius_km: float | None = None,
+        read_timeout_seconds: float | None = None,
     ) -> ResolvedWeatherOut:
         """좌표 → 최근접 anchor + 전체 source bundle. **1회용 discovery** — 3.1 MB급 응답.
 
+        배경 해석은 read_timeout_seconds로 read만 늘린다. connect/write/pool은 client 기본값이다.
         조회 경로에서 반복 호출하지 않는다. 결과(`location.location_id` +
         `source_locations`)를 호출자가 캐시한다(설계 §3.2/§3.3).
         """
+        if read_timeout_seconds is not None and (
+            not math.isfinite(read_timeout_seconds) or read_timeout_seconds <= 0
+        ):
+            raise ValueError("read_timeout_seconds는 유한한 양수여야 합니다.")
         if not _LAT_MIN <= lat <= _LAT_MAX:
             raise ValueError(f"lat는 {_LAT_MIN}..{_LAT_MAX} 범위여야 합니다: {lat}")
         if not _LON_MIN <= lon <= _LON_MAX:
@@ -1033,6 +1136,7 @@ class KorTravelWeatherClient:
             "/v1/weather/resolve",
             endpoint="resolve",
             params={"lat": lat, "lon": lon, "radius_km": radius_km},
+            read_timeout_seconds=read_timeout_seconds,
         )
         return _decode_resolved_weather(self._unwrap_data(resp, path="/v1/weather/resolve"))
 
@@ -1133,7 +1237,7 @@ def kor_travel_weather_timeout(app_settings: Settings) -> httpx.Timeout:
 
 def create_kor_travel_weather_client(app_settings: Settings) -> KorTravelWeatherClient:
     """설정 기반 client 생성 (httpx.AsyncClient 1개, 인증 헤더 없음)."""
-    http = httpx.AsyncClient(
+    http = ApiCallLoggingClient(
         base_url=app_settings.pinvi_kor_travel_weather_base_url,
         timeout=kor_travel_weather_timeout(app_settings),
         event_hooks=api_call_event_hooks(
@@ -1163,8 +1267,14 @@ async def kor_travel_weather_client_lifespan(app: FastAPI) -> AsyncIterator[None
     try:
         yield
     finally:
-        await client.aclose()
-        app.state.kor_travel_weather_client = None
+        # worker가 client 타입을 참조하므로 순환 import를 피하고, 전송 종료 전에 작업을 회수한다.
+        from app.services.weather_resolve_worker import close_weather_resolve_worker
+
+        try:
+            await close_weather_resolve_worker(client)
+        finally:
+            await client.aclose()
+            app.state.kor_travel_weather_client = None
 
 
 def get_kor_travel_weather_client(request: Request) -> KorTravelWeatherClient:

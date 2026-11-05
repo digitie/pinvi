@@ -352,13 +352,27 @@ async def test_paths_do_not_reuse_each_others_rows(session_factory: Any) -> None
         LocationOut,
         ResolvedWeatherOut,
     )
-    from app.services.weather_location_resolver import resolve_weather_location
+    from app.services.weather_location_resolver import (
+        WeatherLocationPending,
+        resolve_weather_location,
+    )
+    from app.services.weather_resolve_worker import (
+        close_weather_resolve_worker,
+        get_weather_resolve_worker,
+    )
 
     class _Direct:
         def __init__(self) -> None:
             self.calls = 0
 
-        async def resolve(self, *, lat: float, lon: float, radius_km: float | None = None) -> Any:
+        async def resolve(
+            self,
+            *,
+            lat: float,
+            lon: float,
+            radius_km: float | None = None,
+            read_timeout_seconds: float | None = None,
+        ) -> Any:
             self.calls += 1
             location = LocationOut(
                 location_id="direct-anchor", name="x", latitude=lat, longitude=lon, enabled=True
@@ -386,6 +400,17 @@ async def test_paths_do_not_reuse_each_others_rows(session_factory: Any) -> None
             lon=_LON,
             client=direct,  # type: ignore[arg-type]
         )
+    assert isinstance(found, WeatherLocationPending)
+    await get_weather_resolve_worker(direct).drain()
+    async with session_factory() as db:
+        found = await resolve_weather_location(
+            db,
+            feature_id=feature_id,
+            lat=_LAT,
+            lon=_LON,
+            client=direct,
+        )
+    await close_weather_resolve_worker(direct)
     assert found == WeatherLocationFound("direct-anchor", ("direct-anchor",))
     assert direct.calls == 1
     assert (await _link(session_factory, feature_id)).measurement_point is None
@@ -797,13 +822,28 @@ async def test_trip_view_flag_off_never_calls_map_weather(session_factory: Any) 
                 "none", status_code=404, code="HTTP_ERROR", detail="없음"
             )
 
+    from app.services.weather_resolve_worker import (
+        close_weather_resolve_worker,
+        get_weather_resolve_worker,
+    )
+
+    weather = _NoAnchor()
     feature_id = f"fo_{uuid.uuid4().hex[:8]}"
     view = await _trip_view(
         session_factory,
         pois=[(1, datetime.now(KST).date(), feature_id)],
         map_client=fake.client,
-        weather_client=_NoAnchor(),
+        weather_client=weather,
     )
+    assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "unavailable"}
+    await get_weather_resolve_worker(weather).drain()
+    view = await _trip_view(
+        session_factory,
+        pois=[(1, datetime.now(KST).date(), feature_id)],
+        map_client=fake.client,
+        weather_client=weather,
+    )
+    await close_weather_resolve_worker(weather)
     assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "no_data"}
     assert fake.weather_requests() == []
 

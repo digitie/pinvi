@@ -216,7 +216,7 @@ async def test_circuit_opens_after_three_failures_and_fails_fast() -> None:
     assert info.value.code == "CIRCUIT_OPEN"
 
     # open 시간이 지나면 시험 호출 하나 — 실패하면 다시 열린다.
-    now[0] += 31.0
+    now[0] += 121.0
     with pytest.raises(KorTravelMapWeatherUnavailable) as info:
         await client.nearest(lon=126.9, lat=37.5)
     assert info.value.code == "WEATHER_STATE_UNAVAILABLE"
@@ -234,7 +234,7 @@ async def test_circuit_closes_after_a_successful_trial() -> None:
     for _ in range(3):
         with pytest.raises(KorTravelMapWeatherUnavailable):
             await client.nearest(lon=126.9, lat=37.5)
-    now[0] += 31.0
+    now[0] += 121.0
     await client.nearest(lon=126.9, lat=37.5)
     await client.nearest(lon=126.9, lat=37.5)
     assert len(seen) == 5

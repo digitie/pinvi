@@ -1289,3 +1289,106 @@ def test_nack_disposition_and_error_fingerprint_are_typed(permanent: bool, expec
     assert body["disposition"] == expected
     assert body["error_fingerprint"] == hashlib.sha256(b"RuntimeError").hexdigest()
     assert "credential" not in str(body)
+
+
+@pytest.mark.asyncio
+async def test_snapshot_outer_envelope_ignores_additions_with_once_per_key_set_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from app.clients import kor_travel_map
+
+    monkeypatch.setattr(kor_travel_map, "_WARNED_ADDITIVE", set())
+    additions = [
+        {"future": "sensitive-value"},
+        {"future": "changed-value"},
+        {"second": True, "future": None},
+        {"future": {}, "second": False},
+    ]
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={**_empty_snapshot_response(), **additions.pop(0)})
+
+    client = _client("consumer", handler)
+    try:
+        for _ in range(4):
+            snapshot = await client.get_snapshot()
+            assert snapshot.count == 0
+            assert snapshot.restore_epoch == 7
+            assert "future" not in snapshot.model_dump()
+    finally:
+        await client.aclose()
+    warnings = [record for record in caplog.records if "additive fields ignored" in record.message]
+    assert len(warnings) == 2
+    assert all("cache_target.envelope" in record.message for record in warnings)
+    assert "['future']" in warnings[0].message
+    assert "['future', 'second']" in warnings[1].message
+    assert "sensitive-value" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda payload: payload.pop("data"),
+        lambda payload: payload.pop("meta"),
+        lambda payload: payload.update(meta=[]),
+        lambda payload: payload.update(data=[]),
+        lambda payload: payload["data"].update(restore_epoch="not-an-epoch"),
+    ],
+    ids=["missing-data", "missing-meta", "meta-type", "data-type", "epoch-type"],
+)
+async def test_snapshot_additions_do_not_hide_required_or_type_errors(
+    mutation: Callable[[dict[str, Any]], Any],
+) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        payload = {**_empty_snapshot_response(), "future": True}
+        mutation(payload)
+        return httpx.Response(200, json=payload)
+
+    client = _client("consumer", handler)
+    try:
+        with pytest.raises(ValueError):
+            await client.get_snapshot()
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("where", ["payload", "coord"])
+async def test_command_fingerprint_payload_keeps_exact_fields(where: str) -> None:
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200)
+
+    source: dict[str, Any] = {
+        "version": "cache-target-source-v1",
+        "state": "active",
+        "coord": {"lon_e6": 126_000_000, "lat_e6": 37_000_000},
+        "radius_m": 5000,
+        "update_enabled": True,
+    }
+    if where == "coord":
+        source["coord"]["future"] = True
+    else:
+        source["future"] = True
+
+    client = _client("command", handler)
+    try:
+        with pytest.raises(ValueError, match="exact v1"):
+            await client.put_target(
+                external_system="pinvi",
+                target_key=str(uuid.uuid4()),
+                command_id=uuid.uuid4(),
+                restore_epoch=7,
+                source_generation=1,
+                occurred_at=datetime(2026, 7, 31, tzinfo=UTC),
+                source_payload=source,
+                expected_etag=None,
+            )
+    finally:
+        await client.aclose()
+    assert calls == 0

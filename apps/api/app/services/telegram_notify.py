@@ -10,14 +10,13 @@ from __future__ import annotations
 import logging
 import uuid
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.telegram import TelegramClient, TelegramError
 from app.core.config import settings
 from app.db import session as db_session
-from app.middleware.api_call_logging import api_call_event_hooks
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 from app.models.telegram_target import TelegramTarget
 
 logger = logging.getLogger(__name__)
@@ -25,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def _make_client() -> TelegramClient:
     """실 전송용 client. 테스트는 이 함수를 monkeypatch한다."""
-    http = httpx.AsyncClient(
+    http = ApiCallLoggingClient(
         base_url=settings.pinvi_telegram_api_base,
         event_hooks=api_call_event_hooks(db_session.async_session_factory, provider="telegram"),
     )

@@ -549,8 +549,8 @@ async def test_circuit_half_open_trial_closes_on_success_and_reopens_on_failure(
             await client.latest("loc-1")
     assert attempts["n"] == 3
 
-    # 30 s 뒤 half-open 시험 1회 — 실패면 다시 30 s open.
-    clock.now += 30.0
+    # open 간격 뒤 half-open 시험 1회 — 실패면 다시 open 간격 동안 대기한다.
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     with pytest.raises(KorTravelWeatherUnavailable):
         await client.latest("loc-1")
     assert attempts["n"] == 4
@@ -558,8 +558,8 @@ async def test_circuit_half_open_trial_closes_on_success_and_reopens_on_failure(
         await client.latest("loc-1")
     assert attempts["n"] == 4
 
-    # 다시 30 s 뒤 시험이 성공하면 닫히고 이후 호출은 정상이다.
-    clock.now += 30.0
+    # 다시 open 간격 뒤 시험이 성공하면 닫히고 이후 호출은 정상이다.
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     fail["on"] = False
     assert len(await client.latest("loc-1")) == 1
     assert len(await client.latest("loc-1")) == 1
@@ -583,7 +583,7 @@ async def test_circuit_half_open_admits_only_one_trial_at_a_time() -> None:
     for _ in range(3):
         with pytest.raises(KorTravelWeatherUnavailable):
             await client.latest("loc-1")
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     trial = asyncio.create_task(client.latest("loc-1"))
     for _ in range(5):
         await asyncio.sleep(0)
@@ -616,7 +616,7 @@ async def test_cancelled_trial_releases_half_open_slot() -> None:
     for _ in range(3):
         with pytest.raises(KorTravelWeatherUnavailable):
             await client.latest("loc-1")
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     trial = asyncio.create_task(client.latest("loc-1"))
     for _ in range(5):
         await asyncio.sleep(0)
@@ -692,7 +692,7 @@ async def test_late_non_trial_failure_does_not_free_half_open_slot() -> None:
     for _ in range(3):
         with pytest.raises(KorTravelWeatherUnavailable):
             await client.latest("loc-1")
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     trial = asyncio.create_task(client.latest("loc-1"))
     for _ in range(5):
         await asyncio.sleep(0)
@@ -701,7 +701,7 @@ async def test_late_non_trial_failure_does_not_free_half_open_slot() -> None:
     release_old.set()
     with pytest.raises(KorTravelWeatherUnavailable):
         await old_call
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     # 시험 T가 아직 진행 중이므로 두 번째 시험은 허가되지 않는다.
     with pytest.raises(KorTravelWeatherUnavailable, match="회로 열림"):
         async with asyncio.timeout(2.0):
@@ -1229,7 +1229,7 @@ async def test_other_endpoint_success_does_not_reset_failing_endpoint_count() ->
     assert len(await client.latest("loc-1")) == 1
     assert calls == {"latest": 3, "forecast": 3}
 
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
         await client.forecast("loc-1")  # half-open 시험 — 실패해 다시 연다
     assert "회로 열림" not in str(exc_info.value)
@@ -1445,8 +1445,8 @@ async def test_host_half_open_trial_reopens_on_connect_failure_and_closes_on_res
     client = _client(handler, max_attempts=1, clock=clock)
     await _fail_each_endpoint_once(client)
 
-    # 30 s 뒤 host half-open 시험 1회 — connect 실패면 모든 엔드포인트가 다시 30 s 막힌다.
-    clock.now += 30.0
+    # open 간격 뒤 host half-open 시험 1회 — connect 실패면 모든 엔드포인트가 다시 open 간격 동안 막힌다.
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
         await client.forecast("loc-1")
     assert "회로 열림" not in str(exc_info.value)
@@ -1454,8 +1454,8 @@ async def test_host_half_open_trial_reopens_on_connect_failure_and_closes_on_res
         await client.latest("loc-2")
     assert sum(calls.values()) == 4
 
-    # 다시 30 s 뒤 시험이 응답을 받으면 host 회로가 닫히고 다른 엔드포인트도 transport에 닿는다.
-    clock.now += 30.0
+    # 다시 open 간격 뒤 시험이 응답을 받으면 host 회로가 닫히고 다른 엔드포인트도 transport에 닿는다.
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     refuse["on"] = False
     assert len(await client.forecast("loc-1")) == 1
     assert len(await client.latest("loc-1")) == 1
@@ -1509,7 +1509,7 @@ async def test_host_trial_answered_with_5xx_closes_host_circuit() -> None:
     clock = _FakeClock()
     client = _client(handler, max_attempts=1, clock=clock)
     await _fail_each_endpoint_once(client)
-    clock.now += 30.0
+    clock.now += kor_travel_weather_module._CIRCUIT_OPEN_SECONDS
     phase["v"] = "5xx"
     with pytest.raises(KorTravelWeatherUnavailable) as exc_info:
         await client.forecast("loc-1")  # host 시험 — 연결은 됐다
@@ -1547,3 +1547,216 @@ async def test_deadline_cut_last_attempt_keeps_earlier_connect_failure() -> None
     # 둘째부터는 deadline에 깎인 attempt다(남은 시간이 0에 가까우면 셋째가 붙을 수도 있다).
     assert waits[0] == 0.2 and len(waits) >= 2 and all(w < 0.2 for w in waits[1:])
     await client.aclose()
+
+
+async def test_resolve_read_override_is_local_and_keeps_connect_write_and_pool_limits() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+    seen: dict[str, dict[str, float | None]] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen[request.url.path] = dict(request.extensions["timeout"])
+        if request.url.path.endswith("/resolve"):
+            started.set()
+            await release.wait()
+            return httpx.Response(
+                200,
+                json=_envelope(
+                    {
+                        "requested": {"latitude": 37.5, "longitude": 126.9},
+                        "location": _LOCATION,
+                        "distance_km": 0.1,
+                        "measurement_point": None,
+                        "source_locations": [],
+                        "latest": [],
+                        "forecast": [],
+                        "alerts": [],
+                    }
+                ),
+            )
+        return httpx.Response(200, json=_envelope([]))
+
+    base = httpx.Timeout(connect=0.2, read=0.3, write=0.4, pool=0.5)
+    http = httpx.AsyncClient(
+        base_url="http://fixture.test", timeout=base, transport=httpx.MockTransport(handler)
+    )
+    client = KorTravelWeatherClient(http, max_attempts=1)
+    pending = asyncio.create_task(client.resolve(lat=37.5, lon=126.9, read_timeout_seconds=45.0))
+    try:
+        await asyncio.wait_for(started.wait(), 1)
+        await client.latest("fixture")
+        await client.forecast("fixture")
+        release.set()
+        await pending
+        assert seen["/v1/weather/resolve"] == {
+            "connect": 0.2,
+            "read": 45.0,
+            "write": 0.4,
+            "pool": 0.5,
+        }
+        for path in (
+            "/v1/weather/locations/fixture/latest",
+            "/v1/weather/locations/fixture/forecast",
+        ):
+            assert seen[path] == base.as_dict()
+        assert http.timeout == base
+    finally:
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+        await client.aclose()
+
+
+@pytest.mark.parametrize("read_timeout", [0.0, -1.0, float("nan"), float("inf")])
+async def test_resolve_read_override_rejects_invalid_limits_before_transport(
+    read_timeout: float,
+) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json=_envelope({}))
+
+    client = _client(handler)
+    try:
+        with pytest.raises(ValueError):
+            await client.resolve(lat=37.5, lon=126.9, read_timeout_seconds=read_timeout)
+        assert calls == 0
+    finally:
+        await client.aclose()
+
+
+async def test_slow_5xx_consumes_one_attempt_but_fast_5xx_still_retries() -> None:
+    calls = 0
+    slow = True
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if slow:
+            await asyncio.sleep(0.04)
+        return httpx.Response(504, json={"code": "UPSTREAM_TIMEOUT"})
+
+    http = httpx.AsyncClient(
+        base_url="http://fixture.test",
+        timeout=0.06,
+        transport=httpx.MockTransport(handler),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0)
+    try:
+        with pytest.raises(KorTravelWeatherUnavailable):
+            await client.latest("fixture")
+        assert calls == 1
+        slow = False
+        with pytest.raises(KorTravelWeatherUnavailable):
+            await client.latest("fixture")
+        assert calls == 4
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.parametrize("worker_fails", [False, True])
+async def test_client_lifespan_stops_resolve_worker_before_closing_http(
+    monkeypatch: pytest.MonkeyPatch, worker_fails: bool
+) -> None:
+    from fastapi import FastAPI
+
+    import app.services.weather_resolve_worker as worker_module
+
+    calls: list[str] = []
+
+    class Client:
+        async def aclose(self) -> None:
+            calls.append("client.close")
+
+    client = Client()
+
+    async def close_worker(value: object) -> None:
+        assert value is client
+        calls.append("worker.close")
+        if worker_fails:
+            raise RuntimeError("fixture worker shutdown failure")
+
+    monkeypatch.setattr(
+        kor_travel_weather_module, "create_kor_travel_weather_client", lambda _: client
+    )
+    monkeypatch.setattr(worker_module, "close_weather_resolve_worker", close_worker)
+    app = FastAPI()
+
+    async def run() -> None:
+        async with kor_travel_weather_module.kor_travel_weather_client_lifespan(app):
+            assert app.state.kor_travel_weather_client is client
+            calls.append("running")
+
+    if worker_fails:
+        with pytest.raises(RuntimeError, match="fixture worker shutdown failure"):
+            await run()
+    else:
+        await run()
+    assert calls == ["running", "worker.close", "client.close"]
+    assert app.state.kor_travel_weather_client is None
+
+
+@pytest.mark.parametrize(
+    ("native_read", "override_read", "delay", "expected_calls"),
+    [
+        (0.1, 45.0, 0.06, 1),
+        (0.2, 0.1, 0.06, 1),
+        (None, 0.1, 0.06, 1),
+        (0.1, None, 0.06, 1),
+        (None, None, 0.0, 3),
+        (0.1, 45.0, 0.0, 3),
+    ],
+)
+async def test_resolve_long_read_never_extends_slow_5xx_retry_budget(
+    native_read: float | None,
+    override_read: float | None,
+    delay: float,
+    expected_calls: int,
+) -> None:
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if delay:
+            await asyncio.sleep(delay)
+        return httpx.Response(504, json={"code": "UPSTREAM_TIMEOUT"})
+
+    http = httpx.AsyncClient(
+        base_url="http://fixture.test",
+        timeout=httpx.Timeout(native_read),
+        transport=httpx.MockTransport(handler),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=3, backoff_base_seconds=0)
+    try:
+        with pytest.raises(KorTravelWeatherUnavailable):
+            await client.resolve(lat=37.5, lon=126.9, read_timeout_seconds=override_read)
+        assert calls == expected_calls
+    finally:
+        await client.aclose()
+
+
+async def test_resolve_long_read_keeps_effective_timeout_meaningful_floor() -> None:
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(request.extensions["timeout"]["read"])
+        raise httpx.ReadTimeout("fixture deadline", request=request)
+
+    http = httpx.AsyncClient(
+        base_url="http://fixture.test",
+        timeout=0.1,
+        transport=httpx.MockTransport(handler),
+    )
+    client = KorTravelWeatherClient(http, max_attempts=1)
+    try:
+        for _ in range(4):
+            with kor_travel_weather_call_deadline(asyncio.get_running_loop().time() + 0.08):
+                with pytest.raises(KorTravelWeatherDeadlineExhausted):
+                    await client.resolve(lat=37.5, lon=126.9, read_timeout_seconds=45.0)
+        assert calls == 4
+    finally:
+        await client.aclose()

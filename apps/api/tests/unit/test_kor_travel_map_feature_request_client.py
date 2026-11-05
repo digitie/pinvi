@@ -245,3 +245,97 @@ async def test_submit_preserves_conflict_and_fails_closed_for_unavailable() -> N
             )
     finally:
         await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_submit_outer_envelope_ignores_additions_with_once_per_key_set_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from app.clients import kor_travel_map
+
+    monkeypatch.setattr(kor_travel_map, "_WARNED_ADDITIVE", set())
+    request_id = uuid.UUID("01900000-0000-7000-8000-000000000002")
+    additions = [
+        {"future": "sensitive-value"},
+        {"future": "changed-value"},
+        {"second": True, "future": None},
+        {"future": {}, "second": False},
+    ]
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(201, json={**_response(request_id), **additions.pop(0)})
+
+    client = _client(handler)
+    try:
+        for _ in range(4):
+            receipt = await client.submit(
+                request_id=request_id,
+                kind="place",
+                name="새 카페",
+                lon=129.0,
+                lat=35.0,
+                categories=["카페", "01070100"],
+                note="좋은 곳",
+            )
+            assert receipt.request_id == request_id
+            assert receipt.status == "pending"
+            assert "future" not in receipt.model_dump()
+    finally:
+        await client.aclose()
+    warnings = [record for record in caplog.records if "additive fields ignored" in record.message]
+    assert len(warnings) == 2
+    assert all("feature_request.envelope" in record.message for record in warnings)
+    assert "['future']" in warnings[0].message
+    assert "['future', 'second']" in warnings[1].message
+    assert "sensitive-value" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda payload: payload.pop("data"),
+        lambda payload: payload.pop("meta"),
+        lambda payload: payload.update(meta=[]),
+        lambda payload: payload.update(data=[]),
+        lambda payload: payload["data"].update(status="approved"),
+        lambda payload: payload["data"].update(status="exact_conflict", feature_id=None),
+        lambda payload: payload["data"].update(feature_id="unexpected-feature"),
+        lambda payload: payload["data"].update(future=True),
+    ],
+    ids=[
+        "missing-data",
+        "missing-meta",
+        "meta-type",
+        "data-type",
+        "non-submit-state",
+        "conflict-without-feature",
+        "pending-with-feature",
+        "receipt-fields-remain-exact",
+    ],
+)
+async def test_submit_additions_do_not_hide_required_type_or_receipt_errors(
+    mutation: Callable[[dict[str, Any]], Any],
+) -> None:
+    request_id = uuid.UUID("01900000-0000-7000-8000-000000000002")
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        payload = {**_response(request_id), "future": True}
+        mutation(payload)
+        return httpx.Response(201, json=payload)
+
+    client = _client(handler)
+    try:
+        with pytest.raises(FeatureRequestQueueContractError):
+            await client.submit(
+                request_id=request_id,
+                kind="place",
+                name="새 카페",
+                lon=129.0,
+                lat=35.0,
+                categories=["카페", "01070100"],
+                note="좋은 곳",
+            )
+    finally:
+        await client.aclose()

@@ -684,7 +684,9 @@ class Settings(BaseSettings):
     pinvi_database_url: str = Field(
         default="postgresql+asyncpg://pinvi:pinvi_dev_password@localhost:5432/pinvi"
     )
-    pinvi_database_pool_size: int = 10
+    pinvi_database_pool_size: int = Field(default=10, ge=1, le=100)
+    pinvi_database_max_overflow: int = Field(default=0, ge=0, le=100)
+    pinvi_database_pool_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
 
     # JWT / 세션
     pinvi_jwt_secret_key: str = Field(default="pinvi-local-jwt-secret-change-me", min_length=32)
@@ -935,6 +937,9 @@ class Settings(BaseSettings):
     # 호출당 ≤ max_attempts x 이 값 + backoff(기본 3 x 2 + 0.6 = 6.6 s). read는 위 timeout 그대로.
     pinvi_kor_travel_weather_connect_timeout_seconds: float = Field(default=2.0, gt=0)
     pinvi_kor_travel_weather_max_attempts: int = 3
+    # 직접 경로의 사용자 카드와 관리자 진단 예산을 분리한다(#621).
+    pinvi_kor_travel_weather_request_budget_seconds: float = Field(default=4.0, gt=0, le=60)
+    pinvi_kor_travel_weather_admin_request_budget_seconds: float = Field(default=10.0, gt=0, le=60)
     # T-368. 기본값 off. on이면 `GET /weather/markers-in-bounds`가 지도 weather
     # marker를 `kor-travel-weather`의 `/nearby`로 직접 조회해 노출한다 — `kor-travel-map`을
     # 전혀 거치지 않는다(위 세 flag의 "완전 분리"를 지도 marker 표면까지 확장, T-363과
