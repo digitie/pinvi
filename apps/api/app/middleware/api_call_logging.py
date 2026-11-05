@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import time
 import uuid
 from collections import deque
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 import httpx
@@ -219,6 +220,46 @@ class ApiCallTracker:
         self._record(request, status_code=None, error=error)
 
 
+class _ObservedResponseStream(httpx.AsyncByteStream):
+    """stream=True 응답은 헤더가 아닌 EOF/실패/취소/조기 close에서 한 번 기록한다."""
+
+    def __init__(
+        self,
+        stream: httpx.AsyncByteStream,
+        request: httpx.Request,
+        tracker: ApiCallTracker,
+        status_code: int,
+    ) -> None:
+        self._stream = stream
+        self._request = request
+        self._tracker = tracker
+        self._status_code = status_code
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        try:
+            async for chunk in self._stream:
+                yield chunk
+        except BaseException as exc:
+            self._tracker.on_error(self._request, exc)
+            raise
+        else:
+            self._tracker._record(self._request, status_code=self._status_code)
+
+    async def aclose(self) -> None:
+        # bounded reader의 상한 예외/호출자 취소도 context manager의 close에서 보존한다.
+        active_error = sys.exception()
+        try:
+            await self._stream.aclose()
+        except BaseException as exc:
+            self._tracker.on_error(self._request, exc)
+            raise
+        finally:
+            self._tracker.on_error(
+                self._request,
+                active_error if active_error is not None else httpx.ResponseNotRead(),
+            )
+
+
 class ApiCallLoggingClient(httpx.AsyncClient):
     """event hook에 없는 전송·body read 오류/취소도 기록하고 원래 예외를 그대로 올린다."""
 
@@ -234,7 +275,16 @@ class ApiCallLoggingClient(httpx.AsyncClient):
         else:
             tracker = request.extensions.get(_TRACKER_EXTENSION)
             if isinstance(tracker, ApiCallTracker):
-                tracker._record(request, status_code=response.status_code)
+                if (
+                    kwargs.get("stream")
+                    and not response.is_stream_consumed
+                    and isinstance(response.stream, httpx.AsyncByteStream)
+                ):
+                    response.stream = _ObservedResponseStream(
+                        response.stream, request, tracker, response.status_code
+                    )
+                else:
+                    tracker._record(request, status_code=response.status_code)
             return response
         finally:
             request.extensions.pop(_DEFER_RESPONSE_EXTENSION, None)

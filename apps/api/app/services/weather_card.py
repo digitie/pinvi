@@ -52,6 +52,7 @@ from app.clients.kor_travel_weather import (
     WeatherValueOut,
     kor_travel_weather_call_deadline,
 )
+from app.core.config import settings
 from app.db.session import release_read_connection
 from app.schemas.feature import FeatureWeatherCard
 from app.services.weather_location_resolver import (
@@ -72,8 +73,6 @@ from app.services.weather_metrics import (
 
 logger = logging.getLogger(__name__)
 _SEOUL = ZoneInfo("Asia/Seoul")
-#: 직접 경로 단건 카드 예산(Map 경로 기본 5 s보다 짧게 — 사용자가 마커를 고른 뒤 기다리는 시간).
-DIRECT_CARD_BUDGET_SECONDS = 4.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +125,7 @@ async def resolve_and_collect_deduped_values(
     lon: float,
     asof: datetime | None,
     weather_client: KorTravelWeatherClient,
-    budget_seconds: float = DIRECT_CARD_BUDGET_SECONDS,
+    budget_seconds: float | None = None,
 ) -> tuple[list[WeatherValueOut], datetime | None]:
     """`feature_id`의 좌표로 location을 해석하고 사실을 모아 dedupe한다 — 단건(T-362)과
     Admin(T-364) weather 카드 조립이 공유하는 pipeline. asof 축소·location 해석 실패
@@ -140,6 +139,8 @@ async def resolve_and_collect_deduped_values(
 
     반환: `(deduped_values, latest_known_at)`. 빈 값이면 `latest_known_at`도 `None`.
     """
+    if budget_seconds is None:
+        budget_seconds = settings.pinvi_kor_travel_weather_request_budget_seconds
     now = datetime.now(UTC)
     window = _asof_window(asof, now=now)
     if window.no_data:
@@ -317,6 +318,7 @@ async def collect_weather_values(
     weather_client: KorTravelWeatherClient | None,
     map_weather_client: KorTravelMapWeatherClient | None = None,
     map_budget_seconds: float = 5.0,
+    direct_budget_seconds: float | None = None,
 ) -> tuple[Sequence[WeatherFact], datetime | None]:
     """사용자·관리자가 같은 소스 선택·예산·취소 경계로 정본 사실을 읽는다."""
     deduped: Sequence[WeatherFact]
@@ -335,7 +337,13 @@ async def collect_weather_values(
         if weather_client is None:
             raise ValueError("직접 경로에는 weather_client가 필요합니다.")
         deduped, latest_known = await resolve_and_collect_deduped_values(
-            db, feature_id=feature_id, lat=lat, lon=lon, asof=asof, weather_client=weather_client
+            db,
+            feature_id=feature_id,
+            lat=lat,
+            lon=lon,
+            asof=asof,
+            weather_client=weather_client,
+            budget_seconds=direct_budget_seconds,
         )
     return deduped, latest_known
 

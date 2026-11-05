@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.kor_travel_map_weather import KorTravelMapWeatherClient
 from app.clients.kor_travel_weather import KorTravelWeatherClient
+from app.core.config import settings
 from app.schemas.admin import AdminFeatureWeatherMetric, AdminFeatureWeatherValuesResponse
 from app.services.weather_card import collect_weather_values
 from app.services.weather_metrics import WeatherFact, to_weather_metric
@@ -57,6 +58,7 @@ async def build_admin_feature_weather_values(
         weather_client=weather_client,
         map_weather_client=map_weather_client,
         map_budget_seconds=map_budget_seconds,
+        direct_budget_seconds=settings.pinvi_kor_travel_weather_admin_request_budget_seconds,
     )
     if not deduped:
         return AdminFeatureWeatherValuesResponse(feature_id=feature_id, asof=asof)

@@ -10,6 +10,7 @@
 - 배경 resolve에만 read45초를 주고 요청 deadline context를 상속하지 않는다. 좌표 변경·Map 행·늦은 결과·삭제 경합과 실제PG 첫 miss→배경 채움→hit를 검증한다.
 - 남은 plain HTTP의 실패/취소와 streaming body 오류도 기록한다. OAuth·Telegram·서명·runtime guard는 그대로 유지하며 실제 제공자에는 접근하지 않는다.
 - 직접 카드 예산은 설정으로 노출하고 Admin이 카드의4초를 암묵 상속하지 않도록 호출별 예산을 분리한다.
+- streaming body 오류/취소/조기종료 기존3 FAIL → 공통관측12 PASS. 직접카드/Admin 예산2 FAIL → 관련16 PASS로 보완했다.
 - 마지막에 사용자 지정 origin/main d02a35d(#692 운영 카탈로그)를 통합하고 타 작업자의 변경을 보존한 뒤 source 실행 범위를 다시 검증한다.
 - 운영 flag·edge HTTP/2·실제 운영 latency만 Claude 담당 잔여로 남긴다. Draft/Closes616/Refs621 유지, 최종 전문리뷰·ready·merge는 메인 담당이다.
 

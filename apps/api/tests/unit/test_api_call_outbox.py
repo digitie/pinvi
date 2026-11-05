@@ -188,3 +188,61 @@ async def test_response_and_exception_cannot_duplicate_same_attempt() -> None:
     await close_api_call_logs(factory)
     assert len(factory.rows) == 1
     assert factory.rows[0]["error_class"] == "HTTPStatusError"
+
+
+@pytest.mark.parametrize("mode", ["failure", "cancel", "incomplete", "complete"])
+async def test_stream_records_final_body_result_once(mode) -> None:
+    factory = RecordingFactory()
+    factory.release.set()
+    started = asyncio.Event()
+    closed = asyncio.Event()
+
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"first"
+            started.set()
+            if mode == "failure":
+                raise httpx.ReadError("token=fixture-private")
+            if mode == "cancel":
+                await asyncio.Event().wait()
+            yield b"last"
+
+        async def aclose(self):
+            closed.set()
+
+    async def handler(request):
+        return httpx.Response(200, stream=Stream(), request=request)
+
+    async with ApiCallLoggingClient(
+        transport=httpx.MockTransport(handler),
+        event_hooks=api_call_event_hooks(factory, provider="stream_fixture"),
+    ) as client:
+
+        async def read():
+            async with client.stream("GET", "https://fixture.invalid/stream") as response:
+                if mode == "incomplete":
+                    return
+                await response.aread()
+
+        if mode == "failure":
+            with pytest.raises(httpx.ReadError):
+                await read()
+        elif mode == "cancel":
+            task = asyncio.create_task(read())
+            await started.wait()
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            await read()
+    await close_api_call_logs(factory)
+    assert closed.is_set()
+    assert len(factory.rows) == 1
+    expected = {
+        "failure": "ReadError",
+        "cancel": "CancelledError",
+        "incomplete": "ResponseNotRead",
+        "complete": None,
+    }
+    assert factory.rows[0]["error_class"] == expected[mode]
+    assert "fixture-private" not in repr(factory.rows)
