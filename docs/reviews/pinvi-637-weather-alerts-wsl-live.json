@@ -1,0 +1,324 @@
+{
+  "product_revision": "c1fad759bb002b87289963ce65814402f4c1c2e8",
+  "base_revision": "5602cf3dc112d15e48aa31dbbfb4b19e0ebb0da2",
+  "production_access": false,
+  "actual_telegram_recipients": false,
+  "owner_contract": {
+    "merged_revision": "d8534aeae8852f9c514e39d625ea7dded956f3ed",
+    "pr": "https://github.com/digitie/kor-travel-weather/pull/201",
+    "openapi_sha256": "63ff8f07c0d51cfec7011f3f470f0ffc27392c0d8832b388d5368199ba645273"
+  },
+  "wsl": {
+    "unit": {
+      "passed": 2020,
+      "skipped": 9,
+      "seconds": 92.5,
+      "revision": "c1fad759bb002b87289963ce65814402f4c1c2e8"
+    },
+    "related_pg": {
+      "passed": 46,
+      "seconds": 48.67,
+      "scope": "same corrected runtime files as product; run before checkpoint commit"
+    },
+    "mypy_source_files": 271,
+    "ruff": true,
+    "format": true,
+    "web": {
+      "passed": 396,
+      "schema_passed": 24,
+      "workspace_types": true,
+      "lint": true,
+      "existing_warnings": 5,
+      "unit_revision": "e7102576fe2b685533bd6173814635c5d431e971",
+      "runtime_web_unchanged_since_unit_run": true,
+      "production_build_at_product": true
+    },
+    "etl": {
+      "passed": 81,
+      "seconds": 3.95
+    },
+    "migration_acl": {
+      "docker_lifecycle_passed": 1,
+      "seconds": 125.08,
+      "anchor_select_only_passed": 31,
+      "anchor_seconds": 128.64,
+      "tables": 6,
+      "crud_AND": true,
+      "scope": "0105/model/bootstrap/head support same as product; later behavior fixes do not change these components"
+    }
+  },
+  "adversarial_reviews": {
+    "Hubble": "no remaining P0/P1/P2 at c1fad",
+    "Hume": "no remaining P0/P1/P2 at c1fad",
+    "reviewers_ran_tests": false,
+    "negative_control": {
+      "failed_before": 4,
+      "passed_after_in_related_suite": 4,
+      "findings": [
+        "positive cancellation fence skipped on stale/incomplete collection",
+        "invalid weekly destination blocking independent weather opt-out"
+      ]
+    }
+  },
+  "live": {
+    "sourceRevision": "c1fad759bb002b87289963ce65814402f4c1c2e8",
+    "production": false,
+    "actualApi": true,
+    "actualPostgres": true,
+    "actualChromium": true,
+    "productionWebBuild": true,
+    "provider": "owned Weather REST and Telegram TCP fixtures; no real receivers",
+    "checks": [
+      "실제 로그인·검증된 대상 등록·특보 기본 off",
+      "실제 여행 대상 연결·weather-only opt-in PUT·reload 영속 보존",
+      "실제 owner REST TCP→영속 planner→실제 worker/Telegram TCP·발령 UI·중복 방지",
+      "정상 빈 응답은 해제를 만들지 않음·명시적 해제만 별도 전송",
+      "같은 시각 원발표/취소 관측은 취소만 전송·회차/활성 상태 추정 없음",
+      "최신성·불완전·HTTP503 실패의 안전한 한국어 상세 원인 UI·가짜 해제/발송 없음",
+      "실제 수신 해제 저장·reload·이후 planner 대상 제외",
+      "실제 Prometheus Docker가 같은 API worker의 weather_alert 전송·안전한 계획 실패 고정 차원을 scrape"
+    ],
+    "pageErrors": [],
+    "responses": [
+      {
+        "path": "/users/me/telegram-targets",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-notifications",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-notification-preferences",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-targets",
+        "status": 201,
+        "method": "POST"
+      },
+      {
+        "path": "/users/me/telegram-targets",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/trips/64300000-0000-4000-8000-000000006370/telegram-targets",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-notifications",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/trips/64300000-0000-4000-8000-000000006370/telegram-targets",
+        "status": 201,
+        "method": "POST"
+      },
+      {
+        "path": "/users/me/telegram-targets",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/trips/64300000-0000-4000-8000-000000006370/telegram-targets",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-targets",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-notifications",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-notification-preferences",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-notification-preferences",
+        "status": 200,
+        "method": "PUT"
+      },
+      {
+        "path": "/users/me/telegram-notification-preferences",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-targets",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-notifications",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-notifications",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-notifications",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-notification-preferences",
+        "status": 200,
+        "method": "PUT"
+      },
+      {
+        "path": "/users/me/telegram-notification-preferences",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-targets",
+        "status": 200,
+        "method": "GET"
+      },
+      {
+        "path": "/users/me/telegram-notifications",
+        "status": 200,
+        "method": "GET"
+      }
+    ],
+    "sourceRequestModes": [
+      "issued",
+      "issued",
+      "empty",
+      "released",
+      "cancelled",
+      "cancelled",
+      "stale",
+      "incomplete",
+      "transport",
+      "transport",
+      "transport"
+    ],
+    "telegramMessages": 3,
+    "prometheus": {
+      "actualDocker": true,
+      "targetUp": true,
+      "weatherDelivered": 3.0,
+      "planningFailures": 3.0,
+      "fixedLabelsOnly": true
+    },
+    "ok": true,
+    "ownedStackStopped": true
+  },
+  "visual_review": "Existing colors retained; default-off weather setting, limitation text, delivery outcomes and safe detailed Korean causes/codes readable without overlap.",
+  "ci_limitations": {
+    "mobile_doctor_informational": "Six Expo SDK patch-version mismatches reported by nonrequired informational job; mobile package manifest and root lock unchanged versus base. Required mobile typecheck/lint pass. No unrelated mobile dependency updates or gate edits."
+  },
+  "limits": [
+    "Owned local Weather REST/Telegram TCP fixtures; no real KMA fetch or real Telegram recipient.",
+    "No prod/deploy/test access. Claude Code owns final production validation.",
+    "BJD representative-region path only, partial official mapping; no inferred occurrence or active-state guarantee.",
+    "NTF-018 product expectations updated; production case remains manual, not falsely marked as live-production passed."
+  ],
+  "artifact_hashes": [
+    {
+      "name": "pinvi637-unit-c1fad.log",
+      "sha256": "2f558189ad9ca05168717cee1efbb8c24cfc73e0feb5aed00d5e2773df91668f"
+    },
+    {
+      "name": "pinvi637-reviewed-pg.log",
+      "sha256": "fc4f54c2288cbb4406b0191127e4522f5080e4786738114819a53dc7bde5f199"
+    },
+    {
+      "name": "pinvi637-review-negative.log",
+      "sha256": "569d331f38b03abd39bd754393b2205019b184dceb878bdd8088b1aaabe3193f"
+    },
+    {
+      "name": "pinvi637-0105-runtime-lifecycle-positive.log",
+      "sha256": "91e2a8f2218a227a855201fadb0590738e789a6663f3b4888bd781bc25375777"
+    },
+    {
+      "name": "pinvi637-0105-anchor-acl.log",
+      "sha256": "6a9dfc9413d85d8bd58bf0cced514a1cbb5a449dfce0a2766613ac79debcb83b"
+    },
+    {
+      "name": "pinvi637-web-tests.log",
+      "sha256": "d6c677c751f6992e7145f050a00f882e419d90081fb21a0418d77e3de40e6b41"
+    },
+    {
+      "name": "pinvi637-schema-tests.log",
+      "sha256": "84c381170f254dbea42861ff019e39b7a2953998c43702e23b94476e340b1498"
+    },
+    {
+      "name": "pinvi637-workspace-types.log",
+      "sha256": "85dd66c98ddd0078437e3b75ad7714b25f8ce5892bb7a02a65b00e66f2be1524"
+    },
+    {
+      "name": "pinvi637-web-lint.log",
+      "sha256": "a8935626ab881e93b1e6174066b95ed9aed63725c130bb78cde63df3c5aab330"
+    },
+    {
+      "name": "pinvi637-complete-ruff.log",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "name": "pinvi637-complete-format.log",
+      "sha256": "a4d9d0ec55553d6f457f128e58070d610c528df57658a6d392a2f886041bb589"
+    },
+    {
+      "name": "pinvi637-reviewed-mypy.log",
+      "sha256": "0f50c672cdacd17014480e6a69decc067dfe8712de58807b575944416825a966"
+    },
+    {
+      "name": "pinvi637-etl.log",
+      "sha256": "cad0adf83f64643f5b1a9dc130e664d5cce4db848507e8d7ce34867de5505a34"
+    },
+    {
+      "name": "pinvi637-live-result.json",
+      "sha256": "b26d1802ed7e37b3a5636a02137412096699483cfcb40341efd1ce6987924de4"
+    },
+    {
+      "name": "pinvi637-ui-errors.png",
+      "sha256": "754e3832a3f3dcaa9a49baffc570ac010903fccdb37f5f9cd01e10906fc6a8e6"
+    },
+    {
+      "name": "pinvi637-ui-optout.png",
+      "sha256": "b0b0ab5379dbd8e9e7c0e57078883e3a2237cfcd7e9ffba8a5cbd949a3956591"
+    },
+    {
+      "name": "pinvi637-openapi-export.json",
+      "sha256": "bc3e72722b99bba5b1bca5dfc616a6e6bcf3b1d681a2b76175246848e01c36fb"
+    },
+    {
+      "name": "pinvi637-mobile-doctor.log",
+      "sha256": "71c47da4ec4eab6f9598acf0123ef10d9517d50f7ba02d34137b6f930aa775c4"
+    }
+  ],
+  "changed_runtime_sha256": {
+    "apps/api/alembic/versions/20261105_0105_telegram_weather_alerts.py": "409cbeaa6ff5501f090baeeac50bff925f99468e0e53eca8d78314ca6a0923b2",
+    "apps/api/app/clients/kor_travel_weather.py": "f73a5f5e92da601753c03aa35952d2c31eb355b367f35fd00ccbde582c9c51cf",
+    "apps/api/app/clients/weather_alert_events.py": "805f82deb553456bedfe4daf04f915b1da4345b8b277ebb96ce0267f9f51e911",
+    "apps/api/app/models/cache_target_sync.py": "728ec62ab10cfb645cffb0b0ea28d21f577dfc36d3ce4b9cad1daa00947c1be7",
+    "apps/api/app/models/telegram_notification.py": "a243696f4c6318ffb73386787005c7d9a19f5a677ceb787c64009dd6846e1bdd",
+    "apps/api/app/schemas/telegram_notifications.py": "21fc7cf6d36d2efd6c407734557366f23af811165cc2cfba7aa34cd903f93b64",
+    "apps/api/app/services/cache_target_final_boundary.py": "b29e83325ac7545ff82128db36e3a981e1dabbb022ee3952a29b75af69ed3088",
+    "apps/api/app/services/telegram_notifications.py": "ddf42678a124c8dcc74484acd8b2b38e258bc74b15f4be79e8876119f2dde67c",
+    "apps/api/app/services/telegram_planner.py": "bedecf94229460cead4f6398542150da8cf91c027f9c58077f861eb795f87dba",
+    "apps/api/app/services/telegram_weather.py": "8ff296f93201b7f80acae99eb755d33b1e204dc564e19d9c7fe938f40ee70ce6",
+    "apps/web/components/trips/TelegramNotificationHistory.tsx": "992c1a585cdf78226f829e79495a3574494c64882b36a05683530b3b6e1197af",
+    "apps/web/components/trips/TelegramNotificationPreferences.tsx": "ae76ef3c6c39a70f04bcdbfa25c5c6d0ec97501ecc2ed717c2117e64ff938f2f",
+    "infra/postgres/bootstrap-pinvi-runtime-role.sh": "72a0bc1ed5721f10e90baf7337d575d22962f1e33db07f8e3351fe999f9c2cf4",
+    "packages/schemas/src/telegram.ts": "c02e03604f5157b6c0978d27c87d8c55209dcd8766f15219dc3acb33aecb36ff",
+    "scripts/deploy-node.sh": "a74052e2393f2b0272fef622b5e76c0df3e937bf2665696ce1a66f8d61caf7ff"
+  }
+}

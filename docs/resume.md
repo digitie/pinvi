@@ -1,3 +1,11 @@
+## 2026-11-05 — #637 최종 제품 WSL UI·telemetry·두 리뷰
+
+- c1fad75의 실제 소유 PG/API·공개 Weather REST와 Telegram TCP fixture·프로덕션 웹 Chromium7흐름이 통과했고 pageerror0이다. 같은 API worker의 전송3·계획 실패3을 실제 Prometheus Docker가 scrape해 총8검증이 통과했다. 실제 수신자·원천·운영 접근은 없다.
+- c1fad75의 독립 전문 적대 코드 리뷰2인은 잔여P0/P1/P2가 없었다. 이전4FAIL→보완PG46PASS를 확인했다. 리뷰어가 테스트를 실행한 것으로 표시하지 않는다.
+- 같은 후보 API단위2020/9skip(92.50초), mypy271·전체Ruff/format·ETL81을 확인했다. 웹396/schema24·workspace타입/lint는 동일 웹 source의e710이며 프로덕션 빌드/실제 UI는c1fad75다. 0105 권한 복구/봉인1과anchor31의 실행 범위도 증거에 구분했다.
+- 증거 docs/reviews/pinvi-637-weather-alerts-wsl-live.json. Expo6개patch 진단은 mobile manifest/lock 미변경의 informational 검사이며 필수mobile타입/lint와 구분한다. 최종 문서 후보의 두 재확인과 정확 HEAD 적용 CI를 확인한 뒤 일반 squash merge한다. 아직 병합 완료 기록이 아니다.
+- 다음은641, 운영650/Map1450은Claude Code 담당이다.671/672와 보호stash는 건드리지 않는다.
+
 ## 2026-11-05 — #637 두 적대 코드 리뷰 보완·실제 PG 검증
 
 - Weather201은d8534ae로 병합됐고 실제 OpenAPI bytes를 동기화했다. Pinvi689 제품은 기본 off 특보 동의·기간/대표 지역·안전한 상세 오류 이력·취소/상충 영속 fence를 연결한다. 원천 수집/회차 추정은 하지 않는다.

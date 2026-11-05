@@ -39,3 +39,11 @@ Weather201은 d8534ae로 일반 squash 병합됐고, 후보7698321의 두 리뷰
 e710의 두 독립 전문 리뷰는 수집 실패/불완전 응답에 포함된 긍정적 취소가 대기 발령을 무효화하지 못하는 문제와 무효 주간 대상이 특보 해제를 거절하는 문제를 지적했다. 실제 PG4실패 후, 검증된 관측의 fence 반영과 신규 생성 자격 검사를 분리했다. 별도 주간 대상이 무효이고 특보 철회를 요청하면 그 무효 주간 설정도 해제한다. 수정 뒤 신규22/기존24 합계46검사가 통과했다.
 
 0105 실제 Docker의6테이블 CRUD/권한 복구·로그인 봉인125.08초1검사와 전체 anchor/SELECT-only 반례31검사가 통과했다. 새 테이블을 추가하며 남은5개 기대값을6개로 동기화했다. 제품 e710의 단위2020/9skip·웹396/schema24·타입/lint/build 기록과, 이후 보완한 실제 PG46·mypy271 기록은 source 범위를 구분한다.
+
+## 실제 UI·telemetry와 최종 후보 검증
+
+정확 c1fad75의 실제 소유 DB/API·공개 Weather REST/Telegram TCP fixture·프로덕션 웹 Chromium에서7흐름이 통과했다. pageerror0이며 발령·명시 해제·동률 취소3건과 오류 UI·특보 철회를 확인했다. 실제 Prometheus Docker가 같은 API worker의 weather_alert 전송3건·고정 계획 실패3건을 읽어 합계8검증이다. 소유 stack은 종료했다.
+
+c1fad75의 두 전문 코드 리뷰는 잔여P0/P1/P2가 없다. API단위2020/9skip·mypy271·Ruff/format·ETL81을 확인했다. 소스 범위와 artifact SHA256은 docs/reviews/pinvi-637-weather-alerts-wsl-live.json에 보존한다. 기존 웹 source의396/schema24·타입/lint와 실제 c1 프로덕션 빌드를 구분한다. 신규0105의 실제 권한 복구/로그인 봉인1·anchor/SELECT-only6표31검사도 해당 구성요소 검증으로 기록한다.
+
+외부 Expo patch metadata의 informational doctor 실패는 동일 manifest/lock의6개 버전 차이이며 이번 변경에서 모바일 의존성이나 CI gate를 수정하지 않는다. 필수 mobile 타입/lint와 다른 적용 CI의 성공을 정확 최종 HEAD에서 확인한다. 최종 문서 후보의 두 재확인 뒤 일반 squash merge한다. 운영 접근·실수신자 전송·배포·시험은 없다.
