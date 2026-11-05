@@ -443,9 +443,9 @@ cleanup() {
   # remains available even on failure; never restore privileges or terminate
   # a backend here. PID reuse conservatively times out instead of touching it.
   if [[ "${LOCK_HOLDER_BACKEND_PID}" =~ ^[0-9]+$ ]]; then
-    if ! PGCONNECT_TIMEOUT=2 PGOPTIONS='-c default_transaction_read_only=on' \
-      timeout --kill-after=1s 8s "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -Atq \
-        --dbname="${FENCE_DATABASE_URL}" > /dev/null 2>&1 <<SQL
+    if ! {
+      write_identity_guard
+      cat <<SQL
 SET statement_timeout = '5s';
 DO \$m05\$
 DECLARE
@@ -471,7 +471,9 @@ BEGIN
 END
 \$m05\$;
 SQL
-    then
+    } | PGCONNECT_TIMEOUT=2 PGOPTIONS='-c default_transaction_read_only=on' \
+      timeout --kill-after=1s 8s "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -Atq \
+        --dbname="${FENCE_DATABASE_URL}" > /dev/null 2>&1; then
       phase "${ACTIVE_PHASE}" failed "advisory lock holder release could not be confirmed; explicit root escalation is required"
       # Preserve an existing failure/signal status; never turn an unconfirmed
       # successful run into a reported success.

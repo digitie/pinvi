@@ -32,3 +32,9 @@
 - 수정 script의 신규 delay+기존 canonical 2통과(13.93초). 정상·원래37·TERM/INT143, 2차 TERM, 정지 backend timeout을 포함한 PG18 생명주기 7통과(45.63초).
 - observer는 fence URL의 읽기 전용 catalog 질의만 수행하며 server4/statement5/connect2/client8+kill유예1초 상한을 둔다. nonzero는 보존하고 확인할 수 없는 정상0만3으로 바꾼다.
 - 동일 key의 다른 세션 비간섭과 관측 연결 실패, 전체 관련 PG/lint 검증은 후속 확인한다.
+
+## 대상 identity와 비간섭 보강
+
+- 같은 advisory key의 별도 대기 세션은 본인 backend 종료 후 lock을 얻고 살아 있어야 한다. 관측 연결 실패에서도 원래37 또는 정상0→3과 고정 진단을 확인한다. 직전 전체 PG18 통합18통과(119.13초).
+- 새 관측 연결에서도 기존 `write_identity_guard`를 같은 bounded psql stdin에서 재사용한다. 이 최종 source의 PG18 전체 재검증은 진행 중이며 단위12통과(0.70초)·Bash 문법·Ruff/format 통과다.
+- ShellCheck는 원본과 동일한 진단7개, 신규0개다. 기존 경고를 전부 통과로 표시하거나 범위 밖 코드를 고치지 않는다.

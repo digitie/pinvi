@@ -1885,19 +1885,21 @@ SELECT (SELECT oid::text FROM pg_namespace WHERE nspname = 'app'),
 
 
 @pytest.mark.parametrize(
-    ("requested_status", "resume_backend"),
+    ("requested_status", "resume_backend", "observer_available"),
     [
-        (0, True),
-        (37, True),
-        ("TERM", True),
-        ("INT", True),
-        (0, False),
-        (37, False),
-        ("TERM", False),
+        (0, True, True),
+        (37, True, True),
+        ("TERM", True, True),
+        ("INT", True, True),
+        (0, False, True),
+        (37, False, True),
+        ("TERM", False, True),
+        (0, False, False),
+        (37, False, False),
     ],
 )
 def test_restore_hotswap_cleanup_waits_for_server_lock_release(
-    tmp_path: Path, requested_status: int | str, resume_backend: bool
+    tmp_path: Path, requested_status: int | str, resume_backend: bool, observer_available: bool
 ) -> None:
     """psql kill/wait와 정지된 소유 PG18 backend의 lock 해제를 분리한다."""
 
@@ -1914,11 +1916,13 @@ def test_restore_hotswap_cleanup_waits_for_server_lock_release(
         + source[source.index("phase() {") : source.index('if [[ "${1:-}"')]
         + source[source.index("cleanup() {") : source.index("copy_tool_to_private_dir() {")]
         + source[source.index("start_advisory_lock() {") : source.index("configure_forensics() {")]
+        + source[source.index("write_identity_guard() {") : source.index("execute_sql_file() {")]
         + """
+TEST_MODE=0
 TMP_DIR="$(mktemp -d)"
 PSQL_BIN="${PROBE_PSQL}"
 DATABASE_URL="${PROBE_URL}"
-FENCE_DATABASE_URL="${PROBE_URL}"
+FENCE_DATABASE_URL="${PROBE_FENCE_URL}"
 start_advisory_lock
 printf 'PROBE_CLIENT|%s\n' "${LOCK_HOLDER_PID}"
 printf 'PROBE_READY\n'
@@ -1935,6 +1939,7 @@ exit "${requested_status}"
     )
     container.start()
     process = None
+    waiter = None
     backend_pid = None
     try:
         database_url = _database_url(
@@ -1944,7 +1949,17 @@ exit "${requested_status}"
             database="m05_root",
         )
         env = os.environ.copy()
-        env.update(PROBE_PSQL=tools["psql"], PROBE_URL=database_url)
+        env.update(
+            PROBE_PSQL=tools["psql"],
+            PROBE_URL=database_url,
+            PROBE_FENCE_URL=database_url if observer_available else database_url + "_missing",
+        )
+        for name, value in zip(
+            ("DATABASE_NAME", "DATABASE_OID", "SYSTEM_IDENTIFIER", "HOSTADDR", "PORT"),
+            _identity(tools, database_url),
+            strict=True,
+        ):
+            env[f"PINVI_RESTORE_EXPECTED_{name}"] = value
         with (tmp_path / "output").open("w+") as output:
             process = subprocess.Popen(  # noqa: S603
                 [tools["bash"], str(harness)],
@@ -1989,6 +2004,37 @@ WHERE activity.datname = current_database()
             stopped_state = container.exec(["cat", f"/proc/{backend_pid}/status"])
             assert stopped_state.exit_code == 0
             assert b"State:\tT" in stopped_state.output
+            # A separate session waits for the same key. Cleanup must observe
+            # only its own backend, even if this waiter acquires the lock next.
+            waiter = subprocess.Popen(  # noqa: S603
+                [
+                    tools["psql"],
+                    "--no-psqlrc",
+                    "-Atq",
+                    "--set=ON_ERROR_STOP=1",
+                    f"--dbname={database_url}",
+                ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+            assert waiter.stdin is not None
+            waiter.stdin.write("SELECT pg_advisory_lock(1414679892, 1213421392);\n")
+            waiter.stdin.flush()
+            deadline = time.monotonic() + 3
+            while True:
+                waiting = _psql(
+                    tools,
+                    database_url,
+                    "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' "
+                    "AND classid = 1414679892 AND objid = 1213421392 AND NOT granted;",
+                )
+                _require_success(waiting)
+                if waiting.stdout.strip() == "1":
+                    break
+                assert time.monotonic() < deadline
+                time.sleep(0.02)
             cleanup_started = time.monotonic()
             if isinstance(requested_status, str):
                 process.send_signal(getattr(signal, f"SIG{requested_status}"))
@@ -2009,12 +2055,14 @@ WHERE activity.datname = current_database()
             )
             _require_success(held)
             assert held.stdout.strip() == "1"
-            assert process.poll() is None, (
-                "cleanup returned while its server backend still held the lock"
-            )
+            if observer_available:
+                assert process.poll() is None, (
+                    "cleanup returned while its server backend still held the lock"
+                )
             # A second signal during cleanup must not discard the first status
             # or cut the bounded server observation short.
-            process.send_signal(signal.SIGTERM)
+            if process.poll() is None:
+                process.send_signal(signal.SIGTERM)
             if resume_backend:
                 assert container.exec(["kill", "-CONT", str(backend_pid)]).exit_code == 0
             expected_status = 143 if isinstance(requested_status, str) else requested_status
@@ -2040,11 +2088,27 @@ WHERE activity.datname = current_database()
             gone = _psql(
                 tools,
                 database_url,
-                "SELECT NOT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' "
+                f"SELECT NOT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = {owner_pid}), "  # noqa: S608 - verified integer PID.
+                f"NOT EXISTS (SELECT 1 FROM pg_locks WHERE pid = {owner_pid} AND granted), "
+                "EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' "
                 "AND classid = 1414679892 AND objid = 1213421392 AND granted);",
             )
             _require_success(gone)
-            assert gone.stdout.strip() == "t"
+            assert gone.stdout.strip().split("|")[:2] == ["t", "t"]
+            deadline = time.monotonic() + 3
+            while True:
+                waiter_lock = _psql(
+                    tools,
+                    database_url,
+                    "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' "
+                    "AND classid = 1414679892 AND objid = 1213421392 AND granted);",
+                )
+                _require_success(waiter_lock)
+                if waiter_lock.stdout.strip() == "t":
+                    break
+                assert time.monotonic() < deadline
+                time.sleep(0.02)
+            assert waiter.poll() is None
     finally:
         if backend_pid is not None:
             container.exec(["kill", "-CONT", str(backend_pid)])
@@ -2054,4 +2118,8 @@ WHERE activity.datname = current_database()
             process.wait(timeout=12)
             if process.stdin is not None:
                 process.stdin.close()
+        if waiter is not None:
+            if waiter.stdin is not None:
+                waiter.stdin.close()
+            waiter.wait(timeout=12)
         container.stop()
