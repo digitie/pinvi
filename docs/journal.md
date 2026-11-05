@@ -1,3 +1,9 @@
+## 2026-11-06 — #616·#621 WSL 복원력 묶음 착수
+
+- 사용자 지정 ff5c2386 기준 전용 worktree에서 최신 두 이슈 본문·댓글과 지침을 확인했다. 실행계획은 docs/execplan/issues-616-621-outbound-resilience.md다.
+- tracker 시작 시각은 이미 request.extensions로 옮겨져 있어 재구현하지 않는다. inline DB 로깅·실패 누락, rate limit 왕복/청소, provider 포화/회로, pool 관측을 재분류 후 구현한다.
+- 계획 commit·push·Draft PR을 구현보다 먼저 만든다. 운영·SSH·실제 provider·Telegram 접근은 없으며 #621 운영 범위는 Claude Code 소유다. 최종 두 전문 리뷰·ready·merge는 메인에 인계한다.
+
 ## 2026-11-06 — 원격 통합 검사의 고정 시계 혼용 보완
 
 - PR691 d8 후보의 원격integration4가 특보12검사 실패를 포착했다. 고정worker NOW는11/5 12UTC인데 DB scheduled_at default는실제21UTC라선택대상이없었다. WSL에서같은1FAIL을재현했다. 제품큐/worker/guard는바꾸지않는다.
