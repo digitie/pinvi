@@ -75,6 +75,8 @@ async def _create_suggestion(
 
 
 class _FakeAdminClient:
+    actor = "pinvi-admin"
+
     def __init__(self, state: str = "applied") -> None:
         self.outbound_calls: list[dict[str, Any]] = []
 

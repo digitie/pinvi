@@ -13,8 +13,9 @@ import json
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import UTC, datetime
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from pydantic import ValidationError
@@ -45,6 +46,8 @@ from app.models.user import User
 from app.schemas.admin_feature_request import (
     AdminFeatureRequestApprove,
     AdminFeatureRequestPagedResponse,
+    AdminFeatureRequestReconcile,
+    AdminFeatureRequestReconcileResult,
     AdminFeatureRequestReject,
     AdminFeatureRequestResult,
     AdminFeatureRequestSummary,
@@ -123,11 +126,18 @@ def _map_admin_errors() -> Iterator[None]:
             },
         ) from exc
     except KorTravelMapConflict as exc:
+        messages = {
+            "LEGACY_FINGERPRINT_UNVERIFIABLE": "과거 Map 명령에는 필드 존재 기록이 없어 안전하게 확정할 수 없습니다. 운영 검토가 필요합니다.",
+            "IDEMPOTENCY_KEY_REUSED": "저장된 Map 명령과 입력이 다릅니다. 기존 명령을 보존했습니다.",
+        }
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": exc.code or "MAP_COMMAND_CONFLICT",
-                "message": "Map 명령이 충돌했습니다. 기존 제출 내용으로 재시도하거나 운영 검토가 필요합니다.",
+                "message": messages.get(
+                    exc.code or "",
+                    "Map 명령이 충돌했습니다. 기존 제출 내용으로 재시도하거나 운영 검토가 필요합니다.",
+                ),
             },
         ) from exc
     except KorTravelMapBadRequest as exc:
@@ -228,7 +238,7 @@ def _result(row: FeatureSuggestion) -> AdminFeatureRequestResult:
     )
 
 
-async def _load_pending(db: AsyncSession, request_id: uuid.UUID) -> FeatureSuggestion:
+async def _load_request(db: AsyncSession, request_id: uuid.UUID) -> FeatureSuggestion:
     suggestion = await db.scalar(
         select(FeatureSuggestion)
         .where(FeatureSuggestion.request_id == request_id)
@@ -240,6 +250,11 @@ async def _load_pending(db: AsyncSession, request_id: uuid.UUID) -> FeatureSugge
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Feature request not found."},
         )
+    return suggestion
+
+
+async def _load_pending(db: AsyncSession, request_id: uuid.UUID) -> FeatureSuggestion:
+    suggestion = await _load_request(db, request_id)
     if suggestion.status != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -313,6 +328,47 @@ def _direct_payload(
     return payload
 
 
+def _dispatch_error(code: str, message: str) -> HTTPException:
+    return HTTPException(status_code=409, detail={"code": code, "message": message})
+
+
+def _dispatch_identity(
+    suggestion: FeatureSuggestion,
+    *,
+    current_actor: str,
+) -> tuple[dict[str, Any], str, str]:
+    value = (suggestion.kor_travel_map_ref or {}).get("dispatch")
+    if not isinstance(value, dict):
+        raise _dispatch_error("MAP_COMMAND_PENDING", "저장된 Map 명령의 운영 검토가 필요합니다.")
+    actor = value.get("actor")
+    if not isinstance(actor, str) or not actor:
+        raise _dispatch_error(
+            "MAP_COMMAND_ACTOR_UNVERIFIABLE",
+            "과거 명령에 원래 Map 운영자 정보가 없어 자동 확인·해제할 수 없습니다. 운영 검토가 필요합니다.",
+        )
+    if actor != current_actor:
+        raise _dispatch_error(
+            "MAP_COMMAND_ACTOR_CHANGED",
+            "원래 명령과 현재 Map 인증 운영자가 다릅니다. 명령을 보존했습니다.",
+        )
+    try:
+        key = str(uuid.UUID(value["command_key"]))
+        original = AdminFeatureRequestApprove.model_validate(value["input"])
+        if (
+            value.get("feature_id") != suggestion.target_feature_id
+            or value.get("type") != suggestion.suggestion_type
+            or not isinstance(value.get("expected_revision"), str)
+            or value.get("payload") != _direct_payload(suggestion, original)
+        ):
+            raise ValueError("stored command mismatch")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _dispatch_error(
+            "MAP_COMMAND_PENDING",
+            "저장된 Map 명령의 입력을 검증하지 못했습니다. 운영 검토가 필요합니다.",
+        ) from exc
+    return value, key, actor
+
+
 async def _direct_submission(
     db: AsyncSession,
     suggestion: FeatureSuggestion,
@@ -356,18 +412,28 @@ async def _direct_submission(
                     "message": "저장된 Map 명령에 대한 운영 검토가 필요합니다.",
                 },
             )
+        _, command_key, _ = _dispatch_identity(suggestion, current_actor=client.actor)
         payload = dispatch["payload"]
     else:
+        try:
+            command_key = str(uuid.UUID(ref.get("next_command_key") or str(suggestion.request_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise _dispatch_error(
+                "MAP_COMMAND_PENDING", "다음 Map 명령 키의 운영 검토가 필요합니다."
+            ) from exc
         with _map_admin_errors():
             expected_revision = await client.get_feature_revision_etag(target_feature_id)
         suggestion.kor_travel_map_ref = {
+            **ref,
             "dispatch": {
+                "actor": client.actor,
+                "command_key": command_key,
                 "input": approval_input,
                 "feature_id": target_feature_id,
                 "type": suggestion.suggestion_type,
                 "payload": payload,
                 "expected_revision": expected_revision,
-            }
+            },
         }
         prepared_dispatch = suggestion.kor_travel_map_ref["dispatch"]
         await append_admin_audit(
@@ -413,14 +479,14 @@ async def _direct_submission(
                     target_feature_id,
                     payload,
                     expected_revision=expected_revision,
-                    idempotency_key=str(suggestion.request_id),
+                    idempotency_key=command_key,
                 )
             return await client.delete_feature(
                 target_feature_id,
                 reason=payload["reason"],
                 operator="pinvi-admin",
                 expected_revision=expected_revision,
-                idempotency_key=str(suggestion.request_id),
+                idempotency_key=command_key,
             )
         except (
             KorTravelMapBadRequest,
@@ -431,6 +497,96 @@ async def _direct_submission(
             suggestion.kor_travel_map_ref = None
             await db.commit()
             raise
+
+
+async def _finalize_feature_request(
+    db: AsyncSession,
+    suggestion: FeatureSuggestion,
+    record: dict[str, Any],
+    request: Request,
+    admin: User,
+    audit_request_id: uuid.UUID,
+    *,
+    access_reason: str,
+    audit_action: str = "feature_request.approve",
+    resolution_info: dict[str, Any] | None = None,
+) -> AdminFeatureRequestResult:
+    stype = suggestion.suggestion_type
+    request_id = suggestion.request_id
+    kor_travel_map_state = str(record.get("status") or ("applied" if stype != "new_place" else ""))
+    # 신규 장소의 approved는 Map 검토 대기이며 직접 명령의 added는 commit receipt가 확정한 결과다.
+    if stype == "new_place":
+        new_status = "duplicate" if kor_travel_map_state == "exact_conflict" else "approved"
+    else:
+        new_status = "added"
+    before = {"status": suggestion.status}
+
+    # 최종 Feature를 받은 경우에만 외부 참조 POI를 연결한다. 큐 검토 대기는 연결하지 않는다.
+    feature_id_val = record.get("feature_id")
+    ref = suggestion.external_ref
+    reconciled = 0
+    if (
+        new_status in {"added", "duplicate"}
+        and isinstance(feature_id_val, str)
+        and feature_id_val
+        and isinstance(ref, dict)
+        and isinstance(ref.get("provider"), str)
+        and isinstance(ref.get("external_id"), str)
+    ):
+        reconciled = await reconcile_pois_for_external_ref(
+            db,
+            provider=ref["provider"],
+            external_id=ref["external_id"],
+            feature_id=feature_id_val,
+        )
+
+    if stype == "new_place":
+        kor_travel_map_ref = {
+            "feature_id": record.get("feature_id"),
+            "request_id": record.get("request_id"),
+            "state": kor_travel_map_state,
+            "review_mode": "feature_request_queue",
+            "action": "submit",
+            "reconciled_poi_count": reconciled,
+        }
+    else:
+        # receipt의 정본 필드는 보존하고 PinVi의 처리 방식만 명시한다.
+        kor_travel_map_ref = {
+            **record,
+            "review_mode": "direct",
+            "action": stype,
+            "reconciled_poi_count": reconciled,
+            "last_resolution": resolution_info
+            or {
+                "state": "completed",
+                "actor": (suggestion.kor_travel_map_ref or {}).get("dispatch", {}).get("actor"),
+                "command_key": (suggestion.kor_travel_map_ref or {})
+                .get("dispatch", {})
+                .get("command_key"),
+            },
+        }
+    suggestion.status = new_status
+    suggestion.kor_travel_map_ref = kor_travel_map_ref
+    suggestion.reviewed_by_admin_id = admin.user_id
+    suggestion.resolved_at = datetime.now(UTC)
+
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action=audit_action,
+        resource_type="feature_request",
+        resource_id=str(request_id),
+        before_state=before,
+        after_state={"status": new_status, "kor_travel_map_ref": kor_travel_map_ref},
+        access_reason=access_reason,
+        target_pii_fields=None,
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=audit_request_id,
+    )
+    await db.commit()
+    await db.refresh(suggestion)
+    return _result(suggestion)
 
 
 @router.post("/{request_id}/approve", response_model=Envelope[AdminFeatureRequestResult])
@@ -493,63 +649,100 @@ async def approve_feature_request_endpoint(
     else:
         record = await _direct_submission(db, suggestion, body, request, admin, audit_request_id)
 
-    kor_travel_map_state = str(record.get("status") or ("applied" if stype != "new_place" else ""))
-    # 신규 장소의 approved는 Map 검토 대기이며 직접 명령의 added는 commit receipt가 확정한 결과다.
-    if stype == "new_place":
-        new_status = "duplicate" if kor_travel_map_state == "exact_conflict" else "approved"
-    else:
-        new_status = "added"
-    before = {"status": suggestion.status}
-
-    # 최종 Feature를 받은 경우에만 외부 참조 POI를 연결한다. 큐 검토 대기는 연결하지 않는다.
-    feature_id_val = record.get("feature_id")
-    ref = suggestion.external_ref
-    reconciled = 0
-    if (
-        new_status in {"added", "duplicate"}
-        and isinstance(feature_id_val, str)
-        and feature_id_val
-        and isinstance(ref, dict)
-        and isinstance(ref.get("provider"), str)
-        and isinstance(ref.get("external_id"), str)
-    ):
-        reconciled = await reconcile_pois_for_external_ref(
+    return Envelope.of(
+        await _finalize_feature_request(
             db,
-            provider=ref["provider"],
-            external_id=ref["external_id"],
-            feature_id=feature_id_val,
+            suggestion,
+            record,
+            request,
+            admin,
+            audit_request_id,
+            access_reason=body.access_reason,
         )
+    )
 
-    if stype == "new_place":
-        kor_travel_map_ref = {
-            "feature_id": record.get("feature_id"),
-            "request_id": record.get("request_id"),
-            "state": kor_travel_map_state,
-            "review_mode": "feature_request_queue",
-            "action": "submit",
-            "reconciled_poi_count": reconciled,
-        }
-    else:
-        # receipt의 정본 필드는 보존하고 PinVi의 처리 방식만 명시한다.
-        kor_travel_map_ref = {
-            **record,
-            "review_mode": "direct",
-            "action": stype,
-            "reconciled_poi_count": reconciled,
-        }
-    suggestion.status = new_status
-    suggestion.kor_travel_map_ref = kor_travel_map_ref
-    suggestion.reviewed_by_admin_id = admin.user_id
-    suggestion.resolved_at = datetime.now(UTC)
 
+def _known_resolution(
+    suggestion: FeatureSuggestion,
+) -> Literal["abandoned", "completed"] | None:
+    ref = suggestion.kor_travel_map_ref or {}
+    if ref.get("dispatch") is not None:
+        return None
+    saved = ref.get("last_resolution")
+    if not isinstance(saved, dict):
+        return None
+    if saved.get("state") == "completed" and suggestion.status == "added":
+        return "completed"
+    if saved.get("state") == "abandoned" and suggestion.status == "pending":
+        try:
+            next_key = str(uuid.UUID(ref["next_command_key"]))
+            old_key = str(uuid.UUID(saved["command_key"]))
+            if next_key != old_key and isinstance(saved.get("actor"), str):
+                return "abandoned"
+        except (ValueError, TypeError, KeyError, AttributeError):
+            pass
+    return None
+
+
+def _reconciliation_result(
+    suggestion: FeatureSuggestion,
+    resolution: Literal["abandoned", "pending", "completed"],
+) -> Envelope[AdminFeatureRequestReconcileResult]:
+    return Envelope.of(
+        AdminFeatureRequestReconcileResult(
+            **_result(suggestion).model_dump(),
+            resolution=resolution,
+        )
+    )
+
+
+@router.post(
+    "/{request_id}/reconcile-map-command",
+    response_model=Envelope[AdminFeatureRequestReconcileResult],
+)
+async def reconcile_feature_request_command_endpoint(
+    request_id: uuid.UUID,
+    body: AdminFeatureRequestReconcile,
+    request: Request,
+    db: DbSession,
+    admin: Annotated[User, Depends(require_role("admin"))],
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Envelope[AdminFeatureRequestReconcileResult]:
+    audit_request_id = _request_correlation_id(request, x_request_id)
+    suggestion = await _load_request(db, request_id)
+    known = _known_resolution(suggestion)
+    if known is not None:
+        return _reconciliation_result(suggestion, known)
+    if suggestion.status != "pending" or suggestion.suggestion_type not in {
+        "correction",
+        "closure",
+    }:
+        raise _dispatch_error(
+            "INVALID_STATE", "미확정 직접 Map 명령이 있는 대기 제안만 확인할 수 있습니다."
+        )
+    client = get_kor_travel_map_admin_client(request)
+    dispatch, command_key, actor = _dispatch_identity(suggestion, current_actor=client.actor)
+    original = deepcopy(dispatch)
+    operation: Literal["admin.feature.patch", "admin.feature.delete"] = (
+        "admin.feature.patch"
+        if suggestion.suggestion_type == "correction"
+        else "admin.feature.delete"
+    )
     await append_admin_audit(
         db,
         actor_user_id=admin.user_id,
-        action="feature_request.approve",
+        action="feature_request.command_reconcile_requested",
         resource_type="feature_request",
         resource_id=str(request_id),
-        before_state=before,
-        after_state={"status": new_status, "kor_travel_map_ref": kor_travel_map_ref},
+        before_state={"status": "pending"},
+        after_state={
+            "command_key": command_key,
+            "actor": actor,
+            "operation": operation,
+            "saved_dispatch_sha256": hashlib.sha256(
+                json.dumps(original, sort_keys=True).encode()
+            ).hexdigest(),
+        },
         access_reason=body.access_reason,
         target_pii_fields=None,
         ip_hash_input=request.client.host if request.client else "",
@@ -557,8 +750,99 @@ async def approve_feature_request_endpoint(
         request_id=audit_request_id,
     )
     await db.commit()
-    await db.refresh(suggestion)
-    return Envelope.of(_result(suggestion))
+    # 요청 감사의 commit이 잠금을 풀었으므로 같은 dispatch인지 새 잠금 아래 다시 대조한다.
+    suggestion = await _load_request(db, request_id)
+    fresh = (suggestion.kor_travel_map_ref or {}).get("dispatch")
+    if suggestion.status != "pending" or fresh != original:
+        known = _known_resolution(suggestion)
+        saved = (suggestion.kor_travel_map_ref or {}).get("last_resolution") or {}
+        if (
+            known is not None
+            and saved.get("command_key") == command_key
+            and saved.get("actor") == actor
+        ):
+            return _reconciliation_result(suggestion, known)
+        raise _dispatch_error(
+            "MAP_COMMAND_PENDING", "확인 중 명령이 변경되었습니다. 상태를 다시 불러와 주세요."
+        )
+    dispatch, _, _ = _dispatch_identity(suggestion, current_actor=client.actor)
+    with _map_admin_errors():
+        resolution = await client.reconcile_feature_command(
+            feature_id=dispatch["feature_id"],
+            operation=operation,
+            payload=dispatch["payload"],
+            expected_revision=dispatch["expected_revision"],
+            idempotency_key=command_key,
+            expected_actor=actor,
+            access_reason=body.access_reason,
+        )
+    state = resolution.get("state")
+    if state not in {"pending", "abandoned", "completed"}:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "MAP_COMMAND_RECEIPT_INVALID",
+                "message": "Map 명령의 확인 결과를 검증하지 못했습니다.",
+            },
+        )
+    info = {
+        "state": state,
+        "actor": actor,
+        "command_key": command_key,
+        "operation": operation,
+        "command_id": resolution["command_id"],
+        "checked_at": datetime.now(UTC).isoformat(),
+    }
+    if state == "completed":
+        record = resolution.get("receipt")
+        if not isinstance(record, dict):
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "MAP_COMMAND_RECEIPT_INVALID",
+                    "message": "확정된 Map 명령의 결과를 검증하지 못했습니다.",
+                },
+            )
+        result = await _finalize_feature_request(
+            db,
+            suggestion,
+            record,
+            request,
+            admin,
+            audit_request_id,
+            access_reason=body.access_reason,
+            audit_action="feature_request.command_reconcile_completed",
+            resolution_info=info,
+        )
+        return Envelope.of(
+            AdminFeatureRequestReconcileResult(
+                **result.model_dump(),
+                resolution="completed",
+            )
+        )
+    before = {"status": suggestion.status, "command_key": command_key, "actor": actor}
+    if state == "abandoned":
+        ref = dict(suggestion.kor_travel_map_ref or {})
+        ref.pop("dispatch", None)
+        ref["next_command_key"] = str(uuid.uuid4())
+        ref["last_resolution"] = info
+        suggestion.kor_travel_map_ref = ref
+    await append_admin_audit(
+        db,
+        actor_user_id=admin.user_id,
+        action=f"feature_request.command_reconcile_{state}",
+        resource_type="feature_request",
+        resource_id=str(request_id),
+        before_state=before,
+        after_state={"status": suggestion.status, **info},
+        access_reason=body.access_reason,
+        target_pii_fields=None,
+        ip_hash_input=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent"),
+        request_id=audit_request_id,
+    )
+    await db.commit()
+    return _reconciliation_result(suggestion, cast(Literal["pending", "abandoned"], state))
 
 
 @router.post("/{request_id}/reject", response_model=Envelope[AdminFeatureRequestResult])

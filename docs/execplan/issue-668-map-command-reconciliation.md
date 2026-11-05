@@ -24,3 +24,7 @@ Map owner와 Pinvi 각각 draft를 먼저 열고 자주 push한다. 소비자 �
 ## 직전 완료
 
 #667은 PR681로 cb3b2f6에 병합했다. 정확35f84c8의 두 리뷰 무차단·CI15 SUCCESS, 통합WSL 단위1975/관련155·웹389·실제UI7/RustFS물리3을 확인했다. #643 체크를 갱신했고 남은6개는668/650/636/637/638/641이다. #671/#672는 다른Code가 처리했다.
+
+## 중간 구현·검증
+
+actor/attempt 키 선저장, 저장 명령 확인과 requested 감사 선커밋·재잠금 비교, 완료·대기·미실행 분기 및 새 키 영속화, 반복 응답의 로컬 재생을 추가했다. 실제 Pinvi PostgreSQL/auth와 SDK HTTP 경계 통합 26개, mypy261 source, SDK/웹 typecheck를 통과했다. 첫 검증에서 PATH에 alembic가 없어 fixture 시작이 실패했고 앱 venv PATH를 명시하여 재실행했다. UI는 기존 base-ui Dialog/AlertDialog·색상으로 사유와 확인창을 연결했다. 확장 경계·실제 owner HTTP/UI·최종 리뷰는 진행 중이다.

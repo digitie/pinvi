@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import uuid
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal, cast
@@ -233,6 +234,17 @@ class FeatureStateReceipt(BaseModel):
     audit_transition_id: int = Field(ge=1, strict=True)
 
 
+class FeatureCommandResolutionWire(BaseModel):
+    state: Literal["abandoned", "pending", "completed"]
+    actor: str = Field(min_length=1, max_length=200)
+    operation: Literal["admin.feature.patch", "admin.feature.delete"]
+    idempotency_key: uuid.UUID
+    feature_id: str = Field(min_length=1)
+    request_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    command_id: int = Field(ge=1, strict=True)
+    receipt: dict[str, Any] | None
+
+
 class KorTravelMapAdminClient:
     """kor-travel-map admin + canonical ops HTTP client(transport-only)."""
 
@@ -278,6 +290,11 @@ class KorTravelMapAdminClient:
         self._max_attempts = max(1, max_attempts)
         self._backoff_base_seconds = backoff_base_seconds
         self._request_id = (request_id or "").strip()
+
+    @property
+    def actor(self) -> str:
+        """실제 admin 인증 경계가 사용하는 actor. secret 없는 local-dev도 구분한다."""
+        return self._admin_actor if self._admin_proxy_secret else "local-dev"
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -601,6 +618,76 @@ class KorTravelMapAdminClient:
             return schema.model_validate(data).model_dump(mode="json")
         except ValidationError as exc:
             raise KorTravelMapError("Map 직접 수정 receipt 형식이 올바르지 않습니다.") from exc
+
+    async def reconcile_feature_command(
+        self,
+        *,
+        feature_id: str,
+        operation: Literal["admin.feature.patch", "admin.feature.delete"],
+        payload: Mapping[str, Any],
+        expected_revision: str,
+        idempotency_key: str,
+        expected_actor: str,
+        access_reason: str,
+    ) -> dict[str, Any]:
+        """원래 명령 identity를 엄격히 대조하고 정규화한 terminal receipt만 반환한다."""
+        if expected_actor != self.actor:
+            raise KorTravelMapError("원래 명령과 현재 Map 인증 운영자가 다릅니다.")
+        response = await self._send(
+            "POST",
+            "/v1/admin/feature-commands/reconcile",
+            retry_transient=False,
+            json={
+                "operation": operation,
+                "feature_id": feature_id,
+                "payload": dict(payload),
+                "expected_revision": expected_revision,
+                "idempotency_key": idempotency_key,
+                "expected_actor": expected_actor,
+                "access_reason": access_reason,
+            },
+        )
+        data = self._payload(response, require_meta=True)["data"]
+        try:
+            result = FeatureCommandResolutionWire.model_validate(data)
+            if (
+                result.actor != expected_actor
+                or result.operation != operation
+                or result.idempotency_key != uuid.UUID(idempotency_key)
+                or result.feature_id != feature_id
+            ):
+                raise ValueError("command resolution identity mismatch")
+            receipt: dict[str, Any] | None = None
+            if result.state == "completed":
+                if result.receipt is None or not isinstance(result.receipt.get("data"), dict):
+                    raise ValueError("completed command has no typed receipt")
+                schema = (
+                    FeatureOverrideReceipt
+                    if operation == "admin.feature.patch"
+                    else FeatureStateReceipt
+                )
+                receipt = schema.model_validate(result.receipt["data"]).model_dump(mode="json")
+                if (
+                    operation == "admin.feature.patch"
+                    and receipt["command_id"] != result.command_id
+                ):
+                    raise ValueError("command receipt identity mismatch")
+                try:
+                    target_uuid = uuid.UUID(feature_id)
+                except ValueError:
+                    pass
+                else:
+                    if uuid.UUID(receipt["feature_id"]) != target_uuid:
+                        raise ValueError("feature receipt identity mismatch")
+            elif result.receipt is not None:
+                raise ValueError("unresolved command must not have a receipt")
+        except (ValidationError, ValueError) as exc:
+            raise KorTravelMapError(
+                "Map 명령 조정의 identity 또는 receipt를 검증하지 못했습니다."
+            ) from exc
+        normalized = result.model_dump(mode="json")
+        normalized["receipt"] = receipt
+        return normalized
 
     async def patch_feature(
         self,
