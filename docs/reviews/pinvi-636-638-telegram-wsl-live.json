@@ -119,6 +119,14 @@
         "file": "telegram-0104-runtime-acl-positive.log",
         "sha256": "f23e602154b4ad9b3354618355d722fd6311bdb4320ed2b1b251d9cb8c750072"
       }
+    },
+    "runtime_select_only_rejection": {
+      "passed": 1,
+      "scope": "5개 테이블에 SELECT만 부여한 실제 PG 역할은 각각 CRUD 검사 false. 558의 테스트 helper import 누락을 수정했다.",
+      "receipt": {
+        "file": "telegram-558-acl-probe-positive.log",
+        "sha256": "7db5d7ed696a41a819ba9c1e30e54b80df4e3699a314c3f6bd5a68bae5a6a7b9"
+      }
     }
   },
   "live_ui": {
@@ -283,5 +291,6 @@
     "단일 지연PUT은 실제 API로 continue했고 응답을 fulfill하지 않음",
     "초기 exact-label 테스트 선택자 오류는 regex로 고쳐 f1 최종8흐름을 검증함"
   ],
-  "owned_stacks_stopped": true
+  "owned_stacks_stopped": true,
+  "candidate_558_follow_up": "두 최종 리뷰 무차단. 원격 CI에서 test_attachment_retention의 이전 helper import 1건 누락을 발견하여 호출부·5개 SELECT-only 반례를 동기화했다. runtime source는558과 같다. 새 정확HEAD CI를 기다린다."
 }
