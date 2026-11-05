@@ -609,6 +609,8 @@ def rate_limit_bucket_hash(policy_name: str, raw_key: str) -> str:
     return _bucket_hash(policy_name, raw_key)
 
 
+_CLEANUP_BATCH_SIZE: Final = 1000
+
 _CLEANUP_SQL: Final = text(
     """
     WITH expired AS (
@@ -628,7 +630,7 @@ _CLEANUP_SQL: Final = text(
 )
 
 
-async def cleanup_expired_rate_limit_buckets(*, batch_size: int = 1000) -> int:
+async def cleanup_expired_rate_limit_buckets(*, batch_size: int = _CLEANUP_BATCH_SIZE) -> int:
     """요청과 독립된 짧은 transaction에서 만료 bucket만 제한 수량 정리한다."""
     if batch_size < 1:
         raise ValueError("batch_size는 양수여야 합니다.")
@@ -670,9 +672,23 @@ class RateLimitBucketCleanup:
         while True:
             await asyncio.sleep(self._interval_seconds)
             try:
+                # 전체 주기 예산은 한 번만 건다. 한 transaction은 계속 1000행 이하이며,
+                # 꽉 찬 batch 뒤에는 다음 batch를 처리해 유입량보다 느린 고정 처리량을 피한다.
                 async with asyncio.timeout(self._timeout_seconds):
-                    await cleanup_expired_rate_limit_buckets()
-            except (SQLAlchemyError, TimeoutError) as exc:
+                    while True:
+                        removed = await cleanup_expired_rate_limit_buckets(
+                            batch_size=_CLEANUP_BATCH_SIZE
+                        )
+                        if removed < _CLEANUP_BATCH_SIZE:
+                            break
+                        await asyncio.sleep(0)
+            except (SQLAlchemyError, OSError) as exc:
+                # driver close 오류가 외부 취소를 덮어써도 task 종료 의도를 삼키지 않는다.
+                task = asyncio.current_task()
+                if task is not None and task.cancelling():
+                    raise asyncio.CancelledError from None
+                # asyncpg 연결 생성의 ConnectionRefusedError와 deadline TimeoutError도
+                # OSError다. CancelledError는 BaseException이므로 그대로 전파한다.
                 logger.warning(
                     "rate_limit.cleanup_failed",
                     extra={"error_type": type(exc).__name__},

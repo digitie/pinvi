@@ -1,3 +1,19 @@
+## Hume 최종 P2 보완 — 연결 복구와 backlog 처리량
+
+부모가 최종 리뷰2건을 수용했다. d95c2c6의 기존 source에서 연결생성
+ConnectionRefusedError/OSError 뒤 task 영구종료·stop 예외와 단일batch 처리량 한계를
+먼저 재현한다. 수정 범위는 rate_limit.py 청소 lifecycle과 해당 unit/실제PG 회귀다.
+
+- expected DB 연결 오류는 다음 주기 복구하며 CancelledError는 계속 전파한다.
+- transaction당1000행·SKIP LOCKED를 유지하고, 같은 전체 bounded 시간예산 안에서
+  full batch를 추가 drain한다. 매batch에 예산을 새로 주거나 요청 경로에 청소를 넣지 않는다.
+- 처음 unit 실패3건(연결오류2종·단일batch)과 실제PG backlog1FAIL을 확보했다.
+  취소중driver close오류가취소를덮는추가1FAIL도보완했다. 관련unit63PASS, 실제PG17PASS에서
+  한주기[1000,1000,501]·locked/유효행보존과실행전후source지문일치를확인했다.
+  전체unit·최종sourcehash·새head원격CI는이어서검증한다.
+- main a5a2154 보존·prod/SSH/실제provider/Telegram 금지·보호stash 불변이다.
+  새 최종SHA의 두 독립 전문리뷰와 원격CI는 다시 확인해야 하며 이전승인을 재사용하지 않는다.
+
 ## 현재 완료 상태 — WSL 보완·최신 main 통합
 
 PR695 한 묶음에서 #616과 #621의 WSL 가능 범위를 구현·검증했다. 직접 resolve와

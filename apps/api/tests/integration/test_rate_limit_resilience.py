@@ -295,3 +295,87 @@ async def test_expired_and_revoked_overrides_cannot_bypass_or_block_counting(
         prefer_blocked=True,
     )
     assert result.override is None and result.count == 1
+
+
+async def test_periodic_cleanup_drains_backlog_in_one_tick_and_preserves_locked_and_live_rows(
+    session_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    import app.middleware.rate_limit as module
+
+    now = datetime.now(UTC)
+    locked_key = f"{0:064x}"
+    live_key = f"{2502:064x}"
+    async with session_factory() as db:
+        db.add_all(
+            [
+                RateLimitBucket(
+                    bucket_hash=f"{index:064x}",
+                    window_start=now - timedelta(minutes=3),
+                    limit_name="authenticated_default",
+                    count=1,
+                    expires_at=now - timedelta(minutes=1),
+                )
+                for index in range(2502)
+            ]
+            + [
+                RateLimitBucket(
+                    bucket_hash=live_key,
+                    window_start=now,
+                    limit_name="authenticated_default",
+                    count=1,
+                    expires_at=now + timedelta(minutes=2),
+                )
+            ]
+        )
+        await db.commit()
+
+    original_sleep = asyncio.sleep
+    original_cleanup = module.cleanup_expired_rate_limit_buckets
+    cycle_finished = asyncio.Event()
+    second_tick_gate = asyncio.Event()
+    delete_counts: list[int] = []
+    tick_sleeps = 0
+    worker = module.RateLimitBucketCleanup()
+
+    async def controlled_sleep(seconds: float, result: Any = None) -> Any:
+        nonlocal tick_sleeps
+        # 실제 60초를 기다리지 않고 두 번째 tick 직전에 첫 주기의 종료를 포착한다.
+        # DB driver·다른 task·주기 안 yield의 sleep은 원래 구현으로 보낸다.
+        if asyncio.current_task() is worker._task and seconds == 60:
+            tick_sleeps += 1
+            if tick_sleeps == 1:
+                return await original_sleep(0, result)
+            cycle_finished.set()
+            await second_tick_gate.wait()
+            return result
+        return await original_sleep(seconds, result)
+
+    async def observe_cleanup(**kwargs: Any) -> int:
+        removed = await original_cleanup(**kwargs)
+        delete_counts.append(removed)
+        return removed
+
+    monkeypatch.setattr(module.asyncio, "sleep", controlled_sleep)
+    monkeypatch.setattr(module, "cleanup_expired_rate_limit_buckets", observe_cleanup)
+    async with session_factory() as locked:
+        await locked.execute(
+            select(RateLimitBucket)
+            .where(RateLimitBucket.bucket_hash == locked_key)
+            .with_for_update()
+        )
+        worker.start()
+        try:
+            await asyncio.wait_for(cycle_finished.wait(), timeout=10)
+            # 각 호출은 실제 PG에서 COMMIT된 별도 transaction이다. 한 주기에
+            # 1000행 상한을 유지하며 2501개 unlocked 만료행을 모두 처리해야 한다.
+            assert delete_counts == [1000, 1000, 501]
+            async with session_factory() as db:
+                remaining = set(await db.scalars(select(RateLimitBucket.bucket_hash)))
+            assert remaining == {locked_key, live_key}
+            assert tick_sleeps == 2
+        finally:
+            await worker.stop()
+            await locked.rollback()
