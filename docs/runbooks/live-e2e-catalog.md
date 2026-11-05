@@ -17,6 +17,8 @@ suite)·`playwright.admin-live.config.ts`(admin read-only matrix)와 분리된 �
 | n150 러너 | `scripts/n150-live-catalog.sh` → `scripts/n150-playwright-runner.sh`(Docker) + `scripts/live-catalog-summary.mjs` |
 | npm | `npm -w @pinvi/web run test:e2e:live-catalog[:list|:index]` |
 
+#643 후속 머지와 #650/Map #1450의 운영 진단·완료 조건은 [Claude Code 운영 검증 인계](claude-prod-e2e-handoff.md)를 먼저 확인한다.
+
 ## 1. 실행 (n150)
 
 러너는 다른 live suite 와 같은 게이트를 지난다 — exact checkout(`PINVI_LIVE_EXPECTED_REVISION`),
@@ -249,7 +251,7 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | #644 | fixed (#655) | 로그인 후 원래 가려던 페이지로 복귀(return-to) | CORE-007 — `test.fail` 제거 |
 | #648 | fixed (#660) | `/admin/features` 한국어 `q` 검색 503 FEATURE_SERVICE_UNAVAILABLE | ADM-015/016, WX-018/019 — helper 재시도·런타임 `test.fail` 제거, 5xx 면 실패 |
 | #649 | fixed (#657 + 리뷰 PR) | 일자 날짜 중복이 저장됨(`dayUsingDate` 가 effective_date 미비교) | TRIP-026 — `test.fail` 제거 |
-| #650 | reopened | 전체 도로명 주소(시·도 약칭) 검색에 주소 행 0건 | SRCH-004 — Geo#622 로컬 검증 후 운영 재현이 남아 원천/최신 코드 경로를 재대조 |
+| #650 | reopened | 전체 도로명 주소(시·도 약칭) 검색에 주소 행 0건 | SRCH-004 — Geo#623 공식202605 원천 WSL 검증 후에도 운영 원천/worker/DB/MV 불일치 대조가 남음 |
 | #651 | fixed (#660) | admin dedup review 목록이 항상 422 FORBIDDEN(Map 거절), 화면은 빈 큐 | ADM-022/023 — `test.fail` 제거, GET 200 단언 |
 | #652 | fixed (#656) | 장소 재정렬 간헐 409 SORT_ORDER_CONFLICT + 응답에 DB 오류 원문 | TRIP-030 — `test.fail` 제거 |
 | #663 | fixed (#662) | 상세 카드 `detail-card` 지연 3.7→6.2→8.5 s(같은 장소, 실행마다 악화) | SRCH-055 — 런타임 `test.fail` 제거, 6 s 초과는 soft 실패 |
@@ -260,7 +262,7 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | #675 | fixed (#679) | 관리자 날씨 소스 정합성 | ADM-020 |
 | kor-travel-map#1438 | bug | feature 카테고리 오분류(숙박·카페·마트·캠핑장·주차장) | SRCH-019/020/022, NEAR-030 (`test.fail`) |
 | kor-travel-map#1439 | bug | event 기간·장소 누락, 축제 category·중복 | SRCH-027 (`test.fail`) |
-| kor-travel-map#1440 | bug | 과거 날짜 날씨 daily_summaries 미제공 | WX-004 (`test.fail`) |
+| kor-travel-map#1440 | reopened | #1446 배포 후에도 과거 요약 원천/보관·적재 진단 필요 | WX-004 (`test.fail`) |
 | #684 | bug | 요청 한도 미들웨어가 핸들러 DB 오류를 503 "한도 저장소 사용 불가"로 바꿈 + 여행 조회 rise/set 동시 INSERT 경합 | TRIP-003 (2026-11-05 경합, 재실행 통과) |
 | kor-travel-map#1450 | data | 운영 Map area kind 0건(KNPS 국립공원 경계 미적재) | SRCH-028 (blocked) |
 

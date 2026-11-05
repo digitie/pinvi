@@ -21,3 +21,9 @@ Map #1450은 국립공원 경계 dataset인 knps_park_boundaries와 특별보호
 운영 카탈로그는 PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY와 설악산/북한산 anchor를 읽지만 n150-playwright-runner.sh의 Docker 환경 전달 목록에는 세 키가 없었다. 실제 Bash allowlist/argv 구성 조각을 격리 실행해 세 누락을 수정 전3실패로 확인했다. 허용 목록에 세 이름만 추가하며 값은 argv에 넣지 않는다. 설정하지 않은 키와 알 수 없는 키는 계속 전달하지 않는다.
 
 N150 host·exact revision·clean checkout·고정 이미지·새 npm ci guard는 그대로다. WSL 검증은 실제 Bash argv 경계이며 N150/Docker·prod UI 실행을 대신하지 않는다. 보완 후 신규4·이미지 계약2·기존M05 wiring20 합계26검사, Bash 문법·Ruff/format이 통과했다. 제품 코드/UI가 아닌 운영 검사 러너의 전달 경계를 보완한 것으로 PR 범위를 갱신한다.
+
+## 열린 이슈와 운영 기록 정정
+
+두 서브에이전트 감사에서 Pinvi7/Map2 열린 이슈를 확인했다. #643 기존 미체크는650/Map1450이지만 Map1440이 재오픈되어 완료 체크 정정도 필요하다. Map1438은 CLOSED 상태의 운영 재적재 후속이다. 두 운영 이슈만 남았다는 표현을 전체 저장소 백로그로 확대하지 않는다.
+
+전체API단위2024PASS/기존9skip(91.21초)을 확인했다. 머지16건·source/API/worker·실제dataset scope·일반VIEW/cluster 경계와 세 운영 표적을 새 인계 런북에 기록한다. 정확 최종 두 적대 리뷰·CI 성공 뒤 병합하고 #643 최신 본문을 다시 읽어1440 체크만 정정한다.
