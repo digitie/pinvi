@@ -140,21 +140,19 @@ test.describe.serial('ADM features', () => {
   });
 
   test('ADM-038 change-requests page: record Map drift branch without crashing', async ({ page }) => {
-    const res = waitForGet(page, /\/admin\/features\/change-requests/, 60_000);
+    // #659(#631): Map이 whole-row change-request 라우트를 제거해 옛 경로는 제안 검토로 redirect한다.
+    // 제거된 Map 라우트를 다시 부르지 않는지(GET /admin/features/change-requests 0회)도 본다.
+    let legacyCalls = 0;
+    page.on('request', (req) => {
+      if (req.method() === 'GET' && /\/admin\/features\/change-requests/.test(new URL(req.url()).pathname) && !req.isNavigationRequest())
+        legacyCalls += 1;
+    });
     await page.goto('/admin/features/change-requests');
-    const response = await res;
-    await expect(page.getByRole('heading', { name: 'Feature 변경 요청' })).toBeVisible();
-    const error = page.getByTestId('admin-fcr-error');
-    const empty = page.getByTestId('admin-fcr-detail-empty');
-    const rows = page.locator('[data-testid^="admin-fcr-select-"]');
-    await expect(error.or(empty).or(rows.first())).toBeVisible({ timeout: 30_000 });
-    if (await error.count()) {
-      await expect(error).toContainText(/찾을 수 없습니다|사용 불가|올바르지 않습니다/);
-      test.info().annotations.push({ type: 'drift', description: `upstream ${response.status()}: ${((await error.textContent()) ?? '').slice(0, 80)}` });
-    } else {
-      test.info().annotations.push({ type: 'drift', description: `list rendered (${await rows.count()} rows) — Map still serves change-requests` });
-    }
+    await expect(page).toHaveURL(/\/admin\/feature-requests(?:[?#].*)?$/, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: 'Feature 제안 검토' })).toBeVisible();
     await expect(page.getByText(/Application error|Unhandled Runtime Error/)).toHaveCount(0);
+    expect(legacyCalls, 'removed Map change-request route must not be called').toBe(0);
+    test.info().annotations.push({ type: 'drift', description: 'legacy change-requests redirects to /admin/feature-requests (#659)' });
     await shot(page, 'ADM-038', 'change-requests');
   });
 });
