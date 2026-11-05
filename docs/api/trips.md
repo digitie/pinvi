@@ -92,6 +92,12 @@ Telegram brief 질의에 쓰는 구조화 코드다. 2~10자리 숫자(sido/sigu
 
 ### 3.3 `GET /trips/{trip_id}`
 
+관리 권한으로 조회할 때 일자 출몰 캐시 유지 작업은 별도 트랜잭션에서 수행한다(#684).
+실패해도 호출자 Trip·POI를 만료시키지 않으며, 다음 조회에서 보정한다. 일자별 행은 원자
+upsert하며 기존 성공 결과는 입력이 같으면 보존한다. 입력 조회부터 저장까지 사용자
+POI·일자 변경과 Trip 선행 잠금을 공유하여 오래된 조회가 최신 이동 기준을 덮지 못하게 한다.
+
+
 응답에 trip + days + pois (snapshot 포함) + companions + share links. `feature_id`가
 있는 POI의 `feature` 필드는 kor-travel-map `POST /v1/features/batch`로 batch join한 최신 정보
 (없거나 조회 실패 시 `feature_snapshot` 사용). feature 없는 POI는 snapshot만 사용한다.

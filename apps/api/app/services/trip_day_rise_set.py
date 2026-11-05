@@ -13,9 +13,11 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db import session as db_session
 from app.models.kasi import TripDayRiseSet
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
@@ -67,76 +69,82 @@ def _status_for(locdate: date | None, reference: DayReference | None) -> str:
     return "pending_fetch"
 
 
-async def sync_trip_day_rise_sets(db: AsyncSession, *, trip_id: uuid.UUID) -> None:
-    """trip의 모든 일자 rise/set 행을 재계산·upsert한다. 좌표/날짜 변경 행만 refetch 표시.
+async def sync_trip_day_rise_sets(*, trip_id: uuid.UUID) -> None:
+    """별도 트랜잭션으로 유지한다. 호출자는 먼저 읽기 커넥션을 반환해야 한다.
 
-    best-effort 유지 작업 — 예외를 전파하지 않는다(사용자 mutation은 이미 커밋됨, ETL/다음 sync가 보정).
+    사용자 mutation은 이미 커밋되어야 한다. 실패 rollback은 이 유지 세션에만
+    적용되며, 호출자가 응답 조립에 쓰는 Trip/POI나 미커밋 변경을 만지지 않는다.
     """
     try:
-        trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id))
-        if trip is None:
-            return
-        days = list(
-            await db.scalars(
-                select(TripDay).where(TripDay.trip_id == trip_id).order_by(TripDay.day_index)
+        async with db_session.async_session_factory() as db, db.begin():
+            await _sync_trip_day_rise_sets(db, trip_id=trip_id)
+    except Exception as exc:  # best-effort — 다음 열람/ETL에서 보정.
+        logger.warning("trip_day_rise_set.sync_failed", extra={"error_type": type(exc).__name__})
+
+
+async def _sync_trip_day_rise_sets(db: AsyncSession, *, trip_id: uuid.UUID) -> None:
+    # POI 추가/이동·일자/여행 변경과 같은 Trip→child 잠금 순서.
+    # 입력을 읽은 뒤 늦게 저장하는 sync가 더 최신 기준을 덮어쓰지 못하게 한다.
+    trip = await db.scalar(
+        select(Trip).where(Trip.trip_id == trip_id, Trip.deleted_at.is_(None)).with_for_update()
+    )
+    if trip is None:
+        return
+    days = list(
+        await db.scalars(
+            select(TripDay).where(TripDay.trip_id == trip_id).order_by(TripDay.day_index)
+        )
+    )
+    pois = list(
+        await db.scalars(
+            select(TripDayPoi)
+            .where(TripDayPoi.trip_id == trip_id, TripDayPoi.deleted_at.is_(None))
+            .order_by(TripDayPoi.created_at, TripDayPoi.attachment_id)
+        )
+    )
+    pois_by_day: dict[int, list[TripDayPoi]] = {}
+    for poi in pois:
+        pois_by_day.setdefault(poi.day_index, []).append(poi)
+
+    for day in days:
+        if day.date is not None:
+            locdate: date | None = day.date
+        elif trip.start_date is not None:
+            locdate = trip.start_date + timedelta(days=day.day_index - 1)
+        else:
+            locdate = None
+        reference = resolve_day_reference(pois_by_day.get(day.day_index, []))
+        statement = insert(TripDayRiseSet).values(
+            trip_id=trip_id,
+            day_index=day.day_index,
+            locdate=locdate,
+            reference_poi_id=reference.reference_poi_id if reference else None,
+            reference_label=reference.reference_label if reference else None,
+            longitude=reference.longitude if reference else None,
+            latitude=reference.latitude if reference else None,
+            status=_status_for(locdate, reference),
+            stale=False,
+        )
+        incoming = statement.excluded
+        # 충돌은 DB가 원자적으로 처리한다. 입력이 같으면 ETL이 채운 success/시각/
+        # payload/fetched_at을 그대로 보존하고, 변경된 입력만 재조회 대상으로 삼는다.
+        await db.execute(
+            statement.on_conflict_do_update(
+                constraint="pk_trip_day_rise_sets",
+                set_={
+                    "locdate": incoming.locdate,
+                    "longitude": incoming.longitude,
+                    "latitude": incoming.latitude,
+                    "reference_poi_id": incoming.reference_poi_id,
+                    "reference_label": incoming.reference_label,
+                    "status": incoming.status,
+                    "stale": True,
+                    "updated_at": func.now(),
+                },
+                where=or_(
+                    TripDayRiseSet.locdate.is_distinct_from(incoming.locdate),
+                    TripDayRiseSet.longitude.is_distinct_from(incoming.longitude),
+                    TripDayRiseSet.latitude.is_distinct_from(incoming.latitude),
+                ),
             )
         )
-        pois = list(
-            await db.scalars(
-                select(TripDayPoi)
-                .where(TripDayPoi.trip_id == trip_id, TripDayPoi.deleted_at.is_(None))
-                .order_by(TripDayPoi.created_at, TripDayPoi.attachment_id)
-            )
-        )
-        pois_by_day: dict[int, list[TripDayPoi]] = {}
-        for poi in pois:
-            pois_by_day.setdefault(poi.day_index, []).append(poi)
-
-        existing = {
-            row.day_index: row
-            for row in await db.scalars(
-                select(TripDayRiseSet).where(TripDayRiseSet.trip_id == trip_id)
-            )
-        }
-
-        for day in days:
-            if day.date is not None:
-                locdate: date | None = day.date
-            elif trip.start_date is not None:
-                locdate = trip.start_date + timedelta(days=day.day_index - 1)
-            else:
-                locdate = None
-            reference = resolve_day_reference(pois_by_day.get(day.day_index, []))
-            lon = reference.longitude if reference else None
-            lat = reference.latitude if reference else None
-            status = _status_for(locdate, reference)
-
-            row = existing.get(day.day_index)
-            if row is None:
-                db.add(
-                    TripDayRiseSet(
-                        trip_id=trip_id,
-                        day_index=day.day_index,
-                        locdate=locdate,
-                        reference_poi_id=reference.reference_poi_id if reference else None,
-                        reference_label=reference.reference_label if reference else None,
-                        longitude=lon,
-                        latitude=lat,
-                        status=status,
-                        stale=False,
-                    )
-                )
-                continue
-            # 좌표/날짜가 바뀌면 refetch 대상으로 표시(변화 없으면 success를 보존).
-            if row.locdate != locdate or row.longitude != lon or row.latitude != lat:
-                row.locdate = locdate
-                row.longitude = lon
-                row.latitude = lat
-                row.reference_poi_id = reference.reference_poi_id if reference else None
-                row.reference_label = reference.reference_label if reference else None
-                row.status = status
-                row.stale = True
-        await db.commit()
-    except Exception as exc:  # best-effort 유지 — 사용자 흐름을 깨지 않는다.
-        await db.rollback()
-        logger.warning("trip_day_rise_set.sync_failed", extra={"error": str(exc)})

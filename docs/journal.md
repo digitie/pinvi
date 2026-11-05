@@ -1,3 +1,16 @@
+## 2026-11-05 — #684 한도 오류 격리·출몰 캐시/권한 경합 수정
+
+- draft#687부터 단계별 push했다. storage-only 예외 경계·handler최대1회, 독립 cache transaction·조건부upsert·Trip 선행 fence를 구현했다. 두 전문 리뷰의 snapshot역전P2와 관리자이동뒤지연DELETE/PATCH 권한P1을 실제 실패 우선으로 재현해 보완했다.
+- 제품ef69f74에서 단위1988pass9skip·관련Postgres/API88·mypy261·Ruff/format493, 실제API/DB/브라우저UI5·GET7회200·pageerror0을 확인했다. 두 독립 제품 리뷰 잔여P0/P1/P2 없음. 외부 Map/weather·타일·운영 테스트 범위는 아니다.
+- 증거 docs/reviews/pinvi-684-rate-limit-rise-set-wsl-live.json. 최종 문서 후보의 두 리뷰·정확HEAD CI 확인 뒤 일반 squash merge한다. 운영은 Claude Code 담당이며 접근/배포/시험하지 않는다.
+- 다음은650(재오픈원주소40유지) → Telegram636/637/638묶음 →641이다. Map1450실제prod적재/확인은Claude담당이고671/672는다른Code작업을보존한다.
+
+## 2026-11-05 — #668 병합 완료·#684 실패 경계 수정 착수
+
+- Map1451을27033b1, Pinvi683을a1b2f53로 일반 squash merge했다. 각 정확 최종 두 전문 리뷰 무차단·Map CI9/Pinvi CI15 성공, 실제병합본 sync·Git tree/계약 bytes 동등성을 확인했다. #668은 닫혔고 최신#643 체크/후속도 갱신했다.
+- 새684는 allowed override의 handler가 저장소 예외 try 안에 있고, 일자 rise/set의 조회 뒤 INSERT/전체rollback이 동시GET을 깨는 문제다. 초안·실패 우선 회귀부터 진행한다.
+- 계획: docs/execplan/issue-684-rate-limit-rise-set.md. WSL·실제UI·두 적대리뷰·정확HEAD CI 후 머지한다. 운영 접근/배포/시험은 없고 최종prod는 Claude Code 담당이다.
+
 ## 2026-11-05 — #668 최신 main의 live E2E 보완 보존
 
 - main07f90f9(PR685)의 geometry 클릭·여행 지도 검색 scope·ADM-038 redirect 검증과 두 후속 이슈 표를 충돌 없이 통합했다. 외부 TS3개와 ADM-038 stanza가 원본과 같고 runbook 추가2행도 보존했다.

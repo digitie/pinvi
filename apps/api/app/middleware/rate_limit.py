@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import re
 import uuid
 from dataclasses import dataclass
@@ -28,6 +29,8 @@ from app.core.config import settings
 from app.core.errors import build_error
 from app.core.security import InvalidTokenError, decode_access_token
 from app.db import session as db_session
+
+logger = logging.getLogger(__name__)
 
 IdentityKind = Literal["ip", "ip_email", "user", "shared_token"]
 BackendName = Literal["memory", "postgres"]
@@ -220,8 +223,12 @@ class RateLimitMiddleware:
             configured_limit if configured_limit is not None else policy.limit_per_minute
         )
 
+        override_decision = None
+        count = 0
+        store_unavailable = False
+        # 이 경계에는 저장소 I/O만 둔다. 응답 전송이나 핸들러 오류를 한도 오류로
+        # 재분류하면 fail-open에서 이미 실행한 사용자 mutation을 다시 실행할 수 있다.
         try:
-            override_decision = None
             if self._uses_postgres_store():
                 override_decision = await _active_override_decision(
                     bucket_hash=bucket_hash,
@@ -229,49 +236,54 @@ class RateLimitMiddleware:
                     now=now,
                     prefer_blocked=configured_limit is not None,
                 )
-            if override_decision is not None and override_decision.action == "blocked":
-                retry_after = max(
-                    1,
-                    min(3600, ceil((override_decision.expires_at - now).total_seconds())),
-                )
-                response = JSONResponse(
-                    status_code=429,
-                    content=build_error(
-                        "RATE_LIMIT_BLOCKED",
-                        "운영 정책에 따라 요청이 일시 차단되었습니다.",
-                        {
-                            "limit_name": policy.name,
-                            "override_id": str(override_decision.override_id),
-                            "expires_at": override_decision.expires_at.isoformat(),
-                        },
-                    ),
-                    headers={"Retry-After": str(retry_after)},
-                )
-                await response(scope, receive, send)
-                return
-            if (
+            blocked = override_decision is not None and override_decision.action == "blocked"
+            allowed = (
                 override_decision is not None
                 and override_decision.action == "allowed"
                 and configured_limit is None
-            ):
-                await self.app(scope, receive, send)
-                return
-            count = await self._backend_for_settings().hit(
-                bucket_hash=bucket_hash,
-                limit_name=policy.name,
-                window_start=window_start,
-                expires_at=expires_at,
             )
-        except SQLAlchemyError:
-            if settings.pinvi_rate_limit_fail_open:
-                await self.app(scope, receive, send)
-                return
+            if not blocked and not allowed:
+                count = await self._backend_for_settings().hit(
+                    bucket_hash=bucket_hash,
+                    limit_name=policy.name,
+                    window_start=window_start,
+                    expires_at=expires_at,
+                )
+        except SQLAlchemyError as exc:
+            store_unavailable = True
+            logger.warning(
+                "rate_limit.store_unavailable",
+                extra={"error_type": type(exc).__name__, "limit_name": policy.name},
+            )
+
+        if store_unavailable and not settings.pinvi_rate_limit_fail_open:
             response = JSONResponse(
                 status_code=503,
                 content=build_error(
                     "SERVICE_UNAVAILABLE",
                     "요청 한도 확인 저장소를 사용할 수 없습니다.",
                 ),
+            )
+            await response(scope, receive, send)
+            return
+
+        if override_decision is not None and override_decision.action == "blocked":
+            retry_after = max(
+                1,
+                min(3600, ceil((override_decision.expires_at - now).total_seconds())),
+            )
+            response = JSONResponse(
+                status_code=429,
+                content=build_error(
+                    "RATE_LIMIT_BLOCKED",
+                    "운영 정책에 따라 요청이 일시 차단되었습니다.",
+                    {
+                        "limit_name": policy.name,
+                        "override_id": str(override_decision.override_id),
+                        "expires_at": override_decision.expires_at.isoformat(),
+                    },
+                ),
+                headers={"Retry-After": str(retry_after)},
             )
             await response(scope, receive, send)
             return

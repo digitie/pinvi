@@ -143,3 +143,185 @@ def test_backend_failure_fails_closed_by_default(monkeypatch: pytest.MonkeyPatch
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "SERVICE_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("fail_open", [False, True])
+@pytest.mark.parametrize("response_started", [False, True])
+@pytest.mark.asyncio
+async def test_allowed_override_never_catches_or_replays_handler_db_error(
+    monkeypatch: pytest.MonkeyPatch, fail_open: bool, response_started: bool
+) -> None:
+    import uuid
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy.exc import SQLAlchemyError
+
+    import app.middleware.rate_limit as module
+
+    monkeypatch.setattr(settings, "pinvi_rate_limit_backend", "postgres")
+    monkeypatch.setattr(settings, "pinvi_rate_limit_fail_open", fail_open)
+    decision = module.RateLimitOverrideDecision(
+        override_id=uuid.uuid4(),
+        action="allowed",
+        expires_at=datetime.now(UTC) + timedelta(minutes=1),
+    )
+
+    async def override(**_: object) -> module.RateLimitOverrideDecision:
+        return decision
+
+    monkeypatch.setattr(module, "_active_override_decision", override)
+    calls = 0
+    sent = []
+    failure = SQLAlchemyError("handler fixture database error")
+
+    async def handler(scope, receive, send):
+        nonlocal calls
+        calls += 1
+        if response_started:
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+        raise failure
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "method": "GET", "path": "/trips", "headers": []}
+    with pytest.raises(SQLAlchemyError) as raised:
+        await RateLimitMiddleware(handler)(scope, receive, send)
+    assert raised.value is failure
+    assert calls == 1
+    assert sent == (
+        [{"type": "http.response.start", "status": 200, "headers": []}] if response_started else []
+    )
+
+
+@pytest.mark.parametrize("fail_open", [False, True])
+def test_allowed_handler_failure_is_server_error_not_store_unavailable(
+    monkeypatch: pytest.MonkeyPatch, fail_open: bool
+) -> None:
+    import uuid
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy.exc import SQLAlchemyError
+
+    import app.middleware.rate_limit as module
+
+    monkeypatch.setattr(settings, "pinvi_rate_limit_backend", "postgres")
+    monkeypatch.setattr(settings, "pinvi_rate_limit_fail_open", fail_open)
+
+    async def override(**_: object) -> module.RateLimitOverrideDecision:
+        return module.RateLimitOverrideDecision(
+            override_id=uuid.uuid4(),
+            action="allowed",
+            expires_at=datetime.now(UTC) + timedelta(minutes=1),
+        )
+
+    monkeypatch.setattr(module, "_active_override_decision", override)
+    app = FastAPI()
+    app.add_middleware(RateLimitMiddleware)
+    calls = 0
+
+    @app.get("/trips")
+    async def handler():
+        nonlocal calls
+        calls += 1
+        raise SQLAlchemyError("fixture handler failure")
+
+    response = TestClient(app, raise_server_exceptions=False).get("/trips")
+    assert response.status_code == 500
+    assert "요청 한도" not in response.text
+    assert calls == 1
+
+
+@pytest.mark.parametrize("fail_open", [False, True])
+@pytest.mark.asyncio
+async def test_blocked_response_send_error_never_runs_handler_or_sends_fallback(
+    monkeypatch: pytest.MonkeyPatch, fail_open: bool
+) -> None:
+    import uuid
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy.exc import SQLAlchemyError
+
+    import app.middleware.rate_limit as module
+
+    monkeypatch.setattr(settings, "pinvi_rate_limit_backend", "postgres")
+    monkeypatch.setattr(settings, "pinvi_rate_limit_fail_open", fail_open)
+
+    async def override(**_: object) -> module.RateLimitOverrideDecision:
+        return module.RateLimitOverrideDecision(
+            override_id=uuid.uuid4(),
+            action="blocked",
+            expires_at=datetime.now(UTC) + timedelta(minutes=1),
+        )
+
+    monkeypatch.setattr(module, "_active_override_decision", override)
+    calls = 0
+    statuses = []
+    failure = SQLAlchemyError("fixture send failure")
+
+    async def handler(scope, receive, send):
+        nonlocal calls
+        calls += 1
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        if message["type"] == "http.response.start":
+            statuses.append(message["status"])
+        raise failure
+
+    scope = {"type": "http", "method": "GET", "path": "/trips", "headers": []}
+    with pytest.raises(SQLAlchemyError) as raised:
+        await RateLimitMiddleware(handler)(scope, receive, send)
+    assert raised.value is failure
+    assert calls == 0
+    assert statuses == [429]
+
+
+@pytest.mark.parametrize("fail_open", [False, True])
+@pytest.mark.parametrize("store_stage", ["override", "counter"])
+def test_only_real_store_failures_use_fallback_and_log_safe_exception_class(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    fail_open: bool,
+    store_stage: str,
+) -> None:
+    from sqlalchemy.exc import SQLAlchemyError
+
+    import app.middleware.rate_limit as module
+
+    monkeypatch.setattr(settings, "pinvi_rate_limit_backend", "postgres")
+    monkeypatch.setattr(settings, "pinvi_rate_limit_fail_open", fail_open)
+
+    async def override(**_: object) -> None:
+        if store_stage == "override":
+            raise SQLAlchemyError("fixture-private-sql-param")
+
+    class Backend:
+        async def hit(self, **_: object) -> int:
+            raise SQLAlchemyError("fixture-private-sql-param")
+
+    monkeypatch.setattr(module, "_active_override_decision", override)
+    monkeypatch.setattr(module, "_POSTGRES_BACKEND", Backend())
+    app = FastAPI()
+    app.add_middleware(RateLimitMiddleware)
+    calls = 0
+
+    @app.get("/trips")
+    async def handler():
+        nonlocal calls
+        calls += 1
+        return {"ok": True}
+
+    response = TestClient(app).get("/trips")
+    assert response.status_code == (200 if fail_open else 503)
+    assert calls == int(fail_open)
+    records = [r for r in caplog.records if r.message == "rate_limit.store_unavailable"]
+    assert len(records) == 1
+    assert records[0].error_type == "SQLAlchemyError"
+    assert "fixture-private-sql-param" not in str(records[0].__dict__)
+    assert "fixture-private-sql-param" not in response.text

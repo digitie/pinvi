@@ -1,0 +1,142 @@
+{
+  "issue": 684,
+  "pull_request": 687,
+  "source_revision": "ef69f74e2547c145123f331c19d7e88ae1bb5b71",
+  "environment": "WSL Ubuntu-26.04 ext4; owned PostGIS18; actual Pinvi/Next.js production build/Chromium",
+  "production_access": false,
+  "production_deploy": false,
+  "production_validation": false,
+  "source_sha256": {
+    "apps/api/app/middleware/rate_limit.py": "29cc3ef638374b08de07ab1e3d5581cf1206f5efad7c00b6d72e879e3572d4e1",
+    "apps/api/app/services/trip_day_rise_set.py": "b3f5748d5953c993a385ea2df40cef4feb5b3dc0810778e0f4338bca8d7b7244",
+    "apps/api/app/services/poi.py": "75040c5a245682691e754509481c83552024098d6bf4d2550eddbbe43c95472d",
+    "apps/api/app/api/v1/trips.py": "068fd03d38e68c3b2e9f72b2d1ebc413dfc96ff91f2c047b109936799ebc10cb",
+    "apps/api/app/api/v1/pois.py": "03fb2ba07efa0c6242de26d53cf771ce10ca0a327e4a7a84c9ab06e21c5875bc",
+    "apps/api/tests/unit/test_rate_limit_middleware.py": "84b88cc7b19b3f16c5891550940e401c82bf4b623628ee3190698ab5e2200a08",
+    "apps/api/tests/integration/test_trip_day_rise_set.py": "44f41ad11ac1b5a4d3b83dab830c99718aded73a0f44c068d2cb8781dd693a36"
+  },
+  "fail_first": [
+    {
+      "revision": "a1b2f5324b64a912e40d48dc5c7130646c04e8be",
+      "count": 6,
+      "kind": "allowed handler SQLAlchemyError becomes503 or executes twice, including response-started"
+    },
+    {
+      "revision": "f876fa9d0563fd456731e08094f490067ee2f7cb",
+      "count": 3,
+      "kind": "cache error expires caller ORM; maintenance commits pending/flushed caller writes"
+    },
+    {
+      "revision": "11dd93c4f78b8573514bce83dc4788c0f090044d",
+      "count": 1,
+      "kind": "Event-controlled old snapshot overwrites later real POI move"
+    },
+    {
+      "revision": "652770b220cdbca85ab1f0b5fd99a723152a189f",
+      "count": 2,
+      "kind": "Event-controlled real admin HTTP cross-trip move then old DELETE/PATCH writes into another user trip"
+    }
+  ],
+  "verification": {
+    "api_unit": {
+      "passed": 1988,
+      "skipped": 9,
+      "revision": "ef69f74e2547c145123f331c19d7e88ae1bb5b71"
+    },
+    "related_postgres_api": {
+      "passed": 88,
+      "revision": "ef69f74e2547c145123f331c19d7e88ae1bb5b71",
+      "focus_count": 15
+    },
+    "mypy": {
+      "files": 261,
+      "errors": 0
+    },
+    "ruff": "app+tests passed; 493 files formatted",
+    "web": {
+      "typecheck": "pass",
+      "lint_errors": 0,
+      "baseline_lint_warnings": 5,
+      "typecheck_lint_revision": "652770b220cdbca85ab1f0b5fd99a723152a189f",
+      "scope": "web/packages unchanged since this check; final actual UI builds same web source anew"
+    },
+    "actual_ui": {
+      "checks": [
+        "실제 사용자 로그인·PostgreSQL 한도 저장소",
+        "같은 여행 두 브라우저 탭 동시 열람·200 응답",
+        "실제 캐시 SQL 실패·legacy allowed에서도 여행 UI 정상 열람",
+        "SQL 실패 중 UI 일자 이동 저장·200·이동 장소 표시",
+        "장애 제거·다음 조회에서 최신 일자 캐시 복구"
+      ],
+      "tripResponses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "pageErrors": [],
+      "production": false,
+      "actualApi": true,
+      "actualPostgres": true,
+      "actualChromium": true,
+      "scope": "WSL owned DB SQL trigger fault; Map/weather external service and tile rendering not asserted",
+      "revision": "ef69f74e2547c145123f331c19d7e88ae1bb5b71",
+      "checked_screenshots": 2,
+      "owned_stack_stopped": true
+    },
+    "reviewers": {
+      "Hubble": {
+        "revision": "ef69f74e2547c145123f331c19d7e88ae1bb5b71",
+        "P0": 0,
+        "P1": 0,
+        "P2": 0,
+        "mode": "read-only source review; did not execute tests"
+      },
+      "Hume": {
+        "revision": "ef69f74e2547c145123f331c19d7e88ae1bb5b71",
+        "P0": 0,
+        "P1": 0,
+        "P2": 0,
+        "mode": "independent read-only source review; did not execute tests"
+      }
+    }
+  },
+  "checks": [
+    "two Event-synchronized GETs both200 and one cache per day",
+    "real SQL cache failure preserves loaded Trip/POI; actual GET and committed move return200",
+    "pool_size1 max_overflow0 GET/PATCH/GET succeeds",
+    "pending and flushed caller writes remain uncommitted; call sites skip maintenance",
+    "unchanged ETL success/time/payload/timestamps preserved; null transitions mark stale",
+    "old sync and user mutation share Trip-first fence",
+    "admin move race returns404 for old DELETE and PATCH; target user POI unchanged",
+    "handler errors and blocked response send errors never replay handler or send fallback",
+    "actual store errors preserve fail-open/fail-closed and safe class-only log"
+  ],
+  "limitations": [
+    "No n150/prod access, deploy or tests; final prod owned by Claude Code",
+    "External Map/weather payloads, VWorld tiles and ETL KASI fetch are outside this UI proof",
+    "release_read_connection is only used at verified read call sites; not a general Core-DML detector",
+    "88 related Postgres tests run locally; complete integration suite is separately gated by exact-head CI"
+  ],
+  "owned_artifact_sha256": {
+    "684-rate-negative.log": "2d7a0bd4d6a2051728f9256c4a8691ed49a91e1545dc07f6dcf11c8c6194c1cb",
+    "684-rise-negative.log": "f72705e7d1326bbc9ecf6258099a9d6b75fec3fc75430e7e1f1d347f592d9f60",
+    "684-stale-negative.log": "8531a8598fe0da5f93e094228ed33eb38e20c63a5fd4e8937c87932e9e38167d",
+    "684-auth-race-negative.log": "9cbc5358dc23c7d7e23446da275621f301881be95d01063bc1c69556aa431e89",
+    "684-unit-final.log": "8c6da6a318e71f9b0f7a86cf6d0efd3b7bd6bec076b4c8274fead1f9a825095e",
+    "684-final-integration.log": "9d4e59cf4e6e79599084e2c9263b66c812fb32a96016bf00187df1f247595e37",
+    "684-mypy-final.log": "85c2a3cf816b125399bd523aa8226d9cbb42d81b770d50e3f144b0e1bcc5b8f2",
+    "684-web-typecheck.log": "de19d4d717988f88deabb39e9de74a03adccd4f22034206045a383b8ba33e2ee",
+    "684-web-lint.log": "a8935626ab881e93b1e6174066b95ed9aed63725c130bb78cde63df3c5aab330",
+    "rise684-result.json": "53049659d9f9ff79a6f7d6547a4c8e11aab47c7b3437d66fcfd1187372328ac6",
+    "rise684_live.py": "7dbfe8eaa3ac0e3f0721cf5a0275671e272990ea00786be39214965e35dc5778",
+    "rise684-browser.cjs": "da84672b675f3d80597f92b25f0988fcc793c90c96e5eecc0e1463a14184e78b",
+    "rise684-web.log": "1c62071355efc4141bc53fab87b98b9c8c81b68cd05a63dc8acdc48e01a8e605",
+    "rise684-api.log": "bc11d13b33d4d90d69c0c5bc5bb5ac8369ec282a0fe548b441e2a560f91c2abb",
+    "rise684-failure-move.png": "a3bbd61c240961ff4586424da80f7f9e7116c6ab15dbab4acf80227aef872eb3",
+    "rise684-recovered.png": "4d730ddcf5743ba7f716c2a3391a419b79636571cf9c9de602212ebd45027d61"
+  }
+}
