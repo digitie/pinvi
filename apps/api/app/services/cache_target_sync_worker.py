@@ -10,7 +10,6 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
-import httpx
 from fastapi import FastAPI
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import DBAPIError
@@ -25,6 +24,7 @@ from app.clients.kor_travel_map_cache_target import (
 )
 from app.core.config import Settings, settings
 from app.db import session as db_session
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 from app.models.cache_target_sync import (
     KtmCacheTargetConsumer,
     KtmCacheTargetHead,
@@ -574,17 +574,23 @@ async def cache_target_sync_worker_lifespan(app: FastAPI) -> AsyncIterator[None]
     if command_secret is None or consumer_secret is None:
         raise RuntimeError("cache target runtime principal이 없습니다.")
     command_client = CacheTargetServiceClient(
-        httpx.AsyncClient(
+        ApiCallLoggingClient(
             base_url=settings.pinvi_kor_travel_map_api_base_url,
             timeout=settings.pinvi_kor_travel_map_timeout_seconds,
+            event_hooks=api_call_event_hooks(
+                db_session.async_session_factory, provider="kor_travel_map_cache_target_command"
+            ),
         ),
         role="command",
         token=command_secret.get_secret_value(),
     )
     consumer_client = CacheTargetServiceClient(
-        httpx.AsyncClient(
+        ApiCallLoggingClient(
             base_url=settings.pinvi_kor_travel_map_api_base_url,
             timeout=settings.pinvi_kor_travel_map_timeout_seconds,
+            event_hooks=api_call_event_hooks(
+                db_session.async_session_factory, provider="kor_travel_map_cache_target_consumer"
+            ),
         ),
         role="consumer",
         token=consumer_secret.get_secret_value(),

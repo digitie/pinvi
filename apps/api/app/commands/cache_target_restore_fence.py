@@ -7,8 +7,6 @@ import asyncio
 import json
 import uuid
 
-import httpx
-
 from app.clients.kor_travel_map_cache_target import CacheTargetServiceClient
 from app.core.config import (
     KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
@@ -17,6 +15,11 @@ from app.core.config import (
     settings,
 )
 from app.db import session as db_session
+from app.middleware.api_call_logging import (
+    ApiCallLoggingClient,
+    api_call_event_hooks,
+    close_api_call_logs,
+)
 from app.services.cache_target_restore_fence import run_cache_target_restore_fence
 
 
@@ -42,12 +45,24 @@ async def _run(args: argparse.Namespace) -> dict[str, int | str]:
     base_url = settings.pinvi_kor_travel_map_api_base_url
     timeout = settings.pinvi_kor_travel_map_timeout_seconds
     consumer_client = CacheTargetServiceClient(
-        httpx.AsyncClient(base_url=base_url, timeout=timeout),
+        ApiCallLoggingClient(
+            base_url=base_url,
+            timeout=timeout,
+            event_hooks=api_call_event_hooks(
+                db_session.async_session_factory, provider="kor_travel_map_cache_target_consumer"
+            ),
+        ),
         role="consumer",
         token=consumer.get_secret_value(),
     )
     restore_client = CacheTargetServiceClient(
-        httpx.AsyncClient(base_url=base_url, timeout=timeout),
+        ApiCallLoggingClient(
+            base_url=base_url,
+            timeout=timeout,
+            event_hooks=api_call_event_hooks(
+                db_session.async_session_factory, provider="kor_travel_map_cache_target_restore"
+            ),
+        ),
         role="restore",
         token=restore.get_secret_value(),
     )
@@ -62,9 +77,15 @@ async def _run(args: argparse.Namespace) -> dict[str, int | str]:
             reason=args.reason,
         )
     finally:
-        await consumer_client.aclose()
-        await restore_client.aclose()
-        await db_session.engine.dispose()
+        try:
+            await consumer_client.aclose()
+            await restore_client.aclose()
+        finally:
+            # CLI에는 API lifespan이 없다. 관측 DB를 쓰는 drain을 engine 종료보다 먼저 끝낸다.
+            try:
+                await close_api_call_logs(db_session.async_session_factory)
+            finally:
+                await db_session.engine.dispose()
     return {
         "control_version": result.receipt.data.control_version,
         "fence_id": str(result.receipt.data.fence_id),

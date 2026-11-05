@@ -65,7 +65,8 @@ _NEAREST_PATH: Final = "/v1/service/weather/nearest"
 LOCATION_ID_MAX_LENGTH: Final = 120
 
 _CIRCUIT_FAILURE_THRESHOLD: Final = 3
-_CIRCUIT_OPEN_SECONDS: Final = 30.0
+# view 사이 간격이 30초를 넘는 경우에도 매번 timeout 시험을 만들지 않는다(#621).
+_CIRCUIT_OPEN_SECONDS: Final = 120.0
 #: 503이어도 Map은 살아 있다 — 회로 실패로 세지 않는다(적재 전은 결정적이다).
 _ALIVE_UNAVAILABLE_CODES: Final[frozenset[str]] = frozenset({"WEATHER_STATE_NOT_LOADED"})
 
@@ -281,8 +282,12 @@ class KorTravelMapWeatherClient:
                 log_failure=False,
             )
         except KorTravelMapUnavailable as exc:
-            self._circuit.record_failure(trial=trial, generation=generation)
-            raise KorTravelMapWeatherUnavailable(str(exc)) from exc
+            if exc.code in {"BULKHEAD_FULL", "POOL_TIMEOUT", "CIRCUIT_OPEN"}:
+                # Map 공통 transport의 로컬 포화·이미 열린 회로는 이 표면의 실패가 아니다.
+                self._circuit.release(trial=trial)
+            else:
+                self._circuit.record_failure(trial=trial, generation=generation)
+            raise KorTravelMapWeatherUnavailable(str(exc), code=exc.code) from exc
         except httpx.HTTPError as exc:
             # DecodingError·TooManyRedirects 등은 TransportError가 아니라 `_send`가 잡지 않는다.
             self._circuit.record_failure(trial=trial, generation=generation)

@@ -291,3 +291,92 @@ async def test_ack_rejects_cursor_before_event_sequence() -> None:
             )
     finally:
         await client.aclose()
+
+
+def _lease_response() -> dict[str, object]:
+    return {
+        "data": {
+            "outcome": "leased",
+            "lease_epoch": 3,
+            "lease_expires_at": "2026-08-21T00:01:00+00:00",
+            "event": _event(),
+            "event_sha256": "a" * 64,
+        },
+        "meta": {"duration_ms": 1},
+    }
+
+
+@pytest.mark.asyncio
+async def test_lease_outer_envelope_ignores_additions_with_once_per_key_set_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from app.clients import kor_travel_map
+
+    monkeypatch.setattr(kor_travel_map, "_WARNED_ADDITIVE", set())
+    additions = [
+        {"future": "sensitive-value"},
+        {"future": "changed-value"},
+        {"second": True, "future": None},
+        {"future": {}, "second": False},
+    ]
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={**_lease_response(), **additions.pop(0)})
+
+    client = _client("read", handler)
+    try:
+        for _ in range(4):
+            lease = await client.lease(worker_id=uuid.uuid4())
+            assert lease is not None
+            assert lease.event.action == "rebind"
+            assert lease.event.event_sequence == 12
+            assert "future" not in lease.model_dump()
+    finally:
+        await client.aclose()
+    warnings = [record for record in caplog.records if "additive fields ignored" in record.message]
+    assert len(warnings) == 2
+    assert all("feature_reference_reconciliation.envelope" in record.message for record in warnings)
+    assert "['future']" in warnings[0].message
+    assert "['future', 'second']" in warnings[1].message
+    assert "sensitive-value" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda payload: payload.pop("data"),
+        lambda payload: payload.pop("meta"),
+        lambda payload: payload.update(meta=[]),
+        lambda payload: payload.update(data=[]),
+        lambda payload: payload["data"].update(outcome="acked"),
+        lambda payload: payload["data"].update(event_sha256="not-a-sha256"),
+        lambda payload: payload["data"]["event"].update(replacement_feature=None),
+        lambda payload: payload["data"]["event"].update(future=True),
+    ],
+    ids=[
+        "missing-data",
+        "missing-meta",
+        "meta-type",
+        "data-type",
+        "non-lease-state",
+        "digest-type",
+        "rebind-without-replacement",
+        "hashed-event-fields-remain-exact",
+    ],
+)
+async def test_lease_additions_do_not_hide_required_type_or_event_errors(
+    mutation: Callable[[dict[str, object]], object],
+) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        payload = {**_lease_response(), "future": True}
+        mutation(payload)
+        return httpx.Response(200, json=payload)
+
+    client = _client("read", handler)
+    try:
+        with pytest.raises(FeatureReferenceReconciliationContractError):
+            await client.lease(worker_id=uuid.uuid4())
+    finally:
+        await client.aclose()

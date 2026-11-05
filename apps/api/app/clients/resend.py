@@ -10,7 +10,7 @@ import httpx
 
 from app.core.config import settings
 from app.db import session as db_session
-from app.middleware.api_call_logging import api_call_event_hooks
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 
 
 class ResendClient:
@@ -47,7 +47,7 @@ async def create_resend_client(
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> AsyncIterator[ResendClient]:
     headers = {"Authorization": f"Bearer {settings.pinvi_resend_api_key}"}
-    async with httpx.AsyncClient(
+    async with ApiCallLoggingClient(
         base_url=settings.pinvi_resend_api_base_url,
         headers=headers,
         timeout=settings.pinvi_resend_timeout_seconds,

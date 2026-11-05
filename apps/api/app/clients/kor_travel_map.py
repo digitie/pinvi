@@ -19,7 +19,8 @@ import asyncio
 import json
 import logging
 import math
-from collections.abc import AsyncIterator, Mapping, Sequence
+import time
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
@@ -28,9 +29,11 @@ from urllib.parse import quote
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 
+from app.clients._resilience import TransportCircuit
 from app.core.config import Settings, settings
 from app.db import session as db_session
-from app.middleware.api_call_logging import api_call_event_hooks
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
+from app.middleware.resilience_runtime import outbound_resilience_lifespan
 
 logger = logging.getLogger(__name__)
 
@@ -341,6 +344,8 @@ class KorTravelMapClient:
         max_attempts: int = 3,
         batch_chunk_size: int = 200,
         backoff_base_seconds: float = 0.2,
+        max_concurrent_requests: int = 16,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._http = http
         self._service_token = service_token.strip()
@@ -350,6 +355,11 @@ class KorTravelMapClient:
             raise ValueError("batch_chunk_size는 producer cap 범위(1..200)여야 합니다.")
         self._batch_chunk_size = batch_chunk_size
         self._backoff_base_seconds = backoff_base_seconds
+        if max_concurrent_requests < 1:
+            raise ValueError("max_concurrent_requests는 양수여야 합니다.")
+        # 논리 호출(재시도·backoff 포함)마다 worker 내 한 자리를 쓴다. 대기열은 만들지 않는다.
+        self._slots = asyncio.Semaphore(max_concurrent_requests)
+        self._transport_circuit = TransportCircuit(clock=clock)
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -369,6 +379,52 @@ class KorTravelMapClient:
         return {}
 
     async def _send(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        json: Any | None = None,
+        allow_public_api_key: bool = False,
+        retry: bool = True,
+        request_timeout: httpx.Timeout | None = None,
+        log_failure: bool = True,
+    ) -> httpx.Response:
+        if self._slots.locked():
+            raise KorTravelMapUnavailable(
+                "kor-travel-map 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
+            )
+        # locked 검사와 acquire 사이에는 suspension이 없어 다른 task가 자리를 가로채지 않는다.
+        async with self._slots:
+            token = self._transport_circuit.acquire()
+            if token is None:
+                raise KorTravelMapUnavailable(
+                    "kor-travel-map 회로 열림 — 호출하지 않음", code="CIRCUIT_OPEN"
+                )
+            try:
+                response = await self._send_with_retries(
+                    method,
+                    path,
+                    params=params,
+                    json=json,
+                    allow_public_api_key=allow_public_api_key,
+                    retry=retry,
+                    request_timeout=request_timeout,
+                    log_failure=log_failure,
+                )
+            except KorTravelMapUnavailable as exc:
+                if exc.code == "POOL_TIMEOUT":
+                    self._transport_circuit.release(token)
+                else:
+                    self._transport_circuit.failure(token)
+                raise
+            except BaseException:
+                self._transport_circuit.release(token)
+                raise
+            self._transport_circuit.success(token)
+            return response
+
+    async def _send_with_retries(
         self,
         method: str,
         path: str,
@@ -403,6 +459,11 @@ class KorTravelMapClient:
                         request_timeout if request_timeout is not None else httpx.USE_CLIENT_DEFAULT
                     ),
                 )
+            except httpx.PoolTimeout as exc:
+                # 로컬 연결 풀 대기는 원격 장애의 증거가 아니며 재시도하지 않는다.
+                raise KorTravelMapUnavailable(
+                    f"kor-travel-map 연결 풀 대기 초과({path})", code="POOL_TIMEOUT"
+                ) from exc
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path}): {exc!r}")
             else:
@@ -915,7 +976,7 @@ def _error_code(resp: httpx.Response) -> str | None:
 
 def create_kor_travel_map_client(app_settings: Settings) -> KorTravelMapClient:
     """설정 기반 client 생성 (httpx.AsyncClient 1개)."""
-    http = httpx.AsyncClient(
+    http = ApiCallLoggingClient(
         base_url=app_settings.pinvi_kor_travel_map_api_base_url,
         timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
         event_hooks=api_call_event_hooks(
@@ -942,11 +1003,12 @@ async def kor_travel_map_client_lifespan(app: FastAPI) -> AsyncIterator[None]:
         "kor_travel_map.client_ready",
         extra={"base_url": settings.pinvi_kor_travel_map_api_base_url},
     )
-    try:
-        yield
-    finally:
-        await client.aclose()
-        app.state.kor_travel_map_client = None
+    async with outbound_resilience_lifespan():
+        try:
+            yield
+        finally:
+            await client.aclose()
+            app.state.kor_travel_map_client = None
 
 
 def get_kor_travel_map_client(request: Request) -> KorTravelMapClient:

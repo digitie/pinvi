@@ -354,3 +354,68 @@ HTTPS로 redirect한다.
 - [ ] OpenAPI export (코드 작성 단계 진입 후 자동) — 변경 시 `.github/workflows/openapi.yml`에서 drift 검사
 - [ ] 관련 문서 갱신: 본 API 문서 + `docs/journal.md` + (도메인 변경 시)
       `docs/data-model.md`
+
+## 외부 호출 복원력과 관측 (#616·#621)
+
+Map outer envelope는 필수 `data`/`meta`와 기존 타입·상태 의미를 검사하고 추가 키는
+무시한다. 무시한 키는 위치·키 집합별 한 번 경고한다. 서명·인과 증명·immutable receipt의
+exact 검사는 별도 보안 경계이므로 그대로 유지한다.
+
+사용자 Map·geo·weather client는 worker별 독립 동시 호출 한도16을 가진다. Map weather와
+transport는 기본 Map client 한도를 공유한다. 포화 시 기다리지 않고 기존 unavailable로
+강등한다. timeout 등 전송 장애가 3회 연속 발생하면 회로를120초 열고 시험 호출 하나만
+허용한다. 직접 weather의 endpoint/host·짧은 deadline 판단은 유지하며 이전 세대의 늦은
+결과는 새 회로 상태에 반영하지 않는다. 로컬 포화·연결 풀 대기는 원격 장애로 세지 않는다.
+별도 admin/curation/command client를 하나의 전역 Map cap으로 합친 것은 아니다.
+
+HTTP 오류 공개 계약은 그대로다. Map·geo의 포화/열린 회로는 공개503의
+`FEATURE_SERVICE_UNAVAILABLE`/`GEOCODING_SERVICE_UNAVAILABLE`로 투영하고 내부 code나
+예외 문자열을 응답하지 않는다. rate limit은 기존429·Retry-After·저장소503·fail-open
+정책을 유지한다. Postgres backend의 override 결정과 atomic counter 증가는 하나의
+statement를 쓰며, 만료 bucket 정리는 요청과 독립된60초 주기 task가 transaction당
+최대1000행씩 `SKIP LOCKED`로 처리한다. full batch이면같은전체주기5초예산안에서
+추가batch를drain하며, 연결생성OSError/ConnectionRefusedError뒤에는다음주기에복구한다.
+취소는계속전파하고driver close오류가외부취소를덮어도종료의도를유지한다.
+
+`api_call_log`는 감사/업무 outbox와 달리 손실 허용 관측이다. session factory마다 메모리
+큐 하나(대기1024행 + 전송 중 최대100행)를 쓰고0.25초/최대100행으로 배치한다. 요청은
+DB 저장을 기다리지 않는다. flush는2초, 종료 drain은3초 상한이며 실패/포화/종료 손실은
+`pinvi_api_call_log_rows_total{outcome=...}`, 대기는 `pinvi_api_call_log_queued`로 집계한다.
+성공 여부를 확인하기 전 응답을 반환하므로 관리자 조회에 짧은 지연이나 누락이 있을 수 있다.
+
+`ApiCallLoggingClient`를 사용하는 provider factory는 timeout·연결 실패·body read 실패·취소도
+기록하고 원래 예외를 유지한다. endpoint는 공통 redaction을 적용하고 임의 예외 문자열은
+저장하지 않는다. 기록의 `occurred_at`은 enqueue 시각이다. API runtime·관리자 TCP/UDS probe·독립 CLI의 생성부도 같은 client로 연결했다.
+Dagster bounded reader는 기존 response-hook 금지 규칙을 유지하고 request tracker와
+stream 종료 관측을 사용한다. streaming 응답은 헤더가 아니라 EOF/실패/취소/조기 종료에서
+한 번 기록한다. 독립 CLI는 client 종료 뒤, DB engine dispose 전에 bounded drain한다.
+Telegram의 전체 deadline이 전송을 먼저 취소하면 실제 전송 예외는 CancelledError이며,
+공개 network_error 변환과 사용자 직접 취소의 재전파는 기존대로 유지한다.
+별도 ETL 패키지는 API ORM에 의존하지 않으며 기존 resource timeout·Dagster retry/metadata를
+유지한다.
+
+DB 기본값은 `PINVI_DATABASE_POOL_SIZE=10`, `PINVI_DATABASE_MAX_OVERFLOW=0`,
+`PINVI_DATABASE_POOL_TIMEOUT_SECONDS=5`이다. 대기 metric
+`pinvi_api_db_pool_wait_seconds{outcome=acquired|timeout|cancelled|error}`는 실제 queue
+acquisition을 측정하고 새 연결 생성 시간도 포함한다. SQL 실행·pre-ping 시간은 포함하지
+않는다. worker가 늘면 이 한도가 worker 수만큼 곱해진다. 운영 설정 전달·부하 검증과
+edge HTTP/2·worker 증설은 별도 운영 담당 범위다.
+
+직접 weather `/resolve`는 요청에서 기다리지 않는다. 같은 좌표의 유효한 직접 캐시만
+읽고, 미스는 별도 세션·별도 context의 배경 해석을 예약해 즉시 빈 카드/trip unavailable로
+반환한다. feature별 single-flight와 최신 좌표 예약 병합, 실행2·대기128·음성 캐시128/30초를
+사용한다. resolve만 read45초를 쓰며 전체 반경 HTTP 해석은140초 상한이다. 요청 deadline이나
+인증 context는 배경 작업에 상속하지 않는다. 종료 시 worker를 취소·회수한 뒤 client를 닫는다.
+음성 캐시는 반경 없음과 실패를 구분하고 TTL 뒤 재시도한다. 좌표/Map/로컬 캐시 삭제 뒤
+늦은 결과는 optimistic version 검사로 거부한다. 외부 Map feature 삭제 여부는 Pinvi가
+캐시 행만으로 추정하지 않는다.
+
+직접 카드 예산은 `PINVI_KOR_TRAVEL_WEATHER_REQUEST_BUDGET_SECONDS` 기본4초,
+관리자는 `PINVI_KOR_TRAVEL_WEATHER_ADMIN_REQUEST_BUDGET_SECONDS` 기본10초를 쓴다.
+긴 resolve read override는 다른 동시 호출의 timeout을 바꾸지 않는다. 느린5xx는 기본 read와
+호출별 read 중 짧은 값의 절반을 이미 썼으면 재시도하지 않으며, 빠른5xx·연결 재시도는
+유지한다. deadline 회로의 의미 있는 원격 예산은 실제 connect/header 전송 시작부터 계산해
+로컬 연결 풀 대기를 원격 장애 시간으로 세지 않는다.
+
+#621의 운영 flag 적용·edge HTTP/2·실제 운영 latency/부하 및 worker 증설은 Claude Code
+소유다. WSL 소유 fixture 검증은 운영 검증을 대신하지 않으며 #621은 자동 종료하지 않는다.

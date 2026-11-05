@@ -10,11 +10,13 @@ admin feature 상세(`get_feature_detail`)로 좌표를 얻고
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+import pytest_asyncio
 
 from app.clients.kor_travel_map import KorTravelMapFeatureNotFound
 from app.clients.kor_travel_map_admin import get_kor_travel_map_admin_client
@@ -28,8 +30,24 @@ from app.clients.kor_travel_weather import (
     get_optional_kor_travel_weather_client,
 )
 from app.main import app
+from app.services.weather_resolve_worker import (
+    close_weather_resolve_worker,
+    get_weather_resolve_worker,
+)
 
 pytestmark = pytest.mark.asyncio
+
+_background_clients: list[Any] = []
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _close_background_resolvers(session_factory: Any) -> AsyncIterator[None]:
+    # session_factory 선행/후행을 보장해 worker를 테스트별 DB engine보다 먼저 종료한다.
+    yield
+    for weather_client in _background_clients:
+        await close_weather_resolve_worker(weather_client)
+    _background_clients.clear()
+
 
 _FEATURE_LAT, _FEATURE_LON = 35.158, 129.163
 
@@ -125,7 +143,12 @@ class _FakeWeatherClient:
         self.calls: dict[str, list[Any]] = {"resolve": [], "latest": [], "forecast": []}
 
     async def resolve(
-        self, *, lat: float, lon: float, radius_km: float | None = None
+        self,
+        *,
+        lat: float,
+        lon: float,
+        radius_km: float | None = None,
+        read_timeout_seconds: float | None = None,
     ) -> ResolvedWeatherOut:
         self.calls["resolve"].append({"lat": lat, "lon": lon, "radius_km": radius_km})
         if self.no_match:
@@ -173,6 +196,8 @@ class _FakeWeatherClient:
 def _override(admin_client: Any, weather_client: Any) -> None:
     app.dependency_overrides[get_kor_travel_map_admin_client] = lambda: admin_client
     app.dependency_overrides[get_optional_kor_travel_weather_client] = lambda: weather_client
+    if weather_client is not None:
+        _background_clients.append(weather_client)
 
 
 def _clear() -> None:
@@ -211,6 +236,14 @@ async def test_resolves_coord_via_admin_detail_and_builds_values(
     )
     _override(admin_client, weather_client)
     try:
+        cold = await client.get(
+            "/admin/features/f_new_1/weather-values", cookies=auth_cookies(str(admin_id))
+        )
+        assert cold.status_code == 200, cold.text
+        assert cold.json()["data"]["items"] == []
+        assert weather_client.calls["latest"] == []
+        assert weather_client.calls["forecast"] == []
+        await get_weather_resolve_worker(weather_client).drain()
         resp = await client.get(
             "/admin/features/f_new_1/weather-values", cookies=auth_cookies(str(admin_id))
         )
@@ -255,6 +288,14 @@ async def test_supports_asof_within_retention(
     weather_client = _FakeWeatherClient()
     _override(admin_client, weather_client)
     try:
+        cold = await client.get(
+            "/admin/features/f_asof/weather-values",
+            params={"asof": datetime.now(UTC).isoformat()},
+            cookies=auth_cookies(str(admin_id)),
+        )
+        assert cold.status_code == 200, cold.text
+        assert cold.json()["data"]["items"] == []
+        await get_weather_resolve_worker(weather_client).drain()
         resp = await client.get(
             "/admin/features/f_asof/weather-values",
             params={"asof": datetime.now(UTC).isoformat()},
@@ -358,6 +399,12 @@ async def test_no_anchor_returns_empty_items(
     weather_client = _FakeWeatherClient(no_match=True)
     _override(admin_client, weather_client)
     try:
+        cold = await client.get(
+            "/admin/features/f_no_anchor/weather-values", cookies=auth_cookies(str(admin_id))
+        )
+        assert cold.status_code == 200, cold.text
+        assert cold.json()["data"]["items"] == []
+        await get_weather_resolve_worker(weather_client).drain()
         resp = await client.get(
             "/admin/features/f_no_anchor/weather-values", cookies=auth_cookies(str(admin_id))
         )
@@ -547,6 +594,14 @@ async def test_admin_direct_preserves_selected_source_stale(
     weather = _FakeWeatherClient(values_by_location={"loc-1": (replace(value, source_stale=True),)})
     _override(_FakeAdminClient(), weather)
     try:
+        cold = await client.get(
+            "/admin/features/f-stale/weather-values", cookies=auth_cookies(verified_user[0])
+        )
+        assert cold.status_code == 200, cold.text
+        assert cold.json()["data"]["items"] == []
+        assert weather.calls["latest"] == []
+        assert weather.calls["forecast"] == []
+        await get_weather_resolve_worker(weather).drain()
         resp = await client.get(
             "/admin/features/f-stale/weather-values", cookies=auth_cookies(verified_user[0])
         )

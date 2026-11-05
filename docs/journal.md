@@ -1,3 +1,27 @@
+## 2026-11-06 — 원격 CI의 연결반환 구형 기대값 보완·push 서버 거절
+
+- d95c2c6 원격integration3이직접resolve구형기대값2FAIL을포착했다. 새source에서같은실패를재현하고기존6검사를냉미스즉시반환·배경1회·독립45초·종료후slot회복·warm latest/forecast요청connection반환으로보완했다. 제품추가수정없음이다.
+- 고정ed6de9d4db1cec78e990b98652886df9a8e7ff05 전체unit2192PASS/기존9SKIP·관련실제PG23PASS·540입력hash전후동일·전체Ruff/format528·mypy275다.
+- 첫일반push는부모693과같은remote fatal error in commit_refs로거절됐고원격3a51833을확인했다. 로컬sourcecommit보존·강제push/reset/stash조작없음이다. 실제새head게시·두독립리뷰·CI성공은별도확인전완료로표시하지않는다.
+- 운영/SSH/실제provider/Telegram접근은없으며main a5a2154원본을보존한다.
+
+## 2026-11-06 — Hume cleanup P2 두 건 실패 우선 보완
+
+- 부모가d95c2c6의Hume2P2를수용했다. 연결생성오류2종·단일batch단위3FAIL과실제PGbacklog1FAIL을먼저확보했다. 예상DB연결OSError를다음주기에서복구하고,tx1000행·SKIPLOCKED를유지하며전체주기5초예산안fullbatch를추가drain한다.
+- 취소중driverclose오류가취소를덮는중간제품1FAIL도추가보완했다. task.cancelling으로외부취소를전파하며정상주기deadline뒤에는다음tick으로복귀한다. 예상오류의자격/DSN문자열을로그에복사하지않는다.
+- 수정 dbdac3d9d994f26a3e7c94d266fad8863906bc0f에서전체unit2192PASS/기존9SKIP(92.73초),관련unit63·실제소유PG17(23.12초),540입력hash전후동일·Ruff/format528·mypy275·OpenAPI동일이다. PG는한주기[1000,1000,501]개별COMMIT과locked만료1/유효1보존을확인했다.
+- 정확source증거를갱신하며이전PG198/#6589는이전구성요소증거로구분한다. 새SHA에서Hubble/Hume두독립전문리뷰와원격CI를다시확인해야한다. 이전승인재사용·자체승인/ready/merge는없다.
+- a5a2154원본8파일·journal양쪽·봉인migration·보호stash를보존했다. 운영/SSH/실제provider/Telegram접근은없다.
+
+## 2026-11-06 — #616·#621 WSL 잔여 완주·a5a2154 보존 통합
+
+- 사용자 후속대로 서비스/라우트/독립CLI까지 같은DraftPR695에서 완성했다. 직접resolve는cache-only요청·별도session/Context·동시2/대기128·feature single-flight·음성30초·read45초와좌표/Map/삭제/commit경합fence를쓴다. plainHTTP/stream오류·취소·종료drain과카드4초/Admin10초예산·느린5xx재시도제한·실전송기준pool판정도연결했다.
+- main a5a215470adf47b31ea7fe25e3a9431337e4e4a9(#658·#692)를8a259b4로통합했다. 원본8파일은byte동일이며이파일의충돌도양쪽기록을보존했다. 기존source/body경계와봉인migration·보호stash는불변이다.
+- 최종고정 dcddeff0213e9e5e5de615b672978d984b095c93 전체APIunit2187PASS/기존9SKIP(93.18초)·540입력sourcehash전후일치, 관련실제PG/API198(131.67초)·들어온#658소유PG잠금9(58.31초)·mypy275·Ruff/format528·Bash/diff가통과했다. 카탈로그349/자동299정합·공개OpenAPI는a5a2154와byte동일이다.
+- 최초통합unit1FAIL은새weathercachewriter정적목록누락으로잡혔고 UUID축없는동일캐시표경로만명시후전체재실행했다. 새로운실패우선재현과초기fixture가정오류는증거JSON에서구분했다. 운영성공으로바꿔기록하지않는다.
+- #643최신본문·최근3댓글을새로확인했고 #616/#621관련범위를PR695한묶음으로유지한다. #650/Map1440/1450운영체크와frontend618/623/686소유변경은가져오지않았다.
+- 증거 docs/reviews/pinvi-616-621-wsl-resilience.json 및 source.sha256. 운영flag·edgeHTTP2·실제운영latency/worker판단은Claude담당이다. 운영/SSH/실제provider/Telegram접근·자체승인/ready/merge는없다. Closes616/Refs621/Refs643·Draft로메인최종두전문적대리뷰와정확headCI게이트에인계한다.
+
 ## 2026-11-06 — #658 cleanup 경합 독립 구현·draft 인계
 
 **작업**: 별도 WSL worktree에서 소유 PG18 backend SIGSTOP으로 psql kill/wait 뒤 서버 lock 잔류와 조기 cleanup 반환을 1실패로 재현했다.
@@ -5,6 +29,27 @@
 **결정**: 다른 server 세션 terminate/ACL/schema/fence 복구를 추가하지 않는다. guard 조기 정의 결함도 별도 1실패를 먼저 확인해 정의 이동·생성 실패 전파로 보완했다.
 **검증**: 최종 PG18 통합18/단위12·Bash/Ruff/format 통과, ShellCheck는 원본과 같은7진단·신규0. 명령·source 지문·한계는 `docs/execplan/issue-658-hotswap-lock-release.md`.
 **다음**: draft PR694의 정확 최신 SHA를 메인의 별도 전문적 적대 리뷰2인과 CI 확인에 인계한다. ready/merge·새 main 통합은 하지 않는다. 운영/SSH/prod/Telegram 접근, 봉인 migration 변경, 타 작업자 변경 되돌리기, 보호 stash pop은 없었다.
+
+## 2026-11-06 — #616·#621 WSL 증거 인계
+
+- 최종고정f99e9b3의 전체unit2084PASS/기존9SKIP(104.59초)·sourcehash전후동일·mypy274·Ruff/format519와 제품674602e 관련실제PG/API134PASS를 확인했다. 실제3provider HTTP·공개503계약7PASS는 앞선134중3건과중복이며 임의합산하지않는다.
+- 포화/timeout/취소·회복·배치DB기록·한왕복counter·SKIPLOCKED청소·pool대기를 WSL소유fixture로검증했다. 기본pool로교체한negative는1FAIL로관측누락을잡았다. 공개오류초기4FAIL은새검사의잘못된envelope가정이며제품실패증거로계산하지않는다.
+- docs/reviews/pinvi-616-621-wsl-resilience.json에명령별sourcehash·증거·한계를남긴다. 직접resolve 서비스재설계와services/routes의plainhttpx OAuth·Telegram 전환·edge/운영flag/worker는잔여다.
+- DraftPR695·Closes616/Refs621로메인최종두전문적대리뷰·ready·merge에인계한다. 자체승인/ready/merge·새main통합·운영/SSH/실제provider/Telegram접근은하지않았다.
+
+## 2026-11-06 — #616·#621 WSL 복원력 구현 중간 저장
+
+- Draft PR695에서 세 구현 작업자가 envelope·rate limit·provider를 병행했고 주 작업자가 logging·pool·lifecycle을 연결했다. 최종 전문 리뷰/승인으로 간주하지 않는다.
+- 필수키·타입·상태와 signed receipt/증명 exact 검사를 보존하면서 outer additive를 허용했다. rate limit은한 statement·독립청소, 관측은 bounded배치·실패/취소·안전한오류, provider는즉시포화·120초회로·늦은결과격리, pool은명시한도·실제 acquisition대기를 연결했다.
+- WSL전체단위2084PASS/기존9SKIP·mypy274·Ruff/format518, 실제소유PG/HTTP로깅·pool7와3provider실HTTP/PG3PASS. 확장공개API계약검사는진행중이다.
+- app/db/session.py는core pool구현을실제engine에연결하는최소배선만수정했다. 0105이하/보호stash/다른작업자/frontend는불변이다. 운영·SSH·실제provider·Telegram접근은없다.
+- 직접weatherresolve 배경화·느린5xx재시도와edge/운영flag/worker는#621잔여다. #621자동종료없이메인최종두리뷰·ready·merge에인계한다.
+
+## 2026-11-06 — #616·#621 WSL 복원력 묶음 착수
+
+- 사용자 지정 ff5c2386 기준 전용 worktree에서 최신 두 이슈 본문·댓글과 지침을 확인했다. 실행계획은 docs/execplan/issues-616-621-outbound-resilience.md다.
+- tracker 시작 시각은 이미 request.extensions로 옮겨져 있어 재구현하지 않는다. inline DB 로깅·실패 누락, rate limit 왕복/청소, provider 포화/회로, pool 관측을 재분류 후 구현한다.
+- 계획 commit·push·Draft PR을 구현보다 먼저 만든다. 운영·SSH·실제 provider·Telegram 접근은 없으며 #621 운영 범위는 Claude Code 소유다. 최종 두 전문 리뷰·ready·merge는 메인에 인계한다.
 
 ## 2026-11-06 — 원격 통합 검사의 고정 시계 혼용 보완
 

@@ -74,6 +74,7 @@ from app.db.session import release_read_connection
 from app.models.poi import TripDayPoi
 from app.services.weather_location_resolver import (
     WeatherLocationFound,
+    WeatherLocationPending,
     WeatherLocationResolution,
     resolve_weather_location,
 )
@@ -246,7 +247,12 @@ async def _resolve_all(
         if isinstance(resolution, WeatherLocationFound):
             found[feature_id] = resolution
             continue
-        state = "unavailable" if feature_id in unavailable_feature_ids else "no_data"
+        state = (
+            "unavailable"
+            if feature_id in unavailable_feature_ids
+            or isinstance(resolution, WeatherLocationPending)
+            else "no_data"
+        )
         pending.mark([feature_id], state)
     return found
 

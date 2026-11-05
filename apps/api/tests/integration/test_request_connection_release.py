@@ -134,22 +134,33 @@ async def test_flushed_writes_flag_clears_when_the_transaction_ends(session_fact
         assert db.in_transaction() is False
 
 
-async def test_weather_card_resolve_hang_opens_the_circuit(session_factory) -> None:  # type: ignore[no-untyped-def]
-    """카드 범위 배선: 예산(1 s)이 read(4 s)의 절반보다 짧아도 응답 없는 `/resolve`를 세서, 카드 3회 뒤엔
-    회로가 열려 4번째 카드는 weather에 닿지 않는다."""
+async def test_weather_card_does_not_wait_or_multiply_hanging_background_resolves(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    """냉미스 카드는 배경 resolve를 기다리지 않고 같은 feature를 한 번만 예약한다."""
     import asyncio
 
     import httpx
 
     from app.clients.kor_travel_weather import KorTravelWeatherClient
     from app.services.weather_card import resolve_and_collect_deduped_values
+    from app.services.weather_resolve_worker import close_weather_resolve_worker
 
-    calls = {"n": 0}
+    calls = 0
+    entered = asyncio.Event()
+    cleaned = asyncio.Event()
 
     async def hang(request: httpx.Request) -> httpx.Response:
-        calls["n"] += 1
-        await asyncio.sleep(request.extensions["timeout"]["read"])
-        raise httpx.ReadTimeout("no response", request=request)
+        nonlocal calls
+        if request.url.path != "/v1/weather/resolve":
+            return httpx.Response(200, json={"data": [], "meta": {}}, request=request)
+        calls += 1
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaned.set()
+        return httpx.Response(200, request=request)
 
     client = KorTravelWeatherClient(
         httpx.AsyncClient(
@@ -159,6 +170,7 @@ async def test_weather_card_resolve_hang_opens_the_circuit(session_factory) -> N
         ),
         max_attempts=3,
         backoff_base_seconds=0.0,
+        max_concurrent_requests=1,
     )
     try:
         for _ in range(4):
@@ -172,10 +184,18 @@ async def test_weather_card_resolve_hang_opens_the_circuit(session_factory) -> N
                     weather_client=client,
                     budget_seconds=1.0,
                 )
+                assert db.in_transaction() is False
             assert values == []
+            assert not cleaned.is_set(), "card deadline cancelled the background resolve"
+        await asyncio.wait_for(entered.wait(), 1)
+        assert calls == 1
+        await close_weather_resolve_worker(client)
+        assert cleaned.is_set()
+        # 배경 취소가 provider 자리나 회로를 누수시키지 않는다.
+        assert await client.latest("loc-release") == ()
     finally:
+        await close_weather_resolve_worker(client)
         await client.aclose()
-    assert calls["n"] == 3
 
 
 class _ProbeWeatherClient:
@@ -185,13 +205,21 @@ class _ProbeWeatherClient:
         self._db = db
         self.in_transaction: dict[str, bool] = {}
 
-    async def resolve(self, *, lat: float, lon: float, radius_km: float | None = None) -> Any:
+    async def resolve(
+        self,
+        *,
+        lat: float,
+        lon: float,
+        radius_km: float | None = None,
+        read_timeout_seconds: float | None = None,
+    ) -> Any:
         from app.clients.kor_travel_weather import (
             CoordinateRequestOut,
             LocationOut,
             ResolvedWeatherOut,
         )
 
+        assert read_timeout_seconds == 45.0
         self.in_transaction["resolve"] = self._db.in_transaction()
         location = LocationOut(
             location_id="loc-release", name="안동", latitude=lat, longitude=lon, enabled=True
@@ -213,14 +241,38 @@ class _ProbeWeatherClient:
         return ()
 
 
-async def test_weather_card_ends_read_transaction_before_weather_calls(session_factory) -> None:  # type: ignore[no-untyped-def]
-    """리뷰 M1: 캐시 조회(db.get)가 연 트랜잭션이 /resolve·latest·forecast 동안 커넥션을 쥐지 않는다."""
+async def test_weather_card_ends_read_transaction_before_weather_calls(
+    session_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    """냉미스 배경 해석과 적중 후 latest/forecast 모두 요청의 읽기 커넥션을 반환한다."""
     from app.services.weather_card import resolve_and_collect_deduped_values
+    from app.services.weather_resolve_worker import (
+        close_weather_resolve_worker,
+        get_weather_resolve_worker,
+    )
 
     feature_id = f"place:wx{uuid.uuid4().hex[:8]}@raw"
-    for attempt in ("miss", "hit"):
+    async with session_factory() as db:
+        client = _ProbeWeatherClient(db)
+        try:
+            values, _known = await resolve_and_collect_deduped_values(
+                db,
+                feature_id=feature_id,
+                lat=36.728,
+                lon=128.84,
+                asof=None,
+                weather_client=client,  # type: ignore[arg-type]
+            )
+            assert values == []
+            assert db.in_transaction() is False
+            await get_weather_resolve_worker(client).drain()  # type: ignore[arg-type]
+            assert client.in_transaction == {"resolve": False}
+        except BaseException:
+            await close_weather_resolve_worker(client)  # type: ignore[arg-type]
+            raise
+    try:
         async with session_factory() as db:
-            client = _ProbeWeatherClient(db)
+            client._db = db
             await resolve_and_collect_deduped_values(
                 db,
                 feature_id=feature_id,
@@ -229,10 +281,10 @@ async def test_weather_card_ends_read_transaction_before_weather_calls(session_f
                 asof=None,
                 weather_client=client,  # type: ignore[arg-type]
             )
-        if attempt == "miss":
-            assert client.in_transaction.get("resolve") is False
-        assert client.in_transaction.get("latest") is False, attempt
-        assert client.in_transaction.get("forecast") is False, attempt
+            assert db.in_transaction() is False
+        assert client.in_transaction == {"resolve": False, "latest": False, "forecast": False}
+    finally:
+        await close_weather_resolve_worker(client)  # type: ignore[arg-type]
 
 
 async def test_trip_view_ends_read_transaction_before_map_call(session_factory) -> None:  # type: ignore[no-untyped-def]

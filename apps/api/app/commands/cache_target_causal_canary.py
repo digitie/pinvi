@@ -11,8 +11,6 @@ import uuid
 from collections.abc import Sequence
 from typing import Never
 
-import httpx
-
 from app.clients.kor_travel_map_cache_target import CacheTargetServiceClient
 from app.core.config import (
     KOR_TRAVEL_MAP_CACHE_TARGET_CAPABILITY_GENERATION,
@@ -21,6 +19,11 @@ from app.core.config import (
     settings,
 )
 from app.db import session as db_session
+from app.middleware.api_call_logging import (
+    ApiCallLoggingClient,
+    api_call_event_hooks,
+    close_api_call_logs,
+)
 from app.services.cache_target_causal_canary import (
     CacheTargetCanaryFailure,
     run_cache_target_causal_canary,
@@ -52,9 +55,12 @@ async def _run(args: argparse.Namespace) -> dict[str, int | str]:
     ):
         raise CacheTargetCanaryFailure("invalid_timeout_config", "startup")
     client = CacheTargetServiceClient(
-        httpx.AsyncClient(
+        ApiCallLoggingClient(
             base_url=settings.pinvi_kor_travel_map_api_base_url,
             timeout=settings.pinvi_kor_travel_map_timeout_seconds,
+            event_hooks=api_call_event_hooks(
+                db_session.async_session_factory, provider="kor_travel_map_cache_target_canary"
+            ),
         ),
         role="consumer",
         token=consumer.get_secret_value(),
@@ -70,8 +76,14 @@ async def _run(args: argparse.Namespace) -> dict[str, int | str]:
         )
         return receipt.json_object()
     finally:
-        await client.aclose()
-        await db_session.engine.dispose()
+        try:
+            await client.aclose()
+        finally:
+            # CLI에는 API lifespan이 없다. 관측 DB를 쓰는 drain을 engine 종료보다 먼저 끝낸다.
+            try:
+                await close_api_call_logs(db_session.async_session_factory)
+            finally:
+                await db_session.engine.dispose()
 
 
 class _SecretFreeArgumentParser(argparse.ArgumentParser):

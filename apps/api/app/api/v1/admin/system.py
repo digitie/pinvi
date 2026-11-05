@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.deps import DbSession
 from app.core.rbac import require_role
+from app.db import session as db_session
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 from app.models.user import User
 from app.schemas.admin import (
     AdminDockerContainerStatus,
@@ -79,7 +81,12 @@ async def _probe_dependency_services(db: AsyncSession) -> list[AdminSystemServic
     ]
 
     timeout = httpx.Timeout(SYSTEM_PROBE_TIMEOUT_SECONDS)
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with ApiCallLoggingClient(
+        timeout=timeout,
+        event_hooks=api_call_event_hooks(
+            db_session.async_session_factory, provider="admin_system_probe"
+        ),
+    ) as client:
         services.extend(
             await asyncio.gather(
                 _probe_http(
@@ -202,10 +209,13 @@ async def _collect_docker_status() -> tuple[
     timeout = httpx.Timeout(settings.pinvi_docker_status_timeout_seconds)
     transport = httpx.AsyncHTTPTransport(uds=str(socket_path))
     try:
-        async with httpx.AsyncClient(
+        async with ApiCallLoggingClient(
             base_url="http://docker",
             transport=transport,
             timeout=timeout,
+            event_hooks=api_call_event_hooks(
+                db_session.async_session_factory, provider="docker_status"
+            ),
         ) as client:
             response = await client.get(
                 "/containers/json",

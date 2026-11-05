@@ -29,10 +29,10 @@ from pydantic import (
     model_validator,
 )
 
-from app.clients.kor_travel_map import _error_code
+from app.clients.kor_travel_map import _error_code, _note_additive_fields
 from app.core.config import Settings, settings
 from app.db import session as db_session
-from app.middleware.api_call_logging import api_call_event_hooks
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,7 @@ class FeatureRequestSubmission(_ClosedModel):
 
 
 class FeatureRequestReceipt(_ClosedModel):
+    # outer envelope와 달리 immutable 제출 입력에 결박되는 receipt 본문은 exact 검증한다.
     request_id: uuid.UUID
     status: Literal["pending", "approved", "rejected", "exact_conflict"]
     kind: Literal["place", "event"]
@@ -235,10 +236,11 @@ class FeatureRequestServiceClient:
             payload = json.loads(response.content)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise FeatureRequestQueueContractError("Map submit response is not valid JSON") from exc
-        if not isinstance(payload, dict) or set(payload) != {"data", "meta"}:
+        if not isinstance(payload, dict) or not {"data", "meta"}.issubset(payload):
             raise FeatureRequestQueueContractError("Map submit envelope shape is invalid")
         if not isinstance(payload["meta"], dict) or not isinstance(payload["data"], dict):
             raise FeatureRequestQueueContractError("Map submit envelope data/meta is invalid")
+        _note_additive_fields(payload, frozenset({"data", "meta"}), what="feature_request.envelope")
         try:
             response_meta = _FeatureRequestResponseMeta.model_validate(payload["meta"])
             receipt = FeatureRequestReceipt.model_validate(payload["data"])
@@ -274,7 +276,7 @@ def create_feature_request_service_client(
     token = app_settings.kor_travel_map_feature_request_token
     if token is None:
         return None
-    http = httpx.AsyncClient(
+    http = ApiCallLoggingClient(
         base_url=app_settings.pinvi_kor_travel_map_api_base_url,
         timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
         event_hooks=api_call_event_hooks(
