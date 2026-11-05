@@ -10,7 +10,8 @@ const names: Record<string, string> = {
   planning_error: '예약 알림 실패',
   daily_brief: '일간 브리프',
   weekly_summary: '주간 요약',
-  weather_alert: '기상 특보',
+  weather_alert: '기상 특보 발표',
+  weather_alert_error: '기상 특보 확인 실패',
 };
 const statuses: Record<string, string> = {
   pending: '대기 중',

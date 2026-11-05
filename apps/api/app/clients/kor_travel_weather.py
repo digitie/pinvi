@@ -1006,7 +1006,11 @@ class KorTravelWeatherClient:
             raise KorTravelWeatherContractError(
                 "특보 발표 응답 계약이 올바르지 않습니다."
             ) from None
-        if result.bjd_code != bjd_code or result.absence_is_clear is not False:
+        if (
+            result.bjd_code != bjd_code
+            or result.absence_is_clear is not False
+            or result.queried_since != since
+        ):
             raise KorTravelWeatherContractError("특보 발표 응답 범위가 일치하지 않습니다.")
         return result
 

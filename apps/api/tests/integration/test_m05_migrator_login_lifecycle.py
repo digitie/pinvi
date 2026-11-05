@@ -24,6 +24,7 @@ def _app_feature_runtime_privileges_sql(role: str) -> str:
         "app.telegram_notification_preferences",
         "app.telegram_notifications",
         "app.telegram_notification_deliveries",
+        "app.telegram_weather_observations",
     )
     privileges = ("SELECT", "INSERT", "UPDATE", "DELETE")
     columns = [
@@ -680,7 +681,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "f",
             "t",
             "t",
-            "20261105_0104",  # 현재 head — Telegram0104가0103 뒤에 추가
+            "20261105_0105",  # 현재 head — 특보0105가0104 뒤에 추가
         )
         canonical_fingerprint = role_catalog_fingerprint()
         assert sealed_role_topology_diagnostic() == (
@@ -854,7 +855,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             '--username="$PINVI_APP_DB_USER" '
             '--dbname="$POSTGRES_DB" --command="SELECT version_num FROM app.alembic_version"',
         )
-        assert runtime_version_select.stdout.strip() == "20261105_0104"  # 현재 head
+        assert runtime_version_select.stdout.strip() == "20261105_0105"  # 현재 head
         feature_acl = compose(
             "exec",
             "-T",

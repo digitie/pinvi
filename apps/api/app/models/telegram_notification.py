@@ -39,6 +39,10 @@ class TelegramPreferences(Base):
     weekly_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    weather_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    weather_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     send_time: Mapped[str] = mapped_column(String(5), nullable=False, server_default="08:00")
     weekly_day: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     weekly_target_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -106,3 +110,19 @@ class TelegramDelivery(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_message: Mapped[str | None] = mapped_column(Text)
+
+
+class TelegramWeatherObservation(Base):
+    """Trip 잠금 아래만 변경한다. 취소와 모호성은 관측 순서와 무관하게 유지한다."""
+
+    __tablename__ = "telegram_weather_observations"
+    trip_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("app.trips.trip_id", ondelete="CASCADE"), primary_key=True
+    )
+    announcement_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    cancelled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    ambiguous: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    generation: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), nullable=False, server_default=text("gen_random_uuid()")
+    )
