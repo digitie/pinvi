@@ -254,25 +254,26 @@ async def plan_weather(
             or not trip.start_date <= when.astimezone(KST).date() <= trip.end_date
         ):
             continue
-        error = item.error or (response_error(item.data, now=when) if item.data else None)
+        data = item.data
+        groups: dict[str, list[ScopedAlertEvent]] = {}
+        if data is not None and data.region_status == "known":
+            for observation in data.events:
+                if item.bjd_code is None or not _matches_region(
+                    item.bjd_code, observation.bjd_prefixes
+                ):
+                    failed += await _failure(
+                        db, user_id, trip.trip_id, "WEATHER_ALERT_CONTRACT", now=when
+                    )
+                    continue
+                groups.setdefault(observation.announcement_id, []).append(observation)
+        observations = [await _observe(db, trip, events) for events in groups.values()]
+        error = item.error or (response_error(data, now=when) if data else None)
         if error:
             failed += await _failure(db, user_id, trip.trip_id, error, now=when)
             continue
-        data = item.data
         if data is None:
             continue
-        groups: dict[str, list[ScopedAlertEvent]] = {}
-        for observation in data.events:
-            if item.bjd_code is None or not _matches_region(
-                item.bjd_code, observation.bjd_prefixes
-            ):
-                failed += await _failure(
-                    db, user_id, trip.trip_id, "WEATHER_ALERT_CONTRACT", now=when
-                )
-                continue
-            groups.setdefault(observation.announcement_id, []).append(observation)
-        for events in groups.values():
-            state, event = await _observe(db, trip, events)
+        for state, event in observations:
             if event is None:
                 if state.ambiguous and not state.cancelled:
                     failed += await _failure(

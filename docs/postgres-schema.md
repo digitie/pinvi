@@ -1351,3 +1351,9 @@ v1의 `apps/api/alembic/versions/`에서 v2로 그대로 가져올 항목:
 - purged_at 부분 covering index는 업로더/여행/POI 총량 조회를 지원한다. 신규 두 테이블의 SELECT/INSERT/UPDATE/DELETE는 M05 runtime ACL repair 대상이며 runtime에 DDL이나 alembic_version 쓰기 권한을 추가하지 않는다.
 
 일자 CASCADE 전 과금 보존용으로 분리한 첨부는 restore_blocked=true로 원래 부모 소실을 영속화한다. 신고 복원으로 여행 수준 파일을 되살리지 못하며, moderation_hold는 해제하여 정리 자격을 유지한다. 관리자 파일 목록·count·다운로드도 purged_at이 있는 실제 폐기 파일을 제외한다.
+
+## #637 Telegram 기상특보 (0105)
+
+telegram_notification_preferences에 기본 false weather_enabled와 nullable timezone-aware weather_enabled_at을 추가한다. 서버의 off→on 전환 시각이며 클라이언트 입력을 받지 않는다. telegram_weather_observations는 trip_id/announcement_id 복합 PK와 event_id/cancelled/ambiguous/generation을 저장한다. Trip FK는 영구 삭제 시 CASCADE이며 여행 soft delete는 worker 정책에서 차단한다. 원천 raw·수신자 credential은 저장하지 않는다.
+
+기존 telegram_notifications/deliveries를 재사용한다. 취소 tombstone은 관측 순서와 무관하게 유지하며 모호한 비취소 관측은 전송하지 않는다. Trip 잠금 아래 관측을 합치고 worker는 Delivery→Pref→Trip→User→Target 정책 순서를 보존한다.

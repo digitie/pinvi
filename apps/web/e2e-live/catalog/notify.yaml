@@ -319,20 +319,26 @@
   notes: 단위/통합 테스트(apps/api/tests/unit/test_telegram_client.py)로 커버. 라이브에서는 수행하지 않음.
 
 - id: NTF-018
-  title: 날씨 특보 Telegram 알림
+  title: 여행 기간·대표 지역 기준 공식 기상특보 Telegram 알림
   priority: P3
-  tags: [telegram, weather]
+  tags: [telegram, weather, mutating]
   preconditions:
-    - 기능 부재 — telegram_messages.py에는 trip_created/companion_invited 2종뿐, 특보는 weather card/marker(weather_alert 도메인)에만 존재
-  data_sources: [weather:map-rest]
+    - PR689와 Weather201의 병합 계약. 전용 테스트 여행·검증된 대상·기본 off 특보 동의
+    - 공식 발표 fixture만 사용하며 실제 개인 수신자나 운영 원천에 가짜 발표를 넣지 않음
+  data_sources: [weather:public-rest, pinvi:telegram-notifications]
   steps:
-    - "N/A"
+    - 대표 지역·현재 여행 기간·대상 연결 뒤 특보만 켜고 저장·reload 보존을 확인
+    - 소유 fixture의 발령·명시적 해제·취소와 정상 빈 응답·반복 planner를 대조
+    - 최신성·불완전·HTTP 실패 원인을 발송 이력에서 확인하고 수신 해제 후 새 발송이 없음을 확인
+    - 취소 역행·동률·정책 변경·만료는 WSL 실제 PG 회귀와 증거로 대조
   expected:
-    - "N/A"
+    - 공식 발표와 action별 여행 중복이 없고 빈 응답/실패가 해제를 만들지 않음
+    - 취소/상충은 이전 대기를 무효화하고 검증되지 않은 구역을 전 지역 안전으로 표시하지 않음
+    - 상세 한국어 실패 원인·코드를 UI에서 확인하며 credential 원문이 없음
   cleanup:
-    - "N/A"
-  automation: blocked
-  notes: 구현되면 메시지 빌더·outbox category 추가 후 NTF-012 패턴으로 scripted 전환.
+    - 보존한 동의를 복원하고 이번 fixture의 여행·연결·대상만 정리
+  automation: manual
+  notes: 제품·WSL 실제 PG/소유 TCP fixture UI 검증은 구현됨. 최종 운영 시험은 Claude Code 담당이며 실수신자 전송은 별도 전용 자격 확인 후 수행.
 
 - id: NTF-019
   title: KST 일간·주간 브리프 설정과 예약 회차 발송

@@ -13,10 +13,10 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | weather | 29 | 24 | 2 | 3 |
 | share | 35 | 30 | 1 | 4 |
 | poi | 32 | 25 | 5 | 2 |
-| notify | 26 | 18 | 2 | 6 |
+| notify | 26 | 18 | 3 | 5 |
 | admin | 43 | 37 | 4 | 2 |
 | core | 31 | 30 | 1 | 0 |
-| **all** | **349** | **298** | **25** | **26** |
+| **all** | **349** | **298** | **26** | **25** |
 
 Spec files: 55.
 
@@ -290,7 +290,7 @@ Spec files: 55.
 | NTF-015 | notify | companion_invited 알림 — 기존 사용자를 동반자로 초대하면 초대자의 기본 대상이 아니라 피초대자의 기본 대상으로 '✉️ … 여행에 초대되었습니다 — <제목>' 전송 | P2 | telegram, mutating, share | blocked |  |
 | NTF-016 | notify | bot_forbidden — 봇이 추방된 chat 등록/재검증 → 403, 'telegram verify 실패: bot_forbidden', 저장 안 됨(재검증이면 failed:bot_forbidden·비활성) | P2 | desktop, telegram | scripted | `specs/notify/notify-settings.live.spec.ts#NTF-016` |
 | NTF-017 | notify | rate_limited(429) — Retry-After 헤더 전달·alert 'telegram verify 실패: rate_limited' | P3 | telegram | blocked |  |
-| NTF-018 | notify | 날씨 특보 Telegram 알림 | P3 | telegram, weather | blocked |  |
+| NTF-018 | notify | 여행 기간·대표 지역 기준 공식 기상특보 Telegram 알림 | P3 | telegram, weather, mutating | manual |  |
 | NTF-019 | notify | KST 일간·주간 브리프 설정과 예약 회차 발송 | P3 | telegram, mutating | manual |  |
 | NTF-020 | notify | 일정 정보 알람으로 보내기 — 여행 전체·특정 일자 수동 전송 요청 | P3 | telegram, mutating | manual |  |
 | NTF-021 | notify | 이메일 알림 수신 — 동반자 초대 메일(Resend email_queue) 실제 수신·본문 | P3 | share, mutating | blocked |  |

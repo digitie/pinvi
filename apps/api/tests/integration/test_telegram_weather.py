@@ -308,3 +308,62 @@ async def test_recent_weather_survives_midnight_within_same_trip(
     async with session_factory() as db:
         assert await process_one(db, now=before + timedelta(minutes=2))
     assert len(provider.sent) == 1
+
+
+@pytest.mark.parametrize("failure", ["stale", "incomplete"])
+async def test_positive_cancellation_fence_survives_collection_failure(
+    client: Any,
+    verified_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    provider: Provider,
+    failure: str,
+) -> None:
+    await setup(client, verified_user, auth_cookies, session_factory)
+    weather = Weather()
+    assert (await run(weather))["enqueued"] == 1
+    weather.events = [weather.event("cancelled")]
+    weather.overrides["fresh" if failure == "stale" else "events_complete"] = False
+    assert (await run(weather))["enqueued"] == 0
+    async with session_factory() as db:
+        assert await process_one(db, now=NOW)
+    assert provider.sent == []
+    async with session_factory() as db:
+        assert await db.scalar(select(TelegramDelivery.status)) == "skipped"
+
+
+@pytest.mark.parametrize("change", ["deleted", "disabled"])
+async def test_invalid_weekly_destination_cannot_block_weather_optout(
+    client: Any,
+    verified_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    provider: Provider,
+    change: str,
+) -> None:
+    from app.models.telegram_target import TelegramTarget
+
+    _, user_id, cookies = await setup(client, verified_user, auth_cookies, session_factory)
+    async with session_factory() as db:
+        weekly = TelegramTarget(user_id=user_id, telegram_chat_id="-10063799", last_verified_at=NOW)
+        db.add(weekly)
+        await db.commit()
+        weekly_id = weekly.id
+    body = {"weather_enabled": True, "weekly_enabled": True, "weekly_target_id": str(weekly_id)}
+    assert (await client.put(PREFERENCES, json=body, cookies=cookies)).status_code == 200
+    assert (await run(Weather()))["enqueued"] == 1
+    async with session_factory() as db:
+        weekly = await db.get(TelegramTarget, weekly_id)
+        if change == "deleted":
+            weekly.deleted_at = NOW
+        else:
+            weekly.is_enabled = False
+        await db.commit()
+    response = await client.put(
+        PREFERENCES, json={**body, "weather_enabled": False}, cookies=cookies
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["weather_enabled"] is False
+    async with session_factory() as db:
+        assert await process_one(db, now=NOW)
+    assert provider.sent == []

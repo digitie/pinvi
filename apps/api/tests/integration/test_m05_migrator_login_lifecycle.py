@@ -868,7 +868,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "--dbname=pinvi",
             "--command=" + _app_feature_runtime_privileges_sql(runtime_role),
         )
-        assert feature_acl.stdout.strip() == "true|true|true|true|true"
+        assert feature_acl.stdout.strip() == "true|true|true|true|true|true"
         compose(
             "exec",
             "-T",

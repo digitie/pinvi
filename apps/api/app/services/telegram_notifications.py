@@ -121,7 +121,11 @@ async def save_preferences(
             or not target.is_enabled
             or target.last_verified_at is None
         ):
-            raise TripValidationError("활성·검증된 본인 Telegram 대상을 선택하세요.")
+            if row.weather_enabled and not body.weather_enabled:
+                # 유효하지 않은 별도 주간 목적지가 독립적인 특보 철회를 막지 않는다.
+                body = body.model_copy(update={"weekly_enabled": False, "weekly_target_id": None})
+            else:
+                raise TripValidationError("활성·검증된 본인 Telegram 대상을 선택하세요.")
     if row.weather_enabled != body.weather_enabled:
         row.weather_enabled_at = datetime.now(UTC) if body.weather_enabled else None
     if preferences_body(row) != body:
