@@ -92,6 +92,9 @@ def preferences_body(row: TelegramPreferences | None) -> TelegramPreferencesBody
 async def save_preferences(
     db: AsyncSession, user_id: uuid.UUID, body: TelegramPreferencesBody
 ) -> TelegramPreferences:
+    if not body.weekly_enabled:
+        # 오래된 주간 대상이 수신 해제(다른 정상 대상의 일간 포함)를 막지 않는다.
+        body = body.model_copy(update={"weekly_target_id": None})
     await db.execute(
         insert(TelegramPreferences)
         .values(user_id=user_id)

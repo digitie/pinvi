@@ -51,3 +51,14 @@
 - malformed ACK6건·느린 response hook1건은 이전 client에서 실패 후 수정, 지연429 계산2건도 이전 코드에서 실패 후 수정했다. 일반 취소는 전파한다. HTTP request+hook은 wall-clock timeout으로 제한한다.
 - 현재 WSL: client/메시지41건, 관련 HTTP·PG21건(예약/권한/동의/집계 포함), ETL81건, API mypy269개, 웹 typecheck 통과. 웹 lint는 신규 오류 수정 후0error/기존5warning이다. 최종 전체검증과 live UI·최종 두리뷰는 아직이다.
 - Weather 리뷰에서도 활성 특보 목록만으로 명시적 해제·검증된 적용 지역을 알 수 없음을 확인했다. #637 owner 이벤트 계약을 먼저 보완한다. 아직 특보 planner를 연결하지 않았으며 완료 처리하지 않는다.
+
+
+## 3차 구현 체크포인트
+
+- Hume의9914ee5 리뷰 P2 두 건을 보완했다. 삭제·비활성 주간 대상이 있어도 off 저장을 허용하고 오래된 주간 참조를 해제한다. 저장 중 입력 전체를 비활성화한다.
+- 두 대상 무효화 회귀는 이전 API에서 실패 후 수정했다. 지연된 저장 응답 회귀도9914의 UI 컴포넌트에서 실패 후 수정했고 새 컴포넌트는 통과했다.
+- 추가 실제 PG에서 날씨 보강 지연 중 opt-out 잠금 대기를 재현했다. 외부 보강을 잠금 전 단계로 분리하고 enqueue 시 현재 동의를 다시 읽는다. 일출은 적재 단계의 현재 성공 캐시를 읽는다.
+- 새 대상 큐가 복원 quiescence 검사에 빠진 것도 실제 PG 실패로 고정했다. 이전 canonical revision에는 테이블이 없을 수 있어 존재 여부를 확인한 뒤 정확한 pending 수를 합산한다.
+- WSL API 전체 단위2009통과·기존9skip, 관련 PG25통과, web394/schema24통과, 전체 workspace typecheck, web lint0error/기존5warning을 확인했다. ETL81통과는9914 체크포인트이며 이 단계 ETL source는 동일하다.
+- 아직 최종 두리뷰·live UI·최종CI를 마치지 않았고 초안 상태를 유지한다.
+- Weather201(초안)을 선행 개설했다. DataGoKR getPwnCd는 공식 지역별 command를 제공하되 APIHub와 코드표가 다르다. 공개 공식413행 특보구역CSV를 확보했으며 현재 Weather location.region_code와는 namespace가 달라 직접 비교하지 않는다. 공식 영역 근거를 추가 대조 중이다. 운영 접근은 없다.

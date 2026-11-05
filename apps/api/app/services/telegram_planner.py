@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -71,15 +72,6 @@ async def daily_context(
         ).all()
     )
     target_date = effective_date(trip, day)
-    rise = await db.get(TripDayRiseSet, (trip.trip_id, day.day_index))
-    sunrise = (
-        local_time(rise.sunrise_at)
-        if rise is not None
-        and rise.locdate == target_date
-        and rise.status == "success"
-        and not rise.stale
-        else "정보 없음"
-    )
     cards: dict[int, dict[str, dict[str, Any]]] = {}
     # weather 해석 helper는 read connection을 해제하므로 별도 세션을 쓴다.
     # planner의 동의·Trip 잠금/원자적 enqueue transaction은 유지한다.
@@ -105,16 +97,75 @@ async def daily_context(
                 weather_client=weather_client,
                 budget_seconds=8,
             )
-    return weather_summary(cards.get(day.day_index, {})) + f"\n일출: {sunrise} (KST)"
+    return weather_summary(cards.get(day.day_index, {}))
+
+
+def _daily_key(trip_id: uuid.UUID, target_date: date, today: date) -> str:
+    return f"daily:{trip_id}:{target_date}:{'today' if target_date == today else 'eve'}"
+
+
+async def _prepare_daily_contexts(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    now: datetime,
+    map_client: KorTravelMapClient | None,
+    weather_client: KorTravelWeatherClient | None,
+) -> dict[tuple[uuid.UUID, int, date], str]:
+    """외부 조회 중에는 동의·Trip row를 잠그지 않는다. 적재 단계에서 새 동의를 읽는다."""
+    pref = await preferences(db, user_id)
+    user = await db.get(User, user_id)
+    if user is None or not user.is_active or user.deleted_at is not None or user.status != "active":
+        return {}
+    local = now.astimezone(KST)
+    if pref is None or not pref.daily_enabled or local.strftime("%H:%M") < pref.send_time:
+        return {}
+    today = local.date()
+    contexts: dict[tuple[uuid.UUID, int, date], str] = {}
+    rows = await db.execute(
+        select(Trip, TripDay)
+        .join(TripDay, TripDay.trip_id == Trip.trip_id)
+        .where(Trip.owner_user_id == user_id, Trip.deleted_at.is_(None))
+        .order_by(Trip.trip_id, TripDay.day_index)
+    )
+    for trip, day in rows:
+        target_date = effective_date(trip, day)
+        if target_date is None or target_date not in (today, today + timedelta(days=1)):
+            continue
+        key = _daily_key(trip.trip_id, target_date, today)
+        existing = await db.scalar(
+            select(TelegramNotification.id).where(
+                TelegramNotification.user_id == user_id, TelegramNotification.occurrence_key == key
+            )
+        )
+        if existing is None and await linked_targets(db, trip):
+            contexts[(trip.trip_id, day.day_index, target_date)] = await daily_context(
+                db, trip, day, map_client=map_client, weather_client=weather_client
+            )
+    return contexts
+
+
+async def _sunrise_context(db: AsyncSession, trip: Trip, day: TripDay) -> str:
+    rise = await db.get(TripDayRiseSet, (trip.trip_id, day.day_index))
+    sunrise = (
+        local_time(rise.sunrise_at)
+        if rise is not None
+        and rise.locdate == effective_date(trip, day)
+        and rise.status == "success"
+        and not rise.stale
+        else "정보 없음"
+    )
+    return f"일출: {sunrise} (KST)"
 
 
 async def plan_user(
     db: AsyncSession,
-    user_id: Any,
+    user_id: uuid.UUID,
     *,
     now: datetime,
     map_client: KorTravelMapClient | None = None,
     weather_client: KorTravelWeatherClient | None = None,
+    prepared_contexts: dict[tuple[uuid.UUID, int, date], str] | None = None,
 ) -> int:
     pref = await preferences(db, user_id, lock=True)
     user = await db.get(User, user_id)
@@ -156,7 +207,7 @@ async def plan_user(
                 target_date = effective_date(trip, day)
                 if target_date not in (today, today + timedelta(days=1)):
                     continue
-                key = f"daily:{trip.trip_id}:{target_date}:{'today' if target_date == today else 'eve'}"
+                key = _daily_key(trip.trip_id, target_date, today)
                 existing = await db.scalar(
                     select(TelegramNotification.id).where(
                         TelegramNotification.user_id == user_id,
@@ -168,9 +219,11 @@ async def plan_user(
                 targets = await linked_targets(db, trip)
                 if not targets:
                     continue
-                context = await daily_context(
-                    db, trip, day, map_client=map_client, weather_client=weather_client
+                assert target_date is not None
+                context = (prepared_contexts or {}).get(
+                    (trip.trip_id, day.day_index, target_date), "날씨: 정보를 확인하지 못했습니다."
                 )
+                context += "\n" + await _sunrise_context(db, trip, day)
                 await enqueue(
                     db,
                     user_id=user_id,
@@ -262,9 +315,22 @@ async def plan_due(
         )
     enqueued = 0
     for user_id in user_ids:
+        async with db_session.async_session_factory() as context_db:
+            contexts = await _prepare_daily_contexts(
+                context_db,
+                user_id,
+                now=current,
+                map_client=map_client,
+                weather_client=weather_client,
+            )
         async with db_session.async_session_factory() as db:
             enqueued += await plan_user(
-                db, user_id, now=current, map_client=map_client, weather_client=weather_client
+                db,
+                user_id,
+                now=current,
+                map_client=map_client,
+                weather_client=weather_client,
+                prepared_contexts=contexts,
             )
             await db.commit()
     return {"users": len(user_ids), "enqueued": enqueued}

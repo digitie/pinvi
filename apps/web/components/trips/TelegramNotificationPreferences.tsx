@@ -31,7 +31,7 @@ export function TelegramNotificationPreferences({ targets }: { targets: Telegram
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!value) return;
+    if (!value || busy) return;
     setBusy(true);
     setError(null);
     setSaved(false);
@@ -63,84 +63,86 @@ export function TelegramNotificationPreferences({ targets }: { targets: Telegram
             className="space-y-3"
             data-testid="telegram-notification-preferences"
           >
-            {(
-              [
-                ['daily_enabled', '일간 브리프'],
-                ['weekly_enabled', '주간 여행 요약'],
-                ['weather_enabled', '여행 중 기상 특보 발령·해제'],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key} className="flex min-h-11 items-center gap-2 text-sm text-ink">
+            <fieldset disabled={busy} className="space-y-3">
+              {(
+                [
+                  ['daily_enabled', '일간 브리프'],
+                  ['weekly_enabled', '주간 여행 요약'],
+                  ['weather_enabled', '여행 중 기상 특보 발령·해제'],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="flex min-h-11 items-center gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={value[key]}
+                    onChange={(event) => {
+                      setValue({ ...value, [key]: event.target.checked });
+                      setSaved(false);
+                    }}
+                  />
+                  {label}
+                </label>
+              ))}
+              <label className="block text-sm text-ink">
+                발송 시각 (KST)
                 <input
-                  type="checkbox"
-                  checked={value[key]}
+                  type="time"
+                  value={value.send_time}
+                  required
                   onChange={(event) => {
-                    setValue({ ...value, [key]: event.target.checked });
+                    setValue({ ...value, send_time: event.target.value });
                     setSaved(false);
                   }}
+                  className="ml-3 min-h-11 rounded-sm border border-hairline bg-canvas px-3"
                 />
-                {label}
               </label>
-            ))}
-            <label className="block text-sm text-ink">
-              발송 시각 (KST)
-              <input
-                type="time"
-                value={value.send_time}
-                required
-                onChange={(event) => {
-                  setValue({ ...value, send_time: event.target.value });
-                  setSaved(false);
-                }}
-                className="ml-3 min-h-11 rounded-sm border border-hairline bg-canvas px-3"
-              />
-            </label>
-            <label className="block text-sm text-ink">
-              주간 요약 요일
-              <select
-                value={value.weekly_day}
-                onChange={(event) => {
-                  setValue({ ...value, weekly_day: Number(event.target.value) });
-                  setSaved(false);
-                }}
-                className="ml-3 min-h-11 rounded-sm border border-hairline bg-canvas px-3"
-              >
-                {['월', '화', '수', '목', '금', '토', '일'].map((day, index) => (
-                  <option key={day} value={index}>
-                    {day}요일
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm text-ink">
-              주간 요약 대상
-              <select
-                value={value.weekly_target_id ?? ''}
-                required={value.weekly_enabled}
-                onChange={(event) => {
-                  setValue({ ...value, weekly_target_id: event.target.value || null });
-                  setSaved(false);
-                }}
-                className="ml-3 min-h-11 max-w-full rounded-sm border border-hairline bg-canvas px-3"
-              >
-                <option value="">선택하세요</option>
-                {targets
-                  .filter((target) => target.is_enabled && target.last_verified_at)
-                  .map((target) => (
-                    <option key={target.id} value={target.id}>
-                      {target.telegram_label || target.title_snapshot || 'Telegram 대상'}
+              <label className="block text-sm text-ink">
+                주간 요약 요일
+                <select
+                  value={value.weekly_day}
+                  onChange={(event) => {
+                    setValue({ ...value, weekly_day: Number(event.target.value) });
+                    setSaved(false);
+                  }}
+                  className="ml-3 min-h-11 rounded-sm border border-hairline bg-canvas px-3"
+                >
+                  {['월', '화', '수', '목', '금', '토', '일'].map((day, index) => (
+                    <option key={day} value={index}>
+                      {day}요일
                     </option>
                   ))}
-              </select>
-            </label>
-            <button type="submit" disabled={busy} className={buttonClassName({ size: 'sm' })}>
-              {busy ? '저장 중…' : '예약 설정 저장'}
-            </button>
-            {saved && (
-              <p role="status" className="text-sm text-ink">
-                예약 설정을 저장했습니다.
-              </p>
-            )}
+                </select>
+              </label>
+              <label className="block text-sm text-ink">
+                주간 요약 대상
+                <select
+                  value={value.weekly_target_id ?? ''}
+                  required={value.weekly_enabled}
+                  onChange={(event) => {
+                    setValue({ ...value, weekly_target_id: event.target.value || null });
+                    setSaved(false);
+                  }}
+                  className="ml-3 min-h-11 max-w-full rounded-sm border border-hairline bg-canvas px-3"
+                >
+                  <option value="">선택하세요</option>
+                  {targets
+                    .filter((target) => target.is_enabled && target.last_verified_at)
+                    .map((target) => (
+                      <option key={target.id} value={target.id}>
+                        {target.telegram_label || target.title_snapshot || 'Telegram 대상'}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <button type="submit" disabled={busy} className={buttonClassName({ size: 'sm' })}>
+                {busy ? '저장 중…' : '예약 설정 저장'}
+              </button>
+              {saved && (
+                <p role="status" className="text-sm text-ink">
+                  예약 설정을 저장했습니다.
+                </p>
+              )}
+            </fieldset>
           </form>
         ) : (
           !error && <p className="text-sm text-muted">불러오는 중…</p>

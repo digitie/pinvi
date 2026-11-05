@@ -415,6 +415,16 @@ async def _application_queue_counts(db: AsyncSession) -> tuple[int, int, int]:
         )
         or 0
     )
+    # 이전 canonical revision 복원에도 쓰이는 경계이므로 새 큐가 존재할 때만 읽는다.
+    if await db.scalar(text("SELECT to_regclass('app.telegram_notification_deliveries')")):
+        telegram += int(
+            await db.scalar(
+                text(
+                    "SELECT count(*) FROM app.telegram_notification_deliveries WHERE status = 'pending'"
+                )
+            )
+            or 0
+        )
     location = int(
         await db.scalar(
             text("SELECT count(*) FROM app.location_audit_outbox WHERE processed_at IS NULL")

@@ -397,3 +397,98 @@ async def test_planner_principal_is_separate_from_user_login(
     )
     assert good.status_code == 200
     assert good.json()["data"]["enqueued"] == 0
+
+
+async def test_restore_boundary_counts_new_pending_delivery(
+    client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any
+) -> None:
+    from app.services.cache_target_final_boundary import _application_queue_counts
+
+    trip_id, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    assert (await send(client, trip_id, cookies)).status_code == 202
+    async with session_factory() as db:
+        _, telegram, _ = await _application_queue_counts(db)
+        # 기존 trip_created1 + 신규 일정 대상1. pending 새 큐를 빼면 quiescence를 오판한다.
+        assert telegram == 2
+
+
+@pytest.mark.parametrize("invalid", ["deleted", "disabled"])
+async def test_opt_out_succeeds_after_weekly_target_becomes_invalid(
+    client: Any,
+    verified_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    provider: Provider,
+    invalid: str,
+) -> None:
+    from app.services.telegram_planner import plan_due
+
+    trip_id, target_id, cookies = await setup_trip(
+        client, verified_user, auth_cookies, session_factory
+    )
+    body = {"daily_enabled": True, "weekly_enabled": True, "weekly_target_id": target_id}
+    endpoint = "/users/me/telegram-notification-preferences"
+    assert (await client.put(endpoint, json=body, cookies=cookies)).status_code == 200
+    async with session_factory() as db:
+        target = await db.get(TelegramTarget, uuid.UUID(target_id))
+        if invalid == "deleted":
+            target.deleted_at = datetime.now(UTC)
+        else:
+            target.is_enabled = False
+        valid = TelegramTarget(
+            user_id=uuid.UUID(verified_user[0]),
+            telegram_chat_id="-100638",
+            last_verified_at=datetime.now(UTC),
+        )
+        db.add(valid)
+        await db.flush()
+        db.add(TripTelegramTarget(trip_id=uuid.UUID(trip_id), telegram_target_id=valid.id))
+        await db.commit()
+    assert (await plan_due(now=datetime(2026, 11, 5, 0, 0, tzinfo=UTC)))["enqueued"] == 2
+    response = await client.put(
+        endpoint, json={**body, "daily_enabled": False, "weekly_enabled": False}, cookies=cookies
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["daily_enabled"] is False
+    async with session_factory() as db:
+        while await process_one(db, now=datetime.now(UTC) + timedelta(hours=1)):
+            pass
+    assert provider.sent == []
+
+
+async def test_opt_out_does_not_wait_for_weather_enrichment(
+    client: Any,
+    verified_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import telegram_planner
+
+    _, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    endpoint = "/users/me/telegram-notification-preferences"
+    assert (
+        await client.put(endpoint, json={"daily_enabled": True}, cookies=cookies)
+    ).status_code == 200
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_context(*args: Any, **kwargs: Any) -> str:
+        started.set()
+        await release.wait()
+        return "날씨: 소유 지연 fixture"
+
+    monkeypatch.setattr(telegram_planner, "daily_context", slow_context)
+    planning = asyncio.create_task(
+        telegram_planner.plan_due(now=datetime(2026, 11, 5, 0, 0, tzinfo=UTC))
+    )
+    await asyncio.wait_for(started.wait(), timeout=5)
+    try:
+        response = await asyncio.wait_for(
+            client.put(endpoint, json={"daily_enabled": False}, cookies=cookies), timeout=1
+        )
+        assert response.status_code == 200, response.text
+    finally:
+        release.set()
+        await planning
+    async with session_factory() as db:
+        assert list((await db.scalars(select(TelegramNotification.id))).all()) == []
