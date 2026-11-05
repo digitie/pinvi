@@ -186,7 +186,7 @@ export function TripMapView({
 }: TripMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const overlayStackRef = useRef<HTMLDivElement | null>(null);
-  const fitObserverRef = useRef<ResizeObserver | null>(null);
+  const fitCleanupRef = useRef<(() => void) | null>(null);
   const featureAbortRef = useRef<AbortController | null>(null);
   const featureDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestFeatureRequestRef = useRef(0);
@@ -291,7 +291,7 @@ export function TripMapView({
 
   useEffect(() => {
     return () => {
-      fitObserverRef.current?.disconnect();
+      fitCleanupRef.current?.();
       featureAbortRef.current?.abort();
       if (featureDebounceRef.current) clearTimeout(featureDebounceRef.current);
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
@@ -389,26 +389,60 @@ export function TripMapView({
     (map: MapLibreMap) => {
       mapRef.current = map;
       geometryViewportChange(map);
+      fitCleanupRef.current?.();
+      // moveend보다 먼저 기록해 드래그 도중 늦은 UI 응답이 시점을 되돌리지 않게 한다.
+      const markUserMove = (event: { originalEvent?: unknown }) => {
+        if (event.originalEvent) userMovedRef.current = true;
+      };
+      map.on('movestart', markUserMove);
       fitToPoints(map);
-      fitObserverRef.current?.disconnect();
       const stack = overlayStackRef.current;
+      let observer: ResizeObserver | null = null;
+      let mutations: MutationObserver | null = null;
       if (stack && typeof ResizeObserver !== 'undefined') {
         let previousLayout = '';
-        const observer = new ResizeObserver(() => {
+        observer = new ResizeObserver(() => {
           if (userMovedRef.current || stack.querySelector('input')?.value.trim()) return;
           const anchor = fitOverlayRect(stack);
           const panel = fitPanelRect(stack);
           const bottom = fitBottomRect(map.getContainer());
-          const layout = JSON.stringify([anchor?.bottom, panel?.top, panel?.bottom, bottom?.top]);
+          const container = map.getContainer().getBoundingClientRect();
+          const layout = JSON.stringify([
+            anchor?.bottom, panel?.left, panel?.right, panel?.top, panel?.bottom,
+            bottom?.top, container.width, container.height,
+          ]);
           if (layout === previousLayout) return;
           previousLayout = layout;
-          // 동적 컨트롤이 확정된 뒤 최신 POI 목록으로 한 번 맞춘다.
-          // 펼친 사건 목록은 fitPanelRect가 빼므로 같은 상시 layout에서 반복하지 않는다.
           fitToPointsRef.current(map);
         });
-        fitObserverRef.current = observer;
-        observer.observe(stack);
+        const observed = new Set<Element>();
+        const observePanels = () => {
+          const targets = new Set<Element>([
+            stack, map.getContainer(), ...stack.querySelectorAll('[data-map-fit-panel]'),
+          ]);
+          for (const element of observed) {
+            if (!targets.has(element)) {
+              observer?.unobserve(element);
+              observed.delete(element);
+            }
+          }
+          for (const element of targets) {
+            if (!observed.has(element)) {
+              observer?.observe(element);
+              observed.add(element);
+            }
+          }
+        };
+        observePanels();
+        // 스택 외곽이 max-height로 고정돼도 나중에 나타난 실제 패널을 관찰한다.
+        mutations = new MutationObserver(observePanels);
+        mutations.observe(stack, { childList: true, subtree: true });
       }
+      fitCleanupRef.current = () => {
+        observer?.disconnect();
+        mutations?.disconnect();
+        map.off('movestart', markUserMove);
+      };
       scheduleFeatureFetch(map);
       transportViewportChange(map);
       reportViewport(map);

@@ -55,3 +55,13 @@ strict 진단으로 드러난 신규 첨부/Telegram read의 새 사용자·새 
 4핀뿐 아니라 2핀 모바일에서 실제 fit 호출과 resize/moveend를 추적했다. 2핀의 꼬리207은 교통 패널214 위라 패널과는 교차하지 않지만, 핀 머리는 경로/영역 카드152~206에 가려졌다. 두 상시 컨트롤을 하나의 피할 영역으로 묶어 계산한다. 수정 후 해당 회귀를 포함한 단위19건과 typecheck는 통과했고 실제 UI 재실행을 진행 중이다.
 
 live helper는 마커의 기존 interactionId를 feature/transport/POI의 정본 ID로 연결한다. CORE025는 클릭 전 대상 ID와 실제 응답·본문을 비교하고, NEAR025는 클릭 뒤 새 요청의 bbox를 최종 native viewport에 결박한다. NEAR024는 서울과 임의 중심 거리 대신 실제 네 좌표·native/API 경계·투영 점유율·컨트롤/칩 가림을 확인한다. 이름·좌표와 원래 입력은 바꾸지 않는다.
+
+## 최종 후보 보완 기록
+
+WSL 소유 Map/PostGIS/Valkey와 Pinvi/PG를 연결한 Chromium에서 desktop/mobile 각각 4핀·2핀 맞춤/실제 첫 클릭/선택 SVG 끝점 오차1px 미만을 통과했다. 동명 PG feature2개를 포함한 실제 휴게소 ID 상세200, A→B의 요청·본문 ID와2.6초 뒤 stale 없음도 두 화면에서 통과했다. 실제 운영/provider/GPU·Firefox 결과로 확장하지 않는다.
+
+전체 mocked 실행은 종료 중 route.fetch/fulfill의 disposal 경합을 드러냈다. context 종료 진입을 추적하고 그때 발생한 Request/Fetch response disposed 또는 Target closed만 정리한다. 실행 중 오류와 기타 오류는 전파한다. 지연 소유 HTTP 회귀는 수정 전1FAIL이었다.
+
+새 최종 독립 검토의 P2 네 건은 사용자 movestart 즉시 보존, max-height 스택 안의 실제 패널과 추가/제거 관찰, image optimizer 서버 proxy 경로 거절, NEAR025의 한국 경계 clamp다. optimizer2개 실패우선과 보완 뒤 격리12개, 관찰·viewport·맞춤 관련 단위23개/typecheck를 확인했다. 수정 이후 전체 실행·실제 UI·두 리뷰와 exact CI는 계속 진행한다.
+
+일반 push의 commit_refs 오류로 f5b453a의 모든 blob/tree 해시를 대조한 뒤 GitHub API로 동일 tree442b20ecfbc009d757dc4225c807c495f0235811를 d18d37d10dc3ea0cad14972e5b5d5a01967c308e로 게시했다. expected 원격506d15e를 조건으로 fast-forward했으며 force는 없었다. 원래 로컬 commit은 refs/codex/checkpoints/pr693-f5b453a로 보존했다.

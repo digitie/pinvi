@@ -14,6 +14,7 @@ import { expect, test, type Page, type Response } from '@playwright/test';
 import { runSearch, searchRows } from '../../helpers/search';
 import { renderedMap, waitForCamera } from '../../helpers/geometry';
 import { normalizeFixtureName } from '../../helpers/searchFixture';
+import { viewportBboxMatches } from '../../helpers/viewportBbox';
 import {
   createTrip,
   deleteAllE2eTrips,
@@ -172,11 +173,7 @@ test.describe('NEAR trip map — four-place trip', () => {
       };
     }, expectedCoords);
     // API가 실제 맞춘 native viewport를 조회해야 한다. 한국 경계 clamp와 저줌 양자화만 허용한다.
-    const tolerance = q.zoom <= 7 ? 0.01 : q.zoom <= 10 ? 0.001 : 0.00001;
-    for (let i = 0; i < 4; i += 1) {
-      const clamped = Math.max(i % 2 ? 33 : 124, Math.min(i % 2 ? 43 : 132, viewport.bbox[i]!));
-      expect(Math.abs(q.bbox[i]! - clamped)).toBeLessThanOrEqual(tolerance + 1e-8);
-    }
+    expect(viewportBboxMatches(q.bbox, viewport.bbox, q.zoom)).toBe(true);
     // 네 좌표가 포함돼도 지나치게 축소한 전국 보기는 실패한다. 고정 카탈로그 화면에서
     // 여행의 투영 범위가 한 축에서 지도 1/4 이상을 사용해야 한다.
     expect(Math.max(viewport.spanX / viewport.width, viewport.spanY / viewport.height)).toBeGreaterThan(0.25);
@@ -227,9 +224,8 @@ test.describe('NEAR trip map — four-place trip', () => {
       await expect.poll(() => {
         matched = responses.find(response => {
           const q = markersQuery(response);
-          const step = q.zoom <= 7 ? 0.01 : q.zoom <= 10 ? 0.001 : 0.00001;
           return q.layers.includes('highway_incident') && q.bbox.join(',') !== first.bbox.join(',') &&
-            q.bbox.every((value, i) => Math.abs(value - bbox[i]!) <= step + 1e-8);
+            viewportBboxMatches(q.bbox, bbox, q.zoom);
         });
         return Boolean(matched);
       }, { timeout: 30_000 }).toBe(true);

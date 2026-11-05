@@ -55,6 +55,13 @@ function label(url: URL, method: string): string {
   return method + ' /' + path;
 }
 
+/** 동일 앱이어도 서버의 다른 origin 조회를 유발하는 proxy는 명시 mock 없이는 허용하지 않는다. */
+function allowedAppRequest(target: URL, appOrigin: string): boolean {
+  let path: string;
+  try { path = decodeURIComponent(target.pathname); } catch { return false; }
+  return target.origin === appOrigin && path !== '/admin/grafana/health' && path !== '/_next/image';
+}
+
 export interface MockedNetworkFence {
   violations: string[];
   verify(): void;
@@ -65,6 +72,15 @@ export async function installMockedNetwork(
   appOrigin: string,
 ): Promise<MockedNetworkFence> {
   const violations: string[] = [];
+  let closing = false;
+  const disposedDuringClose = (error: unknown) =>
+    closing && error instanceof Error &&
+    /Request context disposed|Fetch response has been disposed|Target page, context or browser has been closed/.test(error.message);
+  const close = context.close.bind(context);
+  context.close = async (...args: Parameters<BrowserContext['close']>) => {
+    closing = true;
+    await close(...args);
+  };
   const note = (url: URL, method: string) => {
     const message = label(url, method);
     if (!violations.includes(message)) violations.push(message);
@@ -75,22 +91,27 @@ export async function installMockedNetwork(
     configurable: true,
   });
   await context.route('**/*', async (route) => {
-    const request = route.request();
-    const url = new URL(request.url());
-    if (url.origin === appOrigin && url.pathname !== '/admin/grafana/health') {
-      const response = await route.fetch({ maxRedirects: 0 });
-      if (response.status() >= 300 && response.status() < 400 && response.headers()['location']) {
-        // 브라우저는 redirect 다음 요청을 route에 다시 주지 않는다. mock 없는 redirect는
-        // chain 전체를 허용하지 않고 기능별 page mock에서 명시하도록 한다.
-        note(url, 'REDIRECT');
-        await route.abort('blockedbyclient');
+    try {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (allowedAppRequest(url, appOrigin)) {
+        const response = await route.fetch({ maxRedirects: 0 });
+        if (response.status() >= 300 && response.status() < 400 && response.headers()['location']) {
+          // 브라우저는 redirect 다음 요청을 route에 다시 주지 않는다. mock 없는 redirect는
+          // chain 전체를 허용하지 않고 기능별 page mock에서 명시하도록 한다.
+          note(url, 'REDIRECT');
+          await route.abort('blockedbyclient');
+          return;
+        }
+        await route.fulfill({ response });
         return;
       }
-      await route.fulfill({ response });
-      return;
+      note(url, request.method());
+      await route.abort('blockedbyclient');
+    } catch (error) {
+      // context.close가 취소한 로컬 prefetch만 정리한다. 실행 중의 오류는 계속 실패시킨다.
+      if (!disposedDuringClose(error)) throw error;
     }
-    note(url, request.method());
-    await route.abort('blockedbyclient');
   });
   // 공통 새 사용자/새 여행의 명시적인 read-only 초기 상태. POST/PUT은
   // 여기에 포함하지 않으며 기능별 page mock이 항상 우선한다.
@@ -121,7 +142,11 @@ export async function installMockedNetwork(
                 weekly_target_id: null,
               }
             : [];
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data }) });
+      try {
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data }) });
+      } catch (error) {
+        if (!disposedDuringClose(error)) throw error;
+      }
     },
   );
   await context.routeWebSocket('**/*', async (socket) => {
@@ -132,7 +157,11 @@ export async function installMockedNetwork(
     if (url.origin !== apiSocketOrigin || !/^\/ws\/trips\/[0-9a-f-]+$/.test(url.pathname)) {
       note(url, 'WEBSOCKET');
     }
-    await socket.close({ code: 1008, reason: 'mocked suite has no realtime upstream' });
+    try {
+      await socket.close({ code: 1008, reason: 'mocked suite has no realtime upstream' });
+    } catch (error) {
+      if (!disposedDuringClose(error)) throw error;
+    }
   });
   return {
     violations,
@@ -146,7 +175,7 @@ export async function installMockedNetwork(
 
 export function assertLocalRequest(url: string, baseURL: string): void {
   const target = new URL(url, baseURL);
-  if (target.origin !== new URL(baseURL).origin || target.pathname === '/admin/grafana/health') {
+  if (!allowedAppRequest(target, new URL(baseURL).origin)) {
     throw new Error('mocked suite: APIRequestContext network denied: ' + label(target, 'REQUEST'));
   }
 }

@@ -5,10 +5,11 @@ import { createServer, type Server } from 'node:http';
 import { guardMockedRequest, installMockedNetwork } from './mocked-network';
 import { MOCK_API_ORIGIN } from './mocked-origins';
 
-async function ownedServer(redirect?: string) {
+async function ownedServer(redirect?: string, delayMs = 0) {
   const requests: string[] = [];
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     requests.push(req.url ?? '/');
+    if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
     if (redirect && req.url !== '/') {
       res.writeHead(302, { location: redirect });
       res.end();
@@ -220,5 +221,47 @@ guardedTest('기본·추가 context와 page의 request도 전송 guard를 사용
     expect(outcomes).toEqual([true, true, true, true]);
   } finally {
     await close(trap.server);
+  }
+});
+
+test('context를 닫는 동안 진행 중인 로컬 fetch가 후속 검사를 깨뜨리지 않는다', async ({ browser }) => {
+  const app = await ownedServer(undefined, 500);
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  const fence = await installMockedNetwork(context, app.origin);
+  const page = await context.newPage();
+  try {
+    const pending = page.goto(app.origin).catch(() => null);
+    await expect.poll(() => app.requests.length).toBe(1);
+    await context.close();
+    await pending;
+    fence.verify();
+  } finally {
+    await context.close();
+    await close(app.server);
+  }
+});
+
+test('브라우저 image optimizer 요청은 서버 proxy로 전달하지 않는다', async ({ browser }) => {
+  const s = await scenario(browser);
+  try {
+    await s.page.evaluate(url => fetch(url).catch(() => null),
+      s.app.origin + '/_next/image?url=%2Fadmin%2Fgrafana%2Fhealth&w=64&q=75');
+    expect(s.app.requests).toEqual(['/']);
+    expect(() => s.fence.verify()).toThrow(/unhandled network/);
+  } finally {
+    await s.dispose();
+  }
+});
+
+test('직접 request도 image optimizer를 서버 proxy로 사용하지 않는다', async () => {
+  const app = await ownedServer();
+  const raw = await rawRequestFactory.newContext();
+  try {
+    const request = guardMockedRequest(raw, app.origin);
+    await expect(request.get('/_next/image?url=%2Fadmin%2Fgrafana%2Fhealth&w=64&q=75')).rejects.toThrow(/network denied/);
+    expect(app.requests).toEqual([]);
+  } finally {
+    await raw.dispose();
+    await close(app.server);
   }
 });
