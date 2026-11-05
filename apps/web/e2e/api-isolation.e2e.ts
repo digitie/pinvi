@@ -1,14 +1,20 @@
 /* eslint-disable no-restricted-imports, no-restricted-syntax -- 격리 정책 자체를 독립된 소유 context로 검증한다. */
-import { test, expect, type Browser } from '@playwright/test';
+import { test, expect, request as rawRequestFactory, type Browser } from '@playwright/test';
 import { test as guardedTest } from './fixtures';
 import { createServer, type Server } from 'node:http';
-import { installMockedNetwork } from './mocked-network';
+import { guardMockedRequest, installMockedNetwork } from './mocked-network';
 import { MOCK_API_ORIGIN } from './mocked-origins';
 
-async function ownedServer() {
+async function ownedServer(redirect?: string) {
   const requests: string[] = [];
   const server = createServer((req, res) => {
     requests.push(req.url ?? '/');
+    if (redirect) {
+      res.writeHead(302, { location: redirect });
+      res.end();
+      return;
+    }
+
     res.writeHead(200, { 'content-type': 'text/html', 'access-control-allow-origin': '*' });
     res.end('<!doctype html><title>owned isolation fixture</title>');
   });
@@ -91,6 +97,28 @@ test('등록한 page mock은 context guard보다 먼저 처리하고 앱 정적 
   }
 });
 
+test('공통 read-only 초기 fixture는 쓰기 요청을 성공으로 바꾸지 않는다', async ({ browser }) => {
+  const s = await scenario(browser);
+  try {
+    const url = MOCK_API_ORIGIN + '/users/me/telegram-targets';
+    expect(await s.page.evaluate((path) => fetch(path).then((r) => r.json()), url)).toEqual({
+      data: [],
+    });
+    const failed = await s.page.evaluate(
+      (path) =>
+        fetch(path, { method: 'POST' }).then(
+          () => false,
+          () => true,
+        ),
+      url,
+    );
+    expect(failed).toBe(true);
+    expect(() => s.fence.verify()).toThrow(/unhandled network/);
+  } finally {
+    await s.dispose();
+  }
+});
+
 test('미등록 WebSocket도 실제 업스트림으로 연결하지 않는다', async ({ browser }) => {
   const s = await scenario(browser);
   try {
@@ -135,6 +163,23 @@ guardedTest('APIRequestContext는 로컬 앱 정적 파일 외의 전송을 거�
     const worker = await request.get('/maplibre/maplibre-gl-worker.mjs');
     expect(worker.status()).toBe(200);
   } finally {
+    await close(trap.server);
+  }
+});
+
+test('APIRequestContext의 로컬 redirect가 다른 origin으로 이어지지 않는다', async () => {
+  const trap = await ownedServer();
+  const app = await ownedServer(trap.origin + '/secret-618');
+  const raw = await rawRequestFactory.newContext();
+  try {
+    const request = guardMockedRequest(raw, app.origin);
+    const response = await request.get('/', { maxRedirects: 5 });
+    expect(response.status()).toBe(302);
+    expect(trap.requests).toEqual([]);
+    expect(app.requests).toEqual(['/']);
+  } finally {
+    await raw.dispose();
+    await close(app.server);
     await close(trap.server);
   }
 });

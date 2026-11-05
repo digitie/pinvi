@@ -1,11 +1,10 @@
 import {
   test as base,
   expect,
-  type APIRequestContext,
   type BrowserContext,
   type BrowserContextOptions,
 } from '@playwright/test';
-import { assertLocalRequest, installMockedNetwork } from './mocked-network';
+import { guardMockedRequest, installMockedNetwork } from './mocked-network';
 
 type ContextFactory = (options?: BrowserContextOptions) => Promise<BrowserContext>;
 
@@ -46,19 +45,7 @@ export const test = base.extend<{
   },
   request: async ({ request, baseURL }, use) => {
     if (!baseURL) throw new Error('mocked suite requires a local app baseURL');
-    const methods = new Set(['fetch', 'get', 'post', 'put', 'patch', 'delete', 'head']);
-    const guarded = new Proxy(request, {
-      get(target, key) {
-        const value = Reflect.get(target, key);
-        if (typeof value !== 'function') return value;
-        if (!methods.has(String(key))) return value.bind(target);
-        return async (url: string | { url(): string }, ...args: unknown[]) => {
-          assertLocalRequest(typeof url === 'string' ? url : url.url(), baseURL);
-          return value.call(target, url, ...args);
-        };
-      },
-    }) as APIRequestContext;
-    await use(guarded);
+    await use(guardMockedRequest(request, baseURL));
   },
 });
 

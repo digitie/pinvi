@@ -4,6 +4,23 @@ const tripId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
 const noticePlanId = '33333333-3333-4333-8333-333333333333';
 
+const tripFixture = {
+  trip_id: tripId,
+  owner_user_id: userId,
+  title: '서울 주말 산책',
+  description: null,
+  region_hint: '서울',
+  primary_region_code: '11',
+  primary_region_source: 'manual',
+  start_date: '2099-06-20',
+  end_date: '2099-06-21',
+  visibility: 'private',
+  status: 'planned',
+  version: 1,
+  created_at: '2026-06-01T09:00:00+09:00',
+  updated_at: '2026-06-01T09:00:00+09:00',
+};
+
 test('Trip 사용자 shell이 Trip API만 조회한다', async ({ page }) => {
   const requests: string[] = [];
   page.on('request', (request) => requests.push(request.url()));
@@ -16,24 +33,25 @@ test('Trip 사용자 shell이 Trip API만 조회한다', async ({ page }) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
-        data: [
-          {
-            trip_id: tripId,
-            owner_user_id: userId,
-            title: '서울 주말 산책',
-            description: null,
-            region_hint: '서울',
-            primary_region_code: '11',
-            primary_region_source: 'manual',
-            start_date: '2099-06-20',
-            end_date: '2099-06-21',
-            visibility: 'private',
-            status: 'planned',
-            version: 1,
-            created_at: '2026-06-01T09:00:00+09:00',
-            updated_at: '2026-06-01T09:00:00+09:00',
-          },
-        ],
+        data: [tripFixture],
+      }),
+    });
+  });
+
+  // 목록 카드의 명시적인 상세 prefetch도 Trip API fixture로 응답한다.
+  await page.route(/\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
+    if (request.method() !== 'GET' || !['fetch', 'xhr'].includes(request.resourceType()))
+      return route.fallback();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          trip: tripFixture,
+          days: [],
+          companions: [],
+          share_links: [],
+          broken_feature_count: 0,
+        },
       }),
     });
   });

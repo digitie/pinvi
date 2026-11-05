@@ -23,3 +23,11 @@ mocked 빌드는 전용 API origin을 고정하고 공용 fixture가 미등록 A
 공용 test fixture가 context/popups·추가 협업 context·WebSocket·APIRequestContext에 격리 경계를 적용한다. page mock은 우선하며 미처리 요청은 fallback으로 최종 차단한다. endpoint 이름만 진단에 남기고 ID/token/query는 가린다. 교통 검사가 아닌 화면의 명시적 초기 transport/status fixture는 off다.
 
 원래 수신 서버 요청4→0을 실제 빌드로 확인했고 reserved API 요청도 관측했다. 실브라우저 네트워크 정책5검사·URL정책15단위가 통과했다. 첫 strict 전체 진단은148통과/10미등록mock실패/2skip으로 멈췄으며 기존 숨은 누락을 명시 fixture로 보완 중이다. 이는 전체 검증 완료가 아니다. 실제 UI/지도 source는 아직 바꾸지 않았다.
+
+## 공통 mock 누락 보완
+
+strict 진단으로 드러난 신규 첨부/Telegram read의 새 사용자·새 여행 초기 상태를 GET에 한해 명시 fixture로 제공했다. 쓰기 요청은 공통 fixture에 포함하지 않는다. 관리자 파일 보존은 해당 spec에서 별도 응답을 만들고, 여행 목록의 실제 상세 prefetch도 같은 여행 객체로 명시했다. HTTP/WS/서버 proxy/추가 context/APIRequestContext 격리와 token 없는 진단은 유지한다.
+
+검증된 빌드 source361개와 BUILD_ID를 고정한 외부 진단 config로 전체195통과/기존3skip을 확인했다. 이 config는 테스트 파일만 반복할 때 사용하며 runtime source나 lock·artifact가 바뀌면 즉시 거절한다. 최종 후보는 정규 config의 fresh build와 전체 suite를 다시 실행한다.
+
+#658은 별도PR694/a5a2154로 2인 리뷰·CI8성공 뒤 병합했다. Claude가 병행한PR692/d02a35d의 운영SRCH-028 scripted 복귀는 보존한다. upstream의 미병합PR30(head3c09359)과 실제main(fb75475)을 혼동하지 않으며, 다른 Code의 Firefox 변경을 이번 source로 합치거나 되돌리지 않는다.

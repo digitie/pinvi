@@ -123,6 +123,14 @@ test('Admin retention page가 summary, dry-run, kill-switch guard를 렌더링�
   page,
 }) => {
   await mockCpoAuth(page);
+  await page.route(/\/admin\/storage-retention$/, async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    await fulfillJson(route, { data: {
+      retention_days: 30, expired_trips: 0, eligible_attachments: 0,
+      expired_uploads: 0, pending_objects: 0, in_progress_objects: 0,
+      errors: [], can_execute: false,
+    } });
+  });
   let rows = [retentionRun()];
   let dryRunBody: Record<string, unknown> | null = null;
 
