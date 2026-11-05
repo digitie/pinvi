@@ -2,8 +2,8 @@
 (ADR-068, T-363/T-365, 2026-09-17 사용자 방향 전환).
 
 `trip_weather_batch.build_trip_weather_via_kor_travel_weather`를 `build_trip_view`
-전체 파이프라인을 통해 검증한다(구 `kor-travel-map` 날짜별 batch 경로는 T-365에서
-제거됐다).
+전체 파이프라인을 통해 검증한다. 냉미스의 unavailable과 배경 해석 뒤 cache hit를
+각각 단언한다(구 `kor-travel-map` 날짜별 batch 경로는 T-365에서 제거됐다).
 
 **핵심 불변식** — 이 경로는 feature batch(`get_features`)의 산출물을 전혀 받지
 않는다. weather 조회는 POI 자신의 `feature_snapshot.coord`만으로 동작하고, feature가
@@ -17,13 +17,14 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from datetime import UTC, date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
+import pytest_asyncio
 
 from app.clients.kor_travel_map import KorTravelMapUnavailable, RetiredFeatureBatchItem
 from app.clients.kor_travel_weather import (
@@ -38,8 +39,24 @@ from app.clients.kor_travel_weather import (
     kor_travel_weather_timeout,
 )
 from app.core.config import Settings
+from app.services.weather_resolve_worker import (
+    close_weather_resolve_worker,
+    get_weather_resolve_worker,
+)
 
 pytestmark = pytest.mark.asyncio
+
+_background_clients: list[Any] = []
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _close_background_resolvers(session_factory: Any) -> AsyncIterator[None]:
+    # worker가 테스트별 DB engine보다 먼저 종료되도록 fixture 의존성을 둔다.
+    yield
+    for weather_client in _background_clients:
+        await close_weather_resolve_worker(weather_client)
+    _background_clients.clear()
+
 
 _SEOUL = ZoneInfo("Asia/Seoul")
 
@@ -157,7 +174,12 @@ class _WeatherClient:
         self.forecast_calls: list[dict[str, Any]] = []
 
     async def resolve(
-        self, *, lat: float, lon: float, radius_km: float | None = None
+        self,
+        *,
+        lat: float,
+        lon: float,
+        radius_km: float | None = None,
+        read_timeout_seconds: float | None = None,
     ) -> ResolvedWeatherOut:
         self.resolve_calls.append((lat, lon, radius_km))
         if (lat, lon) in self.failing_resolve_coords:
@@ -216,6 +238,8 @@ async def _build_view(  # type: ignore[no-untyped-def]
     from app.services.trip_view_builder import build_trip_view
 
     feature_cache.clear()
+    if weather_client is not None:
+        _background_clients.append(weather_client)
     user_id = uuid.uuid4()
     trip_id = uuid.uuid4()
     now = datetime.now(UTC)
@@ -301,6 +325,24 @@ async def test_builds_card_and_shares_across_same_location(session_factory) -> N
         },
     )
 
+    cold_view = await _build_view(
+        session_factory,
+        pois=[
+            (1, eff_date, f1, _snapshot(lon, lat)),
+            (1, eff_date, f2, _snapshot(lon, lat)),
+        ],
+        map_client=map_client,
+        weather_client=weather_client,
+    )
+    assert _day(cold_view, 1)["weather_by_feature_id"] == {
+        f1: {"state": "unavailable"},
+        f2: {"state": "unavailable"},
+    }
+    assert all(day["weather_cards"] == {} for day in cold_view["days"])
+    assert weather_client.markers_calls == []
+    assert weather_client.forecast_calls == []
+    await get_weather_resolve_worker(weather_client).drain()
+
     view = await _build_view(
         session_factory,
         pois=[
@@ -339,6 +381,18 @@ async def test_weather_ignores_retired_feature_state_when_snapshot_has_coord(  #
         },
     )
 
+    cold_view = await _build_view(
+        session_factory,
+        pois=[(1, eff_date, feature_id, _snapshot(lon, lat))],
+        map_client=map_client,
+        weather_client=weather_client,
+    )
+    assert _day(cold_view, 1)["weather_by_feature_id"] == {feature_id: {"state": "unavailable"}}
+    assert all(day["weather_cards"] == {} for day in cold_view["days"])
+    assert weather_client.markers_calls == []
+    assert weather_client.forecast_calls == []
+    await get_weather_resolve_worker(weather_client).drain()
+
     view = await _build_view(
         session_factory,
         pois=[(1, eff_date, feature_id, _snapshot(lon, lat))],
@@ -367,6 +421,18 @@ async def test_weather_survives_feature_batch_failure(session_factory) -> None: 
             )
         },
     )
+
+    cold_view = await _build_view(
+        session_factory,
+        pois=[(1, eff_date, feature_id, _snapshot(lon, lat))],
+        map_client=map_client,
+        weather_client=weather_client,
+    )
+    assert _day(cold_view, 1)["weather_by_feature_id"] == {feature_id: {"state": "unavailable"}}
+    assert all(day["weather_cards"] == {} for day in cold_view["days"])
+    assert weather_client.markers_calls == []
+    assert weather_client.forecast_calls == []
+    await get_weather_resolve_worker(weather_client).drain()
 
     view = await _build_view(
         session_factory,
@@ -402,6 +468,18 @@ async def test_merges_full_source_location_bundle(session_factory) -> None:  # t
         },
     )
 
+    cold_view = await _build_view(
+        session_factory,
+        pois=[(1, eff_date, feature_id, _snapshot(lon, lat))],
+        map_client=map_client,
+        weather_client=weather_client,
+    )
+    assert _day(cold_view, 1)["weather_by_feature_id"] == {feature_id: {"state": "unavailable"}}
+    assert all(day["weather_cards"] == {} for day in cold_view["days"])
+    assert weather_client.markers_calls == []
+    assert weather_client.forecast_calls == []
+    await get_weather_resolve_worker(weather_client).drain()
+
     view = await _build_view(
         session_factory,
         pois=[(1, eff_date, feature_id, _snapshot(lon, lat))],
@@ -421,6 +499,18 @@ async def test_no_anchor_marks_no_data_without_network_calls(session_factory) ->
     feature_id = f"f_{uuid.uuid4().hex[:8]}"
     map_client = _MapClient()
     weather_client = _WeatherClient()  # resolutions 비어있음 -> 항상 NotFound
+
+    cold_view = await _build_view(
+        session_factory,
+        pois=[(1, eff_date, feature_id, _snapshot(127.0, 37.5))],
+        map_client=map_client,
+        weather_client=weather_client,
+    )
+    assert _day(cold_view, 1)["weather_by_feature_id"] == {feature_id: {"state": "unavailable"}}
+    assert all(day["weather_cards"] == {} for day in cold_view["days"])
+    assert weather_client.markers_calls == []
+    assert weather_client.forecast_calls == []
+    await get_weather_resolve_worker(weather_client).drain()
 
     view = await _build_view(
         session_factory,
@@ -470,6 +560,18 @@ async def test_partial_location_failure_still_found(session_factory) -> None:  #
         failing_locations=frozenset({"loc-a"}),
     )
 
+    cold_view = await _build_view(
+        session_factory,
+        pois=[(1, eff_date, feature_id, _snapshot(lon, lat))],
+        map_client=map_client,
+        weather_client=weather_client,
+    )
+    assert _day(cold_view, 1)["weather_by_feature_id"] == {feature_id: {"state": "unavailable"}}
+    assert all(day["weather_cards"] == {} for day in cold_view["days"])
+    assert weather_client.markers_calls == []
+    assert weather_client.forecast_calls == []
+    await get_weather_resolve_worker(weather_client).drain()
+
     view = await _build_view(
         session_factory,
         pois=[(1, eff_date, feature_id, _snapshot(lon, lat))],
@@ -495,6 +597,18 @@ async def test_total_location_failure_marks_unavailable_not_no_data(
         failing_locations=frozenset({"loc-a"}),
     )
 
+    cold_view = await _build_view(
+        session_factory,
+        pois=[(1, eff_date, feature_id, _snapshot(lon, lat))],
+        map_client=map_client,
+        weather_client=weather_client,
+    )
+    assert _day(cold_view, 1)["weather_by_feature_id"] == {feature_id: {"state": "unavailable"}}
+    assert all(day["weather_cards"] == {} for day in cold_view["days"])
+    assert weather_client.markers_calls == []
+    assert weather_client.forecast_calls == []
+    await get_weather_resolve_worker(weather_client).drain()
+
     view = await _build_view(
         session_factory,
         pois=[(1, eff_date, feature_id, _snapshot(lon, lat))],
@@ -514,6 +628,18 @@ async def test_all_success_but_empty_marks_no_data(session_factory) -> None:  # 
         resolutions={(lat, lon): _resolved(lat=lat, lon=lon, location_id="loc-a")},
         forecast_values={"loc-a": ()},
     )
+
+    cold_view = await _build_view(
+        session_factory,
+        pois=[(1, eff_date, feature_id, _snapshot(lon, lat))],
+        map_client=map_client,
+        weather_client=weather_client,
+    )
+    assert _day(cold_view, 1)["weather_by_feature_id"] == {feature_id: {"state": "unavailable"}}
+    assert all(day["weather_cards"] == {} for day in cold_view["days"])
+    assert weather_client.markers_calls == []
+    assert weather_client.forecast_calls == []
+    await get_weather_resolve_worker(weather_client).drain()
 
     view = await _build_view(
         session_factory,
@@ -550,6 +676,24 @@ async def test_date_slicing_and_no_date_fanout(session_factory) -> None:  # type
             )
         },
     )
+
+    cold_view = await _build_view(
+        session_factory,
+        pois=[
+            (1, day1_date, feature_id, _snapshot(lon, lat)),
+            (2, day2_date, feature_id, _snapshot(lon, lat)),
+        ],
+        map_client=map_client,
+        weather_client=weather_client,
+    )
+    for day_index in (1, 2):
+        assert _day(cold_view, day_index)["weather_by_feature_id"] == {
+            feature_id: {"state": "unavailable"}
+        }
+    assert all(day["weather_cards"] == {} for day in cold_view["days"])
+    assert weather_client.markers_calls == []
+    assert weather_client.forecast_calls == []
+    await get_weather_resolve_worker(weather_client).drain()
 
     view = await _build_view(
         session_factory,
@@ -592,6 +736,18 @@ async def test_markers_latest_feeds_the_card(session_factory) -> None:  # type: 
             )
         },
     )
+
+    cold_view = await _build_view(
+        session_factory,
+        pois=[(1, eff_date, feature_id, _snapshot(lon, lat))],
+        map_client=map_client,
+        weather_client=weather_client,
+    )
+    assert _day(cold_view, 1)["weather_by_feature_id"] == {feature_id: {"state": "unavailable"}}
+    assert all(day["weather_cards"] == {} for day in cold_view["days"])
+    assert weather_client.markers_calls == []
+    assert weather_client.forecast_calls == []
+    await get_weather_resolve_worker(weather_client).drain()
 
     view = await _build_view(
         session_factory,
@@ -729,28 +885,28 @@ async def test_syn_drop_with_cache_misses_returns_unavailable_within_budget(  # 
         # 예산(1.0 s) + 여유(부하 흔들림 대비 0.5 s).
         assert timer.durations[-1] < _SCALED_BUDGET_SECONDS + 0.5
 
-        # 회로: SYN drop의 ConnectTimeout은 connect 상한(0.2 s)이 deadline에 깎이지 않은 값이라 connect 단계
-        # 실패이고, 그것은 host 회로에 view당 1회 세진다(T-379). 그래서 view 3개째에 host 회로가 열려
-        # resolve·markers를 포함한 모든 엔드포인트가 함께 막힌다 — 엔드포인트별 회로만 있던 T-378에서는
-        # resolve·markers가 각자 3회씩 세져야 해 view 3~6개(이 축척에서는 4개)가 transport에 닿았다. 그 뒤
-        # 요청은 transport에 닿지 않고 즉시 `unavailable`이다. 모든 view가 예산 안에 끝나야 한다.
-        views = 1
+        # 냉미스 실패는 배경에서 완료한다. 이후 host 회로의 정확한 3회 집계는
+        # 새 client의 cache-hit 값 조회만으로 검증해 worker 일정과 분리한다.
+        await get_weather_resolve_worker(weather_client).drain()
+        await close_weather_resolve_worker(weather_client)
+        await weather_client.aclose()
+        transport = _SynDropTransport()
+        weather_client = _syn_drop_weather_client(transport)
+        views = 0
         while True:
             calls_before = transport.calls
-            await _build_view(
+            repeated = await _build_view(
                 session_factory,
-                pois=[
-                    (1, eff_date, f"m_{uuid.uuid4().hex[:8]}", _snapshot(127.3, 37.8)),
-                    (1, eff_date, hit, _snapshot(127.0, 37.5)),
-                ],
+                pois=[(1, eff_date, hit, _snapshot(127.0, 37.5))],
                 map_client=_MapClient(),
                 weather_client=weather_client,
             )
+            assert _day(repeated, 1)["weather_by_feature_id"] == {hit: {"state": "unavailable"}}
             assert timer.durations[-1] < _SCALED_BUDGET_SECONDS + 0.5
             if transport.calls == calls_before:
                 break
             views += 1
-            assert views <= 8, f"회로가 view {views}개까지 다 열리지 않았다"
+            assert views <= 3, f"캐시 적중 값 조회 {views}회 뒤에도 host 회로가 열리지 않았다"
         assert views == 3, views
         calls_before = transport.calls
         view = await _build_view(
@@ -792,6 +948,22 @@ async def test_one_resolve_failure_only_marks_that_feature_unavailable(  # type:
         failing_resolve_coords=frozenset({(37.9, 127.9)}),
     )
 
+    cold_view = await _build_view(
+        session_factory,
+        pois=[
+            (1, eff_date, broken, _snapshot(127.9, 37.9)),
+            (1, eff_date, ok_a, _snapshot(127.0, 37.5)),
+            (1, eff_date, ok_b, _snapshot(127.0, 37.5)),
+        ],
+        map_client=_MapClient(),
+        weather_client=weather_client,
+    )
+    cold_by_feature = _day(cold_view, 1)["weather_by_feature_id"]
+    assert cold_by_feature[broken] == {"state": "unavailable"}
+    assert cold_by_feature[ok_a] == {"state": "unavailable"}
+    assert cold_by_feature[ok_b] == {"state": "found", "card_key": "loc-1"}
+    await get_weather_resolve_worker(weather_client).drain()
+
     view = await _build_view(
         session_factory,
         pois=[
@@ -807,7 +979,7 @@ async def test_one_resolve_failure_only_marks_that_feature_unavailable(  # type:
     assert by_feature[broken] == {"state": "unavailable"}
     assert by_feature[ok_a] == {"state": "found", "card_key": "loc-1"}
     assert by_feature[ok_b] == {"state": "found", "card_key": "loc-1"}
-    # resolve는 순차로 계속 진행됐다 — 실패한 feature 뒤의 미스도 해석했다.
+    # 배경은 실패한 feature에 막히지 않고 다음 미스도 해석했다.
     assert (37.5, 127.0, 20.0) in weather_client.resolve_calls
 
 
@@ -854,6 +1026,9 @@ async def test_hanging_upstream_opens_breaker_after_three_views(  # type: ignore
     try:
         for _ in range(3):
             feature_id = f"hang_{uuid.uuid4().hex[:8]}"
+            await _seed_location_link(
+                session_factory, feature_id=feature_id, lat=37.6, lon=127.1, location_id="loc-hang"
+            )
             view = await _build_view(
                 session_factory,
                 pois=[(1, eff_date, feature_id, _snapshot(127.1, 37.6))],
@@ -865,6 +1040,9 @@ async def test_hanging_upstream_opens_breaker_after_three_views(  # type: ignore
         calls_before = transport.calls
 
         feature_id = f"hang_{uuid.uuid4().hex[:8]}"
+        await _seed_location_link(
+            session_factory, feature_id=feature_id, lat=37.6, lon=127.1, location_id="loc-hang"
+        )
         view = await _build_view(
             session_factory,
             pois=[(1, eff_date, feature_id, _snapshot(127.1, 37.6))],

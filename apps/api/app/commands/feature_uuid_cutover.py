@@ -5,19 +5,25 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-import httpx
-
 from app.clients.kor_travel_map_alias_map import KorTravelMapAliasMapClient
 from app.core.config import settings
 from app.db import session as db_session
+from app.middleware.api_call_logging import (
+    ApiCallLoggingClient,
+    api_call_event_hooks,
+    close_api_call_logs,
+)
 from app.services.feature_uuid_cutover import run_feature_uuid_cutover
 
 
 async def _run(args: argparse.Namespace) -> None:
     client = KorTravelMapAliasMapClient(
-        httpx.AsyncClient(
+        ApiCallLoggingClient(
             base_url=settings.pinvi_kor_travel_map_api_base_url,
             timeout=settings.pinvi_kor_travel_map_timeout_seconds,
+            event_hooks=api_call_event_hooks(
+                db_session.async_session_factory, provider="kor_travel_map_alias_map"
+            ),
         ),
         service_token=settings.pinvi_kor_travel_map_service_token,
     )
@@ -34,8 +40,14 @@ async def _run(args: argparse.Namespace) -> None:
             else:
                 await session.commit()
     finally:
-        await client.aclose()
-        await db_session.engine.dispose()
+        try:
+            await client.aclose()
+        finally:
+            # CLI에는 API lifespan이 없다. 관측 DB를 쓰는 drain을 engine 종료보다 먼저 끝낸다.
+            try:
+                await close_api_call_logs(db_session.async_session_factory)
+            finally:
+                await db_session.engine.dispose()
 
     print(
         f"alias-map verified: alias_count={report.alias_count} "

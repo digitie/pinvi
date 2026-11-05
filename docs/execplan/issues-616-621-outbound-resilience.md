@@ -11,7 +11,7 @@
 - 남은 plain HTTP의 실패/취소와 streaming body 오류도 기록한다. OAuth·Telegram·서명·runtime guard는 그대로 유지하며 실제 제공자에는 접근하지 않는다.
 - 직접 카드 예산은 설정으로 노출하고 Admin이 카드의4초를 암묵 상속하지 않도록 호출별 예산을 분리한다.
 - streaming body 오류/취소/조기종료 기존3 FAIL → 공통관측12 PASS. 직접카드/Admin 예산2 FAIL → 관련16 PASS로 보완했다.
-- 마지막에 사용자 지정 origin/main d02a35d(#692 운영 카탈로그)를 통합하고 타 작업자의 변경을 보존한 뒤 source 실행 범위를 다시 검증한다.
+- 마지막에 사용자 최신 지시 origin/main a5a215470adf47b31ea7fe25e3a9431337e4e4a9(#658, #692 포함)를 통합하고 타 작업자의 변경을 보존한 뒤 source 실행 범위를 다시 검증한다.
 - 운영 flag·edge HTTP/2·실제 운영 latency만 Claude 담당 잔여로 남긴다. Draft/Closes616/Refs621 유지, 최종 전문리뷰·ready·merge는 메인 담당이다.
 
 # #616·#621 외부 호출 계약과 복원력 WSL 실행계획
@@ -91,3 +91,14 @@ PR 종료 문구는 #616 완료 검증 뒤에만 `Closes #616`을 사용하고, 
 - 추가 plain httpx service/routes의 OAuth·Telegram 호출부 전환은 clients 소유 범위 밖이다. event hook만 부착한 client의 response 없는 실패 기록은 후속으로 남는다. 실제 Telegram 접근은 수행하지 않았다.
 
 최종 고정 f99e9b3에서 전체 API unit 재실행은 2084 PASS/기존9 SKIP(104.59초)이며 실행 전후 변경 source SHA-256이 전부 일치했다. 최종 Ruff/format519파일·strict mypy274파일·diff 검사도 통과했다.
+
+## 재개 구현 완료·최종 통합 준비
+
+- 직접 background worker는2실행/128대기/128음성캐시·30초, 별도session·Context()·resolve read45초·전체반경140초 상한을 쓴다. cold miss는Pending/빈 카드이며 다음hit에서값을읽는다.
+- 초기실제PG2FAIL(요청대기·무관쓰기commit)과commit중좌표예약1FAIL을보완했다. 직접resolver/Map 경계48PASS, 기존단건/Admin/trip41PASS, 공개cold→warm실HTTP/PG1PASS다.
+- plainHTTP7파일·CLI4파일을ApiCallLoggingClient에연결했다. 생성경로9FAIL·CLI drain4FAIL→관련unit277PASS·실제TCP/UDS HTTP/PG18PASS·OAuth/Telegram권한/reconciliation관련PG/API127PASS다.
+- streaming 실패3FAIL·카드/Admin예산2FAIL은이미45abaf3으로push했다. 새weather전송7FAIL과long-read45가느린5xx재시도상한까지늘리는추가1FAIL을보완했고 관련103PASS다.
+- Dagster bounded reader의response-hook금지guard는유지하며requesttracker+stream종료관측을사용한다. CLI관측drain은각clientclose뒤/engine.dispose앞이며서명/credential/pin guard순서는보존했다.
+- 별도ETL패키지는API ORM을import하지않는resource다. 기존retention10초·Dagster retry/metadata와planner120초를유지하며API요청starvation경로와혼동하지않는다.
+- 외부Mapfeature삭제를Pinvi가추정하지않는다(cache표에그삭제FK/marker가없음). 로컬link삭제/좌표/Map행전환뒤늦은결과는versionfence로거부한다.
+- 사용자최신main a5a2154의운영cleanup과692카탈로그를통합·보존한뒤정확source로최종검증한다. 운영/SSH/실제provider/Telegram접근은없고621close는금지한다.

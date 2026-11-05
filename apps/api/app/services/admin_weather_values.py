@@ -2,7 +2,8 @@
 
 ADR-077의 Map 모드이면 관측·예보를 Map 상태로, 특보만 weather 직접으로 읽는다.
 직접 모드는 기존 weather 경로를 유지하며 장애 시 다른 소스로 숨은 fallback하지 않는다.
-공통 collect_weather_values가 예산·해석·dedupe를 소유하고 관리자 투영은 provenance를 보존한다.
+공통 collect_weather_values가 해석·dedupe를 소유하며 직접 경로의 관리자 예산은 사용자 카드와
+별도 설정을 사용한다. 관리자 투영은 provenance를 보존한다.
 
 Map에 원천 dataset_key가 없으므로 null이다. 직접 weather 값은 실제 key를 보존한다.
 정수 provider_dataset_id·dataset_display_name도 대응물이 없으면 null이며 known_at은 원문이다.

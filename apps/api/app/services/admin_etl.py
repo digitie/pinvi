@@ -24,6 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.kor_travel_map import KorTravelMapError
 from app.clients.kor_travel_map_admin import KorTravelMapAdminClient
 from app.core.config import settings
+from app.db import session as db_session
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 from app.schemas.admin import (
     AdminAuditRetentionSummary,
     AdminDagsterJobSummary,
@@ -714,7 +716,16 @@ async def _probe_pinvi_dagster() -> _PinviDagsterProbeResult:
             checked_at=checked_at,
         )
     start = time.perf_counter()
-    client = httpx.AsyncClient(timeout=PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS)
+    client = ApiCallLoggingClient(
+        timeout=PINVI_DAGSTER_PROBE_TIMEOUT_SECONDS,
+        # common bounded reader는 response hook을 금지한다. request tracker와
+        # ApiCallLoggingClient의 stream 종료 관측만 사용해 그 안전 경계를 유지한다.
+        event_hooks={
+            "request": api_call_event_hooks(
+                db_session.async_session_factory, provider="pinvi_dagster"
+            )["request"]
+        },
+    )
     try:
         async with asyncio.timeout(PINVI_DAGSTER_TOTAL_TIMEOUT_SECONDS):
             return await _fetch_pinvi_dagster_snapshot(

@@ -9,7 +9,6 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from typing import Literal
 
-import httpx
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -22,7 +21,7 @@ from app.clients.kor_travel_map_feature_reference_reconciliation import (
 )
 from app.core.config import Settings, settings
 from app.db import session as db_session
-from app.middleware.api_call_logging import api_call_event_hooks
+from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 from app.services.feature_reference_reconciliation import (
     ReconciliationApplied,
     ReconciliationBlocked,
@@ -193,7 +192,7 @@ def _client(
     config: Settings,
 ) -> FeatureReferenceReconciliationServiceClient:
     return FeatureReferenceReconciliationServiceClient(
-        httpx.AsyncClient(
+        ApiCallLoggingClient(
             base_url=config.pinvi_kor_travel_map_api_base_url,
             timeout=config.pinvi_kor_travel_map_timeout_seconds,
             event_hooks=api_call_event_hooks(

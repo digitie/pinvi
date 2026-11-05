@@ -1,18 +1,20 @@
 """단건 `GET /features/{id}/weather` — `kor-travel-weather` location 축(ADR-068, T-362/T-365).
 
-`get_feature`로 좌표를 얻고 `weather_location_resolver.resolve_weather_location`
-→ `latest`/`forecast`로 카드를 조립한다(구 `kor-travel-map` 날짜별 경로는 T-365에서
-제거됐다).
+`get_feature`로 좌표를 얻고 직접 캐시 미스는 빈 카드로 반환한다. 배경 해석이 끝난
+다음 조회에서 `latest`/`forecast`로 카드를 조립한다. 구 `kor-travel-map` 날짜별 경로는
+T-365에서 제거됐다.
 """
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 import pytest
+import pytest_asyncio
 
 from app.clients.kor_travel_map import get_kor_travel_map_client
 from app.clients.kor_travel_weather import (
@@ -29,8 +31,24 @@ from app.clients.kor_travel_weather import (
 )
 from app.core.config import Settings
 from app.main import app
+from app.services.weather_resolve_worker import (
+    close_weather_resolve_worker,
+    get_weather_resolve_worker,
+)
 
 pytestmark = pytest.mark.asyncio
+
+_background_clients: list[Any] = []
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _close_background_resolvers(session_factory: Any) -> AsyncIterator[None]:
+    # session_factory 선행/후행을 보장해 worker를 테스트별 DB engine보다 먼저 종료한다.
+    yield
+    for weather_client in _background_clients:
+        await close_weather_resolve_worker(weather_client)
+    _background_clients.clear()
+
 
 _FEATURE_LAT, _FEATURE_LON = 37.5665, 126.978
 
@@ -100,7 +118,12 @@ class _FakeWeatherClient:
         self.calls: dict[str, list[Any]] = {"resolve": [], "latest": [], "forecast": []}
 
     async def resolve(
-        self, *, lat: float, lon: float, radius_km: float | None = None
+        self,
+        *,
+        lat: float,
+        lon: float,
+        radius_km: float | None = None,
+        read_timeout_seconds: float | None = None,
     ) -> ResolvedWeatherOut:
         self.calls["resolve"].append({"lat": lat, "lon": lon, "radius_km": radius_km})
         if self.no_match:
@@ -150,6 +173,8 @@ class _FakeWeatherClient:
 def _override(map_client: Any, weather_client: Any) -> None:
     app.dependency_overrides[get_kor_travel_map_client] = lambda: map_client
     app.dependency_overrides[get_optional_kor_travel_weather_client] = lambda: weather_client
+    if weather_client is not None:
+        _background_clients.append(weather_client)
 
 
 def _clear() -> None:
@@ -181,6 +206,12 @@ async def test_resolves_feature_coord_and_builds_card(
     )
     _override(map_client, weather_client)
     try:
+        cold = await client.get("/features/f_new_1/weather", cookies=auth_cookies(user_id))
+        assert cold.status_code == 200, cold.text
+        assert cold.json()["data"]["metrics"] == []
+        assert weather_client.calls["latest"] == []
+        assert weather_client.calls["forecast"] == []
+        await get_weather_resolve_worker(weather_client).drain()
         resp = await client.get("/features/f_new_1/weather", cookies=auth_cookies(user_id))
     finally:
         _clear()
@@ -217,6 +248,12 @@ async def test_wind_speed_kmh_is_converted_to_ms(
     )
     _override(map_client, weather_client)
     try:
+        cold = await client.get("/features/f_wind/weather", cookies=auth_cookies(user_id))
+        assert cold.status_code == 200, cold.text
+        assert cold.json()["data"]["metrics"] == []
+        assert weather_client.calls["latest"] == []
+        assert weather_client.calls["forecast"] == []
+        await get_weather_resolve_worker(weather_client).drain()
         resp = await client.get("/features/f_wind/weather", cookies=auth_cookies(user_id))
     finally:
         _clear()
@@ -251,6 +288,12 @@ async def test_unmappable_metric_passes_through_unchanged(
     )
     _override(map_client, weather_client)
     try:
+        cold = await client.get("/features/f_cloud/weather", cookies=auth_cookies(user_id))
+        assert cold.status_code == 200, cold.text
+        assert cold.json()["data"]["metrics"] == []
+        assert weather_client.calls["latest"] == []
+        assert weather_client.calls["forecast"] == []
+        await get_weather_resolve_worker(weather_client).drain()
         resp = await client.get("/features/f_cloud/weather", cookies=auth_cookies(user_id))
     finally:
         _clear()
@@ -285,6 +328,12 @@ async def test_weather_alert_becomes_advisory(
     )
     _override(map_client, weather_client)
     try:
+        cold = await client.get("/features/f_alert/weather", cookies=auth_cookies(user_id))
+        assert cold.status_code == 200, cold.text
+        assert cold.json()["data"]["metrics"] == []
+        assert weather_client.calls["latest"] == []
+        assert weather_client.calls["forecast"] == []
+        await get_weather_resolve_worker(weather_client).drain()
         resp = await client.get("/features/f_alert/weather", cookies=auth_cookies(user_id))
     finally:
         _clear()
@@ -303,6 +352,10 @@ async def test_no_anchor_within_radius_returns_empty_card(
     weather_client = _FakeWeatherClient(no_match=True)
     _override(map_client, weather_client)
     try:
+        cold = await client.get("/features/f_no_anchor/weather", cookies=auth_cookies(user_id))
+        assert cold.status_code == 200, cold.text
+        assert cold.json()["data"]["metrics"] == []
+        await get_weather_resolve_worker(weather_client).drain()
         resp = await client.get("/features/f_no_anchor/weather", cookies=auth_cookies(user_id))
     finally:
         _clear()
@@ -440,6 +493,14 @@ async def test_syn_drop_on_cache_miss_returns_empty_card_not_500(
     started = loop.time()
     try:
         resp = await client.get("/features/f_syn_drop/weather", cookies=auth_cookies(user_id))
+        elapsed = loop.time() - started
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["data"]["metrics"] == []
+        assert elapsed < 0.5
+        await get_weather_resolve_worker(weather_client).drain()
+        again = await client.get("/features/f_syn_drop/weather", cookies=auth_cookies(user_id))
+        assert again.status_code == 200, again.text
+        assert again.json()["data"]["metrics"] == []
     finally:
         _clear()
         await weather_client.aclose()
@@ -450,7 +511,7 @@ async def test_syn_drop_on_cache_miss_returns_empty_card_not_500(
     assert data["metrics"] == []
     # 첫 반경의 resolve 1회(3 attempt)에서 끊겼다 — 다음 반경으로 넘어가지 않는다.
     assert transport.calls == 3
-    assert loop.time() - started < 3 * 0.2 + 0.06 + 0.5
+    assert elapsed < 3 * 0.2 + 0.06 + 0.5
 
 
 class _SlowReadTransport(httpx.AsyncBaseTransport):
@@ -458,20 +519,39 @@ class _SlowReadTransport(httpx.AsyncBaseTransport):
 
     def __init__(self) -> None:
         self.calls = 0
+        self.paths: list[str] = []
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         self.calls += 1
+        self.paths.append(request.url.path)
         await asyncio.sleep(request.extensions["timeout"]["read"])
         raise httpx.ReadTimeout("no response", request=request)
 
 
 async def test_slow_weather_card_is_bounded_and_read_timeout_not_retried(
-    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, session_factory: Any
 ) -> None:
     """2026-11-02 prod 점검: 직접 경로 단건 카드에 예산이 없어 read 10 s x 3회 + backoff ≈ 31 s를
-    붙잡았다(브라우저 연결 슬롯 점유 → 다른 요청이 줄 섰다). 운영 수치(read 10 s, 3 attempt)로도 카드는
-    예산(4 s) 안에 빈 카드로 끝나고, read timeout은 다시 보내지 않는다."""
+    붙잡았다(브라우저 연결 슬롯 점유 → 다른 요청이 줄 섰다). #621 이후 이 검사는 cache hit의
+    latest/forecast만 조회한다. 운영 수치(read 10 s, 3 attempt)로도 카드 예산(4 s) 안에서
+    끝나며 각 endpoint의 read timeout은 다시 보내지 않는다."""
     user_id, _email = verified_user
+    from app.models.weather_location_link import WeatherLocationLink
+
+    async with session_factory() as db:
+        db.add(
+            WeatherLocationLink(
+                feature_id="f_slow_read",
+                location_id="loc-slow",
+                source_location_ids=["loc-slow"],
+                lat=_FEATURE_LAT,
+                lon=_FEATURE_LON,
+                distance_km=0.1,
+                resolved_at=datetime.now(UTC),
+                stale=False,
+            )
+        )
+        await db.commit()
     map_client = _FakeMapClient(feature_id="f_slow_read", lon=_FEATURE_LON, lat=_FEATURE_LAT)
     transport = _SlowReadTransport()
     weather_client = KorTravelWeatherClient(
@@ -501,12 +581,21 @@ async def test_slow_weather_card_is_bounded_and_read_timeout_not_retried(
     assert resp.json()["data"]["metrics"] == []
     # 예산 4 s + ASGI·인증·DB 여유(부하 걸린 runner에서도) — 예산이 없던 때는 ≈31 s였다.
     assert loop.time() - started < 4.0 + 2.0
-    assert transport.calls == 1
+    assert transport.calls == 2
+    assert sorted(transport.paths) == [
+        "/v1/weather/locations/loc-slow/forecast",
+        "/v1/weather/locations/loc-slow/latest",
+    ]
 
 
 class _ContractBreakingResolveClient(_FakeWeatherClient):
     async def resolve(
-        self, *, lat: float, lon: float, radius_km: float | None = None
+        self,
+        *,
+        lat: float,
+        lon: float,
+        radius_km: float | None = None,
+        read_timeout_seconds: float | None = None,
     ) -> ResolvedWeatherOut:
         self.calls["resolve"].append({"lat": lat, "lon": lon, "radius_km": radius_km})
         raise KorTravelWeatherContractError("kor-travel-weather resolve 응답 셰입 위반")
@@ -523,6 +612,12 @@ async def test_resolve_contract_error_returns_empty_card_not_500(
     _override(map_client, weather_client)
     try:
         resp = await client.get("/features/f_contract/weather", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["data"]["metrics"] == []
+        await get_weather_resolve_worker(weather_client).drain()
+        again = await client.get("/features/f_contract/weather", cookies=auth_cookies(user_id))
+        assert again.status_code == 200, again.text
+        assert again.json()["data"]["metrics"] == []
     finally:
         _clear()
 

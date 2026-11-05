@@ -15,11 +15,10 @@ AirKorea 측정소였고 KMA 예보는 다른 source location에 있었다). `re
 `resolved.source_locations`에 이미 포함되는 경우가 실측상 일반적이지만, 비어 있는
 방어적 상황에도 대표 location_id를 항상 포함하도록 순서를 보존한 채 dedupe한다.
 
-**coordinate 변경 처리**: 캐시된 좌표와 다르면 먼저 `stale=True`를 커밋해 둔 뒤
-재해석한다 — 재해석 도중 예외가 나도(네트워크 오류 등) `stale=True`만은 남아 다음
-호출이 다시 시도하게 만든다(2단계 커밋, `trip_day_rise_set.py`의 stale 마킹 관례와
-같은 정신이나 여기서는 동기적으로 즉시 재해석까지 한다는 점이 다르다 — weather는
-요청 경로에서 지금 답이 필요하다).
+**요청/배경 분리(#621)**: 요청은 같은 좌표의 유효한 직접 캐시만 읽는다. 미스는
+즉시 `WeatherLocationPending`을 돌려주고 제한된 배경 해석을 예약한다. 배경은 요청과
+다른 세션·deadline context를 쓰며, 좌표/Map 캐시 변경 전에 출발한 결과는 저장하지 않는다.
+호출자의 미확정 쓰기를 commit/rollback하지 않는다.
 
 **Map 경로(ADR-077)**: `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`가 켜지면 같은 표를 Map으로 채운다
 (`weather_map_resolver.py`). 두 경로는 서로의 행을 캐시로 쓰지 않는다(`written_by_map`).
@@ -62,7 +61,12 @@ class WeatherLocationNoData:
     """반경 내 앵커 없음 — 장애가 아니다. 상한 반경(100km)까지 시도한 뒤의 결과."""
 
 
-WeatherLocationResolution = WeatherLocationFound | WeatherLocationNoData
+@dataclass(frozen=True, slots=True)
+class WeatherLocationPending:
+    """미해석/대기/실패 — 관측소 없음을 확정하지 않았으므로 unavailable로 투영한다."""
+
+
+WeatherLocationResolution = WeatherLocationFound | WeatherLocationNoData | WeatherLocationPending
 
 
 def _dedupe_preserving_order(ids: Sequence[str]) -> tuple[str, ...]:
@@ -80,7 +84,9 @@ async def _resolve_via_client(
 ) -> ResolvedWeatherOut | None:
     for radius_km in radii_km:
         try:
-            return await client.resolve(lat=lat, lon=lon, radius_km=radius_km)
+            return await client.resolve(
+                lat=lat, lon=lon, radius_km=radius_km, read_timeout_seconds=45.0
+            )
         except KorTravelWeatherNotFound:
             continue
     return None
@@ -96,25 +102,20 @@ def written_by_map(row: WeatherLocationLink) -> bool:
     return isinstance(point, dict) and point.get("resolved_via") == MAP_RESOLVED_VIA
 
 
-async def _cached_or_mark_stale(
+async def _read_cached(
     db: AsyncSession, *, feature_id: str, lat: float, lon: float
 ) -> tuple[WeatherLocationLink | None, WeatherLocationFound | None]:
-    """캐시 적중이면 `(row, found)`. 좌표가 바뀌었으면 재해석 전에 먼저 stale을 커밋한다.
-
-    Map 경로가 쓴 행(`written_by_map`)은 적중으로 보지 않는다 — 덮어쓴다.
-    """
-    row = await db.get(WeatherLocationLink, feature_id)
-    if row is not None and written_by_map(row):
-        return row, None
-
-    if row is not None and not row.stale and row.lat == lat and row.lon == lon:
+    """요청은 읽기만 한다. Map/stale/좌표 불일치는 별도 세션에서 재해석한다."""
+    with db.no_autoflush:
+        row = await db.get(WeatherLocationLink, feature_id)
+    if (
+        row is not None
+        and not written_by_map(row)
+        and not row.stale
+        and row.lat == lat
+        and row.lon == lon
+    ):
         return row, WeatherLocationFound(row.location_id, tuple(row.source_location_ids))
-
-    if row is not None and not row.stale and (row.lat != lat or row.lon != lon):
-        # 좌표 변경 — 재해석 전에 먼저 stale을 커밋해 둔다(중간에 실패해도 다음 호출이
-        # 재시도하도록).
-        row.stale = True
-        await db.commit()
     return row, None
 
 
@@ -165,34 +166,14 @@ async def resolve_weather_location(
     client: KorTravelWeatherClient,
     radii_km: Sequence[float] = _RESOLVE_RADII_KM,
 ) -> WeatherLocationResolution:
-    """`feature_id`의 좌표를 `kor-travel-weather` location으로 해석(캐시 우선)."""
-    row, cached = await _cached_or_mark_stale(db, feature_id=feature_id, lat=lat, lon=lon)
+    """캐시 적중만 즉시 사용하고 미스는 별도 세션의 배경 해석으로 예약한다."""
+    from app.services.weather_resolve_worker import get_weather_resolve_worker
+
+    row, cached = await _read_cached(db, feature_id=feature_id, lat=lat, lon=lon)
     if cached is not None:
-        # 적중은 트랜잭션을 그대로 둔다 — trip view가 여러 feature를 연달아 읽는 동안 커밋을 반복하지
-        # 않게. 외부 호출 전 반환은 호출자(카드의 `_collect_direct`, trip view의 해석 뒤)가 한다.
         return cached
-
-    # 미스 — `/resolve`(수 초~수십 초) 동안 커넥션을 쥐지 않게 읽기 트랜잭션을 닫는다.
+    # ORM 쓰기가 있으면 release helper는 아무것도 하지 않는다. 호출자 transaction은 보존한다.
     await release_read_connection(db)
-    resolved = await _resolve_via_client(client, lat=lat, lon=lon, radii_km=radii_km)
-    if resolved is None:
-        logger.info(
-            "weather_location_resolver.no_data",
-            extra={"feature_id": feature_id, "max_radius_km": radii_km[-1] if radii_km else None},
-        )
-        return WeatherLocationNoData()
-
-    ids = _dedupe_preserving_order(
-        [resolved.location.location_id, *(loc.location_id for loc in resolved.source_locations)]
-    )
-    return await persist_link(
-        db,
-        row,
-        feature_id=feature_id,
-        lat=lat,
-        lon=lon,
-        location_id=resolved.location.location_id,
-        ids=ids,
-        distance_km=resolved.distance_km,
-        measurement_point=_measurement_point_dict(resolved),
+    return get_weather_resolve_worker(client).schedule(
+        feature_id=feature_id, lat=lat, lon=lon, radii_km=tuple(radii_km), row=row
     )
