@@ -8,7 +8,7 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | area | total | scripted | manual | blocked |
 |---|---:|---:|---:|---:|
 | trip | 57 | 53 | 2 | 2 |
-| search | 55 | 46 | 6 | 3 |
+| search | 55 | 47 | 6 | 2 |
 | nearby | 41 | 35 | 2 | 4 |
 | weather | 29 | 24 | 2 | 3 |
 | share | 35 | 30 | 2 | 3 |
@@ -16,7 +16,7 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | notify | 26 | 18 | 3 | 5 |
 | admin | 43 | 37 | 4 | 2 |
 | core | 31 | 30 | 1 | 0 |
-| **all** | **349** | **298** | **27** | **24** |
+| **all** | **349** | **299** | **27** | **23** |
 
 Spec files: 55.
 
@@ -108,7 +108,7 @@ Spec files: 55.
 | SRCH-025 | search | 국가유산 — '소수서원' → 라벨 국가유산/사적 | P1 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-025` |
 | SRCH-026 | search | 국가유산 — '도산서원' | P3 | desktop, search | manual |  |
 | SRCH-027 | search | 축제/행사 — '축제' → kind=event 상세에 기간(period) 표시 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-027` |
-| SRCH-028 | search | 설악산 영역 — 실제 면 클릭·큰 bounds 선택 후 상세 유지 | P2 | desktop, search, poi | blocked | `specs/search/search-geometry.live.spec.ts#SRCH-028` |
+| SRCH-028 | search | 설악산 영역 — 실제 면 클릭·큰 bounds 선택 후 상세 유지 | P2 | desktop, search, poi | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-028` |
 | SRCH-029 | search | 수목원 — '국립수목원' → 라벨 수목원 | P3 | desktop, search | manual |  |
 | SRCH-030 | search | 휴양림 — '자연휴양림' → 라벨 휴양림 | P3 | desktop, search | manual |  |
 | SRCH-031 | search | 박물관/미술관 — '국립중앙박물관' → 라벨 박물관/문화시설 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-031` |
