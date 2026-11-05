@@ -39,3 +39,11 @@ c87의 전체 웹419·workspace타입·프로덕션 빌드가 통과했다. 실�
 그 뒤 실제 공유 진입에서 발급 API의 url이 구형 /trips/{id}/shared/{token}을 반환하지만 화면의 열기는 /shared/{id}/{token}인 실제 제품 경계 불일치를 확인했다. 실제 PG 회귀1FAIL 후 발급 url과 문서 예시를 화면의 정본 경로로 맞췄고1PASS했다. API 공개 read/comment/edit endpoint 경로 자체는 바꾸지 않는다. 같은 공유 내보내기 진입 범위의 수정으로 이 PR에 포함한다.
 
 기존 Button의 leadingIcon 슬롯으로 아이콘을 배치해 새 버튼에서 아이콘/라벨이 두 줄이 되는 화면 QA 문제도 정리한다. 새 정확 후보에서 전체 검증과 실제 private/shared/long PDF를 재실행한다.
+
+## 실제 PDF 페이지 QA 보완
+
+d31 후보의 실제 WSL private/shared/long UI7흐름은 통과했고 pageerror0이다. ICS2파일을 독립 icalendar parser로 읽어 각각5이벤트·UTC/종일·안정 UID·문자 주입 거절을 확인했다. PDF3파일은2/2/6페이지, 텍스트/metadata/링크와 페이지 bbox를 확인했고 긴 메모80줄과 마지막 표식도 보존됐다.
+
+10페이지 PNG를 모두 열어 본 결과, 한 페이지보다 긴 첫 장소 메모의 break-inside:avoid가 앞 페이지를 제목만 남게 만드는 품질 결함을 확인했다. 실제 d31 PDF의2페이지에 긴 메모가 없다는 실패 검사를 먼저 기록했다. 장소 본문의 페이지 나눔은 허용하고 최소2줄 widow/orphan을 지켜 빈 페이지 낭비를 줄인다. 새 제품 후보에서 실제 PDF3개를 다시 생성해 비교한다.
+
+강제로 켠 Playwright native header/footer의 기본 margin0 때문에 생기는 머리말 잘림은 시험 출력 옵션에도 앱과 같은16mm를 명시해 검증한다. 앱 출력 본문에는16mm @page가 이미 있다. 공식 Playwright PDF 옵션의 margin 기본값을 대조했으며 제품의 인증/인쇄 흐름을 변경하지 않는다.

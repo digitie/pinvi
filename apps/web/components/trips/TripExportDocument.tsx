@@ -8,7 +8,8 @@ export const TRIP_PRINT_CSS = `
 .trip-print h2{font-size:18px;margin:24px 0 8px;border-top:2px solid #202020;padding-top:12px;break-after:avoid}
 .trip-print p{margin:5px 0;white-space:pre-wrap}
 .trip-print .trip-print-muted{color:#616161}
-.trip-print .trip-print-poi{border-top:1px solid #ddd;padding:10px 0;break-inside:avoid}
+.trip-print .trip-print-poi{border-top:1px solid #ddd;padding:10px 0;break-inside:auto}
+.trip-print .trip-print-poi p{orphans:2;widows:2}
 .trip-print .trip-print-poi h3{font-size:14px;margin:0;font-weight:700;break-after:avoid}
 .trip-print .trip-print-map{width:100%;height:auto;max-height:280px;display:block}
 .trip-print figure{margin:12px 0;break-inside:avoid}
@@ -18,7 +19,8 @@ export const TRIP_PRINT_CSS = `
   .trip-print{font-size:10pt;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .trip-print h1{font-size:21pt}
   .trip-print h2{font-size:14pt}
-  .trip-print .trip-print-poi h3{font-size:11pt}
+  .trip-print .trip-print-poi p{orphans:2;widows:2}
+.trip-print .trip-print-poi h3{font-size:11pt}
 }
 `;
 
