@@ -1,14 +1,15 @@
 ## #616·#621 Hume P2 보완·새후보 검증 (2026-11-06)
 
 PR695의cleanup연결오류격리와단일batch처리량P2두건을수정했다. 부모가수용한범위다.
-최종검증고정 dbdac3d9d994f26a3e7c94d266fad8863906bc0f:
-전체unit2192PASS/기존9SKIP(92.73초)·관련실제PG17PASS(23.12초)·540입력hash전후동일,
+최종검증고정 ed6de9d4db1cec78e990b98652886df9a8e7ff05(기존연결반환CI검사동기화포함):
+전체unit2192PASS/기존9SKIP(92.73초)·관련실제PG23PASS(23.46초)·540입력hash전후동일,
 Ruff/format528·mypy275·공개OpenAPI a5a2154와동일이다.
 60초주기·tx1000·주기전체5초예산내fullbatch추가drain·연결거부뒤다음tick복구·외부취소를검증했다.
 a5a2154의main원본8파일·journal·봉인migration·보호stash를보존한다.
 이전전체PG198/#658잠금9·카탈로그검증은8a259b4단계의동일원본구성요소증거로구분한다.
 증거는 docs/reviews/pinvi-616-621-wsl-resilience.json과source.sha256.
 새head Hubble/Hume 두독립리뷰·원격CI를재확인해야하며이전승인을재사용하지않는다.
+신규testcommit의첫push는remote commit_refs 오류로거절됐다. 로컬commit보존·강제push없음이며게시여부는PRhead로별도확인한다.
 Draft/Closes616/Refs621/Refs643유지, ready/merge는메인담당이다.
 운영flag/edgeHTTP2/실제운영latency·worker판단은Claude담당이며prod/SSH/실제provider/Telegram접근은없다.
 

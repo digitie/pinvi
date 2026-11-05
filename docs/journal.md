@@ -1,3 +1,10 @@
+## 2026-11-06 — 원격 CI의 연결반환 구형 기대값 보완·push 서버 거절
+
+- d95c2c6 원격integration3이직접resolve구형기대값2FAIL을포착했다. 새source에서같은실패를재현하고기존6검사를냉미스즉시반환·배경1회·독립45초·종료후slot회복·warm latest/forecast요청connection반환으로보완했다. 제품추가수정없음이다.
+- 고정ed6de9d4db1cec78e990b98652886df9a8e7ff05 전체unit2192PASS/기존9SKIP·관련실제PG23PASS·540입력hash전후동일·전체Ruff/format528·mypy275다.
+- 첫일반push는부모693과같은remote fatal error in commit_refs로거절됐고원격3a51833을확인했다. 로컬sourcecommit보존·강제push/reset/stash조작없음이다. 실제새head게시·두독립리뷰·CI성공은별도확인전완료로표시하지않는다.
+- 운영/SSH/실제provider/Telegram접근은없으며main a5a2154원본을보존한다.
+
 ## 2026-11-06 — Hume cleanup P2 두 건 실패 우선 보완
 
 - 부모가d95c2c6의Hume2P2를수용했다. 연결생성오류2종·단일batch단위3FAIL과실제PGbacklog1FAIL을먼저확보했다. 예상DB연결OSError를다음주기에서복구하고,tx1000행·SKIPLOCKED를유지하며전체주기5초예산안fullbatch를추가drain한다.

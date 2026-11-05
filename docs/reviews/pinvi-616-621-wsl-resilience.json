@@ -1,15 +1,15 @@
 {
   "작업": "Pinvi #616·#621 WSL 가능 범위 완성·최신 main 통합 인계",
-  "기록시각": "2026-11-06T08:18:23.901483+09:00",
+  "기록시각": "2026-11-06T08:27:23.057150+09:00",
   "PR": "https://github.com/digitie/pinvi/pull/695",
   "브랜치": "agent/codex-616-621-resilience",
   "최초_지정_기준_SHA": "ff5c2386c22412714b42365fd3ab801502258087",
   "사용자_최신_main_SHA": "a5a215470adf47b31ea7fe25e3a9431337e4e4a9",
   "재개_제품_commit": "3d7928dae2ec5a33e66f6ca1dd6036b12a219676",
   "main_통합_commit": "8a259b49184f69b134913242c88976858cff7c86",
-  "최종_검증_고정_SHA": "dbdac3d9d994f26a3e7c94d266fad8863906bc0f",
+  "최종_검증_고정_SHA": "ed6de9d4db1cec78e990b98652886df9a8e7ff05",
   "이전_중간_인계": "40930f547d270a71705e7c7448a5384c70ea68e6는 직접 resolve/plain HTTP 보완 전 중간 상태이며 현재 완료 기준이 아니다.",
-  "상태": "Hume P2 두 건 수정·로컬 검증 완료. 새 정확 head의 Hubble/Hume 독립 리뷰와 원격 CI 재확인 필요. Draft 유지.",
+  "상태": "P2·CI검사동기화 로컬완료. 원격ref commit_refs 오류로신규testpush가거절된이력이있다. 실제최종PRhead게시·새두독립리뷰·정확headCI성공을확인하기전Draft유지.",
   "우산643": {
     "url": "https://github.com/digitie/pinvi/issues/643",
     "updatedAt": "2026-11-05T21:40:40Z",
@@ -43,13 +43,13 @@
     {
       "명령": "python -m pytest apps/api/tests/unit -q",
       "결과": "2192 passed, 9 skipped, 5 warnings in 92.73s (0:01:32)",
-      "source": "dbdac3d9d994f26a3e7c94d266fad8863906bc0f"
+      "source": "ed6de9d4db1cec78e990b98652886df9a8e7ff05"
     },
     {
-      "명령": "python -m pytest apps/api/tests/integration/test_rate_limit_resilience.py apps/api/tests/integration/test_admin_abuse_api.py -q",
-      "결과": "17 passed, 52 warnings in 23.12s",
-      "source": "dbdac3d9d994f26a3e7c94d266fad8863906bc0f",
-      "증거": "한주기 COMMIT별[1000,1000,501]·locked/유효행보존·기존atomic/override/cancel/429/503계약"
+      "명령": "python -m pytest apps/api/tests/integration/test_request_connection_release.py apps/api/tests/integration/test_rate_limit_resilience.py apps/api/tests/integration/test_admin_abuse_api.py -q",
+      "결과": "23 passed, 52 warnings in 23.46s",
+      "source": "ed6de9d4db1cec78e990b98652886df9a8e7ff05",
+      "설명": "후속test동기화전후제품code동일. source/test파일내용은이검증고정과동일"
     },
     {
       "명령": "python -m pytest apps/api/tests/unit/test_rate_limit_cleanup.py apps/api/tests/unit/test_rate_limit_middleware.py apps/api/tests/unit/test_rate_limit_user_limits.py apps/api/tests/unit/test_resilience_runtime.py -q",
@@ -92,9 +92,9 @@
   },
   "source_실행범위": {
     "manifest": "docs/reviews/pinvi-616-621-source.sha256",
-    "manifest_sha256": "3b4bfbdcdde82b3d766dafd1e67455c2821afb643ee337d68781de5bbb56ee1b",
+    "manifest_sha256": "bd86e4685005a1d4ca2489af9911a87072431984566aa32f1fb2a3e01eecf3ee",
     "전후_일치_파일수": 540,
-    "범위": "현재 P2수정SHA의추적API app/tests 전체+pyproject/uv.lock+공개계약540개. 전체unit 실행전후일치.",
+    "범위": "CI의구형연결반환검사동기화후전체unit 실행전후540입력일치",
     "PG_source_동등": true,
     "main_원본8파일_보존": {
       "apps/api/tests/integration/test_restore_hotswap_preflight.py": "c7de59470d1cd98edc5dbd533263e21cec418b875810930e653ce38d079cb526",
@@ -219,7 +219,13 @@
     ".local/616-621/hume-ruff-all.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
     ".local/616-621/hume-format-all.log": "6b48cffb233cfde3489e9c30ee5d1df19c8b2ec8229b68d7ca9e88cea9e68ab8",
     ".local/616-621/hume-mypy-all.log": "51e0b2de1c8907f36612bad9838e5b142df660a16920f81ea119b2d8ec852285",
-    ".local/616-621/hume-codegraph-final.log": "0cc38d82e51c25e9853c3b5253eac423f68b4b521deaf915821eb52e57046b41"
+    ".local/616-621/hume-codegraph-final.log": "0cc38d82e51c25e9853c3b5253eac423f68b4b521deaf915821eb52e57046b41",
+    ".local/616-621/ci-connection-release-negative.log": "a81eb4c82f63c219c9e8a3892b09056e285157285f067c144b9c789c41209c41",
+    ".local/616-621/hume-pg-ci-final.log": "c4ca1d5e5388f7eb52c8a5b9f3e01116676db9731af538e373e3200120c22658",
+    ".local/616-621/hume-ci-unit-final.log": "19e46f35ed0f615e13cf55400c97834590c1b7677853a5738b61cb674d56ca38",
+    ".local/616-621/hume-ci-ruff-final.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    ".local/616-621/hume-ci-format-final.log": "6b48cffb233cfde3489e9c30ee5d1df19c8b2ec8229b68d7ca9e88cea9e68ab8",
+    ".local/616-621/hume-ci-mypy-final.log": "51e0b2de1c8907f36612bad9838e5b142df660a16920f81ea119b2d8ec852285"
   },
   "현존_경계": {
     "캐시_워크": "재요청가능한손실허용워밍이며업무outbox가아니다. 종료취소/queue포화뒤다음요청이재예약한다.",
@@ -302,5 +308,19 @@
       "apps/api/tests/unit/test_rate_limit_cleanup.py"
     ],
     "리뷰": "부모가두P2수용. 기존Hubble/Hume승인을새SHA에재사용하지않으며재리뷰·CI는미완료로유지."
-  }
+  },
+  "CI_기존검사_동기화": {
+    "기준": "d95c2c6 원격 integration-test(3)의 test_request_connection_release 두FAIL을 현재소스로 재현",
+    "기존실패": "resolve를카드에서기다리며3회회로실패를쌓는기대값과coldmiss즉시latest호출기대가배경화와불일치",
+    "보완": "기존6검사유지. cold4회요청이배경1회로합쳐지고요청DB연결반환·독립45초·종료취소뒤유일provider슬롯회복, warm시latest/forecast의요청연결반환을명시검증",
+    "제품코드_추가수정": false,
+    "현재CIhead주의": "이테스트보완commit ed6de9d의첫push는remote fatal error in commit_refs로거절되었다. 실제게시/CI여부는PR head를확인해야한다."
+  },
+  "원격push_관측이력": [
+    {
+      "local": "ed6de9d4db1cec78e990b98652886df9a8e7ff05",
+      "remote": "3a518338bebdfcf40138307a6f151479b7234e68",
+      "결과": "remote fatal error in commit_refs; 강제push안함"
+    }
+  ]
 }

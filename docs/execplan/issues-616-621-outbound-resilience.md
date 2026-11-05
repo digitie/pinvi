@@ -1,3 +1,16 @@
+## CI 재확인 후 기존 연결반환 검사 동기화
+
+기존d95c2c6 원격integration3의직접resolve구형기대값2FAIL을새소스에서재현했다.
+제품추가수정없이해당기존6검사를냉미스/배경single-flight/독립timeout/종료회수/
+따뜻한캐시값조회에서도요청커넥션을반환하는동작으로강화했다.
+
+검증고정 ed6de9d4db1cec78e990b98652886df9a8e7ff05:
+전체unit2192PASS/기존9SKIP(92.73초),실제PG연결반환+rate/admin23PASS(23.46초),
+540입력전후일치·Ruff/format528·mypy275다.
+이commit의첫일반push가부모693과같은remote fatal error in commit_refs로거절되어
+로컬commit을보존했다. 강제push·reset·stash조작은없다. 원격은3a51833로관측했다.
+최종게시여부·새SHA두독립리뷰·CI는원격ref복구후별도로확인해야하며완료로기록하지않는다.
+
 ## Hume 최종 P2 보완 — 연결 복구와 backlog 처리량
 
 부모가 최종 리뷰2건을 수용했다. d95c2c6의 기존 source에서 연결생성
