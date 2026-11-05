@@ -9,6 +9,7 @@ from fastapi import APIRouter, Header, HTTPException, status
 
 from app.core.deps import CurrentUserId, DbSession
 from app.db import session as db_session
+from app.db.session import release_read_connection
 from app.models.kasi import TripPoiRiseSet
 from app.models.poi import TripDayPoi
 from app.schemas.envelope import Envelope
@@ -224,7 +225,10 @@ async def update_poi_endpoint(
         ) from exc
     # 이동은 양쪽 일자의 대표 일출/일몰 기준도 바꾼다.
     if body.day_index is not None:
-        await sync_trip_day_rise_sets(db, trip_id=trip_id)
+        # 읽기 전용 호출 경계. 미커밋 변경이 남으면 유지 작업을 건너뛴다.
+        await release_read_connection(db)
+        if not db.in_transaction():
+            await sync_trip_day_rise_sets(trip_id=trip_id)
     rise_set = await get_poi_rise_set(db, poi_id=poi.attachment_id)
     response = _to_response(poi, rise_set=rise_set)
     realtime_broker.publish_event_nowait(
