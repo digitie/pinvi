@@ -7,6 +7,7 @@ import type { TripSharedView } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
 import { tripDaysToMapPoints } from '@pinvi/domain';
 import { TripComments } from '@/components/trips/TripComments';
+import { TripExportButton } from '@/components/trips/TripExportButton';
 import { SharedTripEditor } from '@/components/trips/SharedTripEditor';
 import { TripDayHeader } from '@/components/trips/TripDayHeader';
 import { TripMapView } from '@/components/trips/TripMapView';
@@ -22,7 +23,17 @@ export interface SharedTripViewProps {
   token: string;
 }
 
-export function SharedTripView({ tripId, token }: SharedTripViewProps) {
+export function SharedTripView(props: SharedTripViewProps) {
+  // token이나 여행이 바뀌면 이전 조회·내보내기 snapshot을 즉시 언마운트한다.
+  // 비밀 token을 React key/URL에 복사하지 않는다.
+  const [identity, setIdentity] = useState({ tripId: props.tripId, token: props.token, revision: 0 });
+  if (identity.tripId !== props.tripId || identity.token !== props.token) {
+    setIdentity({ tripId: props.tripId, token: props.token, revision: identity.revision + 1 });
+  }
+  return <SharedTripContent key={identity.revision} {...props} />;
+}
+
+function SharedTripContent({ tripId, token }: SharedTripViewProps) {
   const [view, setView] = useState<TripSharedView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +140,7 @@ export function SharedTripView({ tripId, token }: SharedTripViewProps) {
             {trip.region_hint ?? trip.primary_region_code ?? '지역 미정'}
           </span>
         </p>
+        <TripExportButton view={view} />
       </header>
 
       {view.visibility === 'edit' && (

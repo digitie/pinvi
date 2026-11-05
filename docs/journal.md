@@ -1,3 +1,23 @@
+## 2026-11-05 — #641 여행 내보내기 최종 WSL 검증
+
+- draft PR690을 먼저 열고 기능·리뷰 보완을 원격 커밋했다. 제품 dffec531은 현재 조회 전체 일정의 고정 미리보기·브라우저 인쇄/PDF 저장·ICS 실제 다운로드·기존 좌표/색상의 정적 방문 위치도와 공유 화면을 연결한다. PDF 자동 다운로드나 배경/도로지도는 아니다.
+- 소유 WSL PG/API·프로덕션 웹·Chromium(미국 기기 시간대) 실제7흐름과 pageerror0, ICS2개 각5이벤트 독립 파서, PDF2/2/5페이지가 통과했다. 총9페이지 중 같은 private/shared PNG2쌍의 byte동일성을 확인하고7페이지 파일을 직접 열었다(long 첫 페이지도 동일하여 고유 이미지 내용은6개). 긴 메모80줄과 마지막 종결 표식을 보존하며 제목 단독·본문 잘림/겹침이 없다.
+- 실제 발급 공유 URL이 구형 웹 경로를 반환하던 문제는 PG1FAIL→보완1PASS와 공유권한 합계8PASS로 고정했다. API단위2020/9skip·mypy271·Ruff/format은 d31이며 이후 API는 동일하다. 최신 dff 웹421PASS·관련25PASS·실제 프로덕션 빌드를 확인했다.
+- 두 전문 독립 적대 리뷰는 dff 정확 후보에서 잔여P0/P1/P2 없음이다. 리뷰어는 코드/기존 로그를 읽었고 테스트를 실행하지 않았다. 전체 일자 안내·같은 좌표 겹침·긴 메모 페이지 나눔/제목 단독 문제는 각각 실제 실패를 먼저 확인한 뒤 보완했다.
+- docs/trip-export.md·SHR-032·docs/reviews/pinvi-641-trip-export-wsl-live.json을 갱신했다. 브라우저 강제 기본 머리말/바닥글 잘림은 해결했다고 주장하지 않으며 본문 검증 PDF는 header/footer off다. 정확 최종 문서 후보의 두 재확인·모든 적용 CI 성공 후 일반 squash merge한다. 아직 병합 완료 기록은 아니다.
+- #643을 새로 읽었고 남은 운영 #650/Map1450은 Claude Code 담당이다. 운영 접근/배포/시험·실제 외부 제공자 호출·Telegram 전송은 없고671/672·보호 stash는 건드리지 않는다.
+
+### 원격 기존 공유 URL 회귀 기대값 동기화
+
+dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 웹 경로 기대값1건을 포착했다(255통과/1실패). API 공개 read/comment/edit 경로와 혼동하지 않고 기존 검사의 발급 웹 URL 기대값만 실제 정본 /shared/{trip_id}/{token}에 맞춰 전체 URL로 강화했다. 제품 source는 dff 그대로다. 보완 후 WSL 실제 PG의 해당 검사·신규 링크 회귀·기존 공유권한 합계9검사가18.70초에 통과했다. 최신 workspace타입/lint(기존5warning)·Ruff/format도 통과했다. 정확 최종 문서/테스트 후보의 원격 CI는 별도 확인한다.
+
+
+## 2026-11-05 — #641 여행 내보내기 초안 착수
+
+- #637은 PR689/22d3577로 일반 squash 병합했다. 정확97b 후보의 필수CI13성공·두 최종 적대리뷰·실제UI/Prom8검증·tree동일성을 확인했다.643 최신본문에서637을 완료로 반영했다.
+- 후속641은 인쇄/PDF 저장 미리보기·ICS 파일 다운로드·일자/장소/시간/메모/정적위치도와 공유 화면의 같은 내보내기다. 계획 docs/execplan/issue-641-trip-export.md.
+- 기존 조회 권한으로 받은 일정만 사용하며 공유 token을 URL·파일명·내용에 유출하지 않는다. 초안·자주push·WSL실제UI/PDF시각검증·두리뷰·정확CI 뒤 머지한다. 운영은Claude 담당이다.
+
 ## 2026-11-05 — #637 최종 제품 WSL UI·telemetry·두 리뷰
 
 - c1fad75의 실제 소유 PG/API·공개 Weather REST와 Telegram TCP fixture·프로덕션 웹 Chromium7흐름이 통과했고 pageerror0이다. 같은 API worker의 전송3·계획 실패3을 실제 Prometheus Docker가 scrape해 총8검증이 통과했다. 실제 수신자·원천·운영 접근은 없다.

@@ -554,20 +554,28 @@
   spec: specs/share/realtime-copy.live.spec.ts#SHR-031
 
 - id: SHR-032
-  title: 인쇄/내보내기(PDF·ICS)
+  title: 여행 인쇄·브라우저 PDF 저장·ICS 다운로드
   priority: P3
-  tags: [desktop, share]
+  tags: [desktop, mobile, share]
   preconditions:
-    - 기능 부재 — apps/web에 window.print/내보내기 UI 없음(관리자 category-mapping '내보내기'는 무관)
-  data_sources: []
+    - 여행 상세 또는 유효한 공유 링크의 조회 권한
+    - 날짜·한국 시각·메모·좌표 유무가 섞인 일정과 긴 메모
+  data_sources: [pinvi:trips]
   steps:
-    - (없음)
+    - 여행 상세와 비로그인 공유에서 내보내기 미리보기를 연다
+    - 실제 ICS를 내려받아 캘린더로 파싱하고 인쇄창에서 PDF 저장을 선택한다
+    - 긴 메모·빈 일자·같은 좌표 재방문·모바일 폭과 공유 철회 뒤 진입을 확인한다
   expected:
-    - (없음)
+    - 선택·숨김과 관계없이 조회 전체 일자·장소를 snapshot으로 포함하고 한국 시각을 표시한다
+    - PDF 본문의 제목·시간·메모·위치 개요와 마지막 장소가 잘리지 않는다
+    - 위치도는 배경지도·도로 경로가 아닌 방문 순서 개요이며 누락 좌표의 본문 번호를 보존한다
+    - ICS는 알려진 날짜·시각만 포함하고 미정 제외·역전 종료 건수를 안내한다
+    - 공유 token·비공개 사용자 필드·외부 URL을 출력/파일/인쇄 요청 referrer에 넣지 않는다
+    - 만료·철회된 공유 화면은 내보내기를 노출하지 않는다
   cleanup:
-    - (없음)
-  automation: blocked
-  notes: 제품 결정 필요. 브라우저 기본 인쇄(Ctrl+P)의 공유 페이지 레이아웃은 수동 검토 후보.
+    - 소유 테스트 여행·공유 링크·다운로드 파일·인쇄창을 정리한다
+  automation: manual
+  notes: "#641 구현 완료. WSL 소유 PG/API/프로덕션 웹 Chromium 실제7흐름·ICS 독립 파서·PDF9페이지 검증은 docs/reviews/pinvi-641-trip-export-wsl-live.json. 운영 최종 테스트는 Claude Code 담당이며 운영 자동화 통과로 간주하지 않는다. PDF는 브라우저 인쇄 대상 선택이며 자동 파일 다운로드가 아니다."
 
 - id: SHR-033
   title: 동행(test2)의 댓글 — 작성자와 여행 소유자에게 삭제 버튼

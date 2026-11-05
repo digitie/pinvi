@@ -11,12 +11,12 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | search | 55 | 46 | 6 | 3 |
 | nearby | 41 | 35 | 2 | 4 |
 | weather | 29 | 24 | 2 | 3 |
-| share | 35 | 30 | 1 | 4 |
+| share | 35 | 30 | 2 | 3 |
 | poi | 32 | 25 | 5 | 2 |
 | notify | 26 | 18 | 3 | 5 |
 | admin | 43 | 37 | 4 | 2 |
 | core | 31 | 30 | 1 | 0 |
-| **all** | **349** | **298** | **26** | **25** |
+| **all** | **349** | **298** | **27** | **24** |
 
 Spec files: 55.
 
@@ -237,7 +237,7 @@ Spec files: 55.
 | SHR-029 | share | 편집자 동행 — 제목 편집 성공(소유자 화면 realtime 반영), 공유 링크·초대는 소유자 전용 | P2 | desktop, mutating, share, auth | scripted | `specs/share/companions.live.spec.ts#SHR-029` |
 | SHR-030 | share | 열람 중인 동행을 제거하면 그 화면은 권한 오류로 전환된다 | P2 | desktop, mutating, share, auth | scripted | `specs/share/companions.live.spec.ts#SHR-030` |
 | SHR-031 | share | 여행 복사 — '<제목> copy' 초안, 일자·장소 복제, 공유 링크·동행은 미복제 | P2 | desktop, mutating, share, poi | scripted | `specs/share/realtime-copy.live.spec.ts#SHR-031` |
-| SHR-032 | share | 인쇄/내보내기(PDF·ICS) | P3 | desktop, share | blocked |  |
+| SHR-032 | share | 여행 인쇄·브라우저 PDF 저장·ICS 다운로드 | P3 | desktop, mobile, share | manual |  |
 | SHR-033 | share | 동행(test2)의 댓글 — 작성자와 여행 소유자에게 삭제 버튼 | P2 | desktop, mutating, share | scripted | `specs/share/comments.live.spec.ts#SHR-033` |
 | SHR-034 | share | 공유 페이지 접근성 수동 점검(헤딩 순서·tablist 레이블·포커스 링·공개 chrome) | P3 | desktop, mobile, share, a11y | manual |  |
 | SHR-035 | share | 권한별 링크 3개 — 목록 라벨·활성 상태·권한 옵션 집합 | P2 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-035` |
