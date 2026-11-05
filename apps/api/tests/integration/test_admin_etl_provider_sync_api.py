@@ -917,6 +917,7 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
         "kasi_poi_rise_set_job",
         "pinvi_email_outbox_job",
         "pinvi_telegram_system_outbox_job",
+        "pinvi_telegram_notification_planner_job",
         "pinvi_pii_retention_job",
         "pinvi_location_log_archive_job",
         "pinvi_trip_day_rise_sets_job",

@@ -76,3 +76,12 @@
 - 일간/주간에 기준 KST 날짜·Trip 날짜·일자 유효일 snapshot과 다음 KST 자정 만료를 저장한다. 각 chunk 전 현재 날짜를 검사하고 잠금 대기 후 HTTP 직전 경과 시간까지 다시 확인한다. Retry-After가 미래여도 만료된 대상은 즉시 skip하여 quiescence를 막지 않는다. 수동 발송의 최초 snapshot은 유지한다.
 - 날씨 보강은 정책 잠금 없는 같은 준비 세션을 사용한다. 실제 pool_size1/max_overflow0에서도 해석 캐시 적중·기온18 예보가 포함된다.
 - 관련 실제PG/API44통과·mypy269·web395/schema24·workspace전체타입·web lint0error/기존5warning. ETL81통과. 최종 실제 UI8흐름과 두 최신 제품 리뷰/정확HEAD CI는 후속 검증이다.
+
+
+## 최종 제품 검증과 CI 후속
+
+- 제품 f1fc24f에서 두 독립 전문 리뷰어가 잔여 P0/P1/P2 없음을 확인했다. 직접 수행한 것은 소스·Git·기존 로그 검토이며 테스트 재실행은 부모가 담당했다.
+- 같은 제품에서 API 단위2009통과/기존9skip, 관련 PG44통과, mypy269, ETL81, web395/schema24와 workspace 타입·web lint0error/기존5warning을 확인했다.
+- 실제 소유 Postgres·TCP API·프로덕션 웹 빌드·Chromium·Telegram HTTP fixture의 최종8흐름이 통과했다. 과대 입력의 부모 오류 UI도 포함하며 pageerror0이다. 최초57f의7흐름과 별도 증거로 구분한다.
+- f1 CI의 두 분할에서 새 작업 이름과0104 head의 기존 기대값 누락4건이 발견됐다. 기대값을 갱신하고 runtime CRUD 검사를 새3테이블까지 확장했다.
+- 확장 검사에서0104의 ACL repair caller 누락도 실제로 포착했다. 기존 exact-head 블록을 유지한 채0104 전용 호출을 추가한다. 수정 후 실제 migrator lifecycle·기존2/신규3테이블 runtime CRUD·권한 복구/봉인 검증은 통과했다. 최종 후보 두 리뷰·전체CI를 다시 확인한다. 이 기록은 아직 병합 완료를 뜻하지 않는다.

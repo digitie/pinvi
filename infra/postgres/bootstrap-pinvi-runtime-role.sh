@@ -1277,5 +1277,9 @@ SQL
   if [ "${applied_revision}" = "20261105_0103" ]; then
     apply_runtime_acl_repair
   fi
+  # #636/#638의 신규 알림 테이블도 exact 0104 head에서 runtime ACL을 복구한다.
+  if [ "${applied_revision}" = "20261105_0104" ]; then
+    apply_runtime_acl_repair
+  fi
 
 fi

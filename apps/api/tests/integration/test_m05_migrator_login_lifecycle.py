@@ -17,8 +17,14 @@ ROOT = Path(__file__).resolve().parents[4]
 COMPOSE_FILE = ROOT / "infra" / "docker-compose.app.yml"
 
 
-def _retention_runtime_privileges_sql(role: str) -> str:
-    tables = ("app.attachment_upload_intents", "app.attachment_gc_objects")
+def _app_feature_runtime_privileges_sql(role: str) -> str:
+    tables = (
+        "app.attachment_upload_intents",
+        "app.attachment_gc_objects",
+        "app.telegram_notification_preferences",
+        "app.telegram_notifications",
+        "app.telegram_notification_deliveries",
+    )
     privileges = ("SELECT", "INSERT", "UPDATE", "DELETE")
     columns = [
         "("
@@ -674,7 +680,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "f",
             "t",
             "t",
-            "20261105_0103",  # 현재 head — T-361이 20260824_0101 뒤에 추가
+            "20261105_0104",  # 현재 head — Telegram0104가0103 뒤에 추가
         )
         canonical_fingerprint = role_catalog_fingerprint()
         assert sealed_role_topology_diagnostic() == (
@@ -848,8 +854,8 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             '--username="$PINVI_APP_DB_USER" '
             '--dbname="$POSTGRES_DB" --command="SELECT version_num FROM app.alembic_version"',
         )
-        assert runtime_version_select.stdout.strip() == "20261105_0103"  # 현재 head
-        retention_acl = compose(
+        assert runtime_version_select.stdout.strip() == "20261105_0104"  # 현재 head
+        feature_acl = compose(
             "exec",
             "-T",
             "app-postgres",
@@ -859,9 +865,9 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "--no-align",
             f"--username={root_role}",
             "--dbname=pinvi",
-            "--command=" + _retention_runtime_privileges_sql(runtime_role),
+            "--command=" + _app_feature_runtime_privileges_sql(runtime_role),
         )
-        assert retention_acl.stdout.strip() == "true|true"
+        assert feature_acl.stdout.strip() == "true|true|true|true|true"
         compose(
             "exec",
             "-T",

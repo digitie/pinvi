@@ -1,3 +1,11 @@
+## 2026-11-05 — Telegram636/638 최종 제품 검증·0104 권한 복구
+
+- 제품 f1fc24f의 실제 WSL API·Postgres·프로덕션 웹 빌드·Chromium UI 8흐름이 통과했다. 수신자 없는 계획 실패의 상세 원인 UI까지 확인했고 pageerror는 0이다. Telegram은 소유 HTTP fixture이며 실제 수신자·운영 접근은 없다.
+- 두 독립 전문 리뷰어의 f1 제품 검토에서 잔여 P0/P1/P2는 없었다. API 단위 2009통과/기존9skip, 관련 PG44, ETL81, web395/schema24, mypy269와 전체 workspace 타입 검증을 완료했다.
+- f1 원격 CI의 이전 작업 목록·0103 head 기대값 4건을 갱신했다. 확장한 실제 Docker 권한 검사가 0104 ACL 복구 호출 누락을 포착해 exact0104 분기를 추가했고, 재실행에서 기존2/신규3테이블 CRUD·권한 복구·로그인 봉인이 통과했다.
+- 증거는 docs/reviews/pinvi-636-638-telegram-wsl-live.json. API·웹·ETL은 f1과 같고 별도 bootstrap 변경만 실제 lifecycle로 재검증했다. 최종 후보의 두 리뷰와 정확 HEAD CI를 확인한 뒤 일반 squash merge한다. 아직 병합 완료 기록은 아니다.
+- 후속은 Weather201 선행의 #637 → #641이다. #650/Map1450 운영 최종 시험은 Claude Code 담당이며 #671/#672 다른 Code 작업과 보호 stash를 건드리지 않는다.
+
 ## 2026-11-05 — Telegram636/638 리뷰 경계 보완
 
 - draft688은636/638만 먼저 완료한다.637은공식getPwnCd/특보구역매핑이필요해Weather201선행후분리하며미구현특보설정은노출하지않는다.

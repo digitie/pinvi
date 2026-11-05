@@ -335,34 +335,46 @@
   notes: 구현되면 메시지 빌더·outbox category 추가 후 NTF-012 패턴으로 scripted 전환.
 
 - id: NTF-019
-  title: 예약 리마인더 — 1주 전 weekly_summary / 1일 전 daily_brief
+  title: KST 일간·주간 브리프 설정과 예약 회차 발송
   priority: P3
-  tags: [telegram]
+  tags: [telegram, mutating]
   preconditions:
-    - 미구현 — docs/integrations/telegram.md §10 미체크 항목, Dagster 자산은 pinvi_telegram_system_outbox(운영 집계)뿐
-  data_sources: [pinvi:etl]
+    - PR688 적용. 시스템 봇·planner 전용 키와 Dagster schedule이 구성된 전용 테스트 계정·수신 대화방
+    - 기존 예약 설정을 보존하고 실제 개인 대상·여행에는 발송하지 않는 독립 fixture만 사용
+  data_sources: [pinvi:etl, pinvi:telegram-notifications]
   steps:
-    - "N/A"
+    - 설정에서 일간·주간 기본 off, KST 시각·요일·주간 대상 선택과 저장 후 reload 보존을 확인
+    - 전용 대상에 연결한 오늘·내일 테스트 일정과 앞으로7일 내 여행을 준비하고 지정 시각의 회차를 확인
+    - 발송 내역에서 장소·KST 시각·메모·날씨/일출의 확인 상태와 주간 여행 목록을 확인
+    - 반복 planner·수신 해제·일정 날짜 변경·KST 만료 경계는 WSL 실제 PG 회귀와 검증 증거로 대조
   expected:
-    - "N/A"
+    - 일간/주간 동의·시각·요일·대상이 저장되고 같은 회차의 중복 발송이 없다
+    - 무효화된 주간 대상이 있어도 수신 해제가 저장되고 대기 예약은 전송하지 않는다
+    - 실패 원인·다음 시각과 수신자 없는 예약 실패도 UI에서 확인할 수 있다
   cleanup:
-    - "N/A"
-  automation: blocked
+    - 보존한 예약 설정을 복원하고 이번 fixture의 여행·연결·대상만 정리
+  automation: manual
+  notes: 제품과 WSL 회귀·소유 HTTP fixture UI 검증은 구현됨. 운영 실행은 Claude Code 담당이며 자격·수신 대화방을 확인하기 전 실제 발송하지 않음.
 
 - id: NTF-020
-  title: "'일정 정보 알람으로 보내기' 수동 전송(여행/일자 요약을 즉시 Telegram으로)"
+  title: 일정 정보 알람으로 보내기 — 여행 전체·특정 일자 수동 전송 요청
   priority: P3
-  tags: [telegram]
+  tags: [telegram, mutating]
   preconditions:
-    - apps/web에 해당 UI/엔드포인트 없음(grep '알람|알림으로 보내기' 0건). 자동 알림은 trip_created만.
-  data_sources: [pinvi:trips]
+    - PR688 적용. 전용 테스트 대화방에 검증된 대상과 소유 테스트 여행만 연결
+  data_sources: [pinvi:trips, pinvi:telegram-notifications]
   steps:
-    - "N/A"
+    - 공유 탭에서 여행 전체 또는 특정 일자를 선택하고 알람으로 보내기를 누름
+    - 대상별 대기·전송 진행·완료를 확인하고 실제 수신 내용을 대조
+    - 소유 로컬 provider fixture에서429와403을 주입하고 재시도·실패 원인을 확인
   expected:
-    - "N/A"
+    - 202 요청 후 장소·도착/출발 KST·메모 요약이 선택한 범위의 plain text로 전송된다
+    - 긴 메시지는 분할되고 확인된 chunk는 재시도에서 반복하지 않는다
+    - 요청 한도·전송 권한 실패의 안전한 상세 원인과 다음 시도를 UI에서 확인한다
   cleanup:
-    - "N/A"
-  automation: blocked
+    - 이번 fixture의 여행·연결·대상만 정리
+  automation: manual
+  notes: 실제 API/DB/프로덕션 웹과 소유 Telegram HTTP fixture의8흐름 증거는 docs/reviews/pinvi-636-638-telegram-wsl-live.json 참조. 운영·실수신자 시험은 별도이며 이 변경에서 수행하지 않음.
 
 - id: NTF-021
   title: 이메일 알림 수신 — 동반자 초대 메일(Resend email_queue) 실제 수신·본문
