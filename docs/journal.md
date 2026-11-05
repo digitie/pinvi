@@ -1,3 +1,10 @@
+## 2026-11-05 — #668 최신 main의 live E2E 보완 보존
+
+- main07f90f9(PR685)의 geometry 클릭·여행 지도 검색 scope·ADM-038 redirect 검증과 두 후속 이슈 표를 충돌 없이 통합했다. 외부 TS3개와 ADM-038 stanza가 원본과 같고 runbook 추가2행도 보존했다.
+- 기존 제품·회귀 source14지문은 모두 같으므로 Pinvi7707628의 API1976/관련50·실제UI10 증거는 같은 구성요소 증거로 유지한다. 통합 d80eb4d에서 전체 웹 타입·INDEX349/자동298·live catalog592개/54파일 수집을 통과했다. 운영 테스트는 실행하지 않았다.
+- 최종 증거 커밋을 두 독립 리뷰·전체CI로 다시 확인한다. Map 선병합·실제병합본 sync/바이트 대조 뒤 Pinvi를 병합한다. 새 umbrella 후속#684(요청 한도 예외 경계·rise/set 경합)와 Map#1450(area 실데이터 부재)도 확인했다.
+- 현재 운영 접근/배포/시험은 없고 최종 prod는 Claude Code 담당이다.
+
 ## 2026-11-05 — #668 최종 계약·WSL 검증 완료
 
 - owner Map PR1451 candidate0afad07의 admin 계약을 vendor했다. user/service bytes는 불변이며 byte pin·pair v2 파생 계약을 정합화했다.

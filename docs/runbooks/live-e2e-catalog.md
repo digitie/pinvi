@@ -249,7 +249,7 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | #644 | fixed (#655) | 로그인 후 원래 가려던 페이지로 복귀(return-to) | CORE-007 — `test.fail` 제거 |
 | #648 | fixed (#660) | `/admin/features` 한국어 `q` 검색 503 FEATURE_SERVICE_UNAVAILABLE | ADM-015/016, WX-018/019 — helper 재시도·런타임 `test.fail` 제거, 5xx 면 실패 |
 | #649 | fixed (#657 + 리뷰 PR) | 일자 날짜 중복이 저장됨(`dayUsingDate` 가 effective_date 미비교) | TRIP-026 — `test.fail` 제거 |
-| #650 | fixed (kor-travel-geo #622) | 전체 도로명 주소(시·도 약칭) 검색에 주소 행 0건 | SRCH-004 — `test.fail` 제거(실패 = 재발) |
+| #650 | reopened | 전체 도로명 주소(시·도 약칭) 검색에 주소 행 0건 | SRCH-004 — Geo#622 로컬 검증 후 운영 재현이 남아 원천/최신 코드 경로를 재대조 |
 | #651 | fixed (#660) | admin dedup review 목록이 항상 422 FORBIDDEN(Map 거절), 화면은 빈 큐 | ADM-022/023 — `test.fail` 제거, GET 200 단언 |
 | #652 | fixed (#656) | 장소 재정렬 간헐 409 SORT_ORDER_CONFLICT + 응답에 DB 오류 원문 | TRIP-030 — `test.fail` 제거 |
 | #663 | fixed (#662) | 상세 카드 `detail-card` 지연 3.7→6.2→8.5 s(같은 장소, 실행마다 악화) | SRCH-055 — 런타임 `test.fail` 제거, 6 s 초과는 soft 실패 |

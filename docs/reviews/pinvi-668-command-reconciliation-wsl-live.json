@@ -2,7 +2,7 @@
   "issue": "digitie/pinvi#668",
   "pr": 683,
   "owner_pr": "digitie/kor-travel-map#1451",
-  "recorded_at": "2026-11-05T01:22:41.068680+00:00",
+  "recorded_at": "2026-11-05T01:55:54.705763+00:00",
   "scope": "WSL 소유 fixture; prod 접근·배포·시험 없음",
   "product_checkpoint": "770762822972e50533c31765b14bfd9f64e3a240",
   "source_sha256": {
@@ -80,6 +80,24 @@
       "passed": true,
       "log": "668-pinvi-openapi-export.log",
       "log_sha256": "3d98a00aa792242a4be2b7cf51113353a2bb2ac96803a6201400e24086bb4214"
+    },
+    {
+      "name": "main 통합 웹 타입",
+      "passed": true,
+      "log": "668-pinvi-main-types.log",
+      "log_sha256": "de19d4d717988f88deabb39e9de74a03adccd4f22034206045a383b8ba33e2ee"
+    },
+    {
+      "name": "main 통합 카탈로그349/자동298 정합",
+      "passed": true,
+      "log": "668-pinvi-main-catalog.log",
+      "log_sha256": "3cc9202dcbd9839ef3fbc2475d04f649e7ed3d63baa0439dd8774540ec6bd3b5"
+    },
+    {
+      "name": "main 통합 live catalog 수집592개/54파일",
+      "passed": true,
+      "log": "668-pinvi-main-catalog-list.log",
+      "log_sha256": "32d5c70a9faf581c34ae5fad575c6c55c1043d1e1876523e88dfc026bd0b75b7"
     }
   ],
   "real_ui": {
@@ -181,7 +199,7 @@
     "원래 actor 누락·변경이나 과거 PATCHv1의 모호한 지문은 자동 해제하지 않고 운영 검토 안내",
     "현재 확인 API는 강제 취소가 아니며 Map claim-only는 계속 pending",
     "초기 request_id 키에만 기존 승인 소비자의 expected key 생략을 호환; 전진 뒤 생략/옛 키는409",
-    "최종 실제 UI는 Map0afad07·Pinvi7707628의 실제 앱/DB/SDK/브라우저이며 제품 business 응답 mock은 없다. 이후 문서만 추가한다.",
+    "최종 실제 UI는 Map0afad07·Pinvi7707628의 실제 앱/DB/SDK/브라우저이며 제품 business 응답 mock은 없다. 이후 문서와 외부 main의 live E2E helper/catalog만 추가했으며 제품14지문은 동일하다.",
     "최종 두 전문 소스 리뷰·정확 최종 HEAD CI·owner merge와 병합본 sync·바이트 동등성은 PR에 별도 기록한다."
   ],
   "upstream_source": {
@@ -200,5 +218,19 @@
   "unchanged_user_service_sha256": {
     "user": "3a847c8a53f36044080839855d634fbfa2c5b18fa769bcf95bcbbaa614f72da4",
     "service": "fd2aaa9e8c38e8a7f1a54550233b1b5af5a7aea1089c5432100d7464e5e4aaff"
+  },
+  "main_integration": {
+    "source_revision": "07f90f9f6a448d68b9b56ea30855cfa5474d1ae2",
+    "source_pr": 685,
+    "integration_checkpoint": "d80eb4da17caa0df29755ae6c690ce70b953acb0",
+    "scope": "live E2E helper/spec/catalog/runbook만 통합; 기존 제품·검증 source 지문14개 불변",
+    "preserved_sources_sha256": {
+      "apps/web/e2e-live/helpers/geometry.ts": "ee8a238469b12406e5807f2b7d3ebd66b04c0646033884e4b5730c2801a5f317",
+      "apps/web/e2e-live/specs/admin/admin-features.live.spec.ts": "f8907161a160cc18c200ad082a15791ecce8534fd737a392005d8ff17365f56e",
+      "apps/web/e2e-live/specs/nearby/trip-map.live.spec.ts": "91e0b7b42ecff09a03d8ad4e8c493105c0f0006e977285e6bc7418d8a6ec74dd"
+    },
+    "preserved_ADM038_stanza_sha256": "f14cf87036b0060007143280fe91b9fda57e41c8ac9e0c182c6f624f79481b0d",
+    "external_runbook_added_lines_preserved": 2,
+    "validation": "전체 웹 타입·INDEX349/자동298 및 live catalog592개/54파일 수집; 테스트 실행/운영 접근 없음"
   }
 }
