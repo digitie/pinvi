@@ -763,3 +763,45 @@
     - 없음
   automation: scripted
   spec: specs/admin/admin-readonly-pages.live.spec.ts#ADM-041
+
+- id: ADM-042
+  title: 미확정 Map 명령의 실행 기록 확인·미실행 봉인·새 승인
+  priority: P1
+  tags: [desktop, mobile, admin, a11y]
+  preconditions:
+    - 소유 WSL fixture의 관리자·실제 Map·Pinvi·PostGIS
+    - 전송 전 또는 Map commit 뒤 응답 유실을 주입할 수 있는 소유 HTTP proxy
+  data_sources: [map:admin-proxy, pinvi:feature-suggestions]
+  steps:
+    - 수정·폐쇄 승인 응답 유실 뒤 저장 입력/키/actor와 거절 잠금을 확인
+    - 별도 확인 사유 입력 → Map 실행 기록 확인 → 확인창의 안전한 초기 포커스 → 확정
+    - 완료는 반영, 미실행은 기존 키 영구 봉인 뒤 재검토·새 승인 또는 거절
+  expected:
+    - 실제 Map 완료 receipt를 검증한 경우만 added
+    - 미실행 응답 유실·재확인은 같은 봉인 결과와 동일 next 키를 보존
+    - 새 승인만 별도 키를 사용하고 지연된 옛 승인·조정은 409
+    - 처리 중·인증/계약 실패는 dispatch와 잠금을 유지
+  cleanup:
+    - 소유 fixture DB·프로세스·컨테이너만 종료
+  automation: manual
+  notes: "#668. WSL 쌍방 실제 UI 증거는 docs/reviews/pinvi-668-command-reconciliation-wsl-live.json. 일반 prod catalog에서 fault나 비가역 승인을 자동 주입하지 않는다."
+
+- id: ADM-043
+  title: 과거 Map 명령·실행 계정 변경과 확인창 열린 뒤 시도 교체
+  priority: P1
+  tags: [desktop, mobile, admin]
+  preconditions:
+    - 소유 WSL fixture의 과거 v1 PATCH·actor 누락·시도 교체 제안
+  data_sources: [map:admin-proxy, pinvi:feature-suggestions]
+  steps:
+    - actor 없는 과거 제안의 확인 버튼과 운영 검토 안내 확인
+    - v1 PATCH 확인 후 LEGACY_FINGERPRINT_UNVERIFIABLE의 안전한 한국어 오류 확인
+    - K0 확인창을 연 뒤 다른 세션이 K1로 전진·목록 재조회 → 원래 확인창 확정
+  expected:
+    - 과거 actor를 추측해 해제하지 않으며 v1 PATCH의 모호한 지문도 해제 증거가 아님
+    - 확인창은 연 시점의 K0와 사유를 전송하고 서버는 K1에 영향 없이 409
+    - 390px에서 오류를 읽을 수 있고 입력·거절 잠금 유지
+  cleanup:
+    - 소유 fixture만 종료
+  automation: manual
+  notes: "#668. 확인창 교체는 웹 단위 회귀의 실제 QueryClient 재조회로도 고정한다. 운영 데이터의 강제 해제는 제공하지 않는다."

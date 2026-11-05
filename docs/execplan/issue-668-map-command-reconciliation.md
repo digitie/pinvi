@@ -34,3 +34,7 @@ actor/attempt 키 선저장, 저장 명령 확인과 requested 감사 선커밋�
 두 전문 리뷰어가 지연된 옛 승인/조정의 새 시도 승격(P1), 확정412 뒤 봉인 키 회귀(P2)를 지적했다. actual negative2 이후 expected_command_key를 lock 아래 대조하고 완료 재생도 요청 키에 한정했다. 확정4xx는 dispatch만 제거하고 새 키/봉인 이력을 보존한다. 초기 request_id만 구소비자의 키 생략을 호환하고 전진 후 생략은409다. 관련 통합50개(Event 실제행잠금대기·requested 감사 선커밋 포함)를 통과했다.
 
 추가 리뷰의 열린 확인창 대상 교체(P2)는 확인 시점의 키·사유 snapshot을 mutation 인자로 보내도록 수정했다. 기존 코드 negative1·수정 코드 확인창/SDK4개를 확인했다. 단위 전체1975pass9skip, 웹392pass(snapshot 추가 전)·schema24·타입·lint0error/기존5warning. Map86034cb·Pinvi d54b78f 실제 HTTP/로그인/UI9pass·owner실제상태 대조를 마쳤다. 최종 snapshot UI는 owner merge 뒤 재검증한다.
+
+## 카탈로그·기존 E2E 정합
+
+ADM-042/043은 소유 WSL fixture의 fault·과거 명령·시도 교체 절차로 추가하고 일반 prod 자동 비가역 변경은 피하여 manual로 뒀다. 카탈로그349(298 scripted/23 manual/28 blocked)을 정본 generator로 재생성했다. CI mocked E2E의 기존 두 exact body 기대값이 새 expected_command_key로 실패한 것을 확인하고, 기존 입력 보존과 키 결박을 함께 단언하도록 갱신했다. 관련 모킹 브라우저19개가 WSL에서 통과했다. 이 결과는 실제서비스UI9 증거와 구분한다.

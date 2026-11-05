@@ -493,6 +493,8 @@ test('결과 미확정 직접 명령은 원래 입력을 잠가 재생한다', a
                 kor_travel_map_ref: {
                   dispatch: {
                     input,
+                    actor: 'pinvi-admin',
+                    command_key: correctionRequestId,
                     expected_revision: '"7"',
                     type: 'correction',
                     feature_id: correctionSummary.target_feature_id,
@@ -536,7 +538,7 @@ test('결과 미확정 직접 명령은 원래 입력을 잠가 재생한다', a
   await expect(page.getByTestId('admin-fr-approve')).toHaveText('기존 명령 재시도');
   await page.getByTestId('admin-fr-approve').click();
   await expect(page.getByTestId('admin-fr-review-dialog')).toHaveCount(0);
-  expect(submitted).toEqual(input);
+  expect(submitted).toEqual({ ...input, expected_command_key: correctionRequestId });
 });
 
 test('Map 명령 409 충돌 뒤 저장된 입력으로 화면을 맞추고 그 입력으로만 재시도한다', async ({ page }) => {
@@ -555,7 +557,7 @@ test('Map 명령 409 충돌 뒤 저장된 입력으로 화면을 맞추고 그 �
             items: [
               {
                 ...correctionSummary,
-                kor_travel_map_ref: dispatchStored ? { dispatch: { input: stored } } : null,
+                kor_travel_map_ref: dispatchStored ? { dispatch: { input: stored, actor: 'pinvi-admin', command_key: correctionRequestId } } : null,
               },
             ],
             total: 1,
@@ -601,7 +603,10 @@ test('Map 명령 409 충돌 뒤 저장된 입력으로 화면을 맞추고 그 �
   await expect(page.getByTestId('admin-fr-reason')).toHaveAttribute('readonly');
   await page.getByTestId('admin-fr-approve').click();
   await expect(page.getByTestId('admin-fr-review-dialog')).toHaveCount(0);
-  expect(submissions).toEqual([stored, stored]);
+  expect(submissions).toEqual([
+    { ...stored, expected_command_key: correctionRequestId },
+    { ...stored, expected_command_key: correctionRequestId },
+  ]);
 });
 
 for (const failure of ['timeout', 'bad-response'] as const) {

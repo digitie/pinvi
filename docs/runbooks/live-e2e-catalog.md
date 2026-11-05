@@ -339,3 +339,7 @@ env 1(SHR-027), 데이터/타이밍 2(SRCH-048 이벤트 없음, POI-032 마커 
   kind가 0건이라 현재 blocked다.
 - 도형에 없는 coord를 만들지 않는다. point는 카메라 이동용 fixture다.
 - 운영 origin guard는 유지한다. 격리 WSL 실제 HTTP/WebGL 검증은 별도 fixture에서 실행하며 운영 통과로 기록하지 않는다.
+
+### #668 명령 확인 (ADM-042/043)
+
+직접 수정·폐쇄 승인 응답이 미확정이면 별도 사유와 확인창으로 Map 원장을 조정한다. completed receipt 검증은 added, 미실행 영구 봉인은 새 attempt 키로 재검토, pending/실패는 dispatch 보존이다. approve/reconcile은 사용자가 확인한 expected_command_key를 보내며 오래된 키와 전진 뒤 키 누락은409다. 과거 actor 누락·PATCHv1은 운영 검토를 안내하고 자동 해제하지 않는다. 소유 WSL에서만 fault/비가역 변경을 시험하며 일반 prod catalog의 두 사례는 manual로 둔다.
