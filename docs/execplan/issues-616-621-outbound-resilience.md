@@ -10,7 +10,9 @@ ConnectionRefusedError/OSError 뒤 task 영구종료·stop 예외와 단일batch
 - 처음 unit 실패3건(연결오류2종·단일batch)과 실제PG backlog1FAIL을 확보했다.
   취소중driver close오류가취소를덮는추가1FAIL도보완했다. 관련unit63PASS, 실제PG17PASS에서
   한주기[1000,1000,501]·locked/유효행보존과실행전후source지문일치를확인했다.
-  전체unit·최종sourcehash·새head원격CI는이어서검증한다.
+  최종 dbdac3d 전체unit2192PASS/기존9SKIP(92.73초), 현재source의PG17PASS(23.12초),
+  540입력hash전후일치·Ruff/format528·mypy275·OpenAPI동일을확인했다.
+  문서증거push뒤새정확head의두독립전문리뷰와CI를다시확인한다.
 - main a5a2154 보존·prod/SSH/실제provider/Telegram 금지·보호stash 불변이다.
   새 최종SHA의 두 독립 전문리뷰와 원격CI는 다시 확인해야 하며 이전승인을 재사용하지 않는다.
 

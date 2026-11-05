@@ -1,15 +1,16 @@
-## #616·#621 WSL 보완·최신 main 통합 (2026-11-06)
+## #616·#621 Hume P2 보완·새후보 검증 (2026-11-06)
 
-직접 resolve 배경화와 남은 API/CLI plain HTTP 관측까지 PR695에 구현했다.
-사용자 최신 지정 main a5a215470adf47b31ea7fe25e3a9431337e4e4a9(#658·#692 포함)을
-8a259b4로 통합했고 두 변경의 원본8파일과 journal 양쪽 기록을 보존했다.
-최종고정 dcddeff의 unit2187PASS/기존9SKIP·540입력hash동일을 확인했다. 통합제품의
-PG/API198·#658소유PG9·mypy275·Ruff/format528·카탈로그349/자동299가 통과했고
-공개OpenAPI는a5a2154와byte동일이다.
-계획은 docs/execplan/issues-616-621-outbound-resilience.md, 증거는
-docs/reviews/pinvi-616-621-wsl-resilience.json이다. 메인이 최종 두 전문 리뷰·ready·merge를 수행한다.
-운영 flag·edge HTTP/2·실제 운영 latency/worker 증설은 Claude Code 담당이며 #621은 Refs만 사용한다.
-운영·SSH·실제 provider·Telegram 접근과 보호 stash 조작은 없다.
+PR695의cleanup연결오류격리와단일batch처리량P2두건을수정했다. 부모가수용한범위다.
+최종검증고정 dbdac3d9d994f26a3e7c94d266fad8863906bc0f:
+전체unit2192PASS/기존9SKIP(92.73초)·관련실제PG17PASS(23.12초)·540입력hash전후동일,
+Ruff/format528·mypy275·공개OpenAPI a5a2154와동일이다.
+60초주기·tx1000·주기전체5초예산내fullbatch추가drain·연결거부뒤다음tick복구·외부취소를검증했다.
+a5a2154의main원본8파일·journal·봉인migration·보호stash를보존한다.
+이전전체PG198/#658잠금9·카탈로그검증은8a259b4단계의동일원본구성요소증거로구분한다.
+증거는 docs/reviews/pinvi-616-621-wsl-resilience.json과source.sha256.
+새head Hubble/Hume 두독립리뷰·원격CI를재확인해야하며이전승인을재사용하지않는다.
+Draft/Closes616/Refs621/Refs643유지, ready/merge는메인담당이다.
+운영flag/edgeHTTP2/실제운영latency·worker판단은Claude담당이며prod/SSH/실제provider/Telegram접근은없다.
 
 ## 2026-11-06 — 원격 통합 검사의 고정 시계 혼용 보완
 

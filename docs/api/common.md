@@ -372,8 +372,10 @@ HTTP 오류 공개 계약은 그대로다. Map·geo의 포화/열린 회로는 �
 `FEATURE_SERVICE_UNAVAILABLE`/`GEOCODING_SERVICE_UNAVAILABLE`로 투영하고 내부 code나
 예외 문자열을 응답하지 않는다. rate limit은 기존429·Retry-After·저장소503·fail-open
 정책을 유지한다. Postgres backend의 override 결정과 atomic counter 증가는 하나의
-statement를 쓰며, 만료 bucket 정리는 요청과 독립된60초 주기 task가 최대1000행씩
-`SKIP LOCKED`로 처리한다.
+statement를 쓰며, 만료 bucket 정리는 요청과 독립된60초 주기 task가 transaction당
+최대1000행씩 `SKIP LOCKED`로 처리한다. full batch이면같은전체주기5초예산안에서
+추가batch를drain하며, 연결생성OSError/ConnectionRefusedError뒤에는다음주기에복구한다.
+취소는계속전파하고driver close오류가외부취소를덮어도종료의도를유지한다.
 
 `api_call_log`는 감사/업무 outbox와 달리 손실 허용 관측이다. session factory마다 메모리
 큐 하나(대기1024행 + 전송 중 최대100행)를 쓰고0.25초/최대100행으로 배치한다. 요청은

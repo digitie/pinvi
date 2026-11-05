@@ -1,15 +1,15 @@
 {
   "작업": "Pinvi #616·#621 WSL 가능 범위 완성·최신 main 통합 인계",
-  "기록시각": "2026-11-06T07:48:56.273207+09:00",
+  "기록시각": "2026-11-06T08:18:23.901483+09:00",
   "PR": "https://github.com/digitie/pinvi/pull/695",
   "브랜치": "agent/codex-616-621-resilience",
   "최초_지정_기준_SHA": "ff5c2386c22412714b42365fd3ab801502258087",
   "사용자_최신_main_SHA": "a5a215470adf47b31ea7fe25e3a9431337e4e4a9",
   "재개_제품_commit": "3d7928dae2ec5a33e66f6ca1dd6036b12a219676",
   "main_통합_commit": "8a259b49184f69b134913242c88976858cff7c86",
-  "최종_검증_고정_SHA": "dcddeff0213e9e5e5de615b672978d984b095c93",
+  "최종_검증_고정_SHA": "dbdac3d9d994f26a3e7c94d266fad8863906bc0f",
   "이전_중간_인계": "40930f547d270a71705e7c7448a5384c70ea68e6는 직접 resolve/plain HTTP 보완 전 중간 상태이며 현재 완료 기준이 아니다.",
-  "상태": "WSL 구현·로컬 검증 완료. Draft 유지; 최종 두 전문 적대리뷰·정확 head 원격 CI·ready·merge는 메인 담당.",
+  "상태": "Hume P2 두 건 수정·로컬 검증 완료. 새 정확 head의 Hubble/Hume 독립 리뷰와 원격 CI 재확인 필요. Draft 유지.",
   "우산643": {
     "url": "https://github.com/digitie/pinvi/issues/643",
     "updatedAt": "2026-11-05T21:40:40Z",
@@ -24,7 +24,7 @@
     "직접_resolve": "cache-only 요청/Pending·trip unavailable·빈 카드, 별도session/Context·동시2/queue128·feature singleflight/최신좌표 병합·음성128/30초·close 취소회수·versionfence.",
     "전송": "resolve만 read45초; native timeout 불변. 느린5xx retry임계는 min(native/effective read)*.5; meaningful timeout회로floor는effective read 유지. 실제전송trace로pool대기배제.",
     "예산": "직접사용자4초와관리자10초를별도settings로분리, Map기존예산유지.",
-    "rate_limit": "override+atomic counter 단일statement; 요청밖60초/1000행/5초 SKIP LOCKED청소·기존429/503/failopen유지.",
+    "rate_limit": "override+atomic counter 단일statement. 청소는60초주기/transaction1000행·SKIP LOCKED·전체주기5초예산내fullbatch추가drain. SQLAlchemyError/OSError후다음주기복구,외부취소유지.",
     "provider_pool": "사용자Map/geo/weather각16즉시거부·120초회로·단일halfopen/세대/취소·pool10/overflow0/timeout5초·acquisition metric.",
     "이미_완료된_부분": "request.extensions tracker와읽기connection반환의기존수정은재구현하지않았다."
   },
@@ -42,21 +42,19 @@
   "검증": [
     {
       "명령": "python -m pytest apps/api/tests/unit -q",
-      "결과": "2187 passed, 9 skipped, 5 warnings in 93.18s (0:01:33)",
-      "source": "dcddeff0213e9e5e5de615b672978d984b095c93",
-      "설명": "첫통합실행은새weather캐시쓰기경로의정적목록누락1FAIL/2186PASS. UUID축없는동일cache표writer만목록에명시후전체재실행했다."
+      "결과": "2192 passed, 9 skipped, 5 warnings in 92.73s (0:01:32)",
+      "source": "dbdac3d9d994f26a3e7c94d266fad8863906bc0f"
     },
     {
-      "명령": "python -m pytest apps/api/tests/integration/{test_admin_abuse_api,test_rate_limit_resilience,test_api_call_logging,test_db_pool_resilience,test_outbound_resilience_http,test_plain_http_observability,test_geo_api,test_features_weather_cutover,test_trip_view_weather_cutover,test_weather_via_map,test_admin_features_weather_cutover,test_weather_location_resolver,test_weather_resolve_background,test_weather_background_http,test_feature_request_pipeline,test_feature_reference_reconciliation,test_telegram_weather}.py -q",
-      "결과": "198 passed, 201 warnings in 131.67s (0:02:11)",
-      "source": "8a259b49184f69b134913242c88976858cff7c86",
-      "동등성": "최종고정SHA와app/통합tests diff가비어있다. 이후변경은unit 정적목록2줄뿐이다."
+      "명령": "python -m pytest apps/api/tests/integration/test_rate_limit_resilience.py apps/api/tests/integration/test_admin_abuse_api.py -q",
+      "결과": "17 passed, 52 warnings in 23.12s",
+      "source": "dbdac3d9d994f26a3e7c94d266fad8863906bc0f",
+      "증거": "한주기 COMMIT별[1000,1000,501]·locked/유효행보존·기존atomic/override/cancel/429/503계약"
     },
     {
-      "명령": "python -m pytest apps/api/tests/integration/test_restore_hotswap_preflight.py -q -k cleanup_waits_for_server_lock_release",
-      "결과": "9 passed, 9 deselected, 1 warning in 58.31s",
-      "source": "8a259b49184f69b134913242c88976858cff7c86",
-      "안전": "main658원본source harness와새소유PG18만. 운영hotswap/SSH실행없음."
+      "명령": "python -m pytest apps/api/tests/unit/test_rate_limit_cleanup.py apps/api/tests/unit/test_rate_limit_middleware.py apps/api/tests/unit/test_rate_limit_user_limits.py apps/api/tests/unit/test_resilience_runtime.py -q",
+      "결과": "63 passed, 1 warning in 2.67s",
+      "source": "dbdac3d9d994f26a3e7c94d266fad8863906bc0f"
     },
     {
       "명령": "python -m ruff check apps/api/app apps/api/tests",
@@ -71,22 +69,14 @@
       "결과": "275 source files PASS"
     },
     {
-      "명령": "npm -w @pinvi/web run test:e2e:live-catalog:index",
-      "결과": "349 cases /299 scripted INDEX 일치, 브라우저/운영실행없음"
-    },
-    {
-      "명령": "app.openapi() 현재본과사용자지정main 아카이브원본 비교",
+      "명령": "app.openapi() 현재본과a5a2154기준비교",
       "결과": "byte동일",
       "sha256": "cb20539a7fac5fa764a8c7b53ba5a5fd1aaabd6c37488f2cf3850a990095389f",
-      "안전": "lifespan/네트워크 미실행"
+      "안전": "lifespan/네트워크미실행"
     },
     {
-      "명령": "bash -n scripts/restore-hotswap.sh; git diff --check",
-      "결과": "PASS"
-    },
-    {
-      "명령": "python3 /home/digitie/.cache/pinvi-643/audit-staged.py",
-      "결과": "모든commit직전본cwd에서PASS"
+      "명령": "git diff --check; 지정audit-staged.py",
+      "결과": "PASS;각commit직전본cwd에서실행"
     }
   ],
   "실패우선_추가": {
@@ -102,9 +92,9 @@
   },
   "source_실행범위": {
     "manifest": "docs/reviews/pinvi-616-621-source.sha256",
-    "manifest_sha256": "0e3921f7ffa6546b019fe939c46f522f687687fa00142639d309073aa57018e5",
+    "manifest_sha256": "3b4bfbdcdde82b3d766dafd1e67455c2821afb643ee337d68781de5bbb56ee1b",
     "전후_일치_파일수": 540,
-    "범위": "추적API app/tests 전체+pyproject/uv.lock+4개공개계약. 최종unit실행전후전부일치.",
+    "범위": "현재 P2수정SHA의추적API app/tests 전체+pyproject/uv.lock+공개계약540개. 전체unit 실행전후일치.",
     "PG_source_동등": true,
     "main_원본8파일_보존": {
       "apps/api/tests/integration/test_restore_hotswap_preflight.py": "c7de59470d1cd98edc5dbd533263e21cec418b875810930e653ce38d079cb526",
@@ -149,7 +139,7 @@
     "apps/api/app/core/db_pool.py": "ba2cf8fcb8bd75e872bfe00815caaa358443b45f567ee30f915c284ca2db8290",
     "apps/api/app/db/session.py": "10724b1750c14c687dc9ffbba6020f25a2275762c1e5438681e844f2156c957d",
     "apps/api/app/middleware/api_call_logging.py": "06c9e2f3eee5f5ca69565160d18bf4f848cc84d2cef11608bdbe45dcb63b28b7",
-    "apps/api/app/middleware/rate_limit.py": "34f562b9b92dc5c90aec25a447864a268ac45206074f6f58666b7242e2e1618f",
+    "apps/api/app/middleware/rate_limit.py": "53385fa4c3fb1e9598505c0db373de05eeff057e20815524285dd8e57a0c37b5",
     "apps/api/app/middleware/resilience_runtime.py": "0fbbf02f0c92ad220d4b6c561b70778c83c5ae98113eec2c212ba5bc018a1d47",
     "apps/api/app/services/admin_etl.py": "2be932a5a3d06b10f8c966f5d9305ffa67bc72fafa0d70a8c6b92cfd6290d56b",
     "apps/api/app/services/admin_weather_values.py": "24bd9f1ab7f6c83e03c11d83596390fa7eec87c14bf1e68634a9567e64a382b8",
@@ -167,7 +157,7 @@
     "apps/api/tests/integration/test_features_weather_cutover.py": "98c88380386ef38f1ae2a393f4debba1c7e9f905a0148275907801c81d01ff96",
     "apps/api/tests/integration/test_outbound_resilience_http.py": "d4ed2c5d0f78da1c297f94b40bd4ec7e0af1fdfe73c89f734229838737564670",
     "apps/api/tests/integration/test_plain_http_observability.py": "980baf567e89678c4ba5f5b8bcac7e29f11d265dfce217a31887315f6ccb08d9",
-    "apps/api/tests/integration/test_rate_limit_resilience.py": "bdd0b573041b30763f9aeaa7021ef7556839d4ee1c41583fe8f7ca14b7639b8a",
+    "apps/api/tests/integration/test_rate_limit_resilience.py": "8650a4ee9bed90f1e263461fbccbe387a17a7f18baea950cba6aa8bda5f31642",
     "apps/api/tests/integration/test_trip_view_weather_cutover.py": "f98e8c845379be82976792acdf79a25a6a9253751a09ab1482b0e6e2199134b4",
     "apps/api/tests/integration/test_weather_background_http.py": "533ed11c687bd9586a3c17589eadcfe2f7757e462b0bed5cbec79dd91f639c6b",
     "apps/api/tests/integration/test_weather_location_resolver.py": "0be34748597c706e4e1800f3f3087aeb57ad887554944da8c8f09350c441a9f0",
@@ -185,7 +175,7 @@
     "apps/api/tests/unit/test_outbound_provider_resilience.py": "1822f57b26c1c27410b4f1cdf08f8f1a94abf636d7ca470e5bfeadcce1b097d1",
     "apps/api/tests/unit/test_plain_http_cli_observability.py": "49721cea9b743802c66cbdcc15399e9b1d5afe1e431740965637b45fcc7ed2a7",
     "apps/api/tests/unit/test_plain_http_observability.py": "468f3c5867db996d8d48fce78214fb9d77312e68094de896019e6b6f3e6e586b",
-    "apps/api/tests/unit/test_rate_limit_cleanup.py": "4007c0f192ff44a098e516a27aa46b9e3123035e20bd1c2856a45ddfe7ce5da5",
+    "apps/api/tests/unit/test_rate_limit_cleanup.py": "0cac34a277719152daf2938e28594f1532821997b074d9c3800b422fd2d72814",
     "apps/api/tests/unit/test_rate_limit_middleware.py": "dcee73a3df9de5c6424ea83663570a7c74fd166bc31644c409da7262b26d98d3",
     "apps/api/tests/unit/test_resilience_runtime.py": "be9c8c2397ab57635f0103f64d8c1ad1b358661f716c913242468048dbf1d91d",
     "apps/api/tests/unit/test_weather_request_budgets.py": "e499b9d5e61c09f400d500b7ad343c57a5165acdbb69eb0048956f8330b6354d",
@@ -219,7 +209,17 @@
     ".local/616-621/integrated-mypy-final.log": "51e0b2de1c8907f36612bad9838e5b142df660a16920f81ea119b2d8ec852285",
     ".local/616-621/integrated-catalog.log": "9f9d4f5d7ef0d303730d1722e2d277fc76c034002c38df1f74e834d1570aecf3",
     ".local/616-621/integrated-openapi-proof.log": "8b21e8f41a3c547d5a3c22d19c985c3e65df74200e93aeb4364a0b26b08592c3",
-    ".local/616-621/integrated-codegraph-final.log": "7113406ba5937b01d17788479f868c56abfd756fc2b3585f4ac7dd6e225c3f6c"
+    ".local/616-621/integrated-codegraph-final.log": "7113406ba5937b01d17788479f868c56abfd756fc2b3585f4ac7dd6e225c3f6c",
+    ".local/616-621/hume-cleanup-unit-negative-final.log": "622d4ccced0ef6dcef5350d84d1e729dad916fc606e816e9fa71e19dd02281b0",
+    ".local/616-621/hume-cleanup-cancel-negative.log": "54b7df60b49abfa266a42a8038be34b827ca261c0ea8414fbf40a0ef75bb1fa4",
+    ".local/616-621/rate-limit-backlog-negative.log": "400f752eb6ae56f83ffc6b95c4817a809f6d8d714ba4cf6d2f6ffd945f4a3f6f",
+    ".local/616-621/hume-cleanup-unit-final.log": "b9afa254979ed507ad5fddd9d31e587650105cf2021373d304acab17d47d3403",
+    ".local/616-621/hume-unit-all.log": "19e46f35ed0f615e13cf55400c97834590c1b7677853a5738b61cb674d56ca38",
+    ".local/616-621/hume-pg-final.log": "57a873aa105f10c340f4bf8d13d6714a84da96f4ff03d9857873c71420718f57",
+    ".local/616-621/hume-ruff-all.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    ".local/616-621/hume-format-all.log": "6b48cffb233cfde3489e9c30ee5d1df19c8b2ec8229b68d7ca9e88cea9e68ab8",
+    ".local/616-621/hume-mypy-all.log": "51e0b2de1c8907f36612bad9838e5b142df660a16920f81ea119b2d8ec852285",
+    ".local/616-621/hume-codegraph-final.log": "0cc38d82e51c25e9853c3b5253eac423f68b4b521deaf915821eb52e57046b41"
   },
   "현존_경계": {
     "캐시_워크": "재요청가능한손실허용워밍이며업무outbox가아니다. 종료취소/queue포화뒤다음요청이재예약한다.",
@@ -233,6 +233,74 @@
     "edgeHTTP2와브라우저Queueing/Stalled",
     "실제운영latency·실제provider/운영UI검증"
   ],
-  "인계_게이트": "최종두전문적대리뷰·정확head 원격CI·ready/merge는메인. 이병행구현작업을최종승인으로취급하지않는다.",
-  "종료정책": "Closes #616 / Refs #621 / Refs #643. 운영edge미검증이므로#621자동종료금지."
+  "인계_게이트": "이전review/CI는새SHA승인이아니다. 부모의새Hubble/Hume두독립전문리뷰·새정확head원격CI성공후에만ready/merge판단. 본작업자는승인/ready/merge하지않는다.",
+  "종료정책": "Closes #616 / Refs #621 / Refs #643. 운영edge미검증이므로#621자동종료금지.",
+  "이전_통합_검증": {
+    "검증_고정_SHA": "dcddeff0213e9e5e5de615b672978d984b095c93",
+    "검증": [
+      {
+        "명령": "python -m pytest apps/api/tests/unit -q",
+        "결과": "2187 passed, 9 skipped, 5 warnings in 93.18s (0:01:33)",
+        "source": "dcddeff0213e9e5e5de615b672978d984b095c93",
+        "설명": "첫통합실행은새weather캐시쓰기경로의정적목록누락1FAIL/2186PASS. UUID축없는동일cache표writer만목록에명시후전체재실행했다."
+      },
+      {
+        "명령": "python -m pytest apps/api/tests/integration/{test_admin_abuse_api,test_rate_limit_resilience,test_api_call_logging,test_db_pool_resilience,test_outbound_resilience_http,test_plain_http_observability,test_geo_api,test_features_weather_cutover,test_trip_view_weather_cutover,test_weather_via_map,test_admin_features_weather_cutover,test_weather_location_resolver,test_weather_resolve_background,test_weather_background_http,test_feature_request_pipeline,test_feature_reference_reconciliation,test_telegram_weather}.py -q",
+        "결과": "198 passed, 201 warnings in 131.67s (0:02:11)",
+        "source": "8a259b49184f69b134913242c88976858cff7c86",
+        "동등성": "최종고정SHA와app/통합tests diff가비어있다. 이후변경은unit 정적목록2줄뿐이다."
+      },
+      {
+        "명령": "python -m pytest apps/api/tests/integration/test_restore_hotswap_preflight.py -q -k cleanup_waits_for_server_lock_release",
+        "결과": "9 passed, 9 deselected, 1 warning in 58.31s",
+        "source": "8a259b49184f69b134913242c88976858cff7c86",
+        "안전": "main658원본source harness와새소유PG18만. 운영hotswap/SSH실행없음."
+      },
+      {
+        "명령": "python -m ruff check apps/api/app apps/api/tests",
+        "결과": "PASS"
+      },
+      {
+        "명령": "python -m ruff format --check apps/api/app apps/api/tests",
+        "결과": "528 files already formatted"
+      },
+      {
+        "명령": "python -m mypy --strict --config-file apps/api/pyproject.toml apps/api/app",
+        "결과": "275 source files PASS"
+      },
+      {
+        "명령": "npm -w @pinvi/web run test:e2e:live-catalog:index",
+        "결과": "349 cases /299 scripted INDEX 일치, 브라우저/운영실행없음"
+      },
+      {
+        "명령": "app.openapi() 현재본과사용자지정main 아카이브원본 비교",
+        "결과": "byte동일",
+        "sha256": "cb20539a7fac5fa764a8c7b53ba5a5fd1aaabd6c37488f2cf3850a990095389f",
+        "안전": "lifespan/네트워크 미실행"
+      },
+      {
+        "명령": "bash -n scripts/restore-hotswap.sh; git diff --check",
+        "결과": "PASS"
+      },
+      {
+        "명령": "python3 /home/digitie/.cache/pinvi-643/audit-staged.py",
+        "결과": "모든commit직전본cwd에서PASS"
+      }
+    ],
+    "설명": "d95c2c6 이전의 통합 범위 증거다. cleanup P2 보완 이후 전체unit/관련PG 결과는 현재 검증 항목을 따른다."
+  },
+  "이전_리뷰_고정_SHA": "d95c2c673016167f371d9572d5889b7a91781002",
+  "Hume_P2_수정_commit": "dbdac3d9d994f26a3e7c94d266fad8863906bc0f",
+  "Hume_수정_실패우선": {
+    "P2_연결복구": "원본연결생성 ConnectionRefusedError/OSError2FAIL. task영구종료·stop예외를재현한뒤다음tick복구/stop정상·민감오류문자열비노출검증.",
+    "P2_backlog": "원본실제PG1FAIL:2501 unlocked만료행이한주기[1000]만삭제. 수정후[1000,1000,501],잠긴만료1/유효1보존.",
+    "주기전체budget": "원본unit1FAIL:fullbatch후다음batch미진입. 수정후둘째batch정지시공통deadline으로취소하고다음tick복귀.",
+    "취소중_close오류": "단순OSError격리만한중간제품1FAIL. driverclose가외부취소를OSError로덮어도task.cancelling으로취소를그대로전파하도록보완.",
+    "변경범위": [
+      "apps/api/app/middleware/rate_limit.py",
+      "apps/api/tests/integration/test_rate_limit_resilience.py",
+      "apps/api/tests/unit/test_rate_limit_cleanup.py"
+    ],
+    "리뷰": "부모가두P2수용. 기존Hubble/Hume승인을새SHA에재사용하지않으며재리뷰·CI는미완료로유지."
+  }
 }

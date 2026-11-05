@@ -1,3 +1,11 @@
+## 2026-11-06 — Hume cleanup P2 두 건 실패 우선 보완
+
+- 부모가d95c2c6의Hume2P2를수용했다. 연결생성오류2종·단일batch단위3FAIL과실제PGbacklog1FAIL을먼저확보했다. 예상DB연결OSError를다음주기에서복구하고,tx1000행·SKIPLOCKED를유지하며전체주기5초예산안fullbatch를추가drain한다.
+- 취소중driverclose오류가취소를덮는중간제품1FAIL도추가보완했다. task.cancelling으로외부취소를전파하며정상주기deadline뒤에는다음tick으로복귀한다. 예상오류의자격/DSN문자열을로그에복사하지않는다.
+- 수정 dbdac3d9d994f26a3e7c94d266fad8863906bc0f에서전체unit2192PASS/기존9SKIP(92.73초),관련unit63·실제소유PG17(23.12초),540입력hash전후동일·Ruff/format528·mypy275·OpenAPI동일이다. PG는한주기[1000,1000,501]개별COMMIT과locked만료1/유효1보존을확인했다.
+- 정확source증거를갱신하며이전PG198/#6589는이전구성요소증거로구분한다. 새SHA에서Hubble/Hume두독립전문리뷰와원격CI를다시확인해야한다. 이전승인재사용·자체승인/ready/merge는없다.
+- a5a2154원본8파일·journal양쪽·봉인migration·보호stash를보존했다. 운영/SSH/실제provider/Telegram접근은없다.
+
 ## 2026-11-06 — #616·#621 WSL 잔여 완주·a5a2154 보존 통합
 
 - 사용자 후속대로 서비스/라우트/독립CLI까지 같은DraftPR695에서 완성했다. 직접resolve는cache-only요청·별도session/Context·동시2/대기128·feature single-flight·음성30초·read45초와좌표/Map/삭제/commit경합fence를쓴다. plainHTTP/stream오류·취소·종료drain과카드4초/Admin10초예산·느린5xx재시도제한·실전송기준pool판정도연결했다.
