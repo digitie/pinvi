@@ -249,7 +249,7 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | #644 | fixed (#655) | 로그인 후 원래 가려던 페이지로 복귀(return-to) | CORE-007 — `test.fail` 제거 |
 | #648 | fixed (#660) | `/admin/features` 한국어 `q` 검색 503 FEATURE_SERVICE_UNAVAILABLE | ADM-015/016, WX-018/019 — helper 재시도·런타임 `test.fail` 제거, 5xx 면 실패 |
 | #649 | fixed (#657 + 리뷰 PR) | 일자 날짜 중복이 저장됨(`dayUsingDate` 가 effective_date 미비교) | TRIP-026 — `test.fail` 제거 |
-| #650 | fixed (kor-travel-geo #622) | 전체 도로명 주소(시·도 약칭) 검색에 주소 행 0건 | SRCH-004 — `test.fail` 제거(실패 = 재발) |
+| #650 | reopened | 전체 도로명 주소(시·도 약칭) 검색에 주소 행 0건 | SRCH-004 — Geo#622 로컬 검증 후 운영 재현이 남아 원천/최신 코드 경로를 재대조 |
 | #651 | fixed (#660) | admin dedup review 목록이 항상 422 FORBIDDEN(Map 거절), 화면은 빈 큐 | ADM-022/023 — `test.fail` 제거, GET 200 단언 |
 | #652 | fixed (#656) | 장소 재정렬 간헐 409 SORT_ORDER_CONFLICT + 응답에 DB 오류 원문 | TRIP-030 — `test.fail` 제거 |
 | #663 | fixed (#662) | 상세 카드 `detail-card` 지연 3.7→6.2→8.5 s(같은 장소, 실행마다 악화) | SRCH-055 — 런타임 `test.fail` 제거, 6 s 초과는 soft 실패 |
@@ -341,3 +341,7 @@ env 1(SHR-027), 데이터/타이밍 2(SRCH-048 이벤트 없음, POI-032 마커 
   kind가 0건이라 현재 blocked다.
 - 도형에 없는 coord를 만들지 않는다. point는 카메라 이동용 fixture다.
 - 운영 origin guard는 유지한다. 격리 WSL 실제 HTTP/WebGL 검증은 별도 fixture에서 실행하며 운영 통과로 기록하지 않는다.
+
+### #668 명령 확인 (ADM-042/043)
+
+직접 수정·폐쇄 승인 응답이 미확정이면 별도 사유와 확인창으로 Map 원장을 조정한다. completed receipt 검증은 added, 미실행 영구 봉인은 새 attempt 키로 재검토, pending/실패는 dispatch 보존이다. approve/reconcile은 사용자가 확인한 expected_command_key를 보내며 오래된 키와 전진 뒤 키 누락은409다. 과거 actor 누락·PATCHv1은 운영 검토를 안내하고 자동 해제하지 않는다. 소유 WSL에서만 fault/비가역 변경을 시험하며 일반 prod catalog의 두 사례는 manual로 둔다.

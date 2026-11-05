@@ -41,6 +41,7 @@ export type AdminFeatureRequestPagedResponse = z.infer<
 
 /** 승인 입력 — new_place는 저장된 요청 payload를 그대로 Map 큐에 제출한다. */
 export const AdminFeatureRequestApproveSchema = z.object({
+  expected_command_key: z.string().uuid().optional(),
   access_reason: z.string().trim().min(1).max(500),
   category: z.string().max(32).optional(),
   marker_color: z
@@ -67,3 +68,15 @@ export const AdminFeatureRequestResultSchema = z.object({
   resolved_at: Iso8601Schema.nullable().optional(),
 });
 export type AdminFeatureRequestResult = z.infer<typeof AdminFeatureRequestResultSchema>;
+
+/** 저장된 Map 명령을 확인하고 미실행 키를 영구 봉인한다. */
+export const AdminFeatureRequestReconcileSchema = z.object({
+  expected_command_key: z.string().uuid(),
+  access_reason: z.string().trim().min(5).max(500),
+}).strict();
+export type AdminFeatureRequestReconcile = z.infer<typeof AdminFeatureRequestReconcileSchema>;
+
+export const AdminFeatureRequestReconcileResultSchema = AdminFeatureRequestResultSchema.extend({
+  resolution: z.enum(['abandoned', 'pending', 'completed']),
+});
+export type AdminFeatureRequestReconcileResult = z.infer<typeof AdminFeatureRequestReconcileResultSchema>;

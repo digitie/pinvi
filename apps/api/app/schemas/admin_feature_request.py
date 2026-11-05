@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -60,6 +60,7 @@ class AdminFeatureRequestApprove(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
+    expected_command_key: uuid.UUID | None = None
     access_reason: str = Field(min_length=1, max_length=500)
     category: str | None = Field(default=None, max_length=32)
     marker_color: str | None = Field(default=None, pattern=r"^P-(0[1-9]|1[0-6])$")
@@ -83,3 +84,13 @@ class AdminFeatureRequestResult(BaseModel):
     kor_travel_map_ref: dict[str, Any] | None = None
     reviewed_by_admin_id: uuid.UUID | None = None
     resolved_at: datetime | None = None
+
+
+class AdminFeatureRequestReconcile(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    expected_command_key: uuid.UUID
+    access_reason: str = Field(min_length=5, max_length=500)
+
+
+class AdminFeatureRequestReconcileResult(AdminFeatureRequestResult):
+    resolution: Literal["abandoned", "pending", "completed"]

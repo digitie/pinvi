@@ -749,6 +749,8 @@ export {
   AdminFeatureRequestSummarySchema,
   AdminFeatureRequestPagedResponseSchema,
   AdminFeatureRequestApproveSchema,
+  AdminFeatureRequestReconcileSchema,
+  AdminFeatureRequestReconcileResultSchema,
   AdminFeatureRequestRejectSchema,
   AdminFeatureRequestResultSchema,
 } from './admin_feature_request';
@@ -756,6 +758,8 @@ export type {
   AdminFeatureRequestSummary,
   AdminFeatureRequestPagedResponse,
   AdminFeatureRequestApprove,
+  AdminFeatureRequestReconcile,
+  AdminFeatureRequestReconcileResult,
   AdminFeatureRequestReject,
   AdminFeatureRequestResult,
 } from './admin_feature_request';

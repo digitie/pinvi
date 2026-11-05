@@ -37,6 +37,8 @@ import {
   AdminFeatureRequestApproveSchema,
   AdminFeatureRequestPagedResponseSchema,
   AdminFeatureRequestRejectSchema,
+  AdminFeatureRequestReconcileSchema,
+  AdminFeatureRequestReconcileResultSchema,
   AdminFeatureRequestResultSchema,
   AdminFeatureReferenceReconciliationDetailSchema,
   AdminFeatureReferenceReconciliationPagedResponseSchema,
@@ -1081,6 +1083,19 @@ export const adminApi = (client: ApiClient) => ({
         method: 'POST',
         body: JSON.stringify(AdminFeatureRequestApproveSchema.parse(body)),
         schema: AdminFeatureRequestResultSchema,
+      },
+    ),
+
+  reconcileFeatureRequestCommand: (
+    requestId: string,
+    body: z.infer<typeof AdminFeatureRequestReconcileSchema>,
+  ) =>
+    client.request(
+      `/admin/feature-requests/${encodeURIComponent(requestId)}/reconcile-map-command`,
+      {
+        method: 'POST',
+        body: JSON.stringify(AdminFeatureRequestReconcileSchema.parse(body)),
+        schema: AdminFeatureRequestReconcileResultSchema,
       },
     ),
 

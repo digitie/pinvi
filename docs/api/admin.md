@@ -1585,6 +1585,7 @@ POI 삭제:
 GET    /admin/feature-requests?status=pending&page=1&limit=50
 POST   /admin/feature-requests/{request_id}/approve
 POST   /admin/feature-requests/{request_id}/approve?dry_run=true
+POST   /admin/feature-requests/{request_id}/reconcile-map-command
 POST   /admin/feature-requests/{request_id}/reject
 DELETE /admin/feature-requests/{request_id}
 ```
@@ -1598,10 +1599,14 @@ DELETE /admin/feature-requests/{request_id}
   수정은 field override, 폐쇄는 retire이며 commit receipt를 받은 뒤 `added`로 확정한다.
   큐의 `data.request`나 require_review 모드를 재구성하지 않는다.
 - 직접 명령은 입력·payload·strong ETag를 `kor_travel_map_ref.dispatch`에 먼저 저장하고 dispatch 감사를 기록한다.
-  이후 같은 suggestion UUID를 `Idempotency-Key`로, 같은 ETag를 `If-Match`로 보낸다.
+  이후 저장한 attempt 키를 `Idempotency-Key`로, 같은 ETag를 `If-Match`로 보낸다. 최초 시도만 suggestion UUID를 사용한다.
   응답 유실·불명확한 응답 뒤에는 내용을 바꾸지 않고 같은 명령을 재생한다.
   인증 401/403·전송 실패는 기존 intent를 유지한다. 확정 입력·대상·revision 거부는 intent를 해제하며,
-  재잠금 후 dispatch 전체값이 달라졌다면 송신하지 않는다. 결과 미확정 명령은 거절·삭제할 수 없다.
+  확정 거부 뒤에도 봉인 이력과 새 키를 보존하며 최초 키로 회귀하지 않는다. 재잠금 후 dispatch 전체값이 달라졌다면 송신하지 않는다. 결과 미확정 명령은 거절·삭제할 수 없다.
+- 직접 승인 body의 `expected_command_key`(UUID)는 화면에서 본 현재 dispatch/next 키다. 초기 UUID 시도만 키 생략을 호환한다. 전진 뒤 누락·옛 키는 `409 MAP_COMMAND_ATTEMPT_CHANGED`이며 Map 호출 없이 종료한다.
+- `reconcile-map-command` body는 `{expected_command_key, access_reason}`이며 두 필드가 필수다. 확인 사유는5~500자다. requested 감사 commit·재잠금 대조 뒤 저장 payload/If-Match/actor/key를 Map owner에 보낸다.
+  응답은 기존 제안 결과 필드에 `resolution: completed|pending|abandoned`를 추가한다. completed는 typed receipt로 added를 확정하고, pending은 그대로 보존한다. abandoned만 기존 키의 영구 봉인 증거로 dispatch를 해제하고 next 키를 한 번 발급한다. 같은 요청 키의 재확인은 같은 결과를 재생한다.
+- 과거 dispatch에 원래 actor가 없으면 `MAP_COMMAND_ACTOR_UNVERIFIABLE`, 인증 actor가 달라지면 `MAP_COMMAND_ACTOR_CHANGED`로 보존한다. Map의 과거 PATCHv1은 `LEGACY_FINGERPRINT_UNVERIFIABLE`이며 자동 해제하지 않는다. 확인창의 키·사유는 열 때 고정하므로 재조회가 대상을 바꾸지 않는다.
 - `dry_run=true`는 pending 제안의 형식을 검증하고 `dry_run: true`와 현재 상태를 반환한다.
   Map client 생성·외부 호출·상태 변경·감사 쓰기를 하지 않는다. 실제 장소 존재나 Map registry 승인을 보장하지 않는다.
 - 거절은 Map 호출 없이 `rejected`와 감사를 기록한다. 모든 액션은 공백만 있는 사유를 거부한다.

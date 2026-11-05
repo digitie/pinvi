@@ -66,7 +66,7 @@ def _query_names(operation: dict[str, Any]) -> set[str]:
 
 
 def test_admin_snapshot_is_byte_pinned_to_a_reviewed_map_revision() -> None:
-    assert _UPSTREAM_COMMIT == "ad75031ad0efe81c269ae334f656f1232000e405"
+    assert _UPSTREAM_COMMIT == "0afad078eae3405efc7fa375d66d771c95d5b049"
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
 
 
@@ -414,3 +414,54 @@ def test_dedup_verdict_requires_uuid_command_key_in_admin_realm() -> None:
     assert key["in"] == "header"
     assert key["required"] is True
     assert key["schema"]["format"] == "uuid"
+
+
+def test_uncertain_feature_command_resolution_is_bound_to_admin_actor_and_original_intent() -> None:
+    spec = _spec()
+    operation = spec["paths"]["/v1/admin/feature-commands/reconcile"]["post"]
+    assert operation["security"] == [{"AdminBFF": []}]
+    request = operation["requestBody"]["content"]["application/json"]["schema"]
+    assert request["discriminator"]["propertyName"] == "operation"
+    assert set(request["discriminator"]["mapping"]) == {
+        "admin.feature.patch",
+        "admin.feature.delete",
+    }
+    required = {
+        "feature_id",
+        "expected_revision",
+        "idempotency_key",
+        "expected_actor",
+        "access_reason",
+        "operation",
+        "payload",
+    }
+    for kind, payload in (
+        ("Patch", "AdminFeaturePatchRequest"),
+        ("Delete", "AdminFeatureDeleteRequest"),
+    ):
+        command = _schema(spec, f"Feature{kind}Command")
+        assert set(command["required"]) == required
+        assert command["additionalProperties"] is False
+        props = command["properties"]
+        assert props["idempotency_key"]["format"] == "uuid"
+        assert props["expected_revision"]["pattern"] == r'^"[1-9][0-9]*"$'
+        assert props["access_reason"]["minLength"] == 5
+        assert props["payload"]["$ref"] == f"#/components/schemas/{payload}"
+    assert _response_ref(operation) == "#/components/schemas/FeatureCommandResolutionResponse"
+    data = _schema(spec, "FeatureCommandResolution")
+    assert {
+        "actor",
+        "operation",
+        "feature_id",
+        "idempotency_key",
+        "command_id",
+        "request_fingerprint",
+        "state",
+    } <= set(data["required"])
+    assert set(data["properties"]["state"]["enum"]) == {"abandoned", "pending", "completed"}
+    assert {
+        entry.get("$ref") for entry in data["properties"]["receipt"]["anyOf"] if "$ref" in entry
+    } == {
+        "#/components/schemas/AdminFeatureFieldOverrideResponse",
+        "#/components/schemas/AdminFeatureStateResponse",
+    }

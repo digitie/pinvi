@@ -33,7 +33,7 @@ import {
 } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import { AdminFeatureRequestApproveSchema, type AdminFeatureRequestSummary } from '@pinvi/schemas';
+import { AdminFeatureRequestApproveSchema, AdminFeatureRequestReconcileSchema, type AdminFeatureRequestReconcile, type AdminFeatureRequestSummary } from '@pinvi/schemas';
 import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterBar, FilterField } from '@/components/admin/filter-bar';
@@ -337,6 +337,13 @@ function ReviewDialog({
   const isPending = request.status === 'pending';
   const canDelete = ['rejected', 'added', 'duplicate'].includes(request.status);
   const dispatch = request.kor_travel_map_ref?.dispatch;
+  const expectedCommandKey =
+    dispatch && typeof dispatch === 'object' && 'command_key' in dispatch &&
+    typeof dispatch.command_key === 'string'
+      ? dispatch.command_key
+      : typeof request.kor_travel_map_ref?.next_command_key === 'string'
+        ? request.kor_travel_map_ref.next_command_key
+        : request.request_id;
   const savedInput =
     dispatch &&
     typeof dispatch === 'object' &&
@@ -349,6 +356,15 @@ function ReviewDialog({
     typeof savedInput[key] === 'string' ? (savedInput[key] as string) : '';
   const [commandPending, setCommandPending] = useState(Boolean(dispatch));
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [reconcileConfirmOpen, setReconcileConfirmOpen] = useState(false);
+  const [reconcileIntent, setReconcileIntent] = useState<AdminFeatureRequestReconcile | null>(null);
+  const [resolutionReason, setResolutionReason] = useState('');
+  const [resolutionNotice, setResolutionNotice] = useState<string | null>(null);
+  const reconcileButtonRef = useRef<HTMLButtonElement | null>(null);
+  const reconcileCancelRef = useRef<HTMLButtonElement | null>(null);
+  const hasSavedActor =
+    dispatch && typeof dispatch === 'object' && 'actor' in dispatch &&
+    typeof dispatch.actor === 'string' && dispatch.actor.trim().length > 0;
   const [dryRunNotice, setDryRunNotice] = useState<string | null>(null);
   const isNewPlace = request.type === 'new_place';
   const isCorrection = request.type === 'correction';
@@ -408,7 +424,10 @@ function ReviewDialog({
       : {}),
   });
   const approveMutation = useMutation({
-    mutationFn: () => adminApi(apiClient).approveFeatureRequest(request.request_id, approvalBody()),
+    mutationFn: () => adminApi(apiClient).approveFeatureRequest(request.request_id, {
+      ...approvalBody(),
+      ...(!isNewPlace ? { expected_command_key: expectedCommandKey } : {}),
+    }),
     onSuccess: () =>
       onDone(
         isNewPlace
@@ -434,7 +453,36 @@ function ReviewDialog({
         // 다시 불러와 저장 명령이 있으면 위의 렌더 중 동기화가 입력을 잠근다.
         void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
       }
+      if (!isNewPlace) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
+      }
       setErr(error instanceof ApiError ? error.message : '승인에 실패했습니다.');
+    },
+  });
+
+  const reconcileMutation = useMutation({
+    mutationFn: (intent: AdminFeatureRequestReconcile) =>
+      adminApi(apiClient).reconcileFeatureRequestCommand(request.request_id, intent),
+    onSuccess: (result) => {
+      setReconcileConfirmOpen(false);
+      setErr(null);
+      if (result.resolution === 'pending') {
+        setResolutionNotice('Map에 처리 중인 명령이 남아 있습니다. 입력과 대기 상태를 유지합니다.');
+        void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
+      } else {
+        onDone(
+          result.resolution === 'completed'
+            ? 'Map의 실행 완료 결과를 확인해 제안을 반영 완료로 처리했습니다.'
+            : '기존 명령의 미실행을 확정했습니다. 제안을 다시 열어 수정·승인 또는 거절할 수 있습니다.',
+        );
+      }
+    },
+    onError: (error) => {
+      setReconcileConfirmOpen(false);
+      setResolutionNotice(null);
+      setCommandPending(true);
+      setErr(error instanceof ApiError ? error.message : 'Map 처리 결과를 확인하지 못했습니다. 대기 상태를 유지합니다.');
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
     },
   });
 
@@ -484,7 +532,8 @@ function ReviewDialog({
     approveMutation.isPending ||
     rejectMutation.isPending ||
     dryRunMutation.isPending ||
-    deleteMutation.isPending;
+    deleteMutation.isPending ||
+    reconcileMutation.isPending;
 
   const validateReason = () => {
     if (!accessReason.trim()) {
@@ -711,10 +760,57 @@ function ReviewDialog({
           ) : (
             <form id={formId} onSubmit={approve} className="space-y-4">
               {commandPending && (
-                <p role="status" className="rounded-sm bg-surface-soft p-3 text-sm">
-                  Map 처리 결과가 미확정입니다. 저장된 입력으로 재시도하여 결과를 확인하세요. 확인
-                  전에는 내용을 바꾸거나 거절할 수 없습니다.
-                </p>
+                <div className="space-y-3 rounded-sm border border-hairline bg-surface-soft p-3 text-sm">
+                  <p role="status">
+                    Map 처리 결과가 미확정입니다. 저장된 입력으로 재시도하거나 실행 기록을 확인하세요.
+                    확인 전에는 내용을 바꾸거나 거절할 수 없습니다.
+                  </p>
+                  {!hasSavedActor && (
+                    <p data-testid="admin-fr-reconcile-legacy">
+                      이 명령에는 원래 실행 계정 정보가 없어 안전하게 확인할 수 없습니다.
+                      운영 검토가 필요하며 대기 상태를 유지합니다.
+                    </p>
+                  )}
+                  <FormTextArea
+                    id="admin-fr-resolution-reason"
+                    label="실행 기록 확인 사유 (감사 기록)"
+                    value={resolutionReason}
+                    onChange={(event) => {
+                      setResolutionReason(event.target.value);
+                      setResolutionNotice(null);
+                    }}
+                    disabled={busy || !hasSavedActor}
+                    rows={2}
+                    maxLength={500}
+                    hint="5~500자로 입력하세요. 원래 승인 내용과 별도로 기록됩니다."
+                    data-testid="admin-fr-resolution-reason"
+                  />
+                  <Button
+                    ref={reconcileButtonRef}
+                    type="button"
+                    variant="secondary"
+                    disabled={busy || !hasSavedActor}
+                    data-testid="admin-fr-reconcile-command"
+                    onClick={() => {
+                      const parsed = AdminFeatureRequestReconcileSchema.safeParse({
+                        access_reason: resolutionReason, expected_command_key: expectedCommandKey,
+                      });
+                      if (!parsed.success) {
+                        setErr('실행 기록 확인 사유는 5~500자로 입력하세요.');
+                        return;
+                      }
+                      setErr(null);
+                      // 확인창을 연 시점의 사유·명령 키를 보존한다. 재조회가 대상을 바꾸지 않는다.
+                      setReconcileIntent(parsed.data);
+                      setReconcileConfirmOpen(true);
+                    }}
+                  >
+                    Map 실행 기록 확인
+                  </Button>
+                  {resolutionNotice && (
+                    <p role="status" data-testid="admin-fr-reconcile-notice">{resolutionNotice}</p>
+                  )}
+                </div>
               )}
               {dryRunNotice && (
                 <p role="status" data-testid="admin-fr-dry-run-notice">
@@ -827,6 +923,47 @@ function ReviewDialog({
         </section>
         <DialogFooter>{footer}</DialogFooter>
       </DialogContent>
+      <AlertDialog
+        open={reconcileConfirmOpen}
+        onOpenChange={(open) => {
+          if (!reconcileMutation.isPending) setReconcileConfirmOpen(open);
+        }}
+      >
+        <AlertDialogContent
+          data-testid="admin-fr-reconcile-confirm"
+          initialFocus={reconcileCancelRef}
+          finalFocus={reconcileButtonRef}
+        >
+          <AlertDialogTitle>Map 실행 기록을 확인할까요?</AlertDialogTitle>
+          <AlertDialogDescription>
+            실행 완료는 제안에 반영하고, 미실행이 확인되면 기존 명령을 영구 봉인해 새 검토를 허용합니다.
+            처리 중이거나 확인에 실패하면 대기 상태를 유지합니다.
+          </AlertDialogDescription>
+          <p className="mt-4 whitespace-pre-wrap text-sm text-ink [overflow-wrap:anywhere]">
+            {reconcileIntent?.access_reason}
+          </p>
+          <AlertDialogFooter>
+            <AdminButton
+              ref={reconcileCancelRef}
+              type="button"
+              variant="outline"
+              disabled={busy}
+              data-testid="admin-fr-reconcile-confirm-cancel"
+              onClick={() => setReconcileConfirmOpen(false)}
+            >
+              계속 검토
+            </AdminButton>
+            <AdminButton
+              type="button"
+              disabled={busy}
+              data-testid="admin-fr-reconcile-confirm-confirm"
+              onClick={() => { if (reconcileIntent) reconcileMutation.mutate(reconcileIntent); }}
+            >
+              실행 기록 확인
+            </AdminButton>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog
         open={deleteConfirmOpen}
         onOpenChange={(open) => {
