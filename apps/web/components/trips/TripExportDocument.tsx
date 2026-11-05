@@ -39,7 +39,7 @@ function StaticDayMap({ model, day }: { model: TripExportModel; day: ExportDay }
   const minY = Math.min(...projected.map((point) => point.y));
   const maxY = Math.max(...projected.map((point) => point.y));
   const scale = Math.min(
-    700 / Math.max(maxX - minX, 0.00002),
+    640 / Math.max(maxX - minX, 0.00002),
     250 / Math.max(maxY - minY, 0.00002),
   );
   const positioned = projected.map(({ point, x, y }) => ({
@@ -50,6 +50,13 @@ function StaticDayMap({ model, day }: { model: TripExportModel; day: ExportDay }
   const ordered = [...positioned].sort(
     (a, b) => indices.get(a.point.poiId)! - indices.get(b.point.poiId)!,
   );
+  const groups = new Map<string, typeof ordered>();
+  for (const entry of ordered) {
+    const key = entry.point.lon + ':' + entry.point.lat;
+    const group = groups.get(key) ?? [];
+    group.push(entry);
+    groups.set(key, group);
+  }
   return (
     <figure>
       <svg
@@ -67,30 +74,60 @@ function StaticDayMap({ model, day }: { model: TripExportModel; day: ExportDay }
           strokeWidth="2"
           strokeDasharray="5 5"
         />
-        {ordered.map(({ point, x, y }) => (
-          <g key={point.poiId}>
-            <title>
-              {indices.get(point.poiId)}. {point.title}
-            </title>
-            <circle cx={x} cy={y} r="13" fill={point.color} stroke="white" strokeWidth="2" />
-            <text
-              x={x}
-              y={y + 4}
-              textAnchor="middle"
-              fill={point.labelColor}
-              fontSize="12"
-              fontWeight="700"
-            >
-              {indices.get(point.poiId)}
-            </text>
-          </g>
-        ))}
+        {Array.from(groups.values()).map((group) => {
+          const { point, x, y } = group[0]!;
+          const numbers = group.map((entry) => indices.get(entry.point.poiId)!);
+          const label =
+            numbers.length <= 3
+              ? numbers.join('·')
+              : numbers.slice(0, 2).join('·') + '+' + (numbers.length - 2);
+          const width = Math.max(26, Math.min(140, label.length * 8 + 12));
+          return (
+            <g key={point.poiId}>
+              <title>
+                {group
+                  .map((entry) => indices.get(entry.point.poiId) + '. ' + entry.point.title)
+                  .join(', ')}
+              </title>
+              <rect
+                x={x - width / 2}
+                y={y - 13}
+                width={width}
+                height="26"
+                rx="13"
+                fill={point.color}
+                stroke="white"
+                strokeWidth="2"
+              />
+              <text
+                x={x}
+                y={y + 4}
+                textAnchor="middle"
+                fill={point.labelColor}
+                fontSize={label.length > 10 ? '10' : '12'}
+                fontWeight="700"
+              >
+                {label}
+              </text>
+            </g>
+          );
+        })}
       </svg>
       <figcaption>
         장소 위치 개요 · 점선은 방문 순서이며 도로 경로가 아닙니다. 배경지도는 포함하지 않습니다.
+        같은 좌표의 재방문 번호는 함께 표시합니다.
         {points.length < day.pois.length
           ? ` 좌표를 확인한 ${points.length}/${day.pois.length}곳을 표시했습니다.`
           : ''}
+        {Array.from(groups.values())
+          .filter((group) => group.length > 3)
+          .map((group) => (
+            <span key={group[0]!.point.poiId}>
+              {' '}
+              같은 위치 방문 번호: {group.map((entry) => indices.get(entry.point.poiId)).join(', ')}
+              .
+            </span>
+          ))}
       </figcaption>
     </figure>
   );

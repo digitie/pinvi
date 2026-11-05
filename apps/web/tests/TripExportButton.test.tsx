@@ -123,3 +123,46 @@ it('인쇄 준비 중 명시적 취소가 popup을 닫고 미리보기도 닫는
   expect(popup.print).not.toHaveBeenCalled();
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
+
+it('선택·숨김과 관계없이 받은 전체 일자라는 범위를 명시한다', async () => {
+  const user = userEvent.setup();
+  const source = exportSource();
+  source.days.push({
+    ...source.days[0]!,
+    day_index: 2,
+    title: '숨긴 둘째날',
+    effective_date: '2026-11-06',
+    pois: [],
+  });
+  render(<TripExportButton view={source} />);
+  await user.click(screen.getByRole('button', { name: '여행 내보내기' }));
+  const dialog = await screen.findByRole('dialog');
+  expect(dialog).toHaveTextContent('선택·숨김 상태와 관계없이 조회된 전체 일자를 포함합니다');
+  expect(dialog).toHaveTextContent('숨긴 둘째날');
+});
+
+it('같은 위치 재방문의 번호를 한 표식에 함께 표시한다', async () => {
+  const user = userEvent.setup();
+  const source = exportSource();
+  const first = source.days[0]!.pois[0]!;
+  source.days[0]!.pois.push(
+    {
+      ...first,
+      poi_id: '64100000-0000-4000-8000-000000000002',
+      sort_order: 'b',
+      title: '관광지',
+      feature: { coord: { lon: 129.2, lat: 35.3 } },
+    },
+    {
+      ...first,
+      poi_id: '64100000-0000-4000-8000-000000000003',
+      sort_order: 'c',
+      title: '같은 숙소 재방문',
+    },
+  );
+  render(<TripExportButton view={source} />);
+  await user.click(screen.getByRole('button', { name: '여행 내보내기' }));
+  const map = await screen.findByRole('img', { name: '1일차 장소 위치도' });
+  const labels = Array.from(map.querySelectorAll('text')).map((text) => text.textContent);
+  expect(labels).toEqual(['1·3', '2']);
+});

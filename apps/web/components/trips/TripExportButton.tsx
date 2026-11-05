@@ -86,7 +86,7 @@ export function TripExportButton({
         onClose={close}
         title="여행 내보내기"
         size="lg"
-        description="인쇄창에서 프린터 또는 PDF 저장을 선택하세요. 현재 화면에서 확인한 일정만 포함합니다."
+        description="선택·숨김 상태와 관계없이 조회된 전체 일자를 포함합니다. 인쇄창에서 프린터 또는 PDF 저장을 선택하세요."
         returnFocusRef={triggerRef}
         busy={busy}
         onCancelBusy={close}
