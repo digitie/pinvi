@@ -383,6 +383,26 @@ release_receipt_seal_is_exact() {
     --receipt-record-sha256 "${RELEASE_RECEIPT_RECORD_SHA256}" >/dev/null
 }
 
+write_identity_guard() {
+  if [[ "${TEST_MODE}" == "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
+    return 0
+  fi
+  cat <<SQL
+DO \$m05\$
+BEGIN
+  IF current_database() <> '${PINVI_RESTORE_EXPECTED_DATABASE_NAME}'
+     OR (SELECT oid::text FROM pg_database WHERE datname = current_database()) <> '${PINVI_RESTORE_EXPECTED_DATABASE_OID}'
+     OR (pg_control_system()).system_identifier::text <> '${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}'
+     OR COALESCE(host(inet_server_addr()), '') <> '${PINVI_RESTORE_EXPECTED_HOSTADDR}'
+     OR inet_server_port()::text <> '${PINVI_RESTORE_EXPECTED_PORT}'
+  THEN
+    RAISE EXCEPTION 'restore target identity changed before mutation';
+  END IF;
+END
+\$m05\$;
+SQL
+}
+
 cleanup() {
   local cleanup_status=$?
   trap - EXIT
@@ -437,6 +457,49 @@ cleanup() {
   if [[ -n "${LOCK_HOLDER_PID}" ]]; then
     kill "${LOCK_HOLDER_PID}" >/dev/null 2>&1 || true
     wait "${LOCK_HOLDER_PID}" >/dev/null 2>&1 || true
+  fi
+  # Reaping psql only proves client exit. The server may still own this run's
+  # session lock. Observe through the dedicated fence owner, whose CONNECT
+  # remains available even on failure; never restore privileges or terminate
+  # a backend here. PID reuse conservatively times out instead of touching it.
+  if [[ "${LOCK_HOLDER_BACKEND_PID}" =~ ^[0-9]+$ ]]; then
+    if ! {
+      write_identity_guard && cat <<SQL
+SET statement_timeout = '5s';
+DO \$m05\$
+DECLARE
+  deadline timestamptz := clock_timestamp() + interval '4 seconds';
+BEGIN
+  LOOP
+    PERFORM pg_stat_clear_snapshot();
+    EXIT WHEN NOT EXISTS (
+      SELECT 1 FROM pg_stat_activity WHERE pid = ${LOCK_HOLDER_BACKEND_PID}
+    ) AND NOT EXISTS (
+      SELECT 1 FROM pg_locks
+      WHERE pid = ${LOCK_HOLDER_BACKEND_PID}
+        AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+        AND locktype = 'advisory'
+        AND classid = 1414679892 AND objid = 1213421392 AND objsubid = 2
+        AND granted
+    );
+    IF clock_timestamp() >= deadline THEN
+      RAISE EXCEPTION 'restore lock holder is still present';
+    END IF;
+    PERFORM pg_sleep(0.05);
+  END LOOP;
+END
+\$m05\$;
+SQL
+    } | PGCONNECT_TIMEOUT=2 PGOPTIONS='-c default_transaction_read_only=on' \
+      timeout --kill-after=1s 8s "${PSQL_BIN}" --no-psqlrc -v ON_ERROR_STOP=1 -Atq \
+        --dbname="${FENCE_DATABASE_URL}" > /dev/null 2>&1; then
+      phase "${ACTIVE_PHASE}" failed "advisory lock holder release could not be confirmed; explicit root escalation is required"
+      # Preserve an existing failure/signal status; never turn an unconfirmed
+      # successful run into a reported success.
+      if [[ "${cleanup_status}" == "0" ]]; then
+        cleanup_status=3
+      fi
+    fi
   fi
   if [[ -n "${LOCK_INPUT_FD}" ]]; then
     exec {LOCK_INPUT_FD}>&- || true
@@ -997,25 +1060,6 @@ else
   fi
 fi
 
-write_identity_guard() {
-  if [[ "${TEST_MODE}" == "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
-    return 0
-  fi
-  cat <<SQL
-DO \$m05\$
-BEGIN
-  IF current_database() <> '${PINVI_RESTORE_EXPECTED_DATABASE_NAME}'
-     OR (SELECT oid::text FROM pg_database WHERE datname = current_database()) <> '${PINVI_RESTORE_EXPECTED_DATABASE_OID}'
-     OR (pg_control_system()).system_identifier::text <> '${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}'
-     OR COALESCE(host(inet_server_addr()), '') <> '${PINVI_RESTORE_EXPECTED_HOSTADDR}'
-     OR inet_server_port()::text <> '${PINVI_RESTORE_EXPECTED_PORT}'
-  THEN
-    RAISE EXCEPTION 'restore target identity changed before mutation';
-  END IF;
-END
-\$m05\$;
-SQL
-}
 
 execute_sql_file() {
   local sql_file="$1"
