@@ -88,15 +88,24 @@ export async function clickRenderedGeometry(
     // polygon 내부와 현재 viewport로 잘린 긴 선도 확인한다.
     for (let y = 12; y < rect.height - 12; y += 12)
       for (let x = 12; x < rect.width - 12; x += 12) candidates.push([x, y]);
-    for (const [x, y] of candidates) {
+    // 같은 이름의 구간들이 끝점·겹친 선을 공유한다(예: '설악산_대청봉' 여러 feature). 겹친 점을
+    // 누르면 앱과 helper의 최상단 판정이 반 픽셀 차이로 갈릴 수 있으므로, 대상만 걸리는 정수
+    // 픽셀을 먼저 고른다. 없을 때만 대상이 포함된 점의 최상단 feature를 기대값으로 쓴다.
+    let fallback: { x: number; y: number; id: string } | null = null;
+    for (const [rawX, rawY] of candidates) {
+      const x = Math.round(rawX),
+        y = Math.round(rawY);
       if (x < 4 || y < 4 || x > rect.width - 4 || y > rect.height - 4) continue;
       if (document.elementFromPoint(rect.left + x, rect.top + y) !== canvas) continue;
       const hits = m.queryRenderedFeatures([x, y], { layers });
       if (!hits.some((feature) => feature.properties.feature_id === id)) continue;
+      if (hits.every((feature) => feature.properties.feature_id === id))
+        return { x: rect.left + x, y: rect.top + y, id };
       const top = hits[0];
-      if (top) return { x: rect.left + x, y: rect.top + y, id: String(top.properties.feature_id) };
+      if (top && !fallback)
+        fallback = { x: rect.left + x, y: rect.top + y, id: String(top.properties.feature_id) };
     }
-    return null;
+    return fallback;
   }, featureId);
   expect(hit, '실제 canvas에 요청한 feature의 rendered hit가 있어야 한다').not.toBeNull();
   await page.mouse.click(hit!.x, hit!.y);
