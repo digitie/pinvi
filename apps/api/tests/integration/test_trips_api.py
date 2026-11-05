@@ -222,7 +222,7 @@ async def test_share_link_uses_web_base_url(
 
     assert resp.status_code == 201, resp.text
     share = resp.json()["data"]
-    assert share["url"].startswith(f"https://pinvi.example/trips/{trip_id}/shared/")
+    assert share["url"] == f"https://pinvi.example/shared/{trip_id}/{share['token']}"
     assert "app.pinvi.local" not in share["url"]
 
     detail = await client.get(f"/trips/{trip_id}", cookies=cookies)

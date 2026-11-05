@@ -53,3 +53,17 @@ d31 후보의 실제 WSL private/shared/long UI7흐름은 통과했고 pageerror
 29f 후보의 실제 UI7와 parser가 통과했고 긴 PDF는6→5페이지로 줄었다. 9페이지 PNG를 다시 확인해, 한 장소의 제목/시각만 앞 페이지 끝에 남고 메모가 다음 페이지로 넘어가는 작은 단절을 발견했다. 실제 PDF의3페이지 끝 metadata 단독 단언을 실패로 고정한 뒤, 짧은 제목·시각·주소만 묶어 첫 메모 단락과 함께 배치한다. 긴 메모 본문은 계속 나눌 수 있다.
 
 16mm를 명시해도 헤드리스 Chrome의 강제 기본 header/footer 일부 잘림은 해소되지 않았다. 이는 앞 기록의 기대와 달랐으므로 성공으로 주장하지 않는다. 제품이 제어하는 본문 검증 PDF는 Playwright 기본값인 header/footer off로 생성하고, 사용자 브라우저가 제어하는 native header/footer on 검증 파일은 별도 캐시에 보존한다. 그 enabled 공유 PDF에서도 URL은about:blank이고 공유 token/외부 링크/비공개 식별자는 없었다. 브라우저 인쇄 설정 자체를 앱이 변경한다고 주장하지 않는다.
+
+## 최종 제품 후보 검증
+
+제품 dffec531c566eb20ff6aeb5b812f351c2d010cb6에서 웹421·관련25와 실제 WSL PG/API/프로덕션 웹 Chromium7흐름이 통과했다. 해외 기기 시간대에서도 KST를 표시하고 실제 ICS2파일을 독립 icalendar로 읽어 각5이벤트·안정 UID·UTC/종일·UTF-8 접기·문자 주입 방지를 확인했다.
+
+실제 PDF는 private2/shared2/long5페이지다. Poppler/pypdf의 text bbox·metadata·URI 검사와 메모80줄·마지막 표식을 확인했고9페이지를 렌더했다. private/shared2쌍 PNG가 byte동일하여7개 고유 페이지를 열어 확인했다. 두 페이지 회귀 실패가 모두 성공으로 바뀌었으며 제목 단독 페이지·메타정보만 앞 페이지 끝에 남는 현상이 해소됐다. 본문 PDF는 header/footer off이며 native 머리말/바닥글의 설정/잘림 해결은 검증 범위가 아니다.
+
+API단위2020/9skip·실제 공유권한 PG8·mypy271/Ruff/format은 d31에서 실행했으며 API는 dff와 동일하다. workspace타입/lint도 d31에서 통과했고 출력 문서 마크업/CSS 변경 외의 제품 source는 같다. 최신 후보의 타입/lint도 최종 확인한다. 두 독립 전문 코드 리뷰는 정확dff에서 잔여P0/P1/P2 없음이다. 리뷰어가 실행 검증을 수행했다고 표시하지 않는다.
+
+사용 안내와 SHR-032 기대값을 구현에 맞게 바꾸고 운영 자동화는 manual로 유지한다. 실제 증거는 docs/reviews/pinvi-641-trip-export-wsl-live.json에 source·artifact hash와 실행 범위를 기록한다. 마지막 문서 후보를 다시 두 리뷰어가 읽고 정확 HEAD 적용 CI 성공 후 일반 squash merge한다. 운영 최종 테스트는 Claude Code 담당이다.
+
+### 원격 기존 공유 URL 회귀 기대값 동기화
+
+dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 웹 경로 기대값1건을 포착했다(255통과/1실패). API 공개 read/comment/edit 경로와 혼동하지 않고 기존 검사의 발급 웹 URL 기대값만 실제 정본 /shared/{trip_id}/{token}에 맞춰 전체 URL로 강화했다. 제품 source는 dff 그대로다. 보완 후 WSL 실제 PG의 해당 검사·신규 링크 회귀·기존 공유권한 합계9검사가18.70초에 통과했다. 최신 workspace타입/lint(기존5warning)·Ruff/format도 통과했다. 정확 최종 문서/테스트 후보의 원격 CI는 별도 확인한다.

@@ -1,0 +1,252 @@
+{
+  "product_revision": "dffec531c566eb20ff6aeb5b812f351c2d010cb6",
+  "base_revision": "22d3577803e78d09bcedcd5e05194c67aa1b1e43",
+  "production_access": false,
+  "production_final_test_owner": "Claude Code",
+  "changed_runtime_sha256": {
+    "apps/api/app/api/v1/trips.py": "6ef2475e1c763df8216e46d2cbccea426f99567cd78a6ff6cff9d666ae17d87f",
+    "apps/web/components/trips/SharedTripView.tsx": "85eb7777a635fa4ce76e7f0e0f08473d8160799c8caad3f2193d79a9eb8498a5",
+    "apps/web/components/trips/TripDetail.tsx": "3b7b361cc0674107b991d54b4f0dea9b01998016b66d916c934e7b1881617d5b",
+    "apps/web/components/trips/TripExportButton.tsx": "fff5b9e86ea86f9430361657e6dcf7db7fe0b615249305de4dff86e9e7768a7d",
+    "apps/web/components/trips/TripExportDocument.tsx": "7cfdca60830759ef1cfc6e326f9bb4e5927c9b51c43df44a68de7ba3420184f8",
+    "apps/web/lib/tripExport.ts": "e9074aef118ee35c11281dc7864deb6c58683aa8e462fd3a68c06ba3267b9287",
+    "apps/web/lib/tripPrintWindow.ts": "8c94b305b671f724ddffe3bcb4fd96d933cbbe8f65921931190943d51a7b22ef"
+  },
+  "wsl": {
+    "web": {
+      "revision": "dffec531c566eb20ff6aeb5b812f351c2d010cb6",
+      "passed": 421,
+      "related_passed": 25,
+      "workspace_types": true,
+      "lint": true,
+      "existing_warnings": 5,
+      "production_build_in_live_harness": true
+    },
+    "api_unit": {
+      "revision": "d31c62ca4279c564fd7cf6987beda4bf3bad8bb6",
+      "passed": 2020,
+      "skipped": 9,
+      "seconds": 87.87,
+      "runtime_api_identical_to_product": true
+    },
+    "mypy_source_files": 271,
+    "ruff": true,
+    "format": true,
+    "related_pg": {
+      "passed": 9,
+      "seconds": 18.7,
+      "actual_postgis": true,
+      "scope": "existing base URL test corrected to canonical web route, new issued-link regression and shared read/comment/edit/revoke permissions; runtime same as product"
+    }
+  },
+  "adversarial_reviews": {
+    "source_revision": "dffec531c566eb20ff6aeb5b812f351c2d010cb6",
+    "Hubble": "no remaining P0/P1/P2",
+    "Hume": "no remaining P0/P1/P2",
+    "reviewers_ran_tests": false,
+    "scope": "independent read-only source/diff and existing cache log review; final evidence/test-only candidate recheck follows",
+    "negative_controls": [
+      {
+        "kind": "two source-review findings",
+        "failed_before": 2,
+        "scope": "all queried day wording and same-coordinate revisit marker overlap"
+      },
+      {
+        "kind": "actual API issued shared link",
+        "failed_before": 1,
+        "scope": "old web URL did not match canonical shared page; corrected API URL, unchanged public API routes"
+      },
+      {
+        "kind": "actual PDF pagination",
+        "failed_before": 2,
+        "scope": "long note left preceding heading-only page, then a POI heading/time remained before next-page note; both final parser checks pass"
+      },
+      {
+        "kind": "remote integration regression",
+        "failed_before": 1,
+        "scope": "existing URL expectation still used obsolete web route; changed only exact URL expectation, final WSL related PG9 pass; final remote CI recorded on PR"
+      }
+    ],
+    "harness_failures_excluded": [
+      "wrong fixture ORM PK name",
+      "fixture endpoint typo",
+      "global Playwright request interception stalled initial about:blank CSS; replaced with owned nonforwarding deny proxy"
+    ]
+  },
+  "live": {
+    "sourceRevision": "dffec531c566eb20ff6aeb5b812f351c2d010cb6",
+    "ok": true,
+    "production": false,
+    "actualPostgres": true,
+    "actualApi": true,
+    "actualChromium": true,
+    "productionWebBuild": true,
+    "timezone": "America/Los_Angeles",
+    "checks": [
+      "실제 로그인·API 일정→전체 인쇄 미리보기·해외 기기에서도 KST·좌표 누락 방문 번호 보존",
+      "실제 ICS 파일 다운로드·원래 시각/종일 일정·비공개 사용자/외부 URL 제외",
+      "실제 token 없는 about:blank 인쇄창·동일 DOM Chromium PDF·전체 일자/한글/지도 출력",
+      "실제 비로그인 view_only 공유의 같은 ICS/PDF·공유 token의 HTML/PDF/파일/요청 referrer 비포함",
+      "실제 공유 링크 철회 뒤 거절 화면과 내보내기 미노출",
+      "실제 DB의 한 페이지보다 긴 단일 메모·다중 페이지 PDF·마지막 종결 표식 보존",
+      "실제 모바일 폭의 내보내기 진입·대화상자·가로 넘침 없음"
+    ],
+    "pageErrors": [],
+    "downloads": [
+      {
+        "name": "pinvi641-private.ics",
+        "bytes": 2161,
+        "suggestedFilename": "WSL 부산 여행 _img src_x onerror_alert_1__-일정.ics"
+      },
+      {
+        "name": "pinvi641-shared.ics",
+        "bytes": 2161,
+        "suggestedFilename": "WSL 부산 여행 _img src_x onerror_alert_1__-일정.ics"
+      }
+    ],
+    "pdfPages": {
+      "private": 2,
+      "shared": 2,
+      "long": 5
+    },
+    "tokenAbsentFromPrintRequests": true,
+    "provider": "owned missing-source HTTP fixture; no real map/weather/provider calls",
+    "browserNetworkIsolation": "owned deny proxy with exact loopback bypass; no Playwright request interception",
+    "pdfVisualReviewPending": false,
+    "ownedStackStopped": true,
+    "pdfVisualReview": {
+      "pages": 9,
+      "unique_pages_viewed": 7,
+      "private_shared_pngs_byte_identical": true,
+      "inspected": ["private-1", "private-2", "long-1", "long-2", "long-3", "long-4", "long-5"],
+      "result": "한글·시간·번호·같은 좌표 방문·빈 일자·긴 메모·마지막 표식 확인; 본문 잘림/겹침/제목 단독 페이지 없음",
+      "native_header_footer": false,
+      "scope": "Chromium 출력 본문; 사용자 브라우저 기본 머리말/바닥글 설정 제어 또는 해당 잘림 해결을 주장하지 않음"
+    }
+  },
+  "independent_artifact_verification": {
+    "sourceRevision": "dffec531c566eb20ff6aeb5b812f351c2d010cb6",
+    "independentCalendarParser": "icalendar",
+    "calendars": [
+      {
+        "name": "pinvi641-private.ics",
+        "events": 5,
+        "uids": [
+          "64100000-0000-4000-8000-000000000641-64100000-0000-4000-8000-000000000001@pinvi.example",
+          "64100000-0000-4000-8000-000000000641-64100000-0000-4000-8000-000000000002@pinvi.example",
+          "64100000-0000-4000-8000-000000000641-64100000-0000-4000-8000-000000000003@pinvi.example",
+          "64100000-0000-4000-8000-000000000641-64100000-0000-4000-8000-000000000004@pinvi.example",
+          "64100000-0000-4000-8000-000000000641-day-2@pinvi.example"
+        ],
+        "sha256": "ca9129aba2f81ee7fb2f84b45bf131079b9f3bc27d0f8d6169850d51f39a1293"
+      },
+      {
+        "name": "pinvi641-shared.ics",
+        "events": 5,
+        "uids": [
+          "64100000-0000-4000-8000-000000000641-64100000-0000-4000-8000-000000000001@pinvi.example",
+          "64100000-0000-4000-8000-000000000641-64100000-0000-4000-8000-000000000002@pinvi.example",
+          "64100000-0000-4000-8000-000000000641-64100000-0000-4000-8000-000000000003@pinvi.example",
+          "64100000-0000-4000-8000-000000000641-64100000-0000-4000-8000-000000000004@pinvi.example",
+          "64100000-0000-4000-8000-000000000641-day-2@pinvi.example"
+        ],
+        "sha256": "068366c165a8103b55a102f567bf4d7713d90435601f4c2847d1611ec97f8cac"
+      }
+    ],
+    "pdfs": [
+      {
+        "name": "pinvi641-private.pdf",
+        "pages": 2,
+        "bboxWordsWithinPage": 140,
+        "linkAnnotations": [],
+        "sha256": "0d8bc0464ffeb63532ba8823956b5b69bb0be0e4872ac83e0f3eac20e1a00a27",
+        "renderedPNGs": [
+          "/home/digitie/.cache/pinvi-643/pinvi641-render-dffec531/pinvi641-private-1.png",
+          "/home/digitie/.cache/pinvi-643/pinvi641-render-dffec531/pinvi641-private-2.png"
+        ]
+      },
+      {
+        "name": "pinvi641-shared.pdf",
+        "pages": 2,
+        "bboxWordsWithinPage": 140,
+        "linkAnnotations": [],
+        "sha256": "1512b274262e42b2819524c18695bb150ec8b7f12e763b8a5e05cb5a29d4d680",
+        "renderedPNGs": [
+          "/home/digitie/.cache/pinvi-643/pinvi641-render-dffec531/pinvi641-shared-1.png",
+          "/home/digitie/.cache/pinvi-643/pinvi641-render-dffec531/pinvi641-shared-2.png"
+        ]
+      },
+      {
+        "name": "pinvi641-long.pdf",
+        "pages": 5,
+        "bboxWordsWithinPage": 1142,
+        "linkAnnotations": [],
+        "sha256": "df26286a6011a4d9358c66519680ce337ad00ed90b64cba03b5920c0ef56425f",
+        "renderedPNGs": [
+          "/home/digitie/.cache/pinvi-643/pinvi641-render-dffec531/pinvi641-long-1.png",
+          "/home/digitie/.cache/pinvi-643/pinvi641-render-dffec531/pinvi641-long-2.png",
+          "/home/digitie/.cache/pinvi-643/pinvi641-render-dffec531/pinvi641-long-3.png",
+          "/home/digitie/.cache/pinvi-643/pinvi641-render-dffec531/pinvi641-long-4.png",
+          "/home/digitie/.cache/pinvi-643/pinvi641-render-dffec531/pinvi641-long-5.png"
+        ]
+      }
+    ],
+    "visualReviewPending": false,
+    "visualReview": {
+      "pages": 9,
+      "unique_pages_viewed": 7,
+      "private_shared_pngs_byte_identical": true,
+      "inspected": ["private-1", "private-2", "long-1", "long-2", "long-3", "long-4", "long-5"],
+      "result": "한글·시간·번호·같은 좌표 방문·빈 일자·긴 메모·마지막 표식 확인; 본문 잘림/겹침/제목 단독 페이지 없음",
+      "native_header_footer": false,
+      "scope": "Chromium 출력 본문; 사용자 브라우저 기본 머리말/바닥글 설정 제어 또는 해당 잘림 해결을 주장하지 않음"
+    }
+  },
+  "artifact_cache": "/home/digitie/.cache/pinvi-643",
+  "cache_sha256": {
+    "pinvi641-web-tests-dff.log": "d6a242dccf04ad7df5a404f0176e9b8306f58bbc9d82dd323fa9a732aa9d48da",
+    "pinvi641-heading-unit.log": "c0c92e2d8f7234e67a8b4d349efaa30adfab4e916160283db82a9d1807502976",
+    "pinvi641-workspace-types-dff.log": "85dd66c98ddd0078437e3b75ad7714b25f8ce5892bb7a02a65b00e66f2be1524",
+    "pinvi641-web-lint-dff.log": "a8935626ab881e93b1e6174066b95ed9aed63725c130bb78cde63df3c5aab330",
+    "pinvi641-api-unit-d31.log": "bed4bbb10cedcc1611fcaa03b6ebdbb71dc747a2bf0fdb47e9549cbfcf28b84d",
+    "pinvi641-api-mypy.log": "0f50c672cdacd17014480e6a69decc067dfe8712de58807b575944416825a966",
+    "pinvi641-final-api-ruff.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "pinvi641-final-api-format.log": "50bcb15941476b922fe2c939b016a3f9880b4d26609c5774bc39f23df8e9f699",
+    "pinvi641-final-shared-api-pg.log": "6b4ba30a6efd29dc9a31c93f20b1e8fc8ed43d9ba6d4dc36502e79d4176eea90",
+    "pinvi641-live-result.json": "a3c084d55858ad0ca0945e10fd8ac32fd92bb1e581f24fbfcee21e9b0c4dba02",
+    "pinvi641-artifact-verification.json": "e16a926d7d4d86b6a7b824a89a7bc7220b525983d885500af1bac0685fe87c46",
+    "pinvi641-artifacts.log": "52c3e6323fae106276fa46c80e0f598f41b923ddbf144224b96ca667c93d280e",
+    "pinvi641-review-negative.log": "91cbfe5320bf4b7a72890aab0d06508b7a88ad3d778e18754d7a297009bbae42",
+    "pinvi641-share-url-negative.log": "765ef9e910789f94d582be042a00c695c5f6bc77481ca470c125b1dc2a648517",
+    "pinvi641-pagination-negative.log": "d4693ec76ec1695df185f952cdd167ce6a5374324d447c12dc6e65ff4308bbb0",
+    "pinvi641-note-heading-negative.log": "491c9f6a22052fbe3b195929434d364b1641693cb3625ee1a7c569deff8eaad9",
+    "pinvi641-ci-integration4-dff-failure.log": "5bc597256ff55256e41cf2e9f5eda326bdb1863d3447e4a4864f9c91a1f5e235",
+    "pinvi641-live.py": "a75660d065754162870b4d49d5f887636105803638d84e2af4b4029d222726c4",
+    "pinvi641-browser.cjs": "32be3e66e9af8f509f7362e797320d9e206a9d6bca54ac46aa3ad550af672c0b",
+    "pinvi641-verify-artifacts.py": "c551eacfcc4c8489a10de1ced20e82c7833642d001a790961e242425e8d951d2",
+    "pinvi641-ui-private.png": "421d53142cc20752224362c4fccdbc5b6f999a4fb25cce9dbfc000ba3d012973",
+    "pinvi641-ui-shared.png": "59b66d5be3f3a15b5ed49382954a118ac138c57508c0f9eede0e9b8dafa23a45",
+    "pinvi641-ui-long.png": "baf9a30b3dc4ab487c38e6bf966134babce6ba70203508f4045a1f47c7d300b4",
+    "pinvi641-ui-mobile.png": "c4356caa7c8f4e355db7e077121f93b0556b9382a617caedc42d3080a7c6d330"
+  },
+  "page_png_sha256": {
+    "pinvi641-render-dffec531/pinvi641-long-1.png": "48fc4cdd1e2e728da678205a69f8b060efe01a9e2a52c308f9f1f981b2b401fa",
+    "pinvi641-render-dffec531/pinvi641-long-2.png": "7ac0c30f9eab48f60d927f7850d392b42c0e926e92440b7fe5a5db6044aa982f",
+    "pinvi641-render-dffec531/pinvi641-long-3.png": "fe0f58838584413a3ad95b6d9740fc5bcc6edad66a2f8441eeae135568fcff07",
+    "pinvi641-render-dffec531/pinvi641-long-4.png": "b7040c63b5e3e462311b4efa9807a01fed88ae42f7eeb08dcee1032a03993740",
+    "pinvi641-render-dffec531/pinvi641-long-5.png": "88dd7dae2f4fcd11d91d0db5462911997c4b4ba02edadc3bee201dd4b9a88c13",
+    "pinvi641-render-dffec531/pinvi641-private-1.png": "48fc4cdd1e2e728da678205a69f8b060efe01a9e2a52c308f9f1f981b2b401fa",
+    "pinvi641-render-dffec531/pinvi641-private-2.png": "62e978decec03876e04cbdb11849222d7eef1a56a3a6736e72b59a88e46f5ff7",
+    "pinvi641-render-dffec531/pinvi641-shared-1.png": "48fc4cdd1e2e728da678205a69f8b060efe01a9e2a52c308f9f1f981b2b401fa",
+    "pinvi641-render-dffec531/pinvi641-shared-2.png": "62e978decec03876e04cbdb11849222d7eef1a56a3a6736e72b59a88e46f5ff7"
+  },
+  "boundaries": {
+    "pdf": "browser native print dialog PDF destination; not automatic PDF file download SDK",
+    "map": "verified existing points and visit order schematic; no basemap or road route",
+    "calendar": "actual downloaded files parsed independently; no unperformed external calendar UI import claimed",
+    "native_header_footer": "primary PDFs use default off; forced headless default header/footer clipping remained in separate stress file, not claimed fixed; stress URL about:blank, no token",
+    "network": "actual owned loopback PG/API/web; missing-source fixtures and deny proxy, no real provider or Telegram sends",
+    "permissions": "already-delivered content or downloaded files cannot be recalled on share revoke"
+  },
+  "final_ci": "exact final documentation/test-only candidate required checks and merge/tree proof recorded on PR; no claim of final CI at this precommit evidence snapshot"
+}
