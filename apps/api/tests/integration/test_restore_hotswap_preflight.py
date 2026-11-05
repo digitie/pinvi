@@ -1910,13 +1910,22 @@ def test_restore_hotswap_cleanup_waits_for_server_lock_release(
     # Execute the actual runner functions against PostgreSQL, without running
     # the unrelated snapshot/schema-swap setup in this lock-lifecycle probe.
     harness = tmp_path / "cleanup.sh"
+    # Model cleanup immediately after the first lock acquisition: functions
+    # defined later in the runner are not yet available to its EXIT trap.
+    guard_start = source.index("write_identity_guard() {")
+    first_acquisition = source.index("\nstart_advisory_lock\n")
+    early_guard = (
+        source[guard_start : source.index("\n}\n", guard_start) + 3]
+        if guard_start < first_acquisition
+        else ""
+    )
     harness.write_text(
         "set -euo pipefail\n"
         + source[source.index('TMP_DIR=""') : source.index("TEST_MODE=")]
         + source[source.index("phase() {") : source.index('if [[ "${1:-}"')]
         + source[source.index("cleanup() {") : source.index("copy_tool_to_private_dir() {")]
         + source[source.index("start_advisory_lock() {") : source.index("configure_forensics() {")]
-        + source[source.index("write_identity_guard() {") : source.index("execute_sql_file() {")]
+        + early_guard
         + """
 TEST_MODE=0
 TMP_DIR="$(mktemp -d)"
@@ -2071,6 +2080,7 @@ WHERE activity.datname = current_database()
             assert process.wait(timeout=12) == expected_status
             assert time.monotonic() - cleanup_started < 12
             probe_output = (tmp_path / "output").read_text()
+            assert "command not found" not in probe_output
             assert TEST_PASSWORD not in probe_output
             assert database_url not in probe_output
             if not resume_backend:

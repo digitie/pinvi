@@ -383,6 +383,26 @@ release_receipt_seal_is_exact() {
     --receipt-record-sha256 "${RELEASE_RECEIPT_RECORD_SHA256}" >/dev/null
 }
 
+write_identity_guard() {
+  if [[ "${TEST_MODE}" == "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
+    return 0
+  fi
+  cat <<SQL
+DO \$m05\$
+BEGIN
+  IF current_database() <> '${PINVI_RESTORE_EXPECTED_DATABASE_NAME}'
+     OR (SELECT oid::text FROM pg_database WHERE datname = current_database()) <> '${PINVI_RESTORE_EXPECTED_DATABASE_OID}'
+     OR (pg_control_system()).system_identifier::text <> '${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}'
+     OR COALESCE(host(inet_server_addr()), '') <> '${PINVI_RESTORE_EXPECTED_HOSTADDR}'
+     OR inet_server_port()::text <> '${PINVI_RESTORE_EXPECTED_PORT}'
+  THEN
+    RAISE EXCEPTION 'restore target identity changed before mutation';
+  END IF;
+END
+\$m05\$;
+SQL
+}
+
 cleanup() {
   local cleanup_status=$?
   trap - EXIT
@@ -444,8 +464,7 @@ cleanup() {
   # a backend here. PID reuse conservatively times out instead of touching it.
   if [[ "${LOCK_HOLDER_BACKEND_PID}" =~ ^[0-9]+$ ]]; then
     if ! {
-      write_identity_guard
-      cat <<SQL
+      write_identity_guard && cat <<SQL
 SET statement_timeout = '5s';
 DO \$m05\$
 DECLARE
@@ -1041,25 +1060,6 @@ else
   fi
 fi
 
-write_identity_guard() {
-  if [[ "${TEST_MODE}" == "1" && -z "${PINVI_RESTORE_EXPECTED_DATABASE_NAME:-}" ]]; then
-    return 0
-  fi
-  cat <<SQL
-DO \$m05\$
-BEGIN
-  IF current_database() <> '${PINVI_RESTORE_EXPECTED_DATABASE_NAME}'
-     OR (SELECT oid::text FROM pg_database WHERE datname = current_database()) <> '${PINVI_RESTORE_EXPECTED_DATABASE_OID}'
-     OR (pg_control_system()).system_identifier::text <> '${PINVI_RESTORE_EXPECTED_SYSTEM_IDENTIFIER}'
-     OR COALESCE(host(inet_server_addr()), '') <> '${PINVI_RESTORE_EXPECTED_HOSTADDR}'
-     OR inet_server_port()::text <> '${PINVI_RESTORE_EXPECTED_PORT}'
-  THEN
-    RAISE EXCEPTION 'restore target identity changed before mutation';
-  END IF;
-END
-\$m05\$;
-SQL
-}
 
 execute_sql_file() {
   local sql_file="$1"
