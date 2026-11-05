@@ -266,6 +266,12 @@ bool·문자열 숫자·실수·0·음수·UUID가 아닌 키와 비정규 UUID 
 
 운영 Manager는 환경변수를 명시적으로 전달한다. Manager pinvi-api 전달선과 Pinvi fallback Compose 전달선이 모두 있어야 하며 .env 값만 추가해서는 충분하지 않다. 코드 전달선 변경과 운영 UUID 구성·기존 임시6건 해제는 별개다. 실제 운영 활성화·검증은 담당 Claude Code가 수행한다.
 
+### 저장소 장애와 핸들러 오류의 경계(#684)
+
+한도 저장소의 override 조회·counter hit 실패만 기존 fail-open/fail-closed 정책을 적용한다.
+허용 후 핸들러 DB 오류나 응답 전송 오류를 한도 저장소503으로 바꾸거나 핸들러를 재실행하지 않는다.
+저장소 장애 로그에는 예외 종류와 정책 이름만 남기며 SQL·파라미터 원문은 남기지 않는다.
+
 ## 9. Webhook
 
 | Path                                       | 발신자                                   | 검증                                                                                                                       |
