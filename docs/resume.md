@@ -1,3 +1,9 @@
+## 2026-11-05 — #641 여행 내보내기 초안 착수
+
+- #637은 PR689/22d3577로 일반 squash 병합했다. 정확97b 후보의 필수CI13성공·두 최종 적대리뷰·실제UI/Prom8검증·tree동일성을 확인했다.643 최신본문에서637을 완료로 반영했다.
+- 후속641은 인쇄/PDF 저장 미리보기·ICS 파일 다운로드·일자/장소/시간/메모/정적위치도와 공유 화면의 같은 내보내기다. 계획 docs/execplan/issue-641-trip-export.md.
+- 기존 조회 권한으로 받은 일정만 사용하며 공유 token을 URL·파일명·내용에 유출하지 않는다. 초안·자주push·WSL실제UI/PDF시각검증·두리뷰·정확CI 뒤 머지한다. 운영은Claude 담당이다.
+
 ## 2026-11-05 — #637 최종 제품 WSL UI·telemetry·두 리뷰
 
 - c1fad75의 실제 소유 PG/API·공개 Weather REST와 Telegram TCP fixture·프로덕션 웹 Chromium7흐름이 통과했고 pageerror0이다. 같은 API worker의 전송3·계획 실패3을 실제 Prometheus Docker가 scrape해 총8검증이 통과했다. 실제 수신자·원천·운영 접근은 없다.
