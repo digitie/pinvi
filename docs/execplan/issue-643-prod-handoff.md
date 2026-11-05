@@ -27,3 +27,9 @@ N150 host·exact revision·clean checkout·고정 이미지·새 npm ci guard는
 두 서브에이전트 감사에서 Pinvi7/Map2 열린 이슈를 확인했다. #643 기존 미체크는650/Map1450이지만 Map1440이 재오픈되어 완료 체크 정정도 필요하다. Map1438은 CLOSED 상태의 운영 재적재 후속이다. 두 운영 이슈만 남았다는 표현을 전체 저장소 백로그로 확대하지 않는다.
 
 전체API단위2024PASS/기존9skip(91.21초)을 확인했다. 머지16건·source/API/worker·실제dataset scope·일반VIEW/cluster 경계와 세 운영 표적을 새 인계 런북에 기록한다. 정확 최종 두 적대 리뷰·CI 성공 뒤 병합하고 #643 최신 본문을 다시 읽어1440 체크만 정정한다.
+
+## 최종 CI에서 발견한 테스트 clock 경계
+
+d8 원격 integration4의 기존 특보12검사가 고정 NOW와 실시간 DB scheduled_at default 혼용으로 실패했다. WSL 동일1FAIL 후 특보 테스트 모듈에서만 신규 ORM 미지정 예약 시각을 주입 clock에 맞췄다. function-scope listener는 finally에서 제거하며 명시 예약·후속 retry/chunk UPDATE는 그대로다. runtime·migration·기존 guard/단언 변경은 없다.
+
+보완 뒤 실제PG의 특보와 기존 알림46검사가61.71초에 통과했고 두 독립 전문 소스 리뷰도 무차단이었다. 테스트가 실제 DB default clock을 검증한다고 주장하지 않는다. 새 정확 최종 후보의 두 재확인·적용CI를 다시 확인한다.

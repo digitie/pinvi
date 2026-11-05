@@ -1,3 +1,9 @@
+## 2026-11-06 — 원격 통합 검사의 고정 시계 혼용 보완
+
+- PR691 d8 후보의 원격integration4가 특보12검사 실패를 포착했다. 고정worker NOW는11/5 12UTC인데 DB scheduled_at default는실제21UTC라선택대상이없었다. WSL에서같은1FAIL을재현했다. 제품큐/worker/guard는바꾸지않는다.
+- 해당특보테스트모듈의함수범위fixture에서신규ORM delivery의미지정scheduled_at만고정NOW로맞추고finally listener를제거한다. 명시예약·후속retry/chunk UPDATE와기존동의/취소/만료/버전단언은보존한다. 이fixture는DB실시간default자체의검증이아니다.
+- 보완뒤실제PG 특보/기존알림46PASS(61.71초), Ruff/format통과. 두독립전문리뷰는해당test-only변경무차단이다. 이전WSL단위2024/9skip와러너26의source는동일하다. 새정확후보리뷰/CI뒤일반병합하며실패를성공으로덮어기록하지않는다.
+
 ## 2026-11-06 — 운영 인계·열린 이슈 병행 감사와 러너 보완
 
 - 사용자 확인대로 Codex는WSL작업/머지, prod는Claude Code담당이다. 초안PR691을먼저열고 ecdcaa8로 geometry anchor3개의Docker전달누락을보완했다. 원본Bashargv구성에서수정전3FAIL1PASS,수정후신규4/관련26PASS·Bash문법/Ruff/format을확인했다. 전체API단위2024PASS/기존9skip(91.21초)이다. N150/Docker/prod UI실행이아니다.

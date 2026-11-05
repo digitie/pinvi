@@ -4,7 +4,8 @@
   "runner_revision": "ecdcaa875b86d4a89f94514671d589212b973386",
   "source_sha256": {
     "scripts/n150-playwright-runner.sh": "3ecd34e9a3523637128cdc9e07118617a5e47553bbfccdefa0c34fc1fcb97480",
-    "apps/api/tests/unit/test_playwright_geometry_env.py": "08a6d7ea1c7c48f101bbcd11595dae03d1b8d21d3985407500e6641e222d99ab"
+    "apps/api/tests/unit/test_playwright_geometry_env.py": "08a6d7ea1c7c48f101bbcd11595dae03d1b8d21d3985407500e6641e222d99ab",
+    "apps/api/tests/integration/test_telegram_weather.py": "295bf08722272e1d47e19eb25954f852c0493d9835df593a9488ad3767cc5df1"
   },
   "production_access": false,
   "production_executor": "Claude Code",
@@ -29,7 +30,20 @@
       "count": 3,
       "browser_or_production_run": false
     },
-    "boundary": "runs original allowlist/argv Bash segment; no N150 hostname impersonation, Docker execution or guard bypass"
+    "boundary": "runs original allowlist/argv Bash segment; no N150 hostname impersonation, Docker execution or guard bypass",
+    "weather_clock_regression": {
+      "remote_failed_before": 12,
+      "remote_revision": "d8ae0c2de270e7ee70488c33ae767a84177b8e6c",
+      "remote_job_url": "https://github.com/digitie/pinvi/actions/runs/42111890236/job/127541281491",
+      "local_reproduced_failed": 1,
+      "related_pg_passed": 46,
+      "seconds": 61.71,
+      "cause": "fixed worker NOW=2026-11-05T12:00Z preceded real DB scheduled_at default after noon UTC",
+      "fix": "function-scope autouse before_insert listener sets only unset new test delivery scheduled_at to fixture NOW; removed in finally",
+      "runtime_unchanged": true,
+      "explicit_schedules_and_updates_preserved": true,
+      "scope": "controlled weather fixture does not test DB real-time default; ordinary notifications suite is unchanged"
+    }
   },
   "merged_prs": [
     {
@@ -228,7 +242,8 @@
     "Hubble": "no remaining P0/P1/P2 at ecdcaa8 runner code",
     "Hume": "no remaining P0/P1/P2 at ecdcaa8 runner code",
     "reviewers_ran_tests": false,
-    "final_documentation_candidate": "review and exact CI recorded on PR after this snapshot"
+    "final_documentation_candidate": "review and exact CI recorded on PR after this snapshot",
+    "test_clock_review": "Hubble/Hume read-only uncommitted test-only diff: no remaining P0/P1/P2; exact final candidate recheck follows"
   },
   "critical_boundaries": [
     "Geo original 40 input, nullable coordinates, request/worker/DB/MV/release distinction",
@@ -244,6 +259,9 @@
     "pinvi643-handoff-e2e-list.log": "dd8a3dbf52e8377efe297de7f4a2f8154ee3a2477d48f0c734443bd56ba59f81",
     "pinvi643-runner-impact.json": "cfa58910a3ddeb997504d0d0b9c945d511358b075d19b74c7458a6c9f46a9de1",
     "pinvi643-handoff-merged-prs.json": "7434ae0e914d1a954d2d0d4884b54d039c10574a80c378b55e6a4c7324d734f2",
-    "pinvi643-handoff-open-pinvi.json": "d7899537b5f899b2ece0d9c40dbacbe4d86556201c6361eef476a00c0a49bc5c"
+    "pinvi643-handoff-open-pinvi.json": "d7899537b5f899b2ece0d9c40dbacbe4d86556201c6361eef476a00c0a49bc5c",
+    "pinvi643-weather-clock-negative.log": "a42a265f1b5bd4a8819bea15d156685a17cc21c101b29071e1555e2b0936bea4",
+    "pinvi643-weather-clock-positive.log": "8068ab62e391829072cc89d21b5f1aa7b09d7cd17c6b5b114cbc0bdf8cd53aeb",
+    "pinvi643-weather-clock-impact.json": "cca9a1901d56bf9919e88f19f5c82da83aa3d95b24d3726fa0a1808520024833"
   }
 }
