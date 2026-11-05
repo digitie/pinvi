@@ -1,3 +1,18 @@
+## 2026-11-06 재개 — WSL 잔여를 같은 PR에서 완주
+
+사용자 후속 지시로 직접 resolve와 services/routes의 plain HTTP client도 이번 묶음 소유 범위에 포함한다.
+#621 추가 댓글과 통합 문서가 배경 해석을 이 이슈의 작업으로 명시하므로 다른 이슈 제품 결정에 따른 차단은 없다.
+아래 과거 '서비스 소유 범위 밖 후속' 기록은 이전 중간 상태이며 현재 완료 기준이 아니다.
+
+- 직접 resolver/새 worker/trip 미스 투영은 작업자 A, plain HTTP 7파일은 작업자 B,
+  weather client timeout·느린5xx·풀 대기 증거는 작업자 C, 공통 logging streaming·카드/Admin 예산·lifecycle·통합은 주 작업자가 소유한다.
+- 첫 요청은 캐시만 읽고 미스는 unavailable/빈 카드로 반환한다. 별도 세션·동시2·feature single-flight·제한된 큐·짧은 음성 캐시·종료 취소를 구현한다.
+- 배경 resolve에만 read45초를 주고 요청 deadline context를 상속하지 않는다. 좌표 변경·Map 행·늦은 결과·삭제 경합과 실제PG 첫 miss→배경 채움→hit를 검증한다.
+- 남은 plain HTTP의 실패/취소와 streaming body 오류도 기록한다. OAuth·Telegram·서명·runtime guard는 그대로 유지하며 실제 제공자에는 접근하지 않는다.
+- 직접 카드 예산은 설정으로 노출하고 Admin이 카드의4초를 암묵 상속하지 않도록 호출별 예산을 분리한다.
+- 마지막에 사용자 지정 origin/main d02a35d(#692 운영 카탈로그)를 통합하고 타 작업자의 변경을 보존한 뒤 source 실행 범위를 다시 검증한다.
+- 운영 flag·edge HTTP/2·실제 운영 latency만 Claude 담당 잔여로 남긴다. Draft/Closes616/Refs621 유지, 최종 전문리뷰·ready·merge는 메인 담당이다.
+
 # #616·#621 외부 호출 계약과 복원력 WSL 실행계획
 
 ## 기준·책임 경계
