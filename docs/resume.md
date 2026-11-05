@@ -1,11 +1,15 @@
-## #616·#621 전용 Draft PR695 인계 (2026-11-06)
+## #616·#621 WSL 보완·최신 main 통합 (2026-11-06)
 
-이 worktree는 사용자 지정 ff5c2386 기준이며 새 main은 아직 통합하지 않았다.
-WSL 소유 envelope·rate limit·logging·provider·pool 구현과 관련 검증을 끝냈다.
-증거는 docs/reviews/pinvi-616-621-wsl-resilience.json, 계획은
-docs/execplan/issues-616-621-outbound-resilience.md다. 메인이 최종 두 전문 적대리뷰·ready·merge를
-수행한다. #616만 종료 대상이며 #621 직접 resolve/일부 service 호출부/edge·운영 flag·worker는
-잔여다. 운영·SSH·실제 provider·Telegram에는 접근하지 않았다.
+직접 resolve 배경화와 남은 API/CLI plain HTTP 관측까지 PR695에 구현했다.
+사용자 최신 지정 main a5a215470adf47b31ea7fe25e3a9431337e4e4a9(#658·#692 포함)을
+8a259b4로 통합했고 두 변경의 원본8파일과 journal 양쪽 기록을 보존했다.
+최종고정 dcddeff의 unit2187PASS/기존9SKIP·540입력hash동일을 확인했다. 통합제품의
+PG/API198·#658소유PG9·mypy275·Ruff/format528·카탈로그349/자동299가 통과했고
+공개OpenAPI는a5a2154와byte동일이다.
+계획은 docs/execplan/issues-616-621-outbound-resilience.md, 증거는
+docs/reviews/pinvi-616-621-wsl-resilience.json이다. 메인이 최종 두 전문 리뷰·ready·merge를 수행한다.
+운영 flag·edge HTTP/2·실제 운영 latency/worker 증설은 Claude Code 담당이며 #621은 Refs만 사용한다.
+운영·SSH·실제 provider·Telegram 접근과 보호 stash 조작은 없다.
 
 ## 2026-11-06 — 원격 통합 검사의 고정 시계 혼용 보완
 

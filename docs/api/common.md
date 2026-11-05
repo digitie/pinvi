@@ -383,11 +383,14 @@ DB 저장을 기다리지 않는다. flush는2초, 종료 drain은3초 상한이
 
 `ApiCallLoggingClient`를 사용하는 provider factory는 timeout·연결 실패·body read 실패·취소도
 기록하고 원래 예외를 유지한다. endpoint는 공통 redaction을 적용하고 임의 예외 문자열은
-저장하지 않는다. 기록의 `occurred_at`은 enqueue 시각이다. 외부에서 plain
-`httpx.AsyncClient`에 event hook만 부착하면 response 없는 실패를 잡을 수 없으므로
-실패 관측이 필요한 추가 호출부는 같은 client를 사용해야 한다. 이 PR은 clients 소유
-factory를 연결하며 services/routes에서 직접 생성하는 OAuth·Telegram 등의 plain client
-전환은 소유 범위 밖 후속이다.
+저장하지 않는다. 기록의 `occurred_at`은 enqueue 시각이다. API runtime·관리자 TCP/UDS probe·독립 CLI의 생성부도 같은 client로 연결했다.
+Dagster bounded reader는 기존 response-hook 금지 규칙을 유지하고 request tracker와
+stream 종료 관측을 사용한다. streaming 응답은 헤더가 아니라 EOF/실패/취소/조기 종료에서
+한 번 기록한다. 독립 CLI는 client 종료 뒤, DB engine dispose 전에 bounded drain한다.
+Telegram의 전체 deadline이 전송을 먼저 취소하면 실제 전송 예외는 CancelledError이며,
+공개 network_error 변환과 사용자 직접 취소의 재전파는 기존대로 유지한다.
+별도 ETL 패키지는 API ORM에 의존하지 않으며 기존 resource timeout·Dagster retry/metadata를
+유지한다.
 
 DB 기본값은 `PINVI_DATABASE_POOL_SIZE=10`, `PINVI_DATABASE_MAX_OVERFLOW=0`,
 `PINVI_DATABASE_POOL_TIMEOUT_SECONDS=5`이다. 대기 metric
@@ -396,6 +399,21 @@ acquisition을 측정하고 새 연결 생성 시간도 포함한다. SQL 실행
 않는다. worker가 늘면 이 한도가 worker 수만큼 곱해진다. 운영 설정 전달·부하 검증과
 edge HTTP/2·worker 증설은 별도 운영 담당 범위다.
 
-직접 weather `/resolve`의 서비스 요청 경로 배경화·single-flight·음성 캐시·긴 호출별
-timeout과 느린5xx 재시도 재분류는 #621 잔여다. 이번 변경은 이를 완료했다고 표시하지
-않는다. 운영 검증 전 #621 자동 종료는 하지 않는다.
+직접 weather `/resolve`는 요청에서 기다리지 않는다. 같은 좌표의 유효한 직접 캐시만
+읽고, 미스는 별도 세션·별도 context의 배경 해석을 예약해 즉시 빈 카드/trip unavailable로
+반환한다. feature별 single-flight와 최신 좌표 예약 병합, 실행2·대기128·음성 캐시128/30초를
+사용한다. resolve만 read45초를 쓰며 전체 반경 HTTP 해석은140초 상한이다. 요청 deadline이나
+인증 context는 배경 작업에 상속하지 않는다. 종료 시 worker를 취소·회수한 뒤 client를 닫는다.
+음성 캐시는 반경 없음과 실패를 구분하고 TTL 뒤 재시도한다. 좌표/Map/로컬 캐시 삭제 뒤
+늦은 결과는 optimistic version 검사로 거부한다. 외부 Map feature 삭제 여부는 Pinvi가
+캐시 행만으로 추정하지 않는다.
+
+직접 카드 예산은 `PINVI_KOR_TRAVEL_WEATHER_REQUEST_BUDGET_SECONDS` 기본4초,
+관리자는 `PINVI_KOR_TRAVEL_WEATHER_ADMIN_REQUEST_BUDGET_SECONDS` 기본10초를 쓴다.
+긴 resolve read override는 다른 동시 호출의 timeout을 바꾸지 않는다. 느린5xx는 기본 read와
+호출별 read 중 짧은 값의 절반을 이미 썼으면 재시도하지 않으며, 빠른5xx·연결 재시도는
+유지한다. deadline 회로의 의미 있는 원격 예산은 실제 connect/header 전송 시작부터 계산해
+로컬 연결 풀 대기를 원격 장애 시간으로 세지 않는다.
+
+#621의 운영 flag 적용·edge HTTP/2·실제 운영 latency/부하 및 worker 증설은 Claude Code
+소유다. WSL 소유 fixture 검증은 운영 검증을 대신하지 않으며 #621은 자동 종료하지 않는다.

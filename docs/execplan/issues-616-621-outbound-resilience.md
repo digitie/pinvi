@@ -1,3 +1,24 @@
+## 현재 완료 상태 — WSL 보완·최신 main 통합
+
+PR695 한 묶음에서 #616과 #621의 WSL 가능 범위를 구현·검증했다. 직접 resolve와
+API/CLI plain HTTP는 더 이상 미완료 후속이 아니다. 아래 최초 범위·중간 인계 기록은
+시점별 이력이며 이 현재 완료 상태와 최종 증거가 우선한다.
+
+- 사용자 최신 main a5a215470adf47b31ea7fe25e3a9431337e4e4a9를8a259b4로 통합했다.
+  #658/#692 원본8파일은byte동일하며 journal 충돌은 양쪽 기록을 모두 보존했다.
+- 최종 검증 고정 dcddeff0213e9e5e5de615b672978d984b095c93: 전체unit2187PASS/기존9SKIP
+  (93.18초), source 입력540개 실행 전후동일. 직전1FAIL은신규UUID축없는weather캐시writer의정적
+  목록 누락이었으며 해당경로만명시후전체재검증했다.
+- 통합제품8a259b4의관련실제PG/API198PASS(131.67초), 들어온#658 소유PG잠금9PASS
+  (58.31초). 최종고정과제품/통합test source는동일하고이후변경은unit목록2줄뿐이다.
+- Ruff/format528·mypy275·Bash문법·diff통과. npm카탈로그349/자동299정합,
+  공개OpenAPI는a5a2154와byte동일이다.
+- #643 최신본문/최신댓글3건을재조회했다(updatedAt2026-11-05T21:40:40Z). #616/#621은
+  PR695에서유지하며 #618/#623/#686이나운영#650/Map1440/1450을가져오거나닫지않는다.
+- 최종증거 docs/reviews/pinvi-616-621-wsl-resilience.json 및 전체입력
+  docs/reviews/pinvi-616-621-source.sha256. 운영flag/edgeHTTP2/실제운영latency·worker판단만
+  Claude담당이다. Closes616/Refs621/Refs643·Draft유지, 최종두전문리뷰/ready/merge는메인이다.
+
 ## 2026-11-06 재개 — WSL 잔여를 같은 PR에서 완주
 
 사용자 후속 지시로 직접 resolve와 services/routes의 plain HTTP client도 이번 묶음 소유 범위에 포함한다.

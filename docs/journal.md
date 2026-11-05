@@ -1,3 +1,12 @@
+## 2026-11-06 — #616·#621 WSL 잔여 완주·a5a2154 보존 통합
+
+- 사용자 후속대로 서비스/라우트/독립CLI까지 같은DraftPR695에서 완성했다. 직접resolve는cache-only요청·별도session/Context·동시2/대기128·feature single-flight·음성30초·read45초와좌표/Map/삭제/commit경합fence를쓴다. plainHTTP/stream오류·취소·종료drain과카드4초/Admin10초예산·느린5xx재시도제한·실전송기준pool판정도연결했다.
+- main a5a215470adf47b31ea7fe25e3a9431337e4e4a9(#658·#692)를8a259b4로통합했다. 원본8파일은byte동일이며이파일의충돌도양쪽기록을보존했다. 기존source/body경계와봉인migration·보호stash는불변이다.
+- 최종고정 dcddeff0213e9e5e5de615b672978d984b095c93 전체APIunit2187PASS/기존9SKIP(93.18초)·540입력sourcehash전후일치, 관련실제PG/API198(131.67초)·들어온#658소유PG잠금9(58.31초)·mypy275·Ruff/format528·Bash/diff가통과했다. 카탈로그349/자동299정합·공개OpenAPI는a5a2154와byte동일이다.
+- 최초통합unit1FAIL은새weathercachewriter정적목록누락으로잡혔고 UUID축없는동일캐시표경로만명시후전체재실행했다. 새로운실패우선재현과초기fixture가정오류는증거JSON에서구분했다. 운영성공으로바꿔기록하지않는다.
+- #643최신본문·최근3댓글을새로확인했고 #616/#621관련범위를PR695한묶음으로유지한다. #650/Map1440/1450운영체크와frontend618/623/686소유변경은가져오지않았다.
+- 증거 docs/reviews/pinvi-616-621-wsl-resilience.json 및 source.sha256. 운영flag·edgeHTTP2·실제운영latency/worker판단은Claude담당이다. 운영/SSH/실제provider/Telegram접근·자체승인/ready/merge는없다. Closes616/Refs621/Refs643·Draft로메인최종두전문적대리뷰와정확headCI게이트에인계한다.
+
 ## 2026-11-06 — #658 cleanup 경합 독립 구현·draft 인계
 
 **작업**: 별도 WSL worktree에서 소유 PG18 backend SIGSTOP으로 psql kill/wait 뒤 서버 lock 잔류와 조기 cleanup 반환을 1실패로 재현했다.

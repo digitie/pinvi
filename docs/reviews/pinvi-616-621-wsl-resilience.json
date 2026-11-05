@@ -1,133 +1,133 @@
 {
-  "작업": "Pinvi #616·#621 WSL 소유 outbound 복원력 구현 인계",
-  "기록시각": "2026-11-06T07:22:02.411886+09:00",
-  "기준_SHA": "ff5c2386c22412714b42365fd3ab801502258087",
-  "검증_제품_SHA": "674602e00f1a269970db4e7c695e30773062da52",
-  "최종_검증_고정_SHA": "f99e9b396b393a5d3e001bd39b7bec96502ff940",
-  "브랜치": "agent/codex-616-621-resilience",
+  "작업": "Pinvi #616·#621 WSL 가능 범위 완성·최신 main 통합 인계",
+  "기록시각": "2026-11-06T07:48:56.273207+09:00",
   "PR": "https://github.com/digitie/pinvi/pull/695",
-  "PR_상태": "Draft. 최종 두 전문 적대리뷰·ready·merge는 메인 소유이며 수행하지 않았다.",
+  "브랜치": "agent/codex-616-621-resilience",
+  "최초_지정_기준_SHA": "ff5c2386c22412714b42365fd3ab801502258087",
+  "사용자_최신_main_SHA": "a5a215470adf47b31ea7fe25e3a9431337e4e4a9",
+  "재개_제품_commit": "3d7928dae2ec5a33e66f6ca1dd6036b12a219676",
+  "main_통합_commit": "8a259b49184f69b134913242c88976858cff7c86",
+  "최종_검증_고정_SHA": "dcddeff0213e9e5e5de615b672978d984b095c93",
+  "이전_중간_인계": "40930f547d270a71705e7c7448a5384c70ea68e6는 직접 resolve/plain HTTP 보완 전 중간 상태이며 현재 완료 기준이 아니다.",
+  "상태": "WSL 구현·로컬 검증 완료. Draft 유지; 최종 두 전문 적대리뷰·정확 head 원격 CI·ready·merge는 메인 담당.",
+  "우산643": {
+    "url": "https://github.com/digitie/pinvi/issues/643",
+    "updatedAt": "2026-11-05T21:40:40Z",
+    "state": "CLOSED",
+    "본문_sha256": "6323b7110190d23cc1b7af7c08cc9875cda70722428efbffc1d2eabfa0edd4fa",
+    "확인": "최신 본문과 최신댓글3건을 재조회했다. #616/#621은 이 PR695 하나로 유지한다.",
+    "경계": "#618/#623/#686 frontend는 별도 메인 소유다. #650/Map1440/1450 및 재적재 운영 항목을 완료로 바꾸지 않는다. 본문의 열린7건은 과거 감사 시점이며 #658 병합은 사용자 최신 main 지시를 반영한다."
+  },
+  "완료_범위": {
+    "#616": "outer envelope3곳 required키·타입·상태 의미 유지/additive 무시/위치·키집합 warning1회. signed receipt/증명 exact 유지.",
+    "관측": "bounded batch queue·오류/취소·stream EOF/실패/조기close 1회·redaction. API runtime/probe/CLI의 plain생성부 전환 완료.",
+    "직접_resolve": "cache-only 요청/Pending·trip unavailable·빈 카드, 별도session/Context·동시2/queue128·feature singleflight/최신좌표 병합·음성128/30초·close 취소회수·versionfence.",
+    "전송": "resolve만 read45초; native timeout 불변. 느린5xx retry임계는 min(native/effective read)*.5; meaningful timeout회로floor는effective read 유지. 실제전송trace로pool대기배제.",
+    "예산": "직접사용자4초와관리자10초를별도settings로분리, Map기존예산유지.",
+    "rate_limit": "override+atomic counter 단일statement; 요청밖60초/1000행/5초 SKIP LOCKED청소·기존429/503/failopen유지.",
+    "provider_pool": "사용자Map/geo/weather각16즉시거부·120초회로·단일halfopen/세대/취소·pool10/overflow0/timeout5초·acquisition metric.",
+    "이미_완료된_부분": "request.extensions tracker와읽기connection반환의기존수정은재구현하지않았다."
+  },
   "환경": {
     "OS": "WSL Ubuntu-26.04 Linux native",
     "worktree": "/home/digitie/pinvi-workspaces/pinvi-codex-616-621",
-    "Python": "Linux Python3.13, 원본643의 locked dev venv 재사용, PYTHONPATH는 본 worktree apps/api",
-    "DB": "Linux unix:///var/run/docker.sock의 신규 testcontainers PostGIS18 fixture, 테스트 후 삭제",
-    "HTTP": "127.0.0.1 임시 TCP HTTP fixture 또는 명시적 MockTransport",
-    "운영_접근": false,
-    "SSH_접근": false,
-    "실제_provider_접근": false,
-    "Telegram_접근": false,
-    "frontend_수정": false,
-    "보호_stash": "owner-skip-671-672-other-code-in-progress를 적용하거나 변경하지 않았다.",
-    "새_main_통합": "메인 안내 전이므로 지정 base 유지. fetch만 했으며 새 main을 통합하지 않았다.",
-    "migration_변경_없음": true
+    "실행": "원본643 locked dev venv는실행환경으로만재사용, PYTHONPATH는본worktree",
+    "DB": "신규소유testcontainers PG/PostGIS18, unix:///var/run/docker.sock;시험후삭제",
+    "HTTP": "소유127.0.0.1 TCP/UDS 또는명시MockTransport",
+    "운영_SSH_실제provider_Telegram_접근": false,
+    "보호stash_조작": false,
+    "sealed_migration_변경": false,
+    "직접_frontend_변경": false
   },
-  "병행_구현": {
-    "#616": "독립 구현 작업자: outer envelope 세 client와 해당 회귀",
-    "#621_rate_limit": "독립 구현 작업자: 단일 statement와 독립 청소 및 unit/PG 회귀",
-    "#621_provider": "독립 구현 작업자: Map·geo·weather 회로/bulkhead와 회귀",
-    "주작업": "logging·pool·lifecycle 연결·실제 HTTP/PG·공개 오류 계약·통합 검증",
-    "최종_리뷰": "병행 구현을 최종 두 전문 적대리뷰 또는 승인으로 취급하지 않는다."
-  },
-  "실패_우선": [
-    {
-      "항목": "#616 additive 세 경로",
-      "결과": "3 FAIL → 관련/보안/설정 148 PASS"
-    },
-    {
-      "항목": "rate limit 실제PG SQL statement",
-      "결과": "기존 SELECT+UPSERT+DELETE 3개로1 FAIL → 한 statement 및 관련70 PASS"
-    },
-    {
-      "항목": "provider 포화·timeout·늦은 성공",
-      "결과": "7 FAIL → provider 관련241 PASS/기존1 SKIP, 신규회귀17 PASS"
-    },
-    {
-      "항목": "inline DB 기록",
-      "결과": "response task가DB를기다리는반례1 FAIL → logging/runtime unit12 PASS",
-      "주의": "같은 초기로그의ImportError1건은 의미있는제품실패증거로계산하지 않는다."
-    },
-    {
-      "항목": "pool metric negative control",
-      "결과": "Observed pool을기본pool로monkeypatch하면acquisition metric0으로실제PG1 FAIL. 정상pool은대기/timeout/취소/회복통과"
-    }
-  ],
   "검증": [
     {
       "명령": "python -m pytest apps/api/tests/unit -q",
-      "로그": "unit-final.log",
-      "결과": "2084 passed, 9 skipped, 5 warnings in 104.59s (0:01:44)",
-      "소스": "최종 고정 SHA에서 실행 전후 전체 변경 app/tests sourcehash 대조"
+      "결과": "2187 passed, 9 skipped, 5 warnings in 93.18s (0:01:33)",
+      "source": "dcddeff0213e9e5e5de615b672978d984b095c93",
+      "설명": "첫통합실행은새weather캐시쓰기경로의정적목록누락1FAIL/2186PASS. UUID축없는동일cache표writer만목록에명시후전체재실행했다."
     },
     {
-      "명령": "python -m pytest apps/api/tests/integration/{test_admin_abuse_api,test_rate_limit_resilience,test_api_call_logging,test_db_pool_resilience,test_outbound_resilience_http,test_geo_api,test_features_weather_cutover,test_trip_view_weather_cutover,test_weather_via_map,test_admin_features_weather_cutover,test_feature_request_pipeline,test_feature_reference_reconciliation}.py -q",
-      "결과": "134 PASS, 131 deprecation warnings, 88.55초",
-      "로그": "integration-related.log",
-      "소스": "제품674602e. public 오류4건 추가 전 test_outbound_resilience_http의실HTTP3건 포함"
+      "명령": "python -m pytest apps/api/tests/integration/{test_admin_abuse_api,test_rate_limit_resilience,test_api_call_logging,test_db_pool_resilience,test_outbound_resilience_http,test_plain_http_observability,test_geo_api,test_features_weather_cutover,test_trip_view_weather_cutover,test_weather_via_map,test_admin_features_weather_cutover,test_weather_location_resolver,test_weather_resolve_background,test_weather_background_http,test_feature_request_pipeline,test_feature_reference_reconciliation,test_telegram_weather}.py -q",
+      "결과": "198 passed, 201 warnings in 131.67s (0:02:11)",
+      "source": "8a259b49184f69b134913242c88976858cff7c86",
+      "동등성": "최종고정SHA와app/통합tests diff가비어있다. 이후변경은unit 정적목록2줄뿐이다."
     },
     {
-      "명령": "python -m pytest apps/api/tests/integration/test_outbound_resilience_http.py -q",
-      "결과": "7 PASS, 5 deprecation warnings, 15.54초",
-      "로그": "provider-http-public-pg-final.log",
-      "중복": "앞선134중실HTTP3건과중복. 공개오류4건추가"
+      "명령": "python -m pytest apps/api/tests/integration/test_restore_hotswap_preflight.py -q -k cleanup_waits_for_server_lock_release",
+      "결과": "9 passed, 9 deselected, 1 warning in 58.31s",
+      "source": "8a259b49184f69b134913242c88976858cff7c86",
+      "안전": "main658원본source harness와새소유PG18만. 운영hotswap/SSH실행없음."
     },
     {
       "명령": "python -m ruff check apps/api/app apps/api/tests",
-      "결과": "PASS",
-      "로그": "ruff-final.log"
+      "결과": "PASS"
     },
     {
       "명령": "python -m ruff format --check apps/api/app apps/api/tests",
-      "결과": "519 files already formatted",
-      "로그": "format-final.log"
+      "결과": "528 files already formatted"
     },
     {
       "명령": "python -m mypy --strict --config-file apps/api/pyproject.toml apps/api/app",
-      "결과": "274 source files PASS",
-      "로그": "mypy-final.log"
+      "결과": "275 source files PASS"
     },
     {
-      "명령": "git diff --check",
+      "명령": "npm -w @pinvi/web run test:e2e:live-catalog:index",
+      "결과": "349 cases /299 scripted INDEX 일치, 브라우저/운영실행없음"
+    },
+    {
+      "명령": "app.openapi() 현재본과사용자지정main 아카이브원본 비교",
+      "결과": "byte동일",
+      "sha256": "cb20539a7fac5fa764a8c7b53ba5a5fd1aaabd6c37488f2cf3850a990095389f",
+      "안전": "lifespan/네트워크 미실행"
+    },
+    {
+      "명령": "bash -n scripts/restore-hotswap.sh; git diff --check",
       "결과": "PASS"
     },
     {
       "명령": "python3 /home/digitie/.cache/pinvi-643/audit-staged.py",
-      "결과": "각commit직전본worktree cwd에서실행; staged generic/project secret scan PASS"
-    },
-    {
-      "명령": "codegraph init -i; codegraph_explore/impact via Linux MCP; codegraph sync",
-      "결과": "구현 전 탐색/영향도와 최종 sync 완료",
-      "로그": "codegraph-final-sync.log"
+      "결과": "모든commit직전본cwd에서PASS"
     }
   ],
-  "공개_계약": {
-    "Map_503": "FEATURE_SERVICE_UNAVAILABLE",
-    "geo_503": "GEOCODING_SERVICE_UNAVAILABLE",
-    "오류_셰입": "{\"error\":{\"code\":\"...\",\"message\":\"...\"}} 및 X-Request-Id",
-    "내부_code_비노출": "BULKHEAD_FULL/CIRCUIT_OPEN/fixture-private 미노출4건실행",
-    "rate_limit": "429·Retry-After·저장소503·fail-open·handler오류한번실행 기존계약회귀통과",
-    "새_검사의_정정": "공개오류초기4FAIL은새검사의data/meta가정오류다. 문서/handler확인후test만정정했으며제품실패우선증거로계산하지 않는다."
+  "실패우선_추가": {
+    "stream": "3FAIL→12PASS(complete/error/cancel/earlyclose;기존8포함)",
+    "카드_Admin_예산": "2FAIL→관련16PASS",
+    "plain_factory": "9FAIL→관련unit289PASS; 실제TCP/UDS HTTP/PG18은다른선택PG127에중복",
+    "CLI": "4FAIL→정상/연결/취소·guard검사27PASS",
+    "weather전송": "7FAIL→기존deadline/host/세대포함96PASS",
+    "long_read_느린5xx": "3번전송반례1FAIL→관련103PASS",
+    "직접_resolve": "요청대기/무관쓰기commit 2FAIL+commit중새좌표소진1FAIL→resolver/Map경계48PASS",
+    "공개카드": "별도실HTTP/PG1PASS로cold2회→resolve1회→warm과기본20ms보다느린resolve45초override관측",
+    "주의": "초기공개오류data/meta 가정4FAIL 및Telegram외부deadline의CancelledError를ReadTimeout으로가정한2FAIL은신규test가정정정이며제품실패우선증거로계산하지않는다."
   },
-  "설계_상한": {
-    "관측_queue": "factory당1개, 대기1024 + in-flight100, batch100/0.25초, flush2초, 종료3초",
-    "관측_손실": "실패·포화·취소·종료시drop counter. 내구성보장없음; 관리자조회지연/누락가능",
-    "rate_limit_cleanup": "60초주기·1000행batch·5초timeout·SKIP LOCKED",
-    "DB_pool": "기본size10/max_overflow0/pool_timeout5초; core관측pool을db/session.py4줄최소배선",
-    "pool_metric": "queue acquisition+새연결생성시간포함, SQL실행/pre-ping제외; acquired/timeout/cancelled/error",
-    "provider": "worker별사용자Map/geo/weather각16; Mapweather·transport는기본Map공유; 회로120초·단일halfopen·세대fencing"
+  "source_실행범위": {
+    "manifest": "docs/reviews/pinvi-616-621-source.sha256",
+    "manifest_sha256": "0e3921f7ffa6546b019fe939c46f522f687687fa00142639d309073aa57018e5",
+    "전후_일치_파일수": 540,
+    "범위": "추적API app/tests 전체+pyproject/uv.lock+4개공개계약. 최종unit실행전후전부일치.",
+    "PG_source_동등": true,
+    "main_원본8파일_보존": {
+      "apps/api/tests/integration/test_restore_hotswap_preflight.py": "c7de59470d1cd98edc5dbd533263e21cec418b875810930e653ce38d079cb526",
+      "scripts/restore-hotswap.sh": "609fe5f50d1032aa573822daec73a90fd85445a6732239930b770a7a7f3215fc",
+      "docs/execplan/issue-658-hotswap-lock-release.md": "acc1a7b22a31ed71f9b7b389e5e15edc2eda2c8f2b171b36e1a3887cb307ae82",
+      "docs/runbooks/backup-restore.md": "1f8a30fa145835665574eeb03357577a7d70663ea75c1bd3d3555f38e5825843",
+      "apps/web/e2e-live/catalog/INDEX.md": "98e3f1f52068247f0228c24b4594a96e7f1b1142a532c820f1078f24224bda16",
+      "apps/web/e2e-live/catalog/search.yaml": "e2edfc34958891e62b9d667937f92884b292e6de507acdbefccdff66c8c8e3cc",
+      "apps/web/e2e-live/specs/search/search-geometry.live.spec.ts": "b28e6bbcc2988c53af0a0717ccc9302879299efcce6deb9362a7ef2b602f185f",
+      "docs/runbooks/live-e2e-catalog.md": "21e386eb4928ed5bd4bd7b18c34b03496eefba7378dba9236c3642dc5d8b42da"
+    },
+    "main_journal_기록_보존": true,
+    "main_ancestor": true,
+    "CLI_HTTP생성전_guard_pin_credential_AST_40930f5동일": {
+      "apps/api/app/commands/cache_target_restore_fence.py": true,
+      "apps/api/app/commands/cache_target_initial_cutover.py": true,
+      "apps/api/app/commands/cache_target_causal_canary.py": true,
+      "apps/api/app/commands/feature_uuid_cutover.py": true
+    }
   },
-  "잔여_범위와_제약": [
-    "#621 직접weather resolve의서비스inline경로: background/single-flight/음성캐시/긴45초calloverride 미구현. services소유범위밖이다.",
-    "#621 느린5xx재시도는기존semantics유지. 서비스별요청예산재설계/운영flag검증은완료로표시하지 않는다.",
-    "services/routes에서직접만드는OAuth·Telegram등plainhttpx client는이번소유factory연결밖이다. eventhook만부착하면response없는실패기록은후속으로남는다.",
-    "별도admin/curation/command client까지하나의전역Mapbulkhead로통합하지 않았다.",
-    "edge HTTP/2·브라우저Queueing/Stalled·운영flag·worker증설·운영부하는Claude Code담당이며미검증이다.",
-    "UI변경없음. N150/운영UI/실제provider/Telegram검증미수행. WSL공개오류계약은실행했다.",
-    "sealed migration과runtime/서명guard를완화하지 않았다. guard기능unit과보안회귀통과는운영실행증거가아니다.",
-    "최종후보원격CI성공/메인최종두리뷰·ready·merge·새main통합은별도메인게이트다."
-  ],
-  "종료_정책": "Closes #616 / Refs #621. #621 자동종료금지.",
-  "source_sha256": {
+  "변경_API_source_sha256": {
+    "apps/api/app/api/v1/admin/system.py": "60e0ec6e11a4d5e9e64b5e4d01519541a4ca4e8419731af91ffe1bc5f8d88422",
+    "apps/api/app/api/v1/telegram_targets.py": "bd601a6343f8746097a555a6e0da2d1a988c729008a294e45be10dd7dd3212d7",
     "apps/api/app/clients/_resilience.py": "7930822d8b63fd0cba8d517902b7d33d09e5d3aef591191b3f6ff8514375ebb7",
     "apps/api/app/clients/kakao_local.py": "56b9ad47d16e34b8cc2d55caa2c4487f056ee8e46cedff95bf2021f31b78f615",
     "apps/api/app/clients/kor_travel_geo.py": "8764be39af1a9982189e07465890c4b20e7a370b0b128e821c8d3ce62070816d",
@@ -138,49 +138,101 @@
     "apps/api/app/clients/kor_travel_map_feature_reference_reconciliation.py": "dd20febd3e2a049d428a1979865a0e11f4f3f7ef32ab8b732b85354c3ce7a711",
     "apps/api/app/clients/kor_travel_map_feature_request.py": "1ca46b5e0487fbe63c183af6448275912ed0d7cf34f5d18864a02d4afa73e3d3",
     "apps/api/app/clients/kor_travel_map_weather.py": "4535f77d0e88a60177c9dd105e6e432e573ef63e61a3aa4009038605e3c363db",
-    "apps/api/app/clients/kor_travel_weather.py": "599dc266b1964964ad9bcf9769ee4b2bc2307651272f03543ab279961767f146",
+    "apps/api/app/clients/kor_travel_weather.py": "cd334acf6b4f575b38d846a8318f2954c240882dfccd5a3a150dfa6c428c2646",
     "apps/api/app/clients/naver_local.py": "d4b01637a5b7f24e41bf48747706f57e56a1df87fe84cbdb9cdf0d4169d98ccb",
     "apps/api/app/clients/resend.py": "f1f7e4eeb070689c3779899b7e0c1e55b93c53e72b566df4dd2dee0e7b3a11d7",
-    "apps/api/app/core/config.py": "8f6af1d9a6df3e0f7ce4fa8113d4fa38e4fd7f0492551685f59cf1d560edd724",
+    "apps/api/app/commands/cache_target_causal_canary.py": "590cf521d8943cb911065fbab4626e676b35b61a8913232f0ab1a1be9ec6c777",
+    "apps/api/app/commands/cache_target_initial_cutover.py": "20b60af9183f8c1dbaa1530105b9206543889e0e8befdda3c16e6356214d4bae",
+    "apps/api/app/commands/cache_target_restore_fence.py": "c2125ef60ef9e6cd998c4c0cb5862aab10a197ad57e4c7af0ecda667a534775b",
+    "apps/api/app/commands/feature_uuid_cutover.py": "60427c530227718a7b17f416a2c02f95c714e54cf47242a616a4b8b3999f63eb",
+    "apps/api/app/core/config.py": "ccfca46dc126d112ff94e89fbf33dd4caed0add0a7ba94e7592c8ea3723c9c18",
     "apps/api/app/core/db_pool.py": "ba2cf8fcb8bd75e872bfe00815caaa358443b45f567ee30f915c284ca2db8290",
     "apps/api/app/db/session.py": "10724b1750c14c687dc9ffbba6020f25a2275762c1e5438681e844f2156c957d",
-    "apps/api/app/middleware/api_call_logging.py": "1f7458ecf3e125cdbdb04fa9fef6b0c86c3486ea4a87530698cdacff91f61ca5",
+    "apps/api/app/middleware/api_call_logging.py": "06c9e2f3eee5f5ca69565160d18bf4f848cc84d2cef11608bdbe45dcb63b28b7",
     "apps/api/app/middleware/rate_limit.py": "34f562b9b92dc5c90aec25a447864a268ac45206074f6f58666b7242e2e1618f",
     "apps/api/app/middleware/resilience_runtime.py": "0fbbf02f0c92ad220d4b6c561b70778c83c5ae98113eec2c212ba5bc018a1d47",
+    "apps/api/app/services/admin_etl.py": "2be932a5a3d06b10f8c966f5d9305ffa67bc72fafa0d70a8c6b92cfd6290d56b",
+    "apps/api/app/services/admin_weather_values.py": "24bd9f1ab7f6c83e03c11d83596390fa7eec87c14bf1e68634a9567e64a382b8",
+    "apps/api/app/services/cache_target_sync_worker.py": "f16d7add2c04b6f8dc2cf450886aa6a956285b4ee9be47445580b1818002ad90",
+    "apps/api/app/services/feature_reference_reconciliation_worker.py": "d0bb9ff798a7e8df28db710a945727705dd3e2640a805633b6b8c6985465ece4",
+    "apps/api/app/services/oauth_google.py": "85cd56562694d3d4e88c9ad0f5e04fe97050dbb43aef283effbb4a9f47d287ad",
+    "apps/api/app/services/telegram_notify.py": "99b63a800e767801492b9e5960d7c3c24cf5b54d181d5453c450323506b19ba1",
+    "apps/api/app/services/trip_weather_batch.py": "caa9c05d38a42fe0f2c369dfde87a5a0f7d779935f7540560fe4121e08f3317b",
+    "apps/api/app/services/weather_card.py": "d6b24484b3b0340acb03c3d8c88ccb8c7580255e7bcbd9718c7fa04828025139",
+    "apps/api/app/services/weather_location_resolver.py": "7f61b782b4daa4029ee37ef88b57dba19a58b89731c3ae7ff7c76dea8191dbd4",
+    "apps/api/app/services/weather_resolve_worker.py": "0c06167b5c2db7e994e101ae661b3a025b7ce23fd4080dae87e84d26fad58d3e",
+    "apps/api/tests/integration/test_admin_features_weather_cutover.py": "da06e7849f3abb484bcaaedc9b00bccacfcabf1af26bf2347dab86dc97fb6317",
     "apps/api/tests/integration/test_api_call_logging.py": "9d3346dd4f604a48e284af70a09e1eec164ce10b135c418841eec43ed5409e80",
     "apps/api/tests/integration/test_db_pool_resilience.py": "4a893832a7fc1bdc988accbf22f2be6d37da41af0119a1bfe98d1a01283a6d0b",
+    "apps/api/tests/integration/test_features_weather_cutover.py": "98c88380386ef38f1ae2a393f4debba1c7e9f905a0148275907801c81d01ff96",
     "apps/api/tests/integration/test_outbound_resilience_http.py": "d4ed2c5d0f78da1c297f94b40bd4ec7e0af1fdfe73c89f734229838737564670",
+    "apps/api/tests/integration/test_plain_http_observability.py": "980baf567e89678c4ba5f5b8bcac7e29f11d265dfce217a31887315f6ccb08d9",
     "apps/api/tests/integration/test_rate_limit_resilience.py": "bdd0b573041b30763f9aeaa7021ef7556839d4ee1c41583fe8f7ca14b7639b8a",
-    "apps/api/tests/unit/test_api_call_outbox.py": "892bd1658291a7fb4289c906c22483b63ec6eb8b835ea4c4383d886806521863",
+    "apps/api/tests/integration/test_trip_view_weather_cutover.py": "f98e8c845379be82976792acdf79a25a6a9253751a09ab1482b0e6e2199134b4",
+    "apps/api/tests/integration/test_weather_background_http.py": "533ed11c687bd9586a3c17589eadcfe2f7757e462b0bed5cbec79dd91f639c6b",
+    "apps/api/tests/integration/test_weather_location_resolver.py": "0be34748597c706e4e1800f3f3087aeb57ad887554944da8c8f09350c441a9f0",
+    "apps/api/tests/integration/test_weather_resolve_background.py": "d21ccfadfb65bf82d304f9e31fb3f787e9450e09819fd36382e419c03525535f",
+    "apps/api/tests/integration/test_weather_via_map.py": "bec037f00757c9936533d2fe266be04f88683bba475bc8da9aa1bb076acf4390",
+    "apps/api/tests/plain_http_fixtures.py": "fa31b8acb60503fe72348af4be00196b6ffebb793c7b8220545945ee5f52ba9f",
+    "apps/api/tests/unit/test_admin_etl_dagster_probe.py": "335d8081acf9af7f7a7612eec3940c2595028eba7056e8d6b481f1cf7e445a0b",
+    "apps/api/tests/unit/test_api_call_outbox.py": "6bec13d489f6f66f795b410d2d265ce1b8a5705dd92bf374be50997d47342d55",
     "apps/api/tests/unit/test_cache_target_transport.py": "383ea39b5d84bf515629651e790bb45d9c8e791a1770339767f9e690d1b187d3",
+    "apps/api/tests/unit/test_feature_reference_pair_write_paths.py": "cb9b42292f7f83e2864d70648cafbd0633299f2594b6c4fb2e6ca19aa55c5f43",
     "apps/api/tests/unit/test_feature_reference_reconciliation_transport.py": "3e1618546f80ad329e1e1857a65ebbeacffd9cb3e45f9556bc413a8410053ad8",
     "apps/api/tests/unit/test_kor_travel_map_feature_request_client.py": "87ae88c7aa23c2ab1e94534a2b8cffa22a58d16176a36479f8898ff679ee940e",
     "apps/api/tests/unit/test_kor_travel_map_weather_client.py": "011c833df489c862a355bce016c5ff492f4158af752250bfeae8884bc228c73b",
-    "apps/api/tests/unit/test_kor_travel_weather_client.py": "12d4c1dd0ee5ac66953baf8381133ddf302006e0da8fb605c7bf9d4ad3766e2a",
+    "apps/api/tests/unit/test_kor_travel_weather_client.py": "a4c91c163a623076e72afb5231762cb7145b3cbe5c8574a41549ae344f258ef6",
     "apps/api/tests/unit/test_outbound_provider_resilience.py": "1822f57b26c1c27410b4f1cdf08f8f1a94abf636d7ca470e5bfeadcce1b097d1",
+    "apps/api/tests/unit/test_plain_http_cli_observability.py": "49721cea9b743802c66cbdcc15399e9b1d5afe1e431740965637b45fcc7ed2a7",
+    "apps/api/tests/unit/test_plain_http_observability.py": "468f3c5867db996d8d48fce78214fb9d77312e68094de896019e6b6f3e6e586b",
     "apps/api/tests/unit/test_rate_limit_cleanup.py": "4007c0f192ff44a098e516a27aa46b9e3123035e20bd1c2856a45ddfe7ce5da5",
     "apps/api/tests/unit/test_rate_limit_middleware.py": "dcee73a3df9de5c6424ea83663570a7c74fd166bc31644c409da7262b26d98d3",
-    "apps/api/tests/unit/test_resilience_runtime.py": "be9c8c2397ab57635f0103f64d8c1ad1b358661f716c913242468048dbf1d91d"
+    "apps/api/tests/unit/test_resilience_runtime.py": "be9c8c2397ab57635f0103f64d8c1ad1b358661f716c913242468048dbf1d91d",
+    "apps/api/tests/unit/test_weather_request_budgets.py": "e499b9d5e61c09f400d500b7ad343c57a5165acdbb69eb0048956f8330b6354d",
+    "apps/api/tests/unit/test_weather_transport_http.py": "e943956bb7a8284658181644e334055e85802967e89e7769b3ba27c7cf917a65"
   },
   "로컬_로그_sha256": {
     ".local/616-621/envelope-negative.log": "5eb6f176474dc78938b629c5715feff72af2768ee9575ba57f7baf5751a2cd0b",
-    ".local/616-621/envelope-final.log": "25fc628399befa2d344d7fb402048494be9ce1fc9af2a3426c9b9f2cda623a58",
     ".local/616-621/rate-limit-negative.log": "7c2b6e3ec8ca8a75c33e7012b70bf4bb073f22e3f6ee348295a914ef34aca952",
-    ".local/616-621/rate-limit-positive-final.log": "3b60bcae690f889fa589b59b7bc0d52a2b2024658c30cb03537648d2685f9628",
     ".local/616-621/provider-negative.log": "b3369217a777de3c1951c9920d383347b823022b2c05f19696d7b05a62664074",
-    ".local/616-621/provider-positive-final.log": "c9fa82335506708aa975bbe2fa8695e8aa6e853bd1d11193920c215f45f4c612",
     ".local/616-621/logging-negative.log": "05e4a5c3f0cfd86646c9679e1464a311aa843b8d266dd489a04ab7155f446d35",
-    ".local/616-621/logging-runtime-unit.log": "ca9551b2df7cc27eed2ebe19fd549328356fd74b708ca4ed50ec08225e7e44d4",
-    ".local/616-621/logging-pool-pg.log": "56da4b29ec64a13b8ff2c391290f9d8887b0164251e7ab44b7a48dbd3505a939",
-    ".local/616-621/provider-http-pg.log": "1a51245dd68c79b4d9b8786c8c15f518461b583dc1b683a83839450f2121edac",
-    ".local/616-621/provider-http-public-pg-final.log": "a19a1afca7ba5cdc05c26c69e2947af7157ebd0bbbf21d8c882232a3ace8cc8f",
     ".local/616-621/pool-metric-negative.log": "0f20a095f8770233052804b15f0930fadd63f1fd3f1c21d6fdbef1a5358d1573",
-    ".local/616-621/integration-related.log": "5f99b97a89129da3b174696d497790ca368b0797dfbf1f94f24f6a3d34c11371",
-    ".local/616-621/unit-final.log": "7bc4f5d7e1d0907f28025bcd5883fcebe5eecc10bdd96667675e01f209203a59",
-    ".local/616-621/ruff-final.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
-    ".local/616-621/format-final.log": "b3d9f186f7cdc438ef67062cd1def833d04584b6f4e93ef53267ba95520b08a8",
-    ".local/616-621/mypy-final.log": "cf42848d386f033a3d734abc789698c30bc7c8d2d630c6c9326d868c449be733",
-    ".local/616-621/codegraph-final-sync.log": "fce9a89b1abfa2f93e0bfcf0f42aec164de5e8b9a58c406ad487fcfdf55fac76",
-    ".local/616-621/codegraph-final-status.log": "a19a2b25e1b488c7bc78d292a9783370ad359d561eb1c95c41926d2032a88047"
-  }
+    ".local/616-621/stream-negative.log": "1a6e06a71e382702dcc57aedc412351a38d3e88df5d32ccb570fbfa94196b748",
+    ".local/616-621/budgets-negative.log": "418cd5fa13528a7f453356943242bb4562757c14952502227db5693a671134be",
+    ".local/616-621/plain-http-negative.log": "7494f72ee010818aebac8dee3dac1d755b10839540f0f5e8e704e01ed6957c5b",
+    ".local/616-621/plain-cli-negative.log": "c38763eadcdef1a910daeddb65cc17c29033b531928324e478237da75f2940a0",
+    ".local/616-621/weather-transport-negative.log": "fb351fa42ff77a61cd5c6140461234f8421a48134ac5e22dc6ad4bae56d7e9b5",
+    ".local/616-621/weather-retry-floor-negative.log": "cb3e3081bcda795258b2ba3194aa0555a1ac4b6a1c60f99019eb4d29b7c2fe7c",
+    ".local/616-621/direct-resolve-negative.log": "b555b662dc0c39d905dd4889e9498162db2cc9ce9b66f4a3996c95035a9ecac6",
+    ".local/616-621/direct-resolve-commit-race-negative.log": "c05eb76f1b36f5d852b5f202442bdf635a879eb96687a0ddbd0406581055e192",
+    ".local/616-621/weather-cutover-all.log": "27109d426afb1afd7bd029858f3eb864ca38afac4329db270074fcce862b048a",
+    ".local/616-621/direct-resolve-final.log": "b1b9330633797edf8270f3abfed896fc2c302abdcec998747ffc1601e4802ac9",
+    ".local/616-621/weather-retry-floor-final.log": "d075377914e5bec56c5e88b58d424939f591cceae3205c05c98bb452f6e1d191",
+    ".local/616-621/plain-http-related-pg.log": "8ab57945ad90023f384a76ea9879b8f4ff8ae3dc5d29a74e15d4908a61c46e07",
+    ".local/616-621/integrated-unit.log": "9b14dd8d60bcc5eb9620545ed15137fe1d9a330940a363c95f6c537271a29e4e",
+    ".local/616-621/inventory-fixed.log": "2910caad105509ad6966a16afb15113f149bc5a0fbd8eefcc97317e023827382",
+    ".local/616-621/integrated-unit-final.log": "de2d4e73c080d263938d3079ad8419834a7393e1d74316f9af8ece42a769435e",
+    ".local/616-621/integrated-related-pg.log": "a858d87efb4bfd2eeaf107d488609bbcad7ac3e87de97b006ba34c2ff25f6b28",
+    ".local/616-621/integrated-658-pg.log": "fdddf3c5854ca3502f7c6649e59507864b2eec1e698dde8be1541377827a144b",
+    ".local/616-621/integrated-ruff-final.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    ".local/616-621/integrated-format-final.log": "6b48cffb233cfde3489e9c30ee5d1df19c8b2ec8229b68d7ca9e88cea9e68ab8",
+    ".local/616-621/integrated-mypy-final.log": "51e0b2de1c8907f36612bad9838e5b142df660a16920f81ea119b2d8ec852285",
+    ".local/616-621/integrated-catalog.log": "9f9d4f5d7ef0d303730d1722e2d277fc76c034002c38df1f74e834d1570aecf3",
+    ".local/616-621/integrated-openapi-proof.log": "8b21e8f41a3c547d5a3c22d19c985c3e65df74200e93aeb4364a0b26b08592c3",
+    ".local/616-621/integrated-codegraph-final.log": "7113406ba5937b01d17788479f868c56abfd756fc2b3585f4ac7dd6e225c3f6c"
+  },
+  "현존_경계": {
+    "캐시_워크": "재요청가능한손실허용워밍이며업무outbox가아니다. 종료취소/queue포화뒤다음요청이재예약한다.",
+    "외부feature삭제": "opaque ID이며cache표에owner삭제FK/marker가없다. 외부삭제를추정하지않고로컬link삭제/Map/좌표전환뒤늦은결과를version으로거부한다.",
+    "ETL": "별도패키지resource/asset의기존timeout·Dagsterretry/metadata유지. API ORM의존성을주입하지않았으며API요청기아범위와구분한다.",
+    "provider상한": "기존client경계에맞춰사용자Map/weather/geo상한을둔다. 별도서명command/curation client의권한·불확실명령계약은바꾸지않는다.",
+    "관측": "메모리큐이므로장애/포화/종료drop가능.임의오류문자열/토큰은저장하지않는다."
+  },
+  "Claude_운영_잔여": [
+    "운영flag/구성전달과worker증설·부하판단",
+    "edgeHTTP2와브라우저Queueing/Stalled",
+    "실제운영latency·실제provider/운영UI검증"
+  ],
+  "인계_게이트": "최종두전문적대리뷰·정확head 원격CI·ready/merge는메인. 이병행구현작업을최종승인으로취급하지않는다.",
+  "종료정책": "Closes #616 / Refs #621 / Refs #643. 운영edge미검증이므로#621자동종료금지."
 }
