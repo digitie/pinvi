@@ -41,6 +41,8 @@ export const TelegramNotificationSchema = z.object({
   category: z.string(),
   trip_ids: z.array(z.string().uuid()),
   created_at: Iso8601Schema,
+  error_code: z.string().nullable(),
+  error_message: z.string().nullable(),
   deliveries: z.array(
     z.object({
       id: z.string().uuid(),

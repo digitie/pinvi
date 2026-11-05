@@ -88,6 +88,12 @@ def upgrade() -> None:
         sa.Column("request_fingerprint", sa.String(64), nullable=False),
         sa.Column("trip_ids", pg.JSONB(), nullable=False),
         sa.Column("chunks", pg.JSONB(), nullable=False),
+        sa.Column(
+            "schedule_snapshot", pg.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")
+        ),
+        sa.Column("expires_at", sa.DateTime(timezone=True)),
+        sa.Column("error_code", sa.String(64)),
+        sa.Column("error_message", sa.Text()),
         sa.Column("consent_generation", pg.UUID(as_uuid=True)),
         sa.Column(
             "created_at",

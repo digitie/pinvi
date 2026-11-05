@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.models.poi import TripDayPoi
@@ -21,14 +21,16 @@ def summary(value: str | None, limit: int = 480) -> str:
     return clean[:limit] + ("…" if len(clean) > limit else "")
 
 
-def itinerary_text(trip: Trip, days: list[TripDay], pois: list[TripDayPoi]) -> str:
-    from datetime import timedelta
+def effective_date(trip: Trip, day: TripDay) -> date | None:
+    return day.date or (
+        trip.start_date + timedelta(days=day.day_index - 1) if trip.start_date else None
+    )
 
+
+def itinerary_text(trip: Trip, days: list[TripDay], pois: list[TripDayPoi]) -> str:
     lines = [f"🧳 {trip.title}", "시간: 한국 표준시(KST)"]
     for day in days:
-        effective = day.date or (
-            trip.start_date + timedelta(days=day.day_index - 1) if trip.start_date else None
-        )
+        effective = effective_date(trip, day)
         lines.extend(
             [
                 "",

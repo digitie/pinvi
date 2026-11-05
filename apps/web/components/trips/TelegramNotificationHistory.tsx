@@ -7,6 +7,7 @@ import { apiClient } from '@/lib/api';
 
 const names: Record<string, string> = {
   itinerary: '일정 보내기',
+  planning_error: '예약 알림 실패',
   daily_brief: '일간 브리프',
   weekly_summary: '주간 요약',
   weather_alert: '기상 특보',
@@ -104,7 +105,14 @@ export function TelegramNotificationHistory({
                 }).format(new Date(row.created_at))}{' '}
                 KST
               </p>
-              {row.deliveries.length === 0 && <p className="text-muted">발송 대상 없음</p>}
+              {row.error_message && (
+                <p role="status" className="text-error-text">
+                  {row.error_message}
+                </p>
+              )}
+              {row.deliveries.length === 0 && !row.error_message && (
+                <p className="text-muted">발송 대상 없음</p>
+              )}
               {row.deliveries.map((delivery, index) => (
                 <div key={delivery.id} className="text-muted">
                   <p>

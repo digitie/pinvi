@@ -7,6 +7,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.kor_travel_map import KorTravelMapClient
@@ -21,18 +22,19 @@ from app.models.telegram_target import TelegramTarget
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.models.user import User
-from app.services.telegram_itinerary import KST, local_time, summary
-from app.services.telegram_notifications import enqueue, itinerary, linked_targets, preferences
+from app.services.telegram_itinerary import KST, effective_date, local_time, summary
+from app.services.telegram_metrics import PLANNING_FAILURES
+from app.services.telegram_notifications import (
+    TelegramMessageTooLarge,
+    enqueue,
+    itinerary,
+    linked_targets,
+    preferences,
+)
 from app.services.trip_weather_batch import (
     build_trip_weather_via_kor_travel_map,
     build_trip_weather_via_kor_travel_weather,
 )
-
-
-def effective_date(trip: Trip, day: TripDay) -> date | None:
-    return day.date or (
-        trip.start_date + timedelta(days=day.day_index - 1) if trip.start_date else None
-    )
 
 
 def weather_summary(cards: dict[str, dict[str, Any]]) -> str:
@@ -73,30 +75,29 @@ async def daily_context(
     )
     target_date = effective_date(trip, day)
     cards: dict[int, dict[str, dict[str, Any]]] = {}
-    # weather 해석 helper는 read connection을 해제하므로 별도 세션을 쓴다.
-    # planner의 동의·Trip 잠금/원자적 enqueue transaction은 유지한다.
-    async with db_session.async_session_factory() as weather_db:
-        if (
-            settings.pinvi_kor_travel_map_weather_enabled
-            and map_client is not None
-            and map_client.has_service_token
-        ):
-            _, cards = await build_trip_weather_via_kor_travel_map(
-                weather_db,
-                pois=pois,
-                day_effective_date={day.day_index: target_date},
-                map_client=create_map_weather_client(map_client),
-                weather_client=weather_client,
-                budget_seconds=8,
-            )
-        elif not settings.pinvi_kor_travel_map_weather_enabled and weather_client is not None:
-            _, cards = await build_trip_weather_via_kor_travel_weather(
-                weather_db,
-                pois=pois,
-                day_effective_date={day.day_index: target_date},
-                weather_client=weather_client,
-                budget_seconds=8,
-            )
+    # 이 단계는 정책 잠금·업무 쓰기가 없는 준비용 읽기 세션이다.
+    # 기존 helper가 같은 세션을 commit해 연결을 반납하고 HTTP를 수행한다.
+    if (
+        settings.pinvi_kor_travel_map_weather_enabled
+        and map_client is not None
+        and map_client.has_service_token
+    ):
+        _, cards = await build_trip_weather_via_kor_travel_map(
+            db,
+            pois=pois,
+            day_effective_date={day.day_index: target_date},
+            map_client=create_map_weather_client(map_client),
+            weather_client=weather_client,
+            budget_seconds=8,
+        )
+    elif not settings.pinvi_kor_travel_map_weather_enabled and weather_client is not None:
+        _, cards = await build_trip_weather_via_kor_travel_weather(
+            db,
+            pois=pois,
+            day_effective_date={day.day_index: target_date},
+            weather_client=weather_client,
+            budget_seconds=8,
+        )
     return weather_summary(cards.get(day.day_index, {}))
 
 
@@ -158,6 +159,24 @@ async def _sunrise_context(db: AsyncSession, trip: Trip, day: TripDay) -> str:
     return f"일출: {sunrise} (KST)"
 
 
+def schedule_snapshot(
+    trips: list[Trip], *, today: date, day: TripDay | None = None
+) -> dict[str, object]:
+    snapshots: dict[str, dict[str, object]] = {}
+    for trip in trips:
+        entry: dict[str, object] = {
+            "start_date": trip.start_date.isoformat() if trip.start_date else None,
+            "end_date": trip.end_date.isoformat() if trip.end_date else None,
+        }
+        if day is not None:
+            target = effective_date(trip, day)
+            entry.update(
+                day_index=day.day_index, effective_date=target.isoformat() if target else None
+            )
+        snapshots[str(trip.trip_id)] = entry
+    return {"reference_date": today.isoformat(), "trips": snapshots}
+
+
 async def plan_user(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -179,6 +198,7 @@ async def plan_user(
         return 0
     local = now.astimezone(KST)
     today = local.date()
+    expires_at = local.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
     if local.strftime("%H:%M") < pref.send_time:
         return 0
     trips = list(
@@ -238,6 +258,8 @@ async def plan_user(
                     + context,
                     recipients=[(target, link) for target, link in targets],
                     consent_generation=pref.generation,
+                    schedule_snapshot=schedule_snapshot([trip], today=today, day=day),
+                    expires_at=expires_at,
                 )
                 count += 1
     if (
@@ -286,6 +308,8 @@ async def plan_user(
                         message=message,
                         recipients=[(target, None)],
                         consent_generation=pref.generation,
+                        schedule_snapshot=schedule_snapshot(upcoming, today=today),
+                        expires_at=expires_at,
                     )
                     count += 1
     return count
@@ -313,24 +337,49 @@ async def plan_due(
                 )
             ).all()
         )
-    enqueued = 0
+    enqueued = failed = 0
     for user_id in user_ids:
-        async with db_session.async_session_factory() as context_db:
-            contexts = await _prepare_daily_contexts(
-                context_db,
-                user_id,
-                now=current,
-                map_client=map_client,
-                weather_client=weather_client,
-            )
-        async with db_session.async_session_factory() as db:
-            enqueued += await plan_user(
-                db,
-                user_id,
-                now=current,
-                map_client=map_client,
-                weather_client=weather_client,
-                prepared_contexts=contexts,
-            )
-            await db.commit()
-    return {"users": len(user_ids), "enqueued": enqueued}
+        try:
+            async with db_session.async_session_factory() as context_db:
+                contexts = await _prepare_daily_contexts(
+                    context_db,
+                    user_id,
+                    now=current,
+                    map_client=map_client,
+                    weather_client=weather_client,
+                )
+            async with db_session.async_session_factory() as db:
+                enqueued += await plan_user(
+                    db,
+                    user_id,
+                    now=current,
+                    map_client=map_client,
+                    weather_client=weather_client,
+                    prepared_contexts=contexts,
+                )
+                await db.commit()
+        except TelegramMessageTooLarge:
+            # 한 사용자의 입력 제한을 다른 사용자에게 전파하지 않는다. 원문·예외·대상ID는 저장하지 않는다.
+            failed += 1
+            day = current.astimezone(KST).date().isoformat()
+            key = f"planning_error:{day}"
+            async with db_session.async_session_factory() as db:
+                created = await db.scalar(
+                    insert(TelegramNotification)
+                    .values(
+                        user_id=user_id,
+                        occurrence_key=key,
+                        category="planning_error",
+                        request_fingerprint=key,
+                        trip_ids=[],
+                        chunks=[],
+                        error_code=TelegramMessageTooLarge.code,
+                        error_message="일정이 너무 길어 예약 알림을 만들지 못했습니다. 장소·메모를 줄이거나 일정을 나누어 주세요.",
+                    )
+                    .on_conflict_do_nothing(index_elements=["user_id", "occurrence_key"])
+                    .returning(TelegramNotification.id)
+                )
+                await db.commit()
+            if created is not None:
+                PLANNING_FAILURES.labels(code=TelegramMessageTooLarge.code).inc()
+    return {"users": len(user_ids), "enqueued": enqueued, "failed": failed}

@@ -1,3 +1,11 @@
+## 2026-11-05 — Telegram636/638 리뷰 경계 보완
+
+- draft688은636/638만 먼저 완료한다.637은공식getPwnCd/특보구역매핑이필요해Weather201선행후분리하며미구현특보설정은노출하지않는다.
+- 57f의 실제PG/API/프로덕션웹/Chromium·소유Telegram HTTP fixture UI7흐름이통과했고pageerror0이다. 실제수신자·운영·외부Map/weather/타일검증은아니다.
+- Hubble/Hume의57f리뷰P2네건을실제실패로재현했다:계정철회대기경합·과대입력사용자간전파·예약날짜/자정변경·단일풀날씨보강.현재User최신잠금·사용자별안전한실패UI·날짜snapshot/만료·동일읽기세션으로보완했다.
+- 추가futureRetryAt만료대기와잠금대기중자정경과도실패우선회귀로막았다.현재관련PG/API44,mypy269,web395/schema24,전체workspace타입,lint0error/기존5warning이다.ETL81은새failed집계전파까지확인했다.
+- 아직정확최신제품재리뷰·새실패UI를포함한최종실제UI·정확HEAD전체CI가남아있다.초안상태이며승인·병합완료로간주하지않는다.후속은637→641이고운영최종시험은Claude Code담당이다.
+
 ## 2026-11-05 — Telegram636/637/638 묶음 착수
 
 - Pinvi684/PR687을6f47dad로, Geo공식주소검증623을305777d로 일반squash병합했다. 각 두최종리뷰와정확HEAD CI9/5SUCCESS·후보/병합tree동일성을확인했다.

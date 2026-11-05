@@ -1430,6 +1430,10 @@ _TELEGRAM_OUTBOX_SUMMARY_SQL = text(
         SELECT n.category, d.status, d.attempts, d.scheduled_at, n.created_at
         FROM app.telegram_notification_deliveries AS d
         JOIN app.telegram_notifications AS n ON n.id = d.notification_id
+        UNION ALL
+        SELECT n.category, 'failed', 0, n.created_at, n.created_at
+        FROM app.telegram_notifications AS n
+        WHERE n.error_code IS NOT NULL
     ) AS telegram_outbox
     """
 )
@@ -1453,6 +1457,10 @@ _TELEGRAM_OUTBOX_CATEGORY_SQL = text(
         SELECT n.category, d.status, d.attempts, d.scheduled_at, n.created_at
         FROM app.telegram_notification_deliveries AS d
         JOIN app.telegram_notifications AS n ON n.id = d.notification_id
+        UNION ALL
+        SELECT n.category, 'failed', 0, n.created_at, n.created_at
+        FROM app.telegram_notifications AS n
+        WHERE n.error_code IS NOT NULL
     ) AS telegram_outbox
     WHERE created_at >= :category_window_start
     GROUP BY category

@@ -20,7 +20,7 @@ async def test_missing_planner_configuration_is_noop() -> None:
 @pytest.mark.parametrize(
     "status,body",
     [
-        (200, {"data": {"users": 2, "enqueued": 3}}),
+        (200, {"data": {"users": 2, "enqueued": 3, "failed": 1}}),
         (503, {"detail": "private provider error"}),
         (200, {"data": {"users": True, "enqueued": -1}}),
     ],
@@ -47,6 +47,7 @@ async def test_planner_calls_narrow_boundary_and_keeps_error_body_private(
             assert await pinvi_telegram_notification_planner(context, resource) == {
                 "users": 2,
                 "enqueued": 3,
+                "failed": 1,
             }
         else:
             with pytest.raises(RuntimeError) as error:

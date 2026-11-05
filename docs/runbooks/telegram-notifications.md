@@ -1,0 +1,23 @@
+# Telegram 일정·예약 알림 운영
+
+## 설정과 범위
+
+PR688은636/638이다.637특보는Weather201선행후별도후속이며이화면에는특보동의를노출하지않는다.사용자설정은기본off이며여행연결과발송은소유자만가능하다.실제발송은검증된본인대상으로만수행하고다른기본대상으로fallback하지않는다.
+
+서버에 PINVI_TELEGRAM_BOT_TOKEN_DEFAULT를주입한다.PINVI_TELEGRAM_API_BASE기본값은https://api.telegram.org이다.예약은API와Dagster의동일한별도 PINVI_TELEGRAM_PLANNER_KEY(32바이트이상무작위값)와 PINVI_NOTIFICATION_PLANNER_API_URL을사용한다.미설정schedule은no-op이며사용자JWT로내부planner를호출할수없다.실제값은저장소·로그·브라우저에넣지않는다.
+
+일간은KST전날/당일일정,주간은선택요일기준앞으로7일안에시작하는여행목록이다.시각은KST이며같은회차를중복생성하지않는다.설정변경은기존대기알림을무효화하며같은회차를새로전송하지않는다.날씨는기존투영경계를사용하고미확인은명시한다.일출은해당날짜의성공·비stale캐시만사용한다.
+
+## 전달과 오류
+
+요청은DB에기록하고worker가대상별chunk를처리한다.각chunk마다현재동의·소유권·계정·대상/연결generation과예약날짜를검사한다.날짜가변경되거나다음KST날짜로넘어간예약은skip한다.미래Retry-After대기라도만료시정리한다.과대입력은사용자별실패로기록하고다른사용자를막지않는다.
+
+Bot API의양의retry_after와backoff를오류관측시각부터적용한다.HTTP요청과response hook에는전체시간상한을적용한다.일반적인취소는전파한다.확인된chunk는다시보내지않지만Telegram수락후DB확인이유실되면해당chunk가중복될수있다.[Telegram sendMessage](https://core.telegram.org/bots/api#sendmessage),[ResponseParameters](https://core.telegram.org/bots/api#responseparameters).
+
+## 관측과 인계
+
+사용자는설정/공유탭의최근발송내역에서완료·일부진행·실패/skip원인과다음시도시각을확인한다.운영SQL집계는기존system outbox와신규대상큐·예약실패를합친다.복원quiescence는신규pending도합산하며이전canonical revision에서는테이블존재를먼저확인한다.
+
+기존 /metrics 표면에 pinvi_telegram_delivery_steps_total, pinvi_telegram_delivery_step_seconds, pinvi_telegram_planning_failures_total을추가했다.차원은고정category/outcome/code이며사용자ID·chatID·본문·credential은label에없다.
+
+이번검증은WSL소유DB/API/프로덕션웹과소유Telegram HTTP fixture만사용한다.운영접근·배포·실수신자전송은수행하지않았다.최종prod검증은사용자지시에따라Claude Code담당이다.

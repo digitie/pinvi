@@ -14,6 +14,12 @@ SECONDS = Histogram(
     buckets=(0.1, 0.5, 1, 3, 5, 10, 30),
 )
 
+PLANNING_FAILURES = Counter(
+    "pinvi_telegram_planning_failures_total",
+    "Committed Telegram planning failures",
+    ["code"],
+)
+
 
 def record_step(category: str, *, status: str, has_error: bool, duration: float) -> None:
     label = (

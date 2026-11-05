@@ -8,11 +8,11 @@ Telegram에 idempotency key가 없어 provider 수락 후 DB ACK 유실은 중�
 from __future__ import annotations
 
 import hashlib
-import time
 import uuid
 from datetime import UTC, datetime, timedelta
+from time import monotonic
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,7 +36,7 @@ from app.schemas.telegram_notifications import (
     TelegramSendRequest,
 )
 from app.services import telegram_notify
-from app.services.telegram_itinerary import itinerary_text, split_message
+from app.services.telegram_itinerary import KST, effective_date, itinerary_text, split_message
 from app.services.telegram_metrics import record_step
 from app.services.telegram_outbox import MAX_TELEGRAM_ATTEMPTS, _retry_delay
 from app.services.trip import TripNotFoundError, TripPermissionError, TripValidationError
@@ -50,6 +50,10 @@ _SAFE_ERRORS = {
     "network_error": "Telegram 연결에 실패했습니다. 잠시 후 재시도합니다.",
     "unknown_error": "Telegram이 올바른 응답을 반환하지 않았습니다.",
 }
+
+
+class TelegramMessageTooLarge(TripValidationError):
+    code = "TELEGRAM_MESSAGE_TOO_LARGE"
 
 
 async def owned_trip_locked(db: AsyncSession, trip_id: uuid.UUID, user_id: uuid.UUID) -> Trip:
@@ -151,10 +155,12 @@ async def enqueue(
     message: str,
     recipients: list[tuple[TelegramTarget, TripTelegramTarget | None]],
     consent_generation: uuid.UUID | None = None,
+    schedule_snapshot: dict[str, object] | None = None,
+    expires_at: datetime | None = None,
 ) -> TelegramNotification:
     chunks = split_message(message)
     if len(chunks) > 256:
-        raise TripValidationError("일정이 너무 깁니다. 특정 일자를 선택해 보내세요.")
+        raise TelegramMessageTooLarge("일정이 너무 깁니다. 특정 일자를 선택해 보내세요.")
     notification_id = await db.scalar(
         insert(TelegramNotification)
         .values(
@@ -165,6 +171,8 @@ async def enqueue(
             trip_ids=[str(value) for value in trip_ids],
             chunks=chunks,
             consent_generation=consent_generation,
+            schedule_snapshot=schedule_snapshot or {},
+            expires_at=expires_at,
         )
         .on_conflict_do_nothing(index_elements=["user_id", "occurrence_key"])
         .returning(TelegramNotification.id)
@@ -266,6 +274,8 @@ async def notification_response(
         category=row.category,
         trip_ids=[uuid.UUID(value) for value in row.trip_ids],
         created_at=row.created_at,
+        error_code=row.error_code,
+        error_message=row.error_message,
         deliveries=[
             TelegramDeliveryResponse(
                 id=d.id,
@@ -284,11 +294,19 @@ async def notification_response(
 
 
 async def _guard(
-    db: AsyncSession, row: TelegramNotification, delivery: TelegramDelivery
-) -> TelegramTarget | None:
+    db: AsyncSession, row: TelegramNotification, delivery: TelegramDelivery, *, now: datetime
+) -> tuple[TelegramTarget | None, str | None]:
+    if row.category in {"daily_brief", "weekly_summary"}:
+        if row.expires_at is None or now >= row.expires_at:
+            return None, "schedule_expired"
+        if row.schedule_snapshot.get("reference_date") != now.astimezone(KST).date().isoformat():
+            return None, "schedule_expired"
+        expected_trips = row.schedule_snapshot.get("trips")
+        if not isinstance(expected_trips, dict) or set(expected_trips) != set(row.trip_ids):
+            return None, "schedule_changed"
     user = await db.get(User, row.user_id, populate_existing=True)
     if user is None or not user.is_active or user.deleted_at is not None or user.status != "active":
-        return None
+        return None, "destination_changed"
     if row.consent_generation is not None:
         pref = await preferences(db, row.user_id, lock=True)
         flag = {
@@ -301,9 +319,9 @@ async def _guard(
             or not getattr(pref, flag)
             or pref.generation != row.consent_generation
         ):
-            return None
+            return None, "destination_changed"
         if row.category == "weekly_summary" and pref.weekly_target_id != delivery.target_id:
-            return None
+            return None, "destination_changed"
     for trip_id in sorted(row.trip_ids):
         trip = await db.scalar(
             select(Trip)
@@ -312,7 +330,38 @@ async def _guard(
             .execution_options(populate_existing=True)
         )
         if trip is None or trip.deleted_at is not None or trip.owner_user_id != row.user_id:
-            return None
+            return None, "destination_changed"
+        if row.category in {"daily_brief", "weekly_summary"}:
+            expected = row.schedule_snapshot["trips"][trip_id]
+            if not isinstance(expected, dict) or (
+                expected.get("start_date")
+                != (trip.start_date.isoformat() if trip.start_date else None)
+                or expected.get("end_date")
+                != (trip.end_date.isoformat() if trip.end_date else None)
+            ):
+                return None, "schedule_changed"
+            if row.category == "daily_brief":
+                index = expected.get("day_index")
+                if type(index) is not int:
+                    return None, "schedule_changed"
+                day = await db.get(TripDay, (trip.trip_id, index), populate_existing=True)
+                if day is None:
+                    return None, "schedule_changed"
+                current_date = effective_date(trip, day)
+                if expected.get("effective_date") != (
+                    current_date.isoformat() if current_date else None
+                ):
+                    return None, "schedule_changed"
+    # Trip→User 순서의 NO KEY UPDATE로 계정 철회 commit과 전송을 직렬화한다.
+    # 초반 읽기 뒤 다른 잠금을 기다렸을 수 있으므로 반드시 최신 값을 다시 채운다.
+    user = await db.scalar(
+        select(User)
+        .where(User.user_id == row.user_id)
+        .with_for_update(key_share=True)
+        .execution_options(populate_existing=True)
+    )
+    if user is None or not user.is_active or user.deleted_at is not None or user.status != "active":
+        return None, "account_inactive"
     target = await db.scalar(
         select(TelegramTarget)
         .where(TelegramTarget.id == delivery.target_id)
@@ -327,37 +376,53 @@ async def _guard(
         or target.last_verified_at is None
         or target.generation != delivery.target_generation
     ):
-        return None
+        return None, "destination_changed"
     if delivery.link_generation is not None:
         if len(row.trip_ids) != 1:
-            return None
+            return None, "destination_changed"
         link = await db.get(
             TripTelegramTarget, (uuid.UUID(row.trip_ids[0]), target.id), populate_existing=True
         )
         if link is None or link.generation != delivery.link_generation:
-            return None
-    return target
+            return None, "destination_changed"
+    return target, None
 
 
 async def process_one(db: AsyncSession, *, now: datetime | None = None) -> bool:
     """한 chunk만 claim한다. DB commit 실패·취소는 호출자 rollback으로 잠금을 반납한다."""
     current = now or datetime.now(UTC)
-    started = time.monotonic()
+    started = monotonic()
     delivery = await db.scalar(
         select(TelegramDelivery)
-        .where(TelegramDelivery.status == "pending", TelegramDelivery.scheduled_at <= current)
+        .join(TelegramNotification, TelegramNotification.id == TelegramDelivery.notification_id)
+        .where(
+            TelegramDelivery.status == "pending",
+            or_(
+                TelegramDelivery.scheduled_at <= current, TelegramNotification.expires_at <= current
+            ),
+        )
         .order_by(TelegramDelivery.scheduled_at, TelegramDelivery.id)
         .limit(1)
-        .with_for_update(skip_locked=True)
+        .with_for_update(of=TelegramDelivery, skip_locked=True)
     )
     if delivery is None:
         return False
     row = await db.get(TelegramNotification, delivery.notification_id)
     assert row is not None
-    target = await _guard(db, row, delivery)
+    target, rejection = await _guard(
+        db, row, delivery, now=current + timedelta(seconds=monotonic() - started)
+    )
+    # 정책 잠금 대기 중 날짜가 바뀌었을 수 있어 HTTP 직전에 다시 확인한다.
+    observed = current + timedelta(seconds=monotonic() - started)
+    if target is not None and row.expires_at is not None and observed >= row.expires_at:
+        target, rejection = None, "schedule_expired"
     if target is None:
-        delivery.status, delivery.error_code = "skipped", "destination_changed"
-        delivery.error_message = "대상·연결·동의·여행 권한이 바뀌어 전송하지 않았습니다."
+        delivery.status, delivery.error_code = "skipped", rejection
+        delivery.error_message = {
+            "account_inactive": "계정이 비활성화되어 알림을 보내지 않았습니다.",
+            "schedule_expired": "예약 기준 날짜가 지나 전송하지 않았습니다.",
+            "schedule_changed": "여행·일자 날짜가 바뀌어 예약 알림을 전송하지 않았습니다.",
+        }.get(rejection or "", "대상·연결·동의·여행 권한이 바뀌어 전송하지 않았습니다.")
     elif not settings.pinvi_telegram_bot_token_default:
         delivery.status, delivery.error_code = "failed", "bot_not_configured"
         delivery.error_message = "Telegram 봇이 설정되지 않았습니다. 관리자에게 문의하세요."
@@ -391,9 +456,7 @@ async def process_one(db: AsyncSession, *, now: datetime | None = None) -> bool:
             else:
                 try:
                     delivery.scheduled_at = current + timedelta(
-                        seconds=time.monotonic()
-                        - started
-                        + max(_retry_delay(delivery.attempts), retry)
+                        seconds=monotonic() - started + max(_retry_delay(delivery.attempts), retry)
                     )
                 except OverflowError:
                     delivery.status = "failed"
@@ -422,7 +485,5 @@ async def process_one(db: AsyncSession, *, now: datetime | None = None) -> bool:
         delivery.error_code is not None,
     )
     await db.commit()
-    record_step(
-        category, status=final_status, has_error=has_error, duration=time.monotonic() - started
-    )
+    record_step(category, status=final_status, has_error=has_error, duration=monotonic() - started)
     return True

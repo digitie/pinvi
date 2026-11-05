@@ -492,3 +492,400 @@ async def test_opt_out_does_not_wait_for_weather_enrichment(
         await planning
     async with session_factory() as db:
         assert list((await db.scalars(select(TelegramNotification.id))).all()) == []
+
+
+@pytest.mark.parametrize("change", ["trip_date", "day_delete", "midnight", "weekly_date"])
+async def test_scheduled_delivery_rechecks_dates_and_kst_validity(
+    client: Any,
+    verified_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    provider: Provider,
+    change: str,
+) -> None:
+    from app.models.trip import Trip
+    from app.models.trip_day import TripDay
+    from app.services.telegram_planner import plan_due
+
+    trip_id, target_id, cookies = await setup_trip(
+        client, verified_user, auth_cookies, session_factory
+    )
+    weekly = change == "weekly_date"
+    body = {
+        "daily_enabled": not weekly,
+        "weekly_enabled": weekly,
+        "weekly_target_id": target_id if weekly else None,
+        "weekly_day": 3,
+    }
+    assert (
+        await client.put("/users/me/telegram-notification-preferences", json=body, cookies=cookies)
+    ).status_code == 200
+    await plan_due(now=datetime(2026, 11, 5, 0, 0, tzinfo=UTC))
+    async with session_factory() as db:
+        for pending in (await db.scalars(select(TelegramDelivery))).all():
+            pending.scheduled_at = datetime(2026, 11, 5, 0, tzinfo=UTC)
+        if change in {"trip_date", "weekly_date"}:
+            trip = await db.get(Trip, uuid.UUID(trip_id))
+            trip.start_date, trip.end_date = date(2026, 12, 5), date(2026, 12, 6)
+        elif change == "day_delete":
+            day = await db.get(TripDay, (uuid.UUID(trip_id), 1))
+            await db.delete(day)
+            rows = list((await db.scalars(select(TelegramNotification))).all())
+            for row in rows:
+                if "2일차" in "".join(row.chunks):
+                    recipient = await db.scalar(
+                        select(TelegramDelivery).where(TelegramDelivery.notification_id == row.id)
+                    )
+                    recipient.scheduled_at = datetime(2026, 11, 7, 0, tzinfo=UTC)
+        await db.commit()
+    current = (
+        datetime(2026, 11, 5, 15, 1, tzinfo=UTC)
+        if change == "midnight"
+        else datetime(2026, 11, 5, 1, tzinfo=UTC)
+    )
+    async with session_factory() as db:
+        while await process_one(db, now=current):
+            pass
+    assert provider.sent == []
+    async with session_factory() as db:
+        processed = list(
+            (
+                await db.scalars(
+                    select(TelegramDelivery).where(TelegramDelivery.status != "pending")
+                )
+            ).all()
+        )
+        assert processed
+        assert all(
+            row.error_code == ("schedule_expired" if change == "midnight" else "schedule_changed")
+            for row in processed
+        )
+
+
+async def test_cached_daily_weather_works_with_one_database_connection(
+    client: Any,
+    verified_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.clients.kor_travel_weather import WeatherMarkerOut, WeatherValueOut
+    from app.core.config import settings
+    from app.db import session as db_session
+    from app.models.poi import TripDayPoi
+    from app.models.weather_location_link import WeatherLocationLink
+    from app.services.telegram_planner import plan_due
+
+    trip_id, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    assert (
+        await client.put(
+            "/users/me/telegram-notification-preferences",
+            json={"daily_enabled": True},
+            cookies=cookies,
+        )
+    ).status_code == 200
+    async with session_factory() as db:
+        db.add(
+            TripDayPoi(
+                trip_id=uuid.UUID(trip_id),
+                day_index=1,
+                sort_order="a0",
+                feature_id="f_owned_weather",
+                feature_snapshot={
+                    "name": "소유 날씨 장소",
+                    "coord": {"lon": 129.118, "lat": 35.153},
+                },
+                added_by_user_id=uuid.UUID(verified_user[0]),
+            )
+        )
+        db.add(
+            WeatherLocationLink(
+                feature_id="f_owned_weather",
+                location_id="owned-weather",
+                source_location_ids=["owned-weather"],
+                lat=35.153,
+                lon=129.118,
+                distance_km=0,
+                resolved_at=datetime.now(UTC),
+                stale=False,
+            )
+        )
+        await db.commit()
+
+    class CachedWeather:
+        forecasts = 0
+
+        async def resolve(self, *args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("공식 해석 캐시 적중이면 resolve 호출이 없어야 함")
+
+        async def markers(self, *args: Any, **kwargs: Any) -> Any:
+            return (WeatherMarkerOut(location_id="owned-weather"),)
+
+        async def forecast(self, *args: Any, **kwargs: Any) -> Any:
+            self.forecasts += 1
+            return (
+                WeatherValueOut(
+                    value_id="owned-v1",
+                    location_id="owned-weather",
+                    provider="python-kma-api",
+                    dataset_key="kma_short_forecast",
+                    weather_domain="kma_short_forecast",
+                    forecast_style="short",
+                    metric_key="TMP",
+                    metric_name="기온",
+                    value_number=18,
+                    unit="℃",
+                    target_at=datetime(2026, 11, 5, 0, tzinfo=UTC),
+                    normalization_version="v1",
+                    collected_at=datetime.now(UTC),
+                    source_record_key="owned-weather-source",
+                ),
+            )
+
+    weather = CachedWeather()
+    engine = create_async_engine(
+        settings.pinvi_database_url, pool_size=1, max_overflow=0, pool_timeout=0.2
+    )
+    monkeypatch.setattr(
+        db_session, "async_session_factory", async_sessionmaker(engine, expire_on_commit=False)
+    )
+    monkeypatch.setattr(settings, "pinvi_kor_travel_map_weather_enabled", False)
+    try:
+        result = await plan_due(now=datetime(2026, 11, 5, 0, tzinfo=UTC), weather_client=weather)
+        assert result["enqueued"] == 2
+        async with session_factory() as db:
+            messages = list((await db.scalars(select(TelegramNotification.chunks))).all())
+        assert weather.forecasts == 1
+        assert any("기온" in "".join(chunks) and "18" in "".join(chunks) for chunks in messages)
+    finally:
+        await engine.dispose()
+
+
+async def test_completed_admin_disable_fences_worker_waiting_on_trip(
+    client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any, provider: Provider
+) -> None:
+    from sqlalchemy import event
+
+    from app.db import session as db_session
+    from app.models.trip import Trip
+    from app.models.user import User
+
+    trip_id, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    assert (await send(client, trip_id, cookies)).status_code == 202
+    async with session_factory() as db:
+        admin = User(
+            email=f"telegram-admin-{uuid.uuid4()}@pinvi.test",
+            status="active",
+            roles=["admin"],
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(admin)
+        await db.commit()
+        admin_id = str(admin.user_id)
+    reached = asyncio.Event()
+
+    def waiting(
+        conn: Any, cursor: Any, statement: str, parameters: Any, context: Any, executemany: bool
+    ) -> None:
+        if "app.trips" in statement and "FOR UPDATE" in statement.upper():
+            reached.set()
+
+    async def worker() -> bool:
+        async with session_factory() as db:
+            return await process_one(db)
+
+    async with session_factory() as holder:
+        await holder.scalar(
+            select(Trip).where(Trip.trip_id == uuid.UUID(trip_id)).with_for_update()
+        )
+        event.listen(db_session.engine.sync_engine, "before_cursor_execute", waiting)
+        running = asyncio.create_task(worker())
+        try:
+            await asyncio.wait_for(reached.wait(), timeout=5)
+            disabled = await client.post(
+                f"/admin/users/{verified_user[0]}/disable",
+                json={"access_reason": "소유 WSL 알림 계정 철회 경합"},
+                cookies=auth_cookies(admin_id),
+            )
+            assert disabled.status_code == 200, disabled.text
+            assert disabled.json()["data"]["is_active"] is False
+        finally:
+            await holder.rollback()
+            await running
+            event.remove(db_session.engine.sync_engine, "before_cursor_execute", waiting)
+    assert provider.sent == []
+    assert (await delivery(session_factory)).status == "skipped"
+
+
+async def test_one_oversized_user_does_not_block_later_users_and_has_ui_error(
+    client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any
+) -> None:
+    from app.models.poi import TripDayPoi
+    from app.models.telegram_notification import TelegramPreferences
+    from app.models.trip import Trip
+    from app.models.trip_day import TripDay
+    from app.models.user import User
+    from app.services.telegram_planner import plan_due
+
+    _, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    assert (
+        await client.put(
+            "/users/me/telegram-notification-preferences",
+            json={"daily_enabled": True},
+            cookies=cookies,
+        )
+    ).status_code == 200
+    poison_id, poison_trip = uuid.UUID(int=1), uuid.uuid4()
+    async with session_factory() as db:
+        db.add(
+            User(
+                user_id=poison_id,
+                email="oversized-telegram@pinvi.test",
+                status="active",
+                roles=["user"],
+                email_verified_at=datetime.now(UTC),
+            )
+        )
+        await db.flush()
+        db.add(
+            Trip(
+                trip_id=poison_trip,
+                owner_user_id=poison_id,
+                title="큰 일정",
+                start_date=date(2026, 11, 5),
+                end_date=date(2026, 11, 5),
+            )
+        )
+        await db.flush()
+        db.add(TripDay(trip_id=poison_trip, day_index=1))
+        target = TelegramTarget(
+            user_id=poison_id, telegram_chat_id="-1000001", last_verified_at=datetime.now(UTC)
+        )
+        db.add(target)
+        await db.flush()
+        db.add(TripTelegramTarget(trip_id=poison_trip, telegram_target_id=target.id))
+        db.add(TelegramPreferences(user_id=poison_id, daily_enabled=True, send_time="08:00"))
+        await db.flush()
+        db.add_all(
+            [
+                TripDayPoi(
+                    trip_id=poison_trip,
+                    day_index=1,
+                    sort_order=f"{index:05}",
+                    feature_snapshot={"name": f"장소 {index}"},
+                    user_note="긴메모" * 160,
+                    added_by_user_id=poison_id,
+                )
+                for index in range(2000)
+            ]
+        )
+        await db.commit()
+    result = await plan_due(now=datetime(2026, 11, 5, 0, tzinfo=UTC))
+    assert result["enqueued"] == 2 and result["failed"] == 1
+    async with session_factory() as db:
+        failure = await db.scalar(
+            select(TelegramNotification).where(TelegramNotification.user_id == poison_id)
+        )
+        assert failure is not None and failure.error_code == "TELEGRAM_MESSAGE_TOO_LARGE"
+    history = await client.get(
+        "/users/me/telegram-notifications", cookies=auth_cookies(str(poison_id))
+    )
+    assert history.status_code == 200
+    assert "일정이 너무 길" in history.text and "긴메모" not in history.text
+
+
+async def test_expired_scheduled_retry_is_closed_before_future_retry_at(
+    client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any, provider: Provider
+) -> None:
+    from app.services.telegram_planner import plan_due
+
+    _, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    assert (
+        await client.put(
+            "/users/me/telegram-notification-preferences",
+            json={"daily_enabled": True},
+            cookies=cookies,
+        )
+    ).status_code == 200
+    before_midnight = datetime(2026, 11, 5, 14, 59, tzinfo=UTC)
+    await plan_due(now=before_midnight)
+    async with session_factory() as db:
+        for pending in (await db.scalars(select(TelegramDelivery))).all():
+            pending.scheduled_at = before_midnight
+        await db.commit()
+    provider.error = TelegramError("owned future retry", code="rate_limited", retry_after=3600)
+    async with session_factory() as db:
+        while await process_one(db, now=before_midnight):
+            pass
+    provider.error = None
+    async with session_factory() as db:
+        assert await process_one(db, now=datetime(2026, 11, 5, 15, 1, tzinfo=UTC))
+        while await process_one(db, now=datetime(2026, 11, 5, 15, 1, tzinfo=UTC)):
+            pass
+    async with session_factory() as db:
+        rows = list((await db.scalars(select(TelegramDelivery))).all())
+        assert rows and all(
+            row.status == "skipped" and row.error_code == "schedule_expired" for row in rows
+        )
+    assert provider.sent == []
+
+
+async def test_scheduled_chunk_does_not_cross_midnight_while_waiting_on_policy_locks(
+    client: Any,
+    verified_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    provider: Provider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy import event
+
+    from app.db import session as db_session
+    from app.models.trip import Trip
+    from app.services import telegram_notifications
+    from app.services.telegram_planner import plan_due
+
+    trip_id, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    assert (
+        await client.put(
+            "/users/me/telegram-notification-preferences",
+            json={"daily_enabled": True},
+            cookies=cookies,
+        )
+    ).status_code == 200
+    now = datetime(2026, 11, 5, 14, 59, 55, tzinfo=UTC)
+    await plan_due(now=now)
+    async with session_factory() as db:
+        for pending in (await db.scalars(select(TelegramDelivery))).all():
+            pending.scheduled_at = now
+        await db.commit()
+    clock = {"elapsed": 0.0}
+    monkeypatch.setattr(telegram_notifications, "monotonic", lambda: clock["elapsed"])
+    reached = asyncio.Event()
+
+    def waiting(
+        conn: Any, cursor: Any, statement: str, parameters: Any, context: Any, executemany: bool
+    ) -> None:
+        if "app.trips" in statement and "FOR UPDATE" in statement.upper():
+            reached.set()
+
+    async def worker() -> bool:
+        async with session_factory() as db:
+            return await process_one(db, now=now)
+
+    async with session_factory() as holder:
+        await holder.scalar(
+            select(Trip).where(Trip.trip_id == uuid.UUID(trip_id)).with_for_update()
+        )
+        event.listen(db_session.engine.sync_engine, "before_cursor_execute", waiting)
+        running = asyncio.create_task(worker())
+        try:
+            await asyncio.wait_for(reached.wait(), timeout=5)
+            clock["elapsed"] = 10
+        finally:
+            await holder.rollback()
+            await running
+            event.remove(db_session.engine.sync_engine, "before_cursor_execute", waiting)
+    assert provider.sent == []

@@ -36,5 +36,9 @@ async def pinvi_telegram_notification_planner(
         ):
             raise RuntimeError("알림 planner 응답 형식 오류")
     result = {"users": int(data["users"]), "enqueued": int(data["enqueued"])}
+    if "failed" in data:
+        if type(data["failed"]) is not int or data["failed"] < 0:
+            raise RuntimeError("알림 planner 실패 집계 형식 오류")
+        result["failed"] = data["failed"]
     context.add_output_metadata(result)
     return result

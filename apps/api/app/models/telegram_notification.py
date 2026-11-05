@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -62,6 +63,12 @@ class TelegramNotification(Base):
     request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     trip_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     chunks: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    schedule_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
     consent_generation: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
