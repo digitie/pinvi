@@ -1,3 +1,10 @@
+## 2026-11-05 — Telegram636/637/638 묶음 착수
+
+- Pinvi684/PR687을6f47dad로, Geo공식주소검증623을305777d로 일반squash병합했다. 각 두최종리뷰와정확HEAD CI9/5SUCCESS·후보/병합tree동일성을확인했다.
+- 운영650은보존202605자료/최신코드에서재현되지않아열어둔다. 원래40/약칭/정식·실제COPY/MV/HTTP·Chromium/Firefox각5검색 증거와운영담당Claude의읽기전용코드/DB/MV대조가이드를남겼다.
+- 다음은수동일정·특보발령/해제·사용자opt-in일간/주간을기존대상/outbox와한PR로묶는다. 계획 docs/execplan/telegram-notification-bundle-636-638.md. 초안/자주push·WSL/소유provider fixture UI·두적대리뷰·정확CI후merge한다.
+- 실제Telegram수신자에게메시지를보내지않으며운영접근/배포/시험도없다. 최종prod는Claude담당이다. 이후641을진행한다.
+
 ## 2026-11-05 — #684 한도 오류 격리·출몰 캐시/권한 경합 수정
 
 - draft#687부터 단계별 push했다. storage-only 예외 경계·handler최대1회, 독립 cache transaction·조건부upsert·Trip 선행 fence를 구현했다. 두 전문 리뷰의 snapshot역전P2와 관리자이동뒤지연DELETE/PATCH 권한P1을 실제 실패 우선으로 재현해 보완했다.

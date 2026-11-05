@@ -1,5 +1,9 @@
 # tasks-done.md — 완료·아카이브
 
+## 2026-11-05 — 한도 오류 격리·일자 출몰/권한 경합 (#684)
+
+- [x] Pinvi [PR687](https://github.com/digitie/pinvi/pull/687)을6f47dad로 병합했다. handler 최대1회·독립 cache/upsert/Trip fence·관리자 이동 뒤 원래 여행 재검증을 포함한다. 실패우선12·WSL단위1988/관련PG88/실제UI5, 정확21e1 두전문최종리뷰 무차단·CI9SUCCESS·병합tree동일성을 확인했다. 운영 접근/배포/시험은 없다.
+
 ## 2026-11-05 — 미확정 Map 명령 확인 (#668)
 
 - [x] Map [PR1451](https://github.com/digitie/kor-travel-map/pull/1451)27033b1 선병합·실제병합본 sync/동등성 대조 뒤 Pinvi [PR683](https://github.com/digitie/pinvi/pull/683)a1b2f53 병합. 각 두 독립 전문 리뷰 무차단, Map 정확0afad CI9·Pinvi 정확537 CI15 성공. 실제UI10·API1976/관련50·웹393 등 구성요소 검증과 한계는 source proof에 구분했다. 운영 접근/배포/시험은 없다.
