@@ -69,11 +69,24 @@ export async function installMockedNetwork(
     const message = label(url, method);
     if (!violations.includes(message)) violations.push(message);
   };
+  // page.request도 같은 context의 request를 읽으므로 모든 직접 API 전송에 동일 경계를 적용한다.
+  Object.defineProperty(context, 'request', {
+    value: guardMockedRequest(context.request, appOrigin),
+    configurable: true,
+  });
   await context.route('**/*', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     if (url.origin === appOrigin && url.pathname !== '/admin/grafana/health') {
-      await route.continue();
+      const response = await route.fetch({ maxRedirects: 0 });
+      if (response.status() >= 300 && response.status() < 400 && response.headers()['location']) {
+        // 브라우저는 redirect 다음 요청을 route에 다시 주지 않는다. mock 없는 redirect는
+        // chain 전체를 허용하지 않고 기능별 page mock에서 명시하도록 한다.
+        note(url, 'REDIRECT');
+        await route.abort('blockedbyclient');
+        return;
+      }
+      await route.fulfill({ response });
       return;
     }
     note(url, request.method());

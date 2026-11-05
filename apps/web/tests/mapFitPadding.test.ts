@@ -133,3 +133,18 @@ describe('fitPaddingForOverlay', () => {
     expect(fitPaddingForOverlay(rect(0, 0), rect(0, 100), PIN_HEIGHT).top).toBe(MAP_FIT_PADDING);
   });
 });
+
+describe('하단 통계 칩 맞춤 여백', () => {
+  it('핀 꼬리를 통계 칩 위로 띄우며 위쪽 여백도 보존한다', () => {
+    const surface = rect(0, 800);
+    const stats = rect(700, 36);
+    const padding = fitPaddingForOverlay(surface, rect(88, 44), PIN_HEIGHT, stats);
+    expect(padding.top).toBe(132 + PIN_HEIGHT + OVERLAY_GAP);
+    expect(surface.bottom - padding.bottom).toBeLessThanOrEqual(stats.top - OVERLAY_GAP);
+  });
+
+  it('상하 오버레이가 높아도 fitBounds에 양수 높이를 남긴다', () => {
+    const padding = fitPaddingForOverlay(rect(0, 400), rect(0, 390), PIN_HEIGHT, rect(200, 150));
+    expect(padding.top + padding.bottom).toBeLessThan(400);
+  });
+});

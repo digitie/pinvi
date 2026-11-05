@@ -38,3 +38,12 @@ strict 진단으로 드러난 신규 첨부/Telegram read의 새 사용자·새 
 - 같은 회귀를 포함한 격리 정책·실제 module worker 10건은 모두 통과했다. 소유 redirect 수신 서버 0건이며, 호출자가 maxRedirects를 늘려도 자동 추적하지 않는다.
 - 이 결과는 앞서 원천 해시로 묶은 기존 앱 빌드를 사용한 진단 실행이다. 제품 지도 수정 이후 최종 새 빌드·전체 실행은 별도로 수행한다.
 - 최신 main의 PR692와 PR694를 통합했다. Claude Code의 운영 국립공원 영역 증거와 WSL #658 병합 내역을 보존한다.
+
+## 2차 적대 리뷰와 실제 지도 재현
+
+- Hume의 격리 소스 검토에서 page/context request 직접 전송과 브라우저 redirect 두 우회가 나왔다. 소유 HTTP 수신 서버에 기본/추가 context·page 요청4건과 브라우저 navigation/fetch redirect가 닿는 3건의 회귀 실패를 확인했다.
+- context의 request에도 같은 guard를 적용하고, 허용 앱 요청도 자동 redirect 없이 받아 명시하지 않은 redirect를 차단했다. 관련 독립 소유 정책9건이 모두 통과했다. 최종 새 앱 빌드의 전체 suite는 아직 남아 있다.
+- 실제 Map API·Valkey·PostGIS와 Pinvi API·PG·Chromium의 고정 지리 fixture에서 모바일 4핀 여행의 북쪽 핀은 교통 패널에 가려 실제 클릭이 실패했고, 남쪽 핀 SVG 끝점 y780이 통계 칩 y748~780에 겹쳤다. 운영 제공자와 다른 공식 좌표의 동일성을 주장하지 않는다.
+- 원래 2핀/4핀·desktop/mobile을 모두 기록했다. 최초 harness의 자연키 casefold 누락·로그인 완료 URL의 느슨한 정규식 및 새 회귀 테스트의 build 타입 오류를 고쳤다. 이 harness 오류를 제품 실패 근거에 세지 않는다.
+- panel이 동적으로 렌더되기 전 맞춤을 완료로 취급하던 경계를 보완한다. 통계 칩은 실제 핀과 겹칠 때만 하단 여백에 누적하고, 선택 이동도 검색/교통 패널을 피하는 offset을 사용한다. 관련 단위18건과 typecheck가 통과했으나 실제 제품 수정 후 UI 재검증은 진행 중이다.
+- upstream PR31은 정확16f6e3e에서 독립 전문 리뷰 Feynman/Zeno 잔여P0/P1/P2없음·CI성공(기존21/브라우저17/소비17) 뒤9c46c57181d433c91f7e8837c4e4396204e9b583으로 일반 squash 병합했다. 실제 병합본 재포장·Pinvi 통합은 다음 단계다.

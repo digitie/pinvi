@@ -1938,6 +1938,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
 
         <section
           id="trip-map-canvas"
+          data-map-fit-boundary=""
           className={
             mobileWebLayout
               ? 'relative min-h-0 flex-1 bg-canvas'
@@ -1984,6 +1985,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
           />
           <div
             data-testid="trip-map-stats"
+            data-map-fit-bottom=""
             className={
               mobileWebLayout
                 ? 'pointer-events-none absolute bottom-16 left-3 z-10 flex flex-wrap gap-2'

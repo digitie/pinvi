@@ -199,7 +199,7 @@ config.push({
     }],
     'no-restricted-syntax': ['error',
       { selector: 'CallExpression[callee.object.name="route"][callee.property.name="continue"]', message: '#618 — mock 미처리 요청은 route.fallback()으로 격리 guard에 넘기세요.' },
-      { selector: 'CallExpression[callee.object.name="browser"][callee.property.name="newContext"]', message: '#618 — 추가 세션은 newMockContext fixture를 사용하세요.' },
+      { selector: 'CallExpression[callee.object.name="browser"][callee.property.name=/^(newContext|newPage)$/]', message: '#618 — 추가 세션은 newMockContext fixture를 사용하세요.' },
     ],
   },
 });

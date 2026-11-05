@@ -223,3 +223,18 @@ it('제어된 POI popup이 native로 닫히면 선택 해제를 소유자에게 
   h.popupClose!();
   expect(select).toHaveBeenCalledWith(null);
 });
+
+it('외부 POI 선택은 가운데 열의 검색·교통 패널 아래로 offset을 준다', () => {
+  h.transportVisible = true;
+  const map = fakeMap({ x: 72, y: 207 });
+  h.map = map;
+  const view = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+  map.flyTo.mockClear();
+  view.rerender(
+    <TripMapView points={POINTS} selectedPoiId="north" transportLayers overlayTopLeft={overlay} />,
+  );
+  expect(map.flyTo).toHaveBeenCalledWith(expect.objectContaining({
+    center: [128.53, 37.13],
+    offset: [0, (288 + 48 + 24 - 64) / 2],
+  }));
+});

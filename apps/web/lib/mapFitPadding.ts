@@ -87,6 +87,7 @@ export function fitPaddingForOverlay(
   surface: VerticalRect | null,
   overlay: VerticalRect | null,
   markerHeight = 0,
+  bottomOverlay: VerticalRect | null = null,
 ): FitPadding {
   const padding = {
     top: MAP_FIT_PADDING,
@@ -94,11 +95,26 @@ export function fitPaddingForOverlay(
     bottom: MAP_FIT_PADDING,
     left: MAP_FIT_PADDING,
   };
-  if (!surface || surface.height <= 0 || !overlay || overlay.height <= 0) return padding;
-  const clearance = Math.round(
-    overlay.bottom - surface.top + Math.max(0, markerHeight) + OVERLAY_GAP,
-  );
-  const cap = Math.round(surface.height * MAX_TOP_SHARE);
-  padding.top = Math.max(MAP_FIT_PADDING, Math.min(clearance, cap));
+  if (!surface || surface.height <= 0) return padding;
+  if (overlay && overlay.height > 0) {
+    const clearance = Math.round(
+      overlay.bottom - surface.top + Math.max(0, markerHeight) + OVERLAY_GAP,
+    );
+    padding.top = Math.max(MAP_FIT_PADDING, Math.min(clearance, Math.round(surface.height * MAX_TOP_SHARE)));
+  }
+  if (bottomOverlay && bottomOverlay.height > 0) {
+    // 핀 꼬리를 칩 위에 두고, 상하 여백이 지도 높이를 소진하지 않게 제한한다.
+    const clearance = Math.round(surface.bottom - bottomOverlay.top + OVERLAY_GAP);
+    const cap = Math.max(MAP_FIT_PADDING, surface.height - padding.top - 1);
+    padding.bottom = Math.max(MAP_FIT_PADDING, Math.min(clearance, cap));
+  }
   return padding;
+}
+
+/** 이 지도와 같은 경계 안에 있는 하단 통계 칩의 실제 표시 상자. */
+export function fitBottomRect(container: Element): BoxRect | null {
+  const chip = container.closest('[data-map-fit-boundary]')?.querySelector('[data-map-fit-bottom]');
+  if (!chip) return null;
+  const rect = chip.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0 ? rect : null;
 }

@@ -9,7 +9,7 @@ async function ownedServer(redirect?: string) {
   const requests: string[] = [];
   const server = createServer((req, res) => {
     requests.push(req.url ?? '/');
-    if (redirect) {
+    if (redirect && req.url !== '/') {
       res.writeHead(302, { location: redirect });
       res.end();
       return;
@@ -173,13 +173,52 @@ test('APIRequestContext의 로컬 redirect가 다른 origin으로 이어지지 �
   const raw = await rawRequestFactory.newContext();
   try {
     const request = guardMockedRequest(raw, app.origin);
-    const response = await request.get('/', { maxRedirects: 5 });
+    const response = await request.get('/redirect', { maxRedirects: 5 });
     expect(response.status()).toBe(302);
     expect(trap.requests).toEqual([]);
-    expect(app.requests).toEqual(['/']);
+    expect(app.requests).toEqual(['/redirect']);
   } finally {
     await raw.dispose();
     await close(app.server);
+    await close(trap.server);
+  }
+});
+
+for (const action of ['navigation', 'fetch'] as const) {
+  test('브라우저 redirect는 외부 수신 서버를 호출하지 않는다: ' + action, async ({ browser }) => {
+    const trap = await ownedServer();
+    const app = await ownedServer(trap.origin + '/secret-618');
+    const context = await browser.newContext({ serviceWorkers: 'block' });
+    const fence = await installMockedNetwork(context, app.origin);
+    try {
+      const page = await context.newPage();
+      await page.goto(app.origin);
+      if (action === 'navigation') await page.goto(app.origin + '/redirect').catch(() => null);
+      else await page.evaluate((url) => fetch(url).catch(() => null), app.origin + '/redirect');
+      expect(trap.requests).toEqual([]);
+      expect(() => fence.verify()).toThrow(/unhandled network/);
+    } finally {
+      await context.close();
+      await close(app.server);
+      await close(trap.server);
+    }
+  });
+}
+
+guardedTest('기본·추가 context와 page의 request도 전송 guard를 사용한다', async ({
+  context, page, newMockContext,
+}) => {
+  const trap = await ownedServer();
+  const extra = await newMockContext();
+  const extraPage = await extra.newPage();
+  try {
+    const outcomes = [];
+    for (const request of [context.request, page.request, extra.request, extraPage.request]) {
+      outcomes.push(await request.get(trap.origin + '/secret-618').then(() => false, () => true));
+    }
+    expect(trap.requests).toEqual([]);
+    expect(outcomes).toEqual([true, true, true, true]);
+  } finally {
     await close(trap.server);
   }
 });

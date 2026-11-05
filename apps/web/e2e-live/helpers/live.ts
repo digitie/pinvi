@@ -712,7 +712,7 @@ export function appAlerts(scope: Page | Locator): Locator {
  * zooms instead of opening a popup.
  */
 export function featureMarkerButtons(page: Page): Locator {
-  return page.locator('.maplibregl-marker[role="button"]:not([data-is-cluster="true"]):not([aria-label*="묶음"])');
+  return page.locator('.maplibregl-marker[data-interaction-id^="feature:"][role="button"]:not([data-is-cluster="true"]):not([aria-label*="묶음"])');
 }
 
 /**
@@ -752,7 +752,7 @@ async function featureLegendTitles(page: Page): Promise<Set<string>> {
 export async function clickableFeatureMarkers(page: Page, max = 5): Promise<Locator[]> {
   const all = featureMarkerButtons(page);
   const titles = [...(await featureLegendTitles(page))];
-  // returned locators are keyed by aria-label, not index: tapping one re-renders/re-orders the markers
+  // 같은 이름의 숨은 핀을 다시 고르지 않도록 실제 element의 도메인 ID를 유지한다.
   const indexes = await all.evaluateAll(
     (els, { limit, featureTitles }) => {
     const canvas = document.querySelector('.maplibregl-canvas')?.getBoundingClientRect();
@@ -769,11 +769,11 @@ export async function clickableFeatureMarkers(page: Page, max = 5): Promise<Loca
       const top = document.elementFromPoint(cx, cy);
       if (top && (top === el || el.contains(top))) out.push(i);
     });
-    return out.map((i) => (els[i]!.getAttribute('aria-label') ?? '').trim());
+    return out.map((i) => els[i]!.getAttribute('data-interaction-id') ?? '');
     },
     { limit: max, featureTitles: titles },
   );
-  return [...new Set(indexes)].filter(Boolean).map((label) => all.and(page.getByLabel(label, { exact: true })).first());
+  return [...new Set(indexes)].filter(Boolean).map((id) => all.and(page.locator('[data-interaction-id=' + JSON.stringify(id) + ']')));
 }
 
 /**

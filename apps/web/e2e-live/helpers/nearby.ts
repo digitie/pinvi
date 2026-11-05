@@ -219,44 +219,38 @@ export async function searchAndFly(page: Page, query: string): Promise<void> {
  * opens the transport dialog. Returns the title clicked.
  */
 export async function clickTransportMarker(page: Page, layer: Layer): Promise<string> {
-  const titles = await legendMarkers(page, layer).allTextContents();
-  expect(titles.length, `legend has ${layer} markers`).toBeGreaterThan(0);
+  const items = await legendMarkers(page, layer).evaluateAll((elements) =>
+    elements.map((el) => ({ title: el.textContent?.trim() ?? '', id: el.getAttribute('data-feature-id') ?? '' })),
+  );
+  expect(items.length, 'legend has requested transport markers').toBeGreaterThan(0);
   const canvasBox = await mapCanvas(page).boundingBox();
   expect(canvasBox).not.toBeNull();
-  // Pass 1: real click on a pin that is the topmost element. Pass 2 (country zoom: airport pins can sit
-  // under feature clusters): dispatch the click on the marker element itself.
-  // Touch projects: a real tap on a pin can land on a same-named feature marker — dispatch first there.
-  const isTouch = await page.evaluate(() => navigator.maxTouchPoints > 0);
-  const passes = isTouch ? (['dispatch', 'topmost'] as const) : (['topmost', 'dispatch'] as const);
-  for (const pass of passes)
-  for (const title of titles) {
-    const marker = page.locator('.maplibregl-marker').and(page.getByLabel(title, { exact: true })).first();
-    if ((await marker.count()) === 0) continue;
+  for (const item of items) {
+    const identity = 'transport:' + layer + ':' + item.id;
+    const marker = page.locator('.maplibregl-marker[data-interaction-id=' + JSON.stringify(identity) + ']');
+    if ((await marker.count()) !== 1) continue;
     const box = await marker.boundingBox();
-    if (!box || !canvasBox) continue;
-    const inside =
-      box.x >= canvasBox.x && box.y >= canvasBox.y &&
-      box.x + box.width <= canvasBox.x + canvasBox.width &&
-      box.y + box.height <= canvasBox.y + canvasBox.height;
-    if (!inside) continue;
-    // skip pins covered by an overlay (search card, layer panel, mobile chrome) — a click there never
-    // reaches the marker
+    if (!box || !canvasBox || box.x < canvasBox.x || box.y < canvasBox.y ||
+        box.x + box.width > canvasBox.x + canvasBox.width ||
+        box.y + box.height > canvasBox.y + canvasBox.height) continue;
     const onTop = await marker.evaluate((el) => {
       const r = el.getBoundingClientRect();
       const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return !!top && (top === el || el.contains(top));
     });
-    if (pass === 'topmost' && !onTop) continue;
-    // the pin is the topmost element at its centre — a real click (tap on touch projects is a click too)
-    if (pass === 'topmost') await marker.click();
-    else await marker.dispatchEvent('click');
-    try {
-      await expect(detailDialog(page)).toBeVisible({ timeout: 12_000 });
-      return title;
-    } catch {
-      // A same-named Map feature marker may have taken the click; close whatever opened and try the next.
-      await page.keyboard.press('Escape');
-    }
+    if (!onTop) continue;
+    // 동명 feature 대신 누른 transport ID의 실제 HTTP와 본문까지 연결한다.
+    const response = page.waitForResponse((res) =>
+      res.request().method() === 'GET' &&
+      new URL(res.url()).pathname.endsWith('/transport/' + LAYER_PATH[layer] + '/' + encodeURIComponent(item.id)),
+    );
+    await marker.click();
+    const res = await response;
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.data.item.feature_id).toBe(item.id);
+    await expect(detailDialog(page)).toBeVisible();
+    return item.title;
   }
   throw new Error(`no individually rendered ${layer} marker could open the transport dialog`);
 }
