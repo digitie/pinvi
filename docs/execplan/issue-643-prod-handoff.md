@@ -15,3 +15,9 @@ Map #1450은 국립공원 경계 dataset인 knps_park_boundaries와 특별보호
 ## 진행 순서
 
 초안 PR을 먼저 만들고 기록을 자주 원격에 남긴다. 관련 문서와 카탈로그를 한 PR로 묶고 관련 정합성 검증을 WSL에서 수행한다. 두 독립 전문 적대 리뷰를 거쳐 최종 정확 HEAD의 적용 CI 성공 후 일반 squash merge한다. 운영 접속·배포·적재·검증과 Telegram 전송은 이 PR에서 실행하지 않는다. 두 제품 이슈는 운영 완료 조건이 확인될 때까지 열린 상태를 유지한다.
+
+## 영역 검사 러너의 설정 전달 결함
+
+운영 카탈로그는 PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY와 설악산/북한산 anchor를 읽지만 n150-playwright-runner.sh의 Docker 환경 전달 목록에는 세 키가 없었다. 실제 Bash allowlist/argv 구성 조각을 격리 실행해 세 누락을 수정 전3실패로 확인했다. 허용 목록에 세 이름만 추가하며 값은 argv에 넣지 않는다. 설정하지 않은 키와 알 수 없는 키는 계속 전달하지 않는다.
+
+N150 host·exact revision·clean checkout·고정 이미지·새 npm ci guard는 그대로다. WSL 검증은 실제 Bash argv 경계이며 N150/Docker·prod UI 실행을 대신하지 않는다. 보완 후 신규4·이미지 계약2·기존M05 wiring20 합계26검사, Bash 문법·Ruff/format이 통과했다. 제품 코드/UI가 아닌 운영 검사 러너의 전달 경계를 보완한 것으로 PR 범위를 갱신한다.
