@@ -1,3 +1,11 @@
+## 2026-11-06 — #658 cleanup 경합 독립 조사 착수
+
+**작업**: 지정 기준 SHA의 별도 WSL worktree에서 소유 PG18 실패 우선 재현을 시작한다.
+**변경**: 계획은 `docs/execplan/issue-658-hotswap-lock-release.md`.
+**결정**: 운영·SSH·prod·Telegram 접근, 봉인 migration 변경, 다른 작업자 변경 되돌리기, 보호 stash pop, ready/merge 금지.
+**발견**: #658 댓글 없음. 기존 cleanup은 psql kill/wait 뒤 서버 lock 해제 확인 없이 반환한다. Linux native CodeGraph explore/impact 선행 완료; Bash 본문은 인덱스 지원 밖이라 직접 확인했다.
+**다음**: 계획 원격 commit과 draft PR 뒤 소유 backend 지연을 결정적으로 분리한다. 전문 2인 리뷰는 메인 담당이다.
+
 ## 2026-11-06 — 원격 통합 검사의 고정 시계 혼용 보완
 
 - PR691 d8 후보의 원격integration4가 특보12검사 실패를 포착했다. 고정worker NOW는11/5 12UTC인데 DB scheduled_at default는실제21UTC라선택대상이없었다. WSL에서같은1FAIL을재현했다. 제품큐/worker/guard는바꾸지않는다.
