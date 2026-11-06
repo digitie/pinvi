@@ -964,3 +964,228 @@ async def test_scheduled_chunk_does_not_cross_midnight_while_waiting_on_policy_l
             await running
             event.remove(db_session.engine.sync_engine, "before_cursor_execute", waiting)
     assert provider.sent == []
+
+
+# ── 2026-11-06 소유자 결정 묶음(#697 리뷰 잔여) ────────────────────────────────
+
+PREFERENCES_ENDPOINT = "/users/me/telegram-notification-preferences"
+KST_0800_NOV5 = datetime(2026, 11, 4, 23, 0, tzinfo=UTC)  # 한국 11/5 08:00
+
+
+async def test_planner_skips_tick_while_previous_run_is_active(
+    client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any, provider: Provider
+) -> None:
+    """이전 실행(예: Dagster timeout 뒤에도 계속 도는 API 요청)이 있으면 새 tick은 겹치지 않는다."""
+    from sqlalchemy import func, text
+
+    from app.db import session as db_session
+    from app.services.telegram_planner import plan_due
+
+    _, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    assert (
+        await client.put(PREFERENCES_ENDPOINT, json={"daily_enabled": True}, cookies=cookies)
+    ).status_code == 200
+    async with db_session.engine.connect() as holder:
+        assert await holder.scalar(
+            text("SELECT pg_try_advisory_lock(:namespace, :resource)"),
+            {"namespace": 0x54474C50, "resource": 0x504C414E},
+        )
+        await holder.commit()
+        skipped = await plan_due(now=KST_0800_NOV5)
+        assert skipped["enqueued"] == 0 and skipped.get("skipped") == 1
+        async with session_factory() as db:
+            count = await db.scalar(select(func.count()).select_from(TelegramNotification))
+            assert count == 0
+    # 잠금 연결이 닫히면 다음 tick은 정상 처리한다.
+    done = await plan_due(now=KST_0800_NOV5)
+    assert done["enqueued"] == 2 and "skipped" not in done
+
+
+async def test_planner_time_budget_defers_remaining_users_and_rotates(
+    client: Any,
+    verified_user: Any,
+    other_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    provider: Provider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """예산을 넘기면 남은 사용자를 다음 tick으로 넘기고, 다음 tick은 기다린 사용자부터 처리한다."""
+    from app.core.config import settings
+    from app.services.telegram_planner import plan_due
+
+    owners = [verified_user, other_user]
+    for owner in owners:
+        _, _, cookies = await setup_trip(client, owner, auth_cookies, session_factory)
+        assert (
+            await client.put(PREFERENCES_ENDPOINT, json={"daily_enabled": True}, cookies=cookies)
+        ).status_code == 200
+    # 첫 사용자 하나는 항상 처리하고, 그 뒤에는 예산이 이미 소진된 상태다.
+    monkeypatch.setattr(settings, "pinvi_telegram_planner_budget_seconds", 1e-9)
+    first = await plan_due(now=KST_0800_NOV5)
+    assert first["enqueued"] == 2, first
+    assert first["users"] == 2 and first["processed"] == 1 and first["deferred"] == 1
+    second = await plan_due(now=KST_0800_NOV5)
+    assert second["enqueued"] == 2 and second["processed"] == 1
+    async with session_factory() as db:
+        planned = set(
+            (
+                await db.scalars(
+                    select(TelegramNotification.user_id).where(
+                        TelegramNotification.category == "daily_brief"
+                    )
+                )
+            ).all()
+        )
+    assert planned == {uuid.UUID(owner[0]) for owner in owners}
+    # 두 사용자 모두 끝났으므로 다음 바퀴는 같은 발생키를 다시 만들지 않는다.
+    assert (await plan_due(now=KST_0800_NOV5))["enqueued"] == 0
+
+
+async def test_fair_drain_does_not_let_one_user_backlog_delay_another(
+    client: Any,
+    verified_user: Any,
+    other_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    provider: Provider,
+) -> None:
+    """먼저 쌓인 한 사용자의 대기열 뒤에서 다른 사용자의 알림이 기다리지 않는다."""
+    from app.models.trip import Trip
+    from app.services import telegram_notifications
+
+    heavy_trip, _, heavy = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    for _ in range(3):
+        assert (await send(client, heavy_trip, heavy)).status_code == 202
+    light_trip, _, light = await setup_trip(client, other_user, auth_cookies, session_factory)
+    async with session_factory() as db:
+        trip = await db.get(Trip, uuid.UUID(light_trip))
+        trip.title = "가벼운 사용자 여행"
+        await db.commit()
+    assert (await send(client, light_trip, light)).status_code == 202
+    drain = getattr(telegram_notifications, "drain_fair", None)
+    assert drain is not None, "사용자별 공정 drain이 없다"
+    # 한 바퀴에 두 chunk만 보낼 수 있을 때 두 번째는 가벼운 사용자의 것이어야 한다.
+    assert await drain(now=datetime.now(UTC) + timedelta(seconds=1), limit=2) == 2
+    assert len(provider.sent) == 2
+    assert "가벼운 사용자 여행" in provider.sent[1]
+
+
+async def test_trip_lock_is_not_held_while_calling_telegram(
+    client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any, provider: Provider
+) -> None:
+    """Telegram 응답을 기다리는 동안 여행 편집이 잠금에 막히지 않고, 결과는 새 transaction에 남는다."""
+    from sqlalchemy import text
+
+    from app.models.trip import Trip
+
+    trip_id, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    assert (await send(client, trip_id, cookies)).status_code == 202
+    provider.block = asyncio.Event()
+
+    async def worker() -> bool:
+        async with session_factory() as db:
+            return await process_one(db)
+
+    running = asyncio.create_task(worker())
+    await asyncio.wait_for(provider.started.wait(), timeout=5)
+    try:
+        async with session_factory() as db:
+            await db.execute(text("SET LOCAL lock_timeout = '500ms'"))
+            trip = await db.scalar(
+                select(Trip).where(Trip.trip_id == uuid.UUID(trip_id)).with_for_update()
+            )
+            assert trip is not None
+            trip.title = "전송 중 편집"
+            await db.commit()
+        async with session_factory() as db:
+            await db.execute(text("SET LOCAL lock_timeout = '500ms'"))
+            target = await db.scalar(select(TelegramTarget).with_for_update())
+            assert target is not None
+            await db.rollback()
+    finally:
+        provider.block.set()
+        assert await running
+    assert len(provider.sent) == 1
+    row = await delivery(session_factory)
+    assert row.status == "sent" and row.claim_token is None and row.attempts == 0
+
+
+async def test_notification_body_is_purged_after_retention_but_dedupe_remains(
+    client: Any,
+    verified_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    provider: Provider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """보존 기한이 지난 발송 완료 알림은 본문을 지우고 발생키·상태·시각만 남긴다."""
+    from app.core.config import settings
+    from app.services import telegram_notifications
+
+    purge = getattr(telegram_notifications, "purge_expired_bodies", None)
+    assert purge is not None, "알림 본문 보존 기한 정리가 없다"
+    assert settings.pinvi_telegram_notification_retention_days == 30
+    trip_id, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    old_request = str(uuid.uuid4())
+    old = await send(client, trip_id, cookies, request_id=old_request)
+    async with session_factory() as db:
+        assert await process_one(db)
+    recent = await send(client, trip_id, cookies)
+    async with session_factory() as db:
+        assert await process_one(db)
+    pending = await send(client, trip_id, cookies)
+    aged = [uuid.UUID(old.json()["data"]["id"]), uuid.UUID(pending.json()["data"]["id"])]
+    async with session_factory() as db:
+        for notification_id in aged:
+            row = await db.get(TelegramNotification, notification_id)
+            row.created_at = datetime.now(UTC) - timedelta(days=31)
+        await db.commit()
+    async with session_factory() as db:
+        assert await purge(db) == 1
+    async with session_factory() as db:
+        purged = await db.get(TelegramNotification, aged[0])
+        assert purged.body_purged_at is not None
+        assert purged.chunks and all(chunk == "" for chunk in purged.chunks)
+        assert purged.schedule_snapshot == {}
+        assert purged.occurrence_key == f"manual:{old_request}"
+        waiting = await db.get(TelegramNotification, aged[1])
+        assert waiting.body_purged_at is None and "부산 알림 검증" in "".join(waiting.chunks)
+        fresh = await db.get(TelegramNotification, uuid.UUID(recent.json()["data"]["id"]))
+        assert fresh.body_purged_at is None and "부산 알림 검증" in "".join(fresh.chunks)
+    # 지운 뒤에도 같은 요청 재시도는 같은 행을 돌려주고(중복 방지), 이력은 진행률을 유지한다.
+    retried = await send(client, trip_id, cookies, request_id=old_request)
+    assert retried.status_code == 202 and retried.json()["data"]["id"] == str(aged[0])
+    history = await client.get("/users/me/telegram-notifications", cookies=cookies)
+    assert history.status_code == 200, history.text
+    entry = next(item for item in history.json()["data"] if item["id"] == str(aged[0]))
+    assert entry["deliveries"][0]["status"] == "sent"
+    assert entry["deliveries"][0]["total_chunks"] >= 1
+    async with session_factory() as db:
+        assert await purge(db) == 0  # 멱등
+
+
+async def test_daily_brief_enabled_after_send_time_is_planned_today(
+    client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any, provider: Provider
+) -> None:
+    """소유자 결정(유지): 저장한 발송 시각이 지난 뒤 켜면 그날 브리프를 바로 보낸다."""
+    from app.services.telegram_planner import plan_due
+
+    trip_id, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    assert (
+        await client.put(
+            PREFERENCES_ENDPOINT,
+            json={"daily_enabled": True, "send_time": "08:00"},
+            cookies=cookies,
+        )
+    ).status_code == 200
+    # 한국 11/5 10:00 — 08:00이 이미 지난 뒤 처음 켠 상태에서 첫 tick
+    result = await plan_due(now=datetime(2026, 11, 5, 1, 0, tzinfo=UTC))
+    assert result["enqueued"] == 2
+    async with session_factory() as db:
+        today = await db.scalar(
+            select(TelegramNotification).where(
+                TelegramNotification.occurrence_key == f"daily:{trip_id}:2026-11-05:today"
+            )
+        )
+        assert today is not None and "".join(today.chunks).startswith("오늘 일정")
