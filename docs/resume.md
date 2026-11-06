@@ -1,3 +1,8 @@
+## 확정 takedown 증거 보존 (2026-11-07)
+
+PR claude/takedown-evidence-retention-20261107: 0107 `evidence_hold_started_at`, 180일 보존·용량 제외·만료 뒤 자동 삭제.
+다음: #698(a282e275)과 함께 PinVi 단독 rotation.
+
 ## #697 리뷰 잔여 7건 반영 (2026-11-06)
 
 PR claude/telegram-gc-improvements-20261106: planner 단일 실행·60초 예산·순환, 사용자 공정 drain, 전송 중 잠금 해제(lease),

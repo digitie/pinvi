@@ -1,3 +1,8 @@
+## 2026-11-07 — 확정 takedown 증거 보존 기간(0107)
+
+- 소유자 결정: 확정 takedown 첨부는 180일(`PINVI_MODERATION_EVIDENCE_RETENTION_DAYS`) 증거 보존, 그동안 업로더·여행 용량 제외, 지나면 자동 삭제 뒤 휴지통 여행 정상 정리. 실패 테스트 먼저(6a915089).
+- `evidence_hold_started_at`을 takedown에서 설정·restore에서 해제. 정리 자격은 기간 경과 + 열린 신고(접수·검토·숨김·이의제기) 없음. hide만 된 첨부는 기한 없이 유지·계산. 0107은 nullable 열과 기존 takedown hold backfill.
+
 ## 2026-11-06 — #697 리뷰 잔여 7건 소유자 결정 반영(0106)
 
 - 소유자가 #697에서 보고만 한 7건을 결정했다. 각 건은 실패 테스트를 먼저 커밋하고(n150 red) 고쳤다. migration 0106은 nullable 열 셋과 부분 index 하나라 forward-safe다.

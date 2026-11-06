@@ -1366,3 +1366,7 @@ telegram_notification_preferences에 기본 false weather_enabled와 nullable ti
 - ix_telegram_notifications_body_retained: `created_at` 부분 index(`WHERE body_purged_at IS NULL`). API worker의 1시간 주기 정리 후보 조회용.
 
 기존 telegram_notifications/deliveries를 재사용한다. 취소 tombstone은 관측 순서와 무관하게 유지하며 모호한 비취소 관측은 전송하지 않는다. Trip 잠금 아래 관측을 합치고 worker는 Delivery→Pref→Trip→User→Target 정책 순서를 보존한다.
+
+## 확정 takedown 증거 보존 (0107)
+
+curated_plan_attachments.evidence_hold_started_at (timestamptz, nullable): 확정 takedown 시각. moderation_hold이고 이 값이 있으면 `PINVI_MODERATION_EVIDENCE_RETENTION_DAYS`(기본 180일) 동안 증거로 보존하며 업로더·여행 용량 합산에서 제외한다. 기간이 지나고 같은 첨부에 열린 신고(received·reviewing·hidden·appealed)가 없으면 정리 자격을 얻어 객체가 삭제되고 purged_at이 기록되며, 남은 참조가 없는 휴지통 여행은 정상 삭제된다. restore는 hold와 함께 이 값을 지운다. 0107은 nullable 열 추가와, 현재 hold 중인 첨부에 대한 taken_down 신고의 조치 시각 backfill만 한다.

@@ -963,6 +963,8 @@ class Settings(BaseSettings):
     pinvi_telegram_planner_budget_seconds: float = Field(default=60.0, gt=0, le=110)
     # 발송이 끝난 알림 본문(chunks)·스냅샷 보존 기간. 지난 행은 발생키·상태·시각만 남긴다.
     pinvi_telegram_notification_retention_days: int = Field(default=30, ge=1, le=3650)
+    # 확정 takedown 첨부를 증거로 보존하는 기간(일). 지나면 자동 삭제되고 휴지통 여행도 정리된다.
+    pinvi_moderation_evidence_retention_days: int = Field(default=180, ge=1, le=3650)
     pinvi_telegram_api_base: str = "https://api.telegram.org"
     pinvi_telegram_timeout_seconds: float = 5.0
     pinvi_telegram_bot_token_default: str = ""  # 시스템/Admin 봇
