@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 /**
  * T-314 리뷰 회귀 방지 — 모바일 앱 셸(하단 탭바/더보기 시트)과 대시보드 오류 상태.
@@ -30,7 +30,7 @@ function trip(index: number) {
 
 async function mockTripList(page: Page, count: number, options: { postStatus?: number } = {}) {
   await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     if (request.method() === 'POST') {
       await route.fulfill({
         status: options.postStatus ?? 201,
@@ -48,7 +48,7 @@ async function mockTripList(page: Page, count: number, options: { postStatus?: n
   });
   // 목록 지도 POI 조회는 비워 둔다(레이아웃 측정만 한다).
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
   });
 }
@@ -82,7 +82,7 @@ test.describe('더보기 시트', () => {
   test('버튼 시맨틱을 노출하고 라우팅·바깥 클릭으로 닫힌다', async ({ page }) => {
     await mockTripList(page, 1);
     await page.route(/.*\/files(\?.*)?$/, async (route, request) => {
-      if (!isFetch(request.resourceType())) return route.continue();
+      if (!isFetch(request.resourceType())) return route.fallback();
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
     });
     await page.goto('/trips');
@@ -145,7 +145,7 @@ test('여행 저장 실패는 목록을 지우지 않고 배너로만 알린다'
 
 test('목록 로드 실패는 라이브 리전으로 알리고 회복 행동을 준다', async ({ page }) => {
   await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       status: 500,
       contentType: 'application/json',

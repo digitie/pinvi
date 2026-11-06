@@ -40,23 +40,28 @@ export function fitOverlayRect(stack: Element | null): VerticalRect | null {
 }
 
 /**
- * 스택 안 교통 정보 패널(`[data-map-fit-panel]`)의 상시 부분. 잠깐 펼쳐지는 사건 목록
+ * 스택 안 경로/영역 컨트롤·교통 정보 패널(`[data-map-fit-panel]`)의 상시 부분. 잠깐 펼쳐지는 사건 목록
  * (`[data-map-fit-transient]`)은 아래 끝에서 뺀다.
  */
 export function fitPanelRect(stack: Element | null): BoxRect | null {
-  const panel = stack?.querySelector('[data-map-fit-panel]');
-  if (!panel) return null;
-  const rect = panel.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return null;
-  const transient = panel.querySelector('[data-map-fit-transient]');
-  let bottom = transient
-    ? Math.min(rect.bottom, transient.getBoundingClientRect().top)
-    : rect.bottom;
-  // 스택은 max-height + 세로 스크롤이다 — 검색 결과가 펼쳐져 패널이 밀려 내려가도 보이는 부분까지만.
-  const stackRect = stack?.getBoundingClientRect();
-  if (stackRect && stackRect.height > 0) bottom = Math.min(bottom, stackRect.bottom);
-  if (bottom <= rect.top) return null;
-  return { left: rect.left, right: rect.right, top: rect.top, bottom, height: bottom - rect.top };
+  if (!stack) return null;
+  const stackRect = stack.getBoundingClientRect();
+  const rects = Array.from(stack.querySelectorAll('[data-map-fit-panel]')).flatMap(panel => {
+    const rect = panel.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return [];
+    const transient = panel.querySelector('[data-map-fit-transient]');
+    let bottom = transient ? Math.min(rect.bottom, transient.getBoundingClientRect().top) : rect.bottom;
+    if (stackRect.height > 0) bottom = Math.min(bottom, stackRect.bottom);
+    return bottom > rect.top ? [{ left: rect.left, right: rect.right, top: rect.top, bottom }] : [];
+  });
+  if (rects.length === 0) return null;
+  const top = Math.min(...rects.map(rect => rect.top));
+  const bottom = Math.max(...rects.map(rect => rect.bottom));
+  return {
+    left: Math.min(...rects.map(rect => rect.left)),
+    right: Math.max(...rects.map(rect => rect.right)),
+    top, bottom, height: bottom - top,
+  };
 }
 
 /** 앵커(아래 꼭짓점)가 `(anchorX, anchorY)`인 핀 상자가 `rect`와 겹치는가. */
@@ -87,6 +92,7 @@ export function fitPaddingForOverlay(
   surface: VerticalRect | null,
   overlay: VerticalRect | null,
   markerHeight = 0,
+  bottomOverlay: VerticalRect | null = null,
 ): FitPadding {
   const padding = {
     top: MAP_FIT_PADDING,
@@ -94,11 +100,26 @@ export function fitPaddingForOverlay(
     bottom: MAP_FIT_PADDING,
     left: MAP_FIT_PADDING,
   };
-  if (!surface || surface.height <= 0 || !overlay || overlay.height <= 0) return padding;
-  const clearance = Math.round(
-    overlay.bottom - surface.top + Math.max(0, markerHeight) + OVERLAY_GAP,
-  );
-  const cap = Math.round(surface.height * MAX_TOP_SHARE);
-  padding.top = Math.max(MAP_FIT_PADDING, Math.min(clearance, cap));
+  if (!surface || surface.height <= 0) return padding;
+  if (overlay && overlay.height > 0) {
+    const clearance = Math.round(
+      overlay.bottom - surface.top + Math.max(0, markerHeight) + OVERLAY_GAP,
+    );
+    padding.top = Math.max(MAP_FIT_PADDING, Math.min(clearance, Math.round(surface.height * MAX_TOP_SHARE)));
+  }
+  if (bottomOverlay && bottomOverlay.height > 0) {
+    // 핀 꼬리를 칩 위에 두고, 상하 여백이 지도 높이를 소진하지 않게 제한한다.
+    const clearance = Math.round(surface.bottom - bottomOverlay.top + OVERLAY_GAP);
+    const cap = Math.max(MAP_FIT_PADDING, surface.height - padding.top - 1);
+    padding.bottom = Math.max(MAP_FIT_PADDING, Math.min(clearance, cap));
+  }
   return padding;
+}
+
+/** 이 지도와 같은 경계 안에 있는 하단 통계 칩의 실제 표시 상자. */
+export function fitBottomRect(container: Element): BoxRect | null {
+  const chip = container.closest('[data-map-fit-boundary]')?.querySelector('[data-map-fit-bottom]');
+  if (!chip) return null;
+  const rect = chip.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0 ? rect : null;
 }

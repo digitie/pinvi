@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const targetId = '99999999-9999-4999-8999-999999999999';
 
@@ -43,7 +43,7 @@ test('Telegram 대상 등록 → 목록 반영 → 삭제', async ({ page }) => 
   await page.route(
     (url) => url.port === '12801' && url.pathname === `/users/me/telegram-targets/${targetId}`,
     async (route, request) => {
-      if (request.method() !== 'DELETE') return route.continue();
+      if (request.method() !== 'DELETE') return route.fallback();
       targets.length = 0;
       await route.fulfill({ status: 204, body: '' });
     },
@@ -73,7 +73,7 @@ test('Chat ID 없이 연결하면 필드 오류 + aria-invalid + 포커스', asy
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/users/me/telegram-targets',
     async (route, request) => {
-      if (request.method() !== 'GET') return route.continue();
+      if (request.method() !== 'GET') return route.fallback();
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
     },
   );

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
 
@@ -6,7 +6,7 @@ const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType
 test('장소 제안 딥링크로 다이얼로그를 열고 제출하면 접수된다', async ({ page }) => {
   // viewport feature 로딩(키 없으면 호출 안 됨 — 안전하게 mock).
   await page.route(/.*\/features\/in-bounds(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -23,7 +23,7 @@ test('장소 제안 딥링크로 다이얼로그를 열고 제출하면 접수�
 
   let requested = false;
   await page.route(/.*\/features\/requests$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     requested = true;
     await route.fulfill({
       contentType: 'application/json',

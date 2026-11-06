@@ -10,10 +10,11 @@
  *
  * Mutating: creates one `[e2e]` trip per project in beforeAll and deletes it in afterAll (+ sweep).
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Response } from '@playwright/test';
 import { runSearch, searchRows } from '../../helpers/search';
 import { renderedMap, waitForCamera } from '../../helpers/geometry';
 import { normalizeFixtureName } from '../../helpers/searchFixture';
+import { viewportBboxMatches } from '../../helpers/viewportBbox';
 import {
   createTrip,
   deleteAllE2eTrips,
@@ -40,7 +41,6 @@ import {
   legendMarkers,
   markersBody,
   markersQuery,
-  nextMarkersResponse,
   stateLine,
   toggleExpectingRequest,
   waitForControls,
@@ -162,15 +162,29 @@ test.describe('NEAR trip map — four-place trip', () => {
       expect(q.bbox[3]).toBeGreaterThanOrEqual(coord.lat);
     }
     expect(await map.evaluate((m,coords)=>coords.every(c=>m.getBounds().contains([c.lon,c.lat])),expectedCoords)).toBe(true);
+    const viewport = await map.evaluate((m, coords) => {
+      const bounds = m.getBounds(), canvas = m.getCanvas();
+      const points = coords.map(c => m.project([c.lon, c.lat]));
+      return {
+        bbox: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
+        spanX: Math.max(...points.map(p => p.x)) - Math.min(...points.map(p => p.x)),
+        spanY: Math.max(...points.map(p => p.y)) - Math.min(...points.map(p => p.y)),
+        width: canvas.clientWidth, height: canvas.clientHeight,
+      };
+    }, expectedCoords);
+    // API가 실제 맞춘 native viewport를 조회해야 한다. 한국 경계 clamp와 저줌 양자화만 허용한다.
+    expect(viewportBboxMatches(q.bbox, viewport.bbox, q.zoom)).toBe(true);
+    // 네 좌표가 포함돼도 지나치게 축소한 전국 보기는 실패한다. 고정 카탈로그 화면에서
+    // 여행의 투영 범위가 한 축에서 지도 1/4 이상을 사용해야 한다.
+    expect(Math.max(viewport.spanX / viewport.width, viewport.spanY / viewport.height)).toBeGreaterThan(0.25);
+    const panel = (await controls(page).boundingBox())!;
+    const stats = (await page.getByTestId('trip-map-stats').boundingBox())!;
+    for (const marker of await tripMarkers(page).all()) {
+      const box = (await marker.boundingBox())!;
+      expect(boxesOverlap(box, panel)).toBe(false);
+      expect(boxesOverlap(box, stats)).toBe(false);
+    }
     await map.dispose();
-    // The fitted viewport is centred on the trip (영월~안동), not on the Seoul default camera — at the
-    // fit zoom a wide desktop viewport may still *contain* Seoul, so compare centres, not containment.
-    const cx = (q.bbox[0] + q.bbox[2]) / 2;
-    const cy = (q.bbox[1] + q.bbox[3]) / 2;
-    // fit padding (search card + panel on the left) shifts the centre west by ~1°
-    expect(Math.abs(cx - (Math.min(...expectedCoords.map(c=>c.lon))+Math.max(...expectedCoords.map(c=>c.lon)))/2)).toBeLessThan(2);
-    expect(Math.abs(cy - (Math.min(...expectedCoords.map(c=>c.lat))+Math.max(...expectedCoords.map(c=>c.lat)))/2)).toBeLessThan(2);
-    expect(Math.hypot(cx - 126.978, cy - 37.5665)).toBeGreaterThan(1);
     await expectLayerLineShape(page, 'highway_incident');
     const rest = await toggleExpectingRequest(page, 'rest_area', (x) => x.layers.includes('rest_area'));
     const restBody = (await markersBody(rest)).layers.find((l) => l.layer === 'rest_area')!;
@@ -185,19 +199,47 @@ test.describe('NEAR trip map — four-place trip', () => {
   test('NEAR-025 selecting a POI pin flies the map and re-queries the enabled layers', async ({ page }) => {
     await openTrip(page, tripId);
     const first = markersQuery(await toggleExpectingRequest(page, 'highway_incident'));
-    const pin = tripMarkers(page).and(page.getByLabel(/고씨굴/)).first();
+    const poiId = await page.getByTestId('trip-map-marker-style').filter({ hasText: /고씨굴/ }).getAttribute('data-poi-id');
+    expect(poiId).toBeTruthy();
+    const pin = tripMarkers(page).and(page.locator('[data-interaction-id=' + JSON.stringify('poi:' + poiId) + ']'));
     await expect(pin).toBeVisible();
-    const pending = nextMarkersResponse(page, (q) => q.layers.includes('highway_incident') && q.bbox.join(',') !== first.bbox.join(','));
-    await pin.click({ force: true });
-    const next = markersQuery(await pending);
-    // flyTo moves (and may zoom) to the pin: the re-query must cover 고씨굴 (영월 ≈ 128.47E 37.17N) and
-    // is centred north of the first (4-place) viewport.
-    expect(next.bbox[0]).toBeLessThanOrEqual(128.47);
-    expect(next.bbox[2]).toBeGreaterThanOrEqual(128.47);
-    expect(next.bbox[1]).toBeLessThanOrEqual(37.17);
-    expect(next.bbox[3]).toBeGreaterThanOrEqual(37.17);
-    expect((next.bbox[1] + next.bbox[3]) / 2).toBeGreaterThan((first.bbox[1] + first.bbox[3]) / 2);
-    test.info().annotations.push({ type: 'flyto-zoom', description: `${first.zoom} → ${next.zoom}` });
+    const map = await renderedMap(page);
+    const responses: Response[] = [];
+    const issuedAfter = Date.now();
+    const observe = (response: Response) => {
+      const url = new URL(response.url());
+      if (url.pathname.endsWith('/transport/markers-in-bounds') &&
+          response.request().timing().startTime >= issuedAfter) responses.push(response);
+    };
+    page.on('response', observe);
+    try {
+      await pin.click();
+      await expect(pin).toHaveAttribute('data-selected', 'true');
+      await waitForCamera(map);
+      const bbox = await map.evaluate(m => {
+        const b = m.getBounds();
+        return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+      });
+      let matched: Response | undefined;
+      await expect.poll(() => {
+        matched = responses.find(response => {
+          const q = markersQuery(response);
+          return q.layers.includes('highway_incident') && q.bbox.join(',') !== first.bbox.join(',') &&
+            viewportBboxMatches(q.bbox, bbox, q.zoom);
+        });
+        return Boolean(matched);
+      }, { timeout: 30_000 }).toBe(true);
+      const next = markersQuery(matched!);
+      const selectedCoord = expectedCoords[0]!;
+      expect(next.bbox[0]).toBeLessThanOrEqual(selectedCoord.lon);
+      expect(next.bbox[2]).toBeGreaterThanOrEqual(selectedCoord.lon);
+      expect(next.bbox[1]).toBeLessThanOrEqual(selectedCoord.lat);
+      expect(next.bbox[3]).toBeGreaterThanOrEqual(selectedCoord.lat);
+      test.info().annotations.push({ type: 'flyto-zoom', description: first.zoom + ' → ' + next.zoom });
+    } finally {
+      page.off('response', observe);
+      await map.dispose();
+    }
     await expectLayerLineShape(page, 'highway_incident');
   });
 

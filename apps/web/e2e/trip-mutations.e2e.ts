@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const tripId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
@@ -105,18 +105,18 @@ function companion() {
 
 async function commonRoutes(page: import('@playwright/test').Page) {
   await page.route(/.*\/auth\/me$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: { user_id: userId } }),
     });
   });
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/comments(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/attachments$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
 }
@@ -126,7 +126,7 @@ test('동반자를 초대하면 목록에 나타난다', async ({ page }) => {
   await commonRoutes(page);
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/members$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     invited = true;
     await route.fulfill({
       contentType: 'application/json',
@@ -135,7 +135,7 @@ test('동반자를 초대하면 목록에 나타난다', async ({ page }) => {
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -165,17 +165,17 @@ test('POI를 삭제하면 장소 목록에서 제거된다', async ({ page }) =>
   await commonRoutes(page);
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/pois\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     if (request.method() === 'DELETE') {
       deleted = true;
       await route.fulfill({ status: 204, body: '' });
       return;
     }
-    await route.continue();
+    await route.fallback();
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -203,7 +203,7 @@ test('POI 마커 편집기를 열고 저장하면 닫힌다', async ({ page }) =
   await commonRoutes(page);
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/pois\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     if (request.method() === 'PATCH') {
       await route.fulfill({
         contentType: 'application/json',
@@ -211,11 +211,11 @@ test('POI 마커 편집기를 열고 저장하면 닫힌다', async ({ page }) =
       });
       return;
     }
-    await route.continue();
+    await route.fallback();
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -250,7 +250,7 @@ test('POI가 있는 일자 삭제는 확인 후 force로 함께 삭제된다 (F2
   await commonRoutes(page);
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     if (request.method() === 'DELETE') {
       if (request.url().includes('force=true')) {
         forceDeleted = true;
@@ -268,11 +268,11 @@ test('POI가 있는 일자 삭제는 확인 후 force로 함께 삭제된다 (F2
       }
       return;
     }
-    await route.continue();
+    await route.fallback();
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -305,7 +305,7 @@ test('일자 설정에서 색을 고르면 marker_color가 PATCH된다 (F6)', as
   await commonRoutes(page);
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     if (request.method() === 'PATCH') {
       const body = request.postDataJSON() as { marker_color?: string | null };
       patchedColor = body.marker_color;
@@ -327,11 +327,11 @@ test('일자 설정에서 색을 고르면 marker_color가 PATCH된다 (F6)', as
       });
       return;
     }
-    await route.continue();
+    await route.fallback();
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -365,7 +365,7 @@ test('기간 있는 여행 + 날짜 없는 일자에서 색만 저장하면 날�
   await commonRoutes(page);
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/1(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     if (request.method() === 'PATCH') {
       const body = request.postDataJSON() as { marker_color?: string | null; date?: string | null };
       patchedColor = body.marker_color;
@@ -388,11 +388,11 @@ test('기간 있는 여행 + 날짜 없는 일자에서 색만 저장하면 날�
       });
       return;
     }
-    await route.continue();
+    await route.fallback();
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

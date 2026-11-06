@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 // 2026-11-02 prod e2e — webpack 빌드가 maplibre 6의 worker URL(`import.meta.url` 유도)을 빌드 머신
 // `file://` 경로로 굳혀 "Worker failed to load"가 났다(worker를 쓰는 GeoJSON/벡터 source는 그 상태에서

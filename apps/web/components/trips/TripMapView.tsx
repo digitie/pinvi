@@ -34,6 +34,7 @@ import {
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import {
+  fitBottomRect,
   fitOverlayRect,
   fitPaddingForOverlay,
   fitPanelRect,
@@ -185,6 +186,7 @@ export function TripMapView({
 }: TripMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const overlayStackRef = useRef<HTMLDivElement | null>(null);
+  const fitCleanupRef = useRef<(() => void) | null>(null);
   const featureAbortRef = useRef<AbortController | null>(null);
   const featureDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestFeatureRequestRef = useRef(0);
@@ -289,6 +291,7 @@ export function TripMapView({
 
   useEffect(() => {
     return () => {
+      fitCleanupRef.current?.();
       featureAbortRef.current?.abort();
       if (featureDebounceRef.current) clearTimeout(featureDebounceRef.current);
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
@@ -298,7 +301,6 @@ export function TripMapView({
   const fitToPoints = useCallback(
     (map: MapLibreMap) => {
       lastFitPointsRef.current = points;
-      lastFitWithPanelRef.current = transportVisibleRef.current;
       // 맞춤이 시점을 새로 정했다 — 그 전의 사용자 이동은 더는 지킬 시점이 아니다.
       userMovedRef.current = false;
       const bounds = pointsBounds(points);
@@ -309,7 +311,9 @@ export function TripMapView({
       const container = map.getContainer().getBoundingClientRect();
       const stack = overlayStackRef.current;
       const padding = fitPaddingForOverlay(container, fitOverlayRect(stack), TRIP_MAP_PIN_HEIGHT);
-      const panel = transportVisibleRef.current ? fitPanelRect(stack) : null;
+      const panel = fitPanelRect(stack);
+      lastFitWithPanelRef.current = panel != null;
+      const bottom = fitBottomRect(map.getContainer());
       const only = points[0];
       if (points.length === 1 && only) {
         // 핀 하나는 가운데에 두되, 위·아래 여백 차이의 절반만큼 내려 검색 줄과 겹치지 않게. 교통
@@ -318,14 +322,15 @@ export function TripMapView({
         const half = TRIP_MAP_MARKER_SIZE / 2;
         const panelCoversCenter =
           panel != null && panel.left < centerX + half && panel.right > centerX - half;
-        const top =
-          panel && panelCoversCenter
-            ? Math.max(padding.top, fitPaddingForOverlay(container, panel, TRIP_MAP_PIN_HEIGHT).top)
-            : padding.top;
+        const singlePadding = fitPaddingForOverlay(
+          container, panel && panelCoversCenter ? panel : fitOverlayRect(stack),
+          TRIP_MAP_PIN_HEIGHT,
+          bottom && bottom.left < centerX + half && bottom.right > centerX - half ? bottom : null,
+        );
         map.flyTo({
           center: [only.lon, only.lat],
           zoom: 13,
-          offset: [0, (top - padding.bottom) / 2],
+          offset: [0, (singlePadding.top - singlePadding.bottom) / 2],
         });
         return;
       }
@@ -336,28 +341,41 @@ export function TripMapView({
       map.fitBounds(lngLatBounds, { padding, maxZoom: 15, animate: false });
       // 교통 정보 패널(왼쪽 열) 밑에 핀이 들어가면 패널 아래까지 한 번 더 맞춘다. animate:false라
       // fitBounds가 바로 적용돼 project가 맞춘 뒤 위치를 준다.
-      const hiddenByPanel =
-        panel != null &&
-        points.some((point) => {
-          const at = map.project([point.lon, point.lat]);
-          return pinBoxIntersects(
-            container.left + at.x,
-            container.top + at.y,
-            TRIP_MAP_MARKER_SIZE,
-            TRIP_MAP_PIN_HEIGHT,
-            panel,
-          );
-        });
-      if (panel && hiddenByPanel) {
+      let topOverlay = fitOverlayRect(stack);
+      let bottomOverlay = null;
+      // 한쪽을 피한 재맞춤이 반대쪽 핀을 옮길 수 있어 상하 제한을 누적한다.
+      for (let pass = 0; pass < 2; pass += 1) {
+        const overlaps = (rect: NonNullable<typeof panel>) =>
+          points.some((point) => {
+            const at = map.project([point.lon, point.lat]);
+            return pinBoxIntersects(
+              container.left + at.x, container.top + at.y,
+              TRIP_MAP_MARKER_SIZE, TRIP_MAP_PIN_HEIGHT, rect,
+            );
+          });
+        let changed = false;
+        if (panel && topOverlay !== panel && overlaps(panel)) {
+          topOverlay = panel;
+          changed = true;
+        }
+        if (bottom && !bottomOverlay && overlaps(bottom)) {
+          bottomOverlay = bottom;
+          changed = true;
+        }
+        if (!changed) break;
         map.fitBounds(lngLatBounds, {
-          padding: fitPaddingForOverlay(container, panel, TRIP_MAP_PIN_HEIGHT),
-          maxZoom: 15,
-          animate: false,
+          padding: fitPaddingForOverlay(container, topOverlay, TRIP_MAP_PIN_HEIGHT, bottomOverlay),
+          maxZoom: 15, animate: false,
         });
       }
     },
     [points],
   );
+
+  const fitToPointsRef = useRef(fitToPoints);
+  useEffect(() => {
+    fitToPointsRef.current = fitToPoints;
+  }, [fitToPoints]);
 
   const onViewportBboxChangeRef = useRef(onViewportBboxChange);
   useEffect(() => {
@@ -371,7 +389,60 @@ export function TripMapView({
     (map: MapLibreMap) => {
       mapRef.current = map;
       geometryViewportChange(map);
+      fitCleanupRef.current?.();
+      // moveend보다 먼저 기록해 드래그 도중 늦은 UI 응답이 시점을 되돌리지 않게 한다.
+      const markUserMove = (event: { originalEvent?: unknown }) => {
+        if (event.originalEvent) userMovedRef.current = true;
+      };
+      map.on('movestart', markUserMove);
       fitToPoints(map);
+      const stack = overlayStackRef.current;
+      let observer: ResizeObserver | null = null;
+      let mutations: MutationObserver | null = null;
+      if (stack && typeof ResizeObserver !== 'undefined') {
+        let previousLayout = '';
+        observer = new ResizeObserver(() => {
+          if (userMovedRef.current || stack.querySelector('input')?.value.trim()) return;
+          const anchor = fitOverlayRect(stack);
+          const panel = fitPanelRect(stack);
+          const bottom = fitBottomRect(map.getContainer());
+          const container = map.getContainer().getBoundingClientRect();
+          const layout = JSON.stringify([
+            anchor?.bottom, panel?.left, panel?.right, panel?.top, panel?.bottom,
+            bottom?.top, container.width, container.height,
+          ]);
+          if (layout === previousLayout) return;
+          previousLayout = layout;
+          fitToPointsRef.current(map);
+        });
+        const observed = new Set<Element>();
+        const observePanels = () => {
+          const targets = new Set<Element>([
+            stack, map.getContainer(), ...stack.querySelectorAll('[data-map-fit-panel]'),
+          ]);
+          for (const element of observed) {
+            if (!targets.has(element)) {
+              observer?.unobserve(element);
+              observed.delete(element);
+            }
+          }
+          for (const element of targets) {
+            if (!observed.has(element)) {
+              observer?.observe(element);
+              observed.add(element);
+            }
+          }
+        };
+        observePanels();
+        // 스택 외곽이 max-height로 고정돼도 나중에 나타난 실제 패널을 관찰한다.
+        mutations = new MutationObserver(observePanels);
+        mutations.observe(stack, { childList: true, subtree: true });
+      }
+      fitCleanupRef.current = () => {
+        observer?.disconnect();
+        mutations?.disconnect();
+        map.off('movestart', markUserMove);
+      };
       scheduleFeatureFetch(map);
       transportViewportChange(map);
       reportViewport(map);
@@ -460,7 +531,23 @@ export function TripMapView({
     if (selected && mapRef.current) {
       // 사용자가 고른 장소로 가는 이동 — 늦게 나타난 교통 패널의 재맞춤이 되돌리지 않게.
       userMovedRef.current = true;
-      mapRef.current.flyTo({ center: [selected.lon, selected.lat] });
+      const map = mapRef.current;
+      const container = map.getContainer().getBoundingClientRect();
+      const stack = overlayStackRef.current;
+      const centerX = container.left + container.width / 2;
+      const half = TRIP_MAP_MARKER_SIZE / 2;
+      const panel = fitPanelRect(stack);
+      const bottom = fitBottomRect(map.getContainer());
+      const coversCenter = (rect: NonNullable<typeof panel>) =>
+        rect.left < centerX + half && rect.right > centerX - half;
+      const padding = fitPaddingForOverlay(
+        container, panel && coversCenter(panel) ? panel : fitOverlayRect(stack),
+        TRIP_MAP_PIN_HEIGHT, bottom && coversCenter(bottom) ? bottom : null,
+      );
+      map.flyTo({
+        center: [selected.lon, selected.lat],
+        offset: [0, (padding.top - padding.bottom) / 2],
+      });
     }
   }, [selected]);
 
@@ -573,7 +660,7 @@ export function TripMapView({
           >
             <div className="pointer-events-auto">{overlayTopLeft}</div>
             {showFeatures && (
-              <div className="pointer-events-auto mt-2 w-64 max-w-[80%]">
+              <div className="pointer-events-auto mt-2 w-64 max-w-[80%]" data-map-fit-panel="">
                 <FeatureGeometryControls state={geometry} />
               </div>
             )}
@@ -658,6 +745,7 @@ export function TripMapView({
                   selected={marker.point.poiId === selectedPoiId}
                   highlighted={marker.point.featureResolutionState === 'missing'}
                   ariaLabel={marker.point.title}
+                  interactionId={'poi:' + marker.point.poiId}
                   onClick={() => {
                     clearGeometrySelection();
                     setSelectedFeature(null);

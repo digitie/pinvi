@@ -1,4 +1,4 @@
-import { expect, test, type Route } from '@playwright/test';
+import { expect, test, type Route } from './fixtures';
 
 const requestId = '11111111-1111-4111-8111-111111111111';
 

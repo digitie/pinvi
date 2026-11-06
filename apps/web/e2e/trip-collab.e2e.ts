@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 const tripId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
@@ -93,22 +93,22 @@ async function commonRoutes(
   } = {},
 ) {
   await page.route(/.*\/auth\/me$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: { user_id: userId } }),
     });
   });
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/comments(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/attachments$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     onTripGet?.();
     await route.fulfill({
       contentType: 'application/json',
@@ -218,7 +218,7 @@ test('공유 링크를 만들면 생성된 URL이 1회 표시된다', async ({ p
   await commonRoutes(page);
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/share-tokens$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -257,7 +257,7 @@ test('동선 최적화 미리보기 후 적용하면 패널이 닫힌다', async
   await commonRoutes(page);
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/days\/\d+\/optimize$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -293,10 +293,10 @@ test('동선 최적화 미리보기 후 적용하면 패널이 닫힌다', async
 });
 
 test('두 브라우저 컨텍스트가 presence와 WebSocket broadcast reload를 반영한다', async ({
-  browser,
+  newMockContext,
 }) => {
-  const contextA = await browser.newContext();
-  const contextB = await browser.newContext();
+  const contextA = await newMockContext();
+  const contextB = await newMockContext();
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
   let titleForB = '협업 테스트 여행';
@@ -376,9 +376,9 @@ test('재연결 후 수신한 broadcast가 최신 HTTP snapshot으로 갱신된�
 });
 
 test('다섯 브라우저 컨텍스트 presence fan-out와 offline cleanup을 표시한다', async ({
-  browser,
+  newMockContext,
 }) => {
-  const contexts = await Promise.all(Array.from({ length: 5 }, () => browser.newContext()));
+  const contexts = await Promise.all(Array.from({ length: 5 }, () => newMockContext()));
   const pages = await Promise.all(contexts.map((context) => context.newPage()));
   const observerPage = pages[0];
   if (!observerPage) throw new Error('Observer page was not created');

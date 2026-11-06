@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 /**
  * T-325 — 진입 시 단말기 위치로 지도 중심점을 잡는다.
@@ -30,7 +30,7 @@ const GRANTED_CONSENTS = [
 
 async function stubConsents(page: Page, data: unknown[]): Promise<void> {
   await page.route(/.*\/users\/me\/consents$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data }) });
   });
 }
@@ -120,7 +120,7 @@ test.describe('브라우저 권한이 없을 때', () => {
     await spyOnGeolocation(page);
     let consentCalls = 0;
     await page.route(/.*\/users\/me\/consents$/, async (route, request) => {
-      if (!isFetch(request.resourceType())) return route.continue();
+      if (!isFetch(request.resourceType())) return route.fallback();
       consentCalls += 1;
       await route.fulfill({
         contentType: 'application/json',

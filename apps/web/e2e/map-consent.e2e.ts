@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
 
@@ -11,7 +11,7 @@ test('내 위치는 위치 동의 후에만 동작한다', async ({ page }) => {
   let consented = false;
 
   await page.route(/.*\/users\/me\/consents$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     if (request.method() === 'PUT') {
       consented = true;
       await route.fulfill({

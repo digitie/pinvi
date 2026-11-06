@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page, type Route } from './fixtures';
 
 const adminUser = {
   user_id: '99999999-9999-4999-8999-999999999999',
@@ -103,7 +103,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 async function continueIfWebRequest(route: Route) {
   const url = new URL(route.request().url());
   if (url.port !== '12801') {
-    await route.continue();
+    await route.fallback();
     return true;
   }
   return false;

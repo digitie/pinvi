@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TripMapPoint } from '@pinvi/domain';
 
@@ -120,8 +120,8 @@ function fakeMap(northAnchor: { x: number; y: number }) {
       getNorth: () => 38,
     }),
     getZoom: () => 9,
-    on: () => {},
-    off: () => {},
+    on: vi.fn(),
+    off: vi.fn(),
   };
 }
 
@@ -135,6 +135,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   h.transportVisible = false;
   h.onMoveEnd = null;
   h.popupClose = null;
@@ -222,4 +223,63 @@ it('제어된 POI popup이 native로 닫히면 선택 해제를 소유자에게 
   expect(h.popupClose).toEqual(expect.any(Function));
   h.popupClose!();
   expect(select).toHaveBeenCalledWith(null);
+});
+
+it('외부 POI 선택은 가운데 열의 검색·교통 패널 아래로 offset을 준다', () => {
+  h.transportVisible = true;
+  const map = fakeMap({ x: 72, y: 207 });
+  h.map = map;
+  const view = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+  map.flyTo.mockClear();
+  view.rerender(
+    <TripMapView points={POINTS} selectedPoiId="north" transportLayers overlayTopLeft={overlay} />,
+  );
+  expect(map.flyTo).toHaveBeenCalledWith(expect.objectContaining({
+    center: [128.53, 37.13],
+    offset: [0, (288 + 48 + 24 - 64) / 2],
+  }));
+});
+
+function ownedResizeObserver() {
+  let callback: ResizeObserverCallback | undefined;
+  const observe = vi.fn(), unobserve = vi.fn(), disconnect = vi.fn();
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(next: ResizeObserverCallback) { callback = next; }
+    observe = observe;
+    unobserve = unobserve;
+    disconnect = disconnect;
+  });
+  return { observe, disconnect, notify: () => callback?.([], {} as ResizeObserver) };
+}
+
+it('사용자 제스처 시작부터 늦은 패널 크기 변경이 시점을 되돌리지 않는다', () => {
+  const resize = ownedResizeObserver();
+  h.transportVisible = true;
+  const map = fakeMap({ x: 72, y: 207 });
+  h.map = map;
+  const view = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+  const start = map.on.mock.calls.find(call => call[0] === 'movestart')?.[1];
+  expect(start).toEqual(expect.any(Function));
+  const fitted = map.fitBounds.mock.calls.length;
+  act(() => {
+    start({ originalEvent: new MouseEvent('mousedown') });
+    resize.notify();
+  });
+  expect(map.fitBounds).toHaveBeenCalledTimes(fitted);
+  view.unmount();
+  expect(map.off).toHaveBeenCalledWith('movestart', start);
+  expect(resize.disconnect).toHaveBeenCalled();
+});
+
+it('외곽 스택이 고정돼도 실제 패널 크기를 관찰하며 늦게 추가된 패널도 등록한다', async () => {
+  const resize = ownedResizeObserver();
+  h.transportVisible = false;
+  h.map = fakeMap({ x: 72, y: 207 });
+  const view = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+  h.transportVisible = true;
+  await act(async () => {
+    view.rerender(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+    await Promise.resolve();
+  });
+  expect(resize.observe).toHaveBeenCalledWith(view.getByTestId('fit-panel'));
 });

@@ -1,10 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
 
 async function mockInBounds(page: import('@playwright/test').Page) {
   await page.route(/.*\/features\/in-bounds(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

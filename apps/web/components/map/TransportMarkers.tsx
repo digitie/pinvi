@@ -30,6 +30,7 @@ export function TransportMarkers({ points, selectedId, onSelect }: TransportMark
             title={p.title}
             selected={p.id === selectedId}
             ariaLabel={p.title}
+            interactionId={p.id}
             onClick={() => onSelect({ layer: p.layer, featureId: p.featureId, title: p.title })}
           />
         );

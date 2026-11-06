@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('퇴역한 변경 요청 화면은 사용자 제안 큐로 이동한다', async ({ page }) => {
   const obsolete: string[] = [];
@@ -8,7 +8,7 @@ test('퇴역한 변경 요청 화면은 사용자 제안 큐로 이동한다', a
       if (route.request().resourceType() === 'fetch') {
         obsolete.push(route.request().url());
         await route.abort();
-      } else await route.continue();
+      } else await route.fallback();
     },
   );
   await page.route('**/auth/me', (route) =>
@@ -37,7 +37,7 @@ test('퇴역한 변경 요청 화면은 사용자 제안 큐로 이동한다', a
             contentType: 'application/json',
             body: JSON.stringify({ data: { items: [], total: 0, page: 1, limit: 50 } }),
           })
-        : route.continue(),
+        : route.fallback(),
   );
   await page.goto('/admin/features/change-requests');
   await expect(page).toHaveURL(/\/admin\/feature-requests$/);

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 /**
  * 법무 표면(Long Document) — T-316. 이 표면에는 e2e가 0건이었다.

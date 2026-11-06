@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './fixtures';
 
 const adminUser = {
   user_id: '77777777-7777-4777-8777-777777777777',

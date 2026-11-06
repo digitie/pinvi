@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 const tripId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
@@ -71,18 +71,18 @@ function tripView(title: string, tripVersion: number, note: string | null, poiVe
 
 async function commonRoutes(page: Page) {
   await page.route(/.*\/auth\/me$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: { user_id: userId } }),
     });
   });
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/comments(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/attachments.*$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
 }
@@ -124,7 +124,7 @@ test('여행 정보 409 충돌에서 내 값 전체를 최신 version으로 다�
       });
       return;
     }
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -166,7 +166,7 @@ test('편집 다이얼로그 위에 뜬 충돌 다이얼로그에 키보드로 �
       });
       return;
     }
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: tripView('서버 제목', 2, null, 1) }),
@@ -222,7 +222,7 @@ test('저장 중에는 실수 닫기만 잠기고, 명시적 닫기는 요청을
       // 응답을 주지 않는다 — 정지한 네트워크.
       return;
     }
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: tripView('원래 제목', 1, null, 1) }),
@@ -265,7 +265,7 @@ test('POI 409 충돌에서 내 메모를 최신 version으로 다시 저장한�
   await commonRoutes(page);
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}\/pois\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (request.method() !== 'PATCH') return route.continue();
+    if (request.method() !== 'PATCH') return route.fallback();
     patchCount += 1;
     if (patchCount === 1) {
       expect(request.headers()['if-match']).toBe('1');
@@ -289,7 +289,7 @@ test('POI 409 충돌에서 내 메모를 최신 version으로 다시 저장한�
   });
 
   await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

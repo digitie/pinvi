@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const adminUser = {
   user_id: '77777777-7777-4777-8777-777777777777',
@@ -26,7 +26,7 @@ test.beforeEach(async ({ page }) => {
   await page.route(
     (url) => url.port === '12801' && url.pathname === '/admin/mcp-tokens',
     async (route, request) => {
-      if (request.method() !== 'GET') return route.continue();
+      if (request.method() !== 'GET') return route.fallback();
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
     },
   );

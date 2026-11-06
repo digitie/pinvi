@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const noticePlanId = '33333333-3333-4333-8333-333333333333';
 const tripId = '11111111-1111-4111-8111-111111111111';
@@ -24,7 +24,7 @@ const PLAN = {
 
 test('추천 여행을 새 여행으로 복사하면 결과 링크가 표시된다', async ({ page }) => {
   await page.route(/.*\/notice-plans(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ data: [PLAN] }),
@@ -33,13 +33,13 @@ test('추천 여행을 새 여행으로 복사하면 결과 링크가 표시된�
 
   // 다이얼로그가 기존 여행 목록을 조회한다(빈 목록).
   await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
 
   // 복사 POST → 새 여행 생성 결과.
   await page.route(/.*\/notice-plans\/[0-9a-f-]{36}\/copy$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

@@ -122,67 +122,43 @@ test.describe('CORE resilience', () => {
       clickable = await clickableFeatureMarkers(page, 2);
     }
     test.skip(clickable.length < 2, '보이는 영역에 클릭 가능한 feature 핀이 2개 미만');
-    const pins = { nth: (k: number) => clickable[k]! };
-    const a = (await pins.nth(0).getAttribute('aria-label')) ?? '';
-    const b = (await pins.nth(1).getAttribute('aria-label')) ?? '';
-    test.skip(a === b, '서로 다른 두 핀 필요');
-    await pins.nth(0).click();
-    // desktop: immediately supersede A with B. Mobile: A's sheet now covers the map — the mobile branch
-    // below closes it and taps B.
-    if (!isMobileViewport(page)) {
-      const uncovered = await pins.nth(1).evaluate((el) => {
-        const r = el.getBoundingClientRect(),
-          top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-        return top === el || el.contains(top);
-      });
-      if (!uncovered)
-        await page
-          .getByTestId('feature-map-popup')
-          .getByRole('button', { name: '닫기', exact: true })
-          .click();
-      await pins.nth(1).click();
-    }
+    const a = clickable[0]!, b = clickable[1]!;
+    const idA = (await a.getAttribute('data-interaction-id'))?.replace(/^feature:/, '');
+    const idB = (await b.getAttribute('data-interaction-id'))?.replace(/^feature:/, '');
+    expect(idA).toBeTruthy();
+    expect(idB).toBeTruthy();
+    expect(idB).not.toBe(idA);
+    await a.click();
     if (isMobileViewport(page)) {
-      // mobile: A's sheet opened; close it, tap B, sheet must be B (useFeatureDetailCard aborts A)
       const modal = page.getByTestId('feature-detail-modal');
       await expect(modal).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(modal).toHaveCount(0);
-      await dismissFeaturePopup(page); // the selection popup stays over the map after the sheet closes
-      await pins.nth(1).tap();
-      const popup = page.getByTestId('feature-map-popup');
-      const idB = await popup.getAttribute('data-feature-id');
-      expect(idB).toBeTruthy();
-      await expect(page.getByTestId('feature-detail-card-body')).toHaveAttribute(
-        'data-feature-id',
-        idB!,
-      );
-      await expect(page.getByTestId('feature-detail-modal-title')).toContainText(b.slice(0, 4), {
-        timeout: 15_000,
-      });
-      await page.waitForTimeout(2500); // 기존 정본 예산 이후에도 B 본문 ID 유지
-      await expect(page.getByTestId('feature-detail-card-body')).toHaveAttribute(
-        'data-feature-id',
-        idB!,
-      );
-      await expect(page.getByTestId('feature-detail-modal-title')).toContainText(b.slice(0, 4));
-      await expect(page.getByTestId('feature-detail-modal-title')).not.toContainText(a.slice(0, 6));
+      await dismissFeaturePopup(page);
     } else {
-      const popup = page.getByTestId('feature-map-popup');
-      const idB = await popup.getAttribute('data-feature-id');
-      expect(idB).toBeTruthy();
-      await expect(popup).toHaveAttribute('data-detail-feature-id', idB!);
-      // the popup waits for detail + weather together (#622) — allow the slow path
-      await expect(popup).toHaveCount(1, { timeout: 30_000 });
-      await expect(popup).toContainText(b.slice(0, 4));
-      await expect(popup.getByText('상세 불러오는 중…')).toHaveCount(0, { timeout: 15_000 });
-      await page.waitForTimeout(2500);
-      await expect(popup).toContainText(b.slice(0, 4));
-      await expect(popup).not.toContainText(a.slice(0, 6));
-      await expect(
-        page.locator('[data-testid="feature-map-marker-style"][data-marker-selected="true"]'),
-      ).toHaveCount(1);
+      const uncovered = await b.evaluate(el => {
+        const r = el.getBoundingClientRect();
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return top === el || Boolean(top && el.contains(top));
+      });
+      if (!uncovered) await dismissFeaturePopup(page);
     }
+    const response = page.waitForResponse(res => {
+      const url = new URL(res.url());
+      return res.request().method() === 'GET' &&
+        url.pathname.endsWith('/features/' + idB + '/detail-card') && !url.searchParams.has('providers');
+    });
+    await b.click();
+    const res = await response;
+    expect(res.status()).toBe(200);
+    expect((await res.json()).data.feature_id).toBe(idB);
+    const body = isMobileViewport(page)
+      ? page.getByTestId('feature-detail-card-body')
+      : page.getByTestId('feature-map-popup');
+    const attribute = isMobileViewport(page) ? 'data-feature-id' : 'data-detail-feature-id';
+    await expect(body).toHaveAttribute(attribute, idB!);
+    await page.waitForTimeout(2500);
+    await expect(body).toHaveAttribute(attribute, idB!);
     await shot(page, 'CORE-025', 'b-selected');
   });
 

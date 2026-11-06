@@ -94,7 +94,7 @@ jobs:
 
       - name: Build (workspaces)
         env:
-          NEXT_PUBLIC_PINVI_API_URL: http://localhost:12801
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:13805
         run: npm run build
 
   docker-image:
@@ -177,12 +177,12 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # 모든 e2e 는 page.route 로 API 를 mock — 백엔드 불필요.
-      # playwright webServer 가 `npm run build && npm run start`(:12805)로 앱을 띄운다.
-      # API URL 은 12801(lib/api 기본값) — admin e2e mock 이 port 12801 을 exact-match 하므로 일치 필수.
+      # playwright webServer 가 `npm run build && npm run start`(:13805)로 앱을 띄운다.
+      # mocked config가 API/Grafana를 reserved .invalid origin으로 고정한다. live env는 상속하지 않는다.
       - name: Run Playwright e2e
         working-directory: apps/web
         env:
-          NEXT_PUBLIC_PINVI_API_URL: http://localhost:12801
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:13805
         run: npx playwright test
 
       - name: Upload e2e traces

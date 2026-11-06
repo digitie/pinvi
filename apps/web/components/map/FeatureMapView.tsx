@@ -908,6 +908,7 @@ export function FeatureMapView({
                       title={mapPoint.title}
                       selected={isSelected}
                       ariaLabel={mapPoint.title}
+                      interactionId={mapPoint.kind === 'feature' ? 'feature:' + mapPoint.featureId : undefined}
                       onClick={() => handlePointClick(mapPoint)}
                     />
                   );

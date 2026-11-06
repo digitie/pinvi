@@ -1,10 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
 
 test('여행 생성 폼: 제목 없이 제출하면 제목 필드 오류 + aria-invalid', async ({ page }) => {
   await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
 
@@ -23,7 +23,7 @@ test('여행 생성 폼: 제목 없이 제출하면 제목 필드 오류 + aria-
 
 test('여행 생성 폼: label↔input 연결(제목 클릭 시 포커스)', async ({ page }) => {
   await page.route(/.*\/trips(\?.*)?$/, async (route, request) => {
-    if (!isFetch(request.resourceType())) return route.continue();
+    if (!isFetch(request.resourceType())) return route.fallback();
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [] }) });
   });
 

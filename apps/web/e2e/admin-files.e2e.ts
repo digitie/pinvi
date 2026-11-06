@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import type { AdminFileStorageSettings, AttachmentLibraryItem } from '@pinvi/schemas';
 
 const adminUser = {

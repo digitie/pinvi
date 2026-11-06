@@ -190,7 +190,21 @@ const config = [...nextCoreWebVitals, ...nextTypescript, {
   },
 }];
 
-// prebuild/predev가 복사한 maplibre worker(생성물, 518KB minified) — lint 대상이 아니다.
-config.unshift({ ignores: ['public/maplibre/**'] });
+config.push({
+  files: ['e2e/**/*.e2e.ts'],
+  rules: {
+    'no-restricted-imports': ['error', {
+      paths: [{ name: '@playwright/test', importNames: ['test'], message: '#618 — mocked 검사는 ./fixtures의 격리 test를 사용하세요.' }],
+      patterns: [KAKAO_IMPORT_GUARD],
+    }],
+    'no-restricted-syntax': ['error',
+      { selector: 'CallExpression[callee.object.name="route"][callee.property.name="continue"]', message: '#618 — mock 미처리 요청은 route.fallback()으로 격리 guard에 넘기세요.' },
+      { selector: 'CallExpression[callee.object.name="browser"][callee.property.name=/^(newContext|newPage)$/]', message: '#618 — 추가 세션은 newMockContext fixture를 사용하세요.' },
+    ],
+  },
+});
+
+// worker와 Playwright trace/report의 번들 생성물은 소스 lint 대상이 아니다.
+config.unshift({ ignores: ['public/maplibre/**', 'test-results/**', 'playwright-report/**', 'blob-report/**'] });
 
 export default config;
