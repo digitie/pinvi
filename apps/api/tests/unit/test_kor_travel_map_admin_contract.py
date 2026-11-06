@@ -465,3 +465,26 @@ def test_uncertain_feature_command_resolution_is_bound_to_admin_actor_and_origin
         "#/components/schemas/AdminFeatureFieldOverrideResponse",
         "#/components/schemas/AdminFeatureStateResponse",
     }
+
+
+def test_reconcile_wire_requires_only_what_map_requires() -> None:
+    """Map이 선택으로 둔 필드(receipt)를 PinVi가 필수로 받아 정상 응답을 거부하지 않는다."""
+    from app.clients.kor_travel_map_admin import FeatureCommandResolutionWire
+
+    map_required = set(_schema(_spec(), "FeatureCommandResolution")["required"])
+    pinvi_required = {
+        name for name, field in FeatureCommandResolutionWire.model_fields.items() if field.is_required()
+    }
+    assert pinvi_required <= map_required
+    pending = FeatureCommandResolutionWire.model_validate(
+        {
+            "state": "pending",
+            "actor": "pinvi-admin",
+            "operation": "admin.feature.patch",
+            "idempotency_key": "6a2f3d0e-1b4c-4d5e-8f90-123456789abc",
+            "feature_id": "feature-1",
+            "request_fingerprint": "a" * 64,
+            "command_id": 1,
+        }
+    )
+    assert pending.receipt is None
