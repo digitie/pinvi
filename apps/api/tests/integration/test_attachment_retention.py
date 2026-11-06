@@ -1424,3 +1424,163 @@ async def test_runtime_retention_acl_probe_rejects_select_only_role(session_fact
             assert tuple(result) == ("false",) * 6
         finally:
             await db.rollback()
+
+
+async def _takedown_report(session_factory, *, user_id, trip, attachment_id, action="takedown"):
+    from app.models.moderation import ContentReport
+    from app.schemas.moderation import ContentModerationActionRequest
+    from app.services.moderation import moderate_content_report
+
+    uid = uuid.UUID(user_id)
+    async with session_factory() as db:
+        report = ContentReport(
+            target_type="attachment",
+            target_id=uuid.UUID(attachment_id),
+            target_trip_id=uuid.UUID(trip),
+            target_owner_user_id=uid,
+            reporter_user_id=uid,
+            reason_code="other",
+            reason_text="evidence retention",
+            status="reviewing",
+        )
+        db.add(report)
+        await db.commit()
+        report_id = report.report_id
+    async with session_factory() as db:
+        await moderate_content_report(
+            db,
+            report_id=report_id,
+            actor_user_id=uid,
+            action=action,
+            body=ContentModerationActionRequest(
+                access_reason="retention regression", resolution_summary="evidence fixture"
+            ),
+        )
+        await db.commit()
+    return report_id
+
+
+async def _age_evidence(session_factory, attachment_id, days):
+    async with session_factory() as db:
+        row = await db.get(CuratedPlanAttachment, uuid.UUID(attachment_id))
+        row.evidence_hold_started_at = datetime.now(UTC) - timedelta(days=days)
+        await db.commit()
+
+
+async def test_confirmed_takedown_is_evidence_for_retention_then_deleted_with_trash_trip(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    """소유자 결정(2026-11-07): 확정 takedown 파일은 보존 기간(기본 180일) 동안 증거로 남기되 업로더
+    용량에서 빼고, 기간이 지나면 자동 삭제한다. 그 뒤 휴지통 여행도 정상 정리된다."""
+    from app.core.config import settings
+    from app.services.storage_policy import attachment_bytes_for_trip
+
+    assert settings.pinvi_moderation_evidence_retention_days == 180
+    user_id, _ = verified_user
+    uid = uuid.UUID(user_id)
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    file = await _file(client, cookies, user_id, trip)
+    await _takedown_report(
+        session_factory, user_id=user_id, trip=trip, attachment_id=file["attachment_id"]
+    )
+    async with session_factory() as db:
+        row = await db.get(CuratedPlanAttachment, uuid.UUID(file["attachment_id"]))
+        assert row.moderation_hold and row.evidence_hold_started_at is not None
+        # 보존 중에는 업로더·여행 용량에 계산하지 않는다.
+        assert await attachment_bytes_for_user(db, user_id=uid) == 0
+        assert await attachment_bytes_for_trip(db, trip_id=uuid.UUID(trip)) == 0
+    await _trash(session_factory, trip, 31)
+    calls = []
+
+    async def delete(bucket, key):
+        calls.append(key)
+
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
+    await _age_evidence(session_factory, file["attachment_id"], 179)
+    async with session_factory() as db:
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_deleted"] == 0 and result["trips_deleted"] == 0
+    assert calls == []
+    await _age_evidence(session_factory, file["attachment_id"], 181)
+    async with session_factory() as db:
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_deleted"] == 1, result
+        assert result["trips_deleted"] == 1, result
+        assert result["status"]["held_attachments"] == 0
+    assert calls == [file["storage_key"]]
+    async with session_factory() as db:
+        assert await db.get(Trip, uuid.UUID(trip)) is None
+
+
+async def test_evidence_retention_waits_for_open_appeal_and_restore_clears_it(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    """보존 기간이 지나도 이의제기 검토 중이면 지우지 않는다. 복원은 증거 보존을 풀고 용량에 다시 넣는다."""
+    from app.schemas.moderation import ContentModerationActionRequest, ContentReportAppealRequest
+    from app.services.moderation import appeal_content_report, moderate_content_report
+
+    user_id, _ = verified_user
+    uid = uuid.UUID(user_id)
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    file = await _file(client, cookies, user_id, trip)
+    report_id = await _takedown_report(
+        session_factory, user_id=user_id, trip=trip, attachment_id=file["attachment_id"]
+    )
+    async with session_factory() as db:
+        await appeal_content_report(
+            db,
+            report_id=report_id,
+            actor_user_id=uid,
+            body=ContentReportAppealRequest(appeal_reason="please review"),
+        )
+        await db.commit()
+    await _age_evidence(session_factory, file["attachment_id"], 181)
+    calls = []
+
+    async def delete(bucket, key):
+        calls.append(key)
+
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
+    async with session_factory() as db:
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_deleted"] == 0 and calls == []
+    body = ContentModerationActionRequest(
+        access_reason="retention regression", resolution_summary="restored"
+    )
+    async with session_factory() as db:
+        await moderate_content_report(
+            db, report_id=report_id, actor_user_id=uid, action="restore", body=body
+        )
+        await db.commit()
+    async with session_factory() as db:
+        row = await db.get(CuratedPlanAttachment, uuid.UUID(file["attachment_id"]))
+        assert not row.moderation_hold and row.evidence_hold_started_at is None
+        assert row.deleted_at is None
+        assert await attachment_bytes_for_user(db, user_id=uid) == 60
+    async with session_factory() as db:
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_deleted"] == 0 and calls == []
+
+
+async def test_hidden_without_takedown_keeps_counting_and_has_no_evidence_expiry(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    """숨김(hide)은 확정 takedown이 아니다. 보존 기한 없이 신고 처리까지 남고 용량에도 계산한다."""
+    user_id, _ = verified_user
+    uid = uuid.UUID(user_id)
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    file = await _file(client, cookies, user_id, trip)
+    await _takedown_report(
+        session_factory,
+        user_id=user_id,
+        trip=trip,
+        attachment_id=file["attachment_id"],
+        action="hide",
+    )
+    async with session_factory() as db:
+        row = await db.get(CuratedPlanAttachment, uuid.UUID(file["attachment_id"]))
+        assert row.moderation_hold and row.evidence_hold_started_at is None
+        assert await attachment_bytes_for_user(db, user_id=uid) == 60
