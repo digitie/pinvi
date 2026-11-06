@@ -48,7 +48,7 @@
       "passed": 202,
       "skipped": 3,
       "api": "strict mocked origins; real production Next build and browser",
-      "test_files": 58
+      "test_files": 59
     },
     "router_resolution": "actual CLI -> router-server -> expo-router/_ctx-shared; Expo/router directories are not symlinks"
   },
