@@ -179,11 +179,22 @@ async def preserve_deleted_day_attachment_charges(
     )
 
 
+def _charged() -> ColumnElement[bool]:
+    """용량에 계산하는 보존 참조. 확정 takedown 증거 보존 중인 파일은 업로더 책임으로 세지 않는다."""
+    return and_(
+        CuratedPlanAttachment.purged_at.is_(None),
+        ~and_(
+            CuratedPlanAttachment.moderation_hold.is_(True),
+            CuratedPlanAttachment.evidence_hold_started_at.is_not(None),
+        ),
+    )
+
+
 async def attachment_bytes_for_trip(db: AsyncSession, *, trip_id: uuid.UUID) -> int:
     poi_ids = select(TripDayPoi.attachment_id).where(TripDayPoi.trip_id == trip_id)
     total = await db.scalar(
         select(func.coalesce(func.sum(CuratedPlanAttachment.byte_size), 0)).where(
-            CuratedPlanAttachment.purged_at.is_(None),
+            _charged(),
             or_(
                 CuratedPlanAttachment.trip_id == trip_id,
                 CuratedPlanAttachment.trip_poi_id.in_(poi_ids),
@@ -196,7 +207,7 @@ async def attachment_bytes_for_trip(db: AsyncSession, *, trip_id: uuid.UUID) -> 
 async def attachment_bytes_for_user(db: AsyncSession, *, user_id: uuid.UUID) -> int:
     total = await db.scalar(
         select(func.coalesce(func.sum(CuratedPlanAttachment.byte_size), 0)).where(
-            CuratedPlanAttachment.purged_at.is_(None),
+            _charged(),
             CuratedPlanAttachment.uploaded_by_user_id == user_id,
         )
     )

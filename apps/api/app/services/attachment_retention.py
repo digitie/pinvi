@@ -18,6 +18,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import settings
 from app.models.attachment import CuratedPlanAttachment as A
+from app.models.moderation import ContentReport
 from app.models.poi import TripDayPoi
 from app.models.storage_lifecycle import AttachmentGcObject as G
 from app.models.storage_lifecycle import AttachmentUploadIntent as I
@@ -38,6 +39,30 @@ def upload_collectable(now: datetime) -> Any:
     )
 
 
+# 신고가 아직 끝나지 않은(접수·검토·숨김·이의제기) 첨부는 증거 보존 기간이 지나도 지우지 않는다.
+_UNRESOLVED_REPORT_STATUSES = ("received", "reviewing", "hidden", "appealed")
+
+
+def released_hold(now: datetime) -> ColumnElement[bool]:
+    """hold가 없거나, 확정 takedown 증거 보존 기간이 지났고 열린 신고가 없는 첨부."""
+    open_report = exists(
+        select(ContentReport.report_id).where(
+            ContentReport.target_type == "attachment",
+            ContentReport.target_id == A.attachment_id,
+            ContentReport.status.in_(_UNRESOLVED_REPORT_STATUSES),
+        )
+    )
+    cutoff = now - timedelta(days=settings.pinvi_moderation_evidence_retention_days)
+    return or_(
+        A.moderation_hold.is_(False),
+        and_(
+            A.evidence_hold_started_at.is_not(None),
+            A.evidence_hold_started_at <= cutoff,
+            ~open_report,
+        ),
+    )
+
+
 def eligible_attachment(now: datetime, *, preview: bool = False) -> Any:
     expired: ColumnElement[bool] = Trip.purge_started_at.is_not(None)
     if preview:
@@ -52,11 +77,12 @@ def eligible_attachment(now: datetime, *, preview: bool = False) -> Any:
             ),
         )
     )
-    # moderation hold는 신고 처리(복원)로 풀릴 때까지 어떤 삭제 경로보다 우선한다. 장소·일자·여행 삭제와
-    # 휴지통 만료도 증거 파일을 지우지 않는다. 같은 객체를 공유하는 다른 행도 이 행이 살아 있는 참조로
-    # 남아 S3 삭제가 예약되지 않으며, 여행 행도 남은 첨부 때문에 최종 삭제되지 않는다.
+    # moderation hold는 신고 처리(복원)로 풀리거나 확정 takedown의 증거 보존 기간이 끝날 때까지 어떤
+    # 삭제 경로보다 우선한다. 장소·일자·여행 삭제와 휴지통 만료도 증거 파일을 지우지 않는다. 같은 객체를
+    # 공유하는 다른 행도 이 행이 살아 있는 참조로 남아 S3 삭제가 예약되지 않으며, 여행 행도 남은 첨부
+    # 때문에 최종 삭제되지 않는다. 보존 기간이 지나 파일이 지워지면 휴지통 여행은 정상 정리된다.
     return and_(
-        A.moderation_hold.is_(False),
+        released_hold(now),
         or_(A.deleted_at.is_not(None), expired_trip, deleted_poi),
     )
 
@@ -83,7 +109,11 @@ async def retention_status(db: AsyncSession) -> dict[str, Any]:
         await db.scalar(
             select(func.count())
             .select_from(A)
-            .where(A.purged_at.is_(None), A.moderation_hold.is_(True))
+            .where(
+                A.purged_at.is_(None),
+                A.moderation_hold.is_(True),
+                ~eligible_attachment(now, preview=True),
+            )
         )
         or 0
     )

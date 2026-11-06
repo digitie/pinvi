@@ -181,7 +181,7 @@ async def test_0101_installs_m05_final_contract_with_minimal_public_surface(
             async with engine.begin() as connection:
                 assert (
                     await connection.scalar(text("SELECT version_num FROM app.alembic_version"))
-                    == "20261106_0106"  # 현재 head — 0106이0105 뒤에 추가
+                    == "20261107_0107"  # 현재 head — 0107이0106 뒤에 추가
                 )
                 assert (
                     await connection.scalar(
@@ -1257,7 +1257,7 @@ async def test_online_alembic_serializes_concurrent_fresh_upgrades(
         async with engine.connect() as connection:
             assert await connection.scalar(
                 text("SELECT array_agg(version_num ORDER BY version_num) FROM app.alembic_version")
-            ) == ["20261106_0106"]  # 현재 head — 0106이0105 뒤에 추가
+            ) == ["20261107_0107"]  # 현재 head — 0107이0106 뒤에 추가
     finally:
         for process in processes:
             if process.returncode is None:

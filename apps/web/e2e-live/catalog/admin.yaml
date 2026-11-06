@@ -823,4 +823,4 @@
   cleanup:
     - "fixture 여행·신고 정리"
   automation: manual
-  notes: "2026-11-06 소유자 결정으로 변경(이전에는 부모 삭제·만료가 hold보다 우선). 비가역 정리 실행이라 prod catalog에서 자동화하지 않는다. API 회귀 test_moderation_hold_survives_parent_deletion_until_moderation_resolves·test_hard_deleted_day_keeps_attachment_charge[held]."
+  notes: "2026-11-06 소유자 결정으로 변경(이전에는 부모 삭제·만료가 hold보다 우선). 2026-11-07: 확정 takedown은 180일 증거 보존(용량 제외) 뒤 자동 삭제, 이의제기 중에는 유지 — API 회귀 test_confirmed_takedown_is_evidence_for_retention_then_deleted_with_trash_trip. 비가역 정리 실행이라 prod catalog에서 자동화하지 않는다. API 회귀 test_moderation_hold_survives_parent_deletion_until_moderation_resolves·test_hard_deleted_day_keeps_attachment_charge[held]."

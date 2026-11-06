@@ -85,6 +85,8 @@ class CuratedPlanAttachment(Base, TimestampMixin):
     moderation_hold: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    # 확정 takedown 시각. 설정된 hold는 증거 보존 기간 동안만 남고 업로더·여행 용량에 계산하지 않는다.
+    evidence_hold_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     @property

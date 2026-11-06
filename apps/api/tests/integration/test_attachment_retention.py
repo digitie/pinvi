@@ -1584,3 +1584,58 @@ async def test_hidden_without_takedown_keeps_counting_and_has_no_evidence_expiry
         row = await db.get(CuratedPlanAttachment, uuid.UUID(file["attachment_id"]))
         assert row.moderation_hold and row.evidence_hold_started_at is None
         assert await attachment_bytes_for_user(db, user_id=uid) == 60
+
+
+async def test_0107_backfills_only_confirmed_takedown_holds(
+    client, verified_user, auth_cookies, session_factory
+):
+    import ast
+    from pathlib import Path
+
+    from sqlalchemy import text
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    taken = await _file(client, cookies, user_id, trip)
+    hidden = await _file(client, cookies, user_id, trip)
+    await _takedown_report(
+        session_factory, user_id=user_id, trip=trip, attachment_id=taken["attachment_id"]
+    )
+    await _takedown_report(
+        session_factory,
+        user_id=user_id,
+        trip=trip,
+        attachment_id=hidden["attachment_id"],
+        action="hide",
+    )
+    async with session_factory() as db:
+        for aid in (taken["attachment_id"], hidden["attachment_id"]):
+            row = await db.get(CuratedPlanAttachment, uuid.UUID(aid))
+            row.evidence_hold_started_at = None  # 0107 이전 상태
+        await db.commit()
+    migration = (
+        Path(__file__).resolve().parents[2]  # noqa: ASYNC240 — 로컬 fixture 경로만 해석
+        / "alembic/versions/20261107_0107_moderation_evidence_retention.py"
+    )
+    sql = next(
+        node.args[0].value
+        for node in ast.walk(ast.parse(migration.read_text()))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "execute"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and "UPDATE app.curated_plan_attachments" in str(node.args[0].value)
+    )
+    async with session_factory() as db:
+        await db.execute(text(sql))
+        await db.commit()
+        taken_row = await db.get(
+            CuratedPlanAttachment, uuid.UUID(taken["attachment_id"]), populate_existing=True
+        )
+        hidden_row = await db.get(
+            CuratedPlanAttachment, uuid.UUID(hidden["attachment_id"]), populate_existing=True
+        )
+        assert taken_row.evidence_hold_started_at is not None
+        assert hidden_row.evidence_hold_started_at is None

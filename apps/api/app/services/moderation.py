@@ -548,6 +548,9 @@ async def _hide_target(
     elif isinstance(target, CuratedPlanAttachment):
         target.moderation_hold = True
         target.deleted_at = target.deleted_at or now
+        if taken_down:
+            # 확정 takedown부터 증거 보존 기간을 센다(다시 takedown하면 다시 센다).
+            target.evidence_hold_started_at = now
     elif isinstance(target, TripShareLink):
         target.revoked_at = target.revoked_at or now
     else:
@@ -605,6 +608,7 @@ async def _restore_target(db: AsyncSession, row: ContentReport) -> None:
                 # 신고 처리는 끝내고 hold만 푼다 — 파일은 삭제 상태로 남아 다음 정리에서 지워진다.
                 # 그렇지 않으면 hold가 영구히 남아 파일과 여행 행이 끝내 정리되지 않는다.
                 held.moderation_hold = False
+                held.evidence_hold_started_at = None
                 await db.flush()
                 return
         raise ContentReportTransitionError(str(exc)) from exc
@@ -618,6 +622,7 @@ async def _restore_target(db: AsyncSession, row: ContentReport) -> None:
         target.deleted_at = None
     elif isinstance(target, CuratedPlanAttachment):
         target.moderation_hold = False
+        target.evidence_hold_started_at = None
         target.deleted_at = None
     elif isinstance(target, TripShareLink):
         target.revoked_at = None
