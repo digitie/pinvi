@@ -473,7 +473,9 @@ def test_reconcile_wire_requires_only_what_map_requires() -> None:
 
     map_required = set(_schema(_spec(), "FeatureCommandResolution")["required"])
     pinvi_required = {
-        name for name, field in FeatureCommandResolutionWire.model_fields.items() if field.is_required()
+        name
+        for name, field in FeatureCommandResolutionWire.model_fields.items()
+        if field.is_required()
     }
     assert pinvi_required <= map_required
     pending = FeatureCommandResolutionWire.model_validate(
