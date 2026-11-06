@@ -461,12 +461,14 @@ async def execute_attachment_retention(db: AsyncSession, *, batch_size: int = 20
                 continue
             claimed_obj.deleted_at = done
             await db.execute(
+                # 객체가 실제로 지워졌으므로 그 key의 남은 참조를 모두 정리한다. 정리 예약 뒤에는 새 복사·
+                # 복원이 막히므로 살아 있는 참조가 새로 생기지 않는다. 예약과 삭제 사이에 들어온 이의제기로
+                # 자격이 바뀐 행도 여기서 정리해야 휴지통 여행이 영구히 남지 않는다.
                 update(A)
                 .where(
                     A.bucket == bucket,
                     A.storage_key == key,
                     A.purged_at.is_(None),
-                    eligible_attachment(done),
                 )
                 .values(purged_at=done)
                 .execution_options(synchronize_session="fetch")

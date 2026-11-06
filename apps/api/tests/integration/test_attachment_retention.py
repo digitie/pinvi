@@ -1597,11 +1597,36 @@ async def test_0107_backfills_only_confirmed_takedown_holds(
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
     trip = await _make_trip(client, cookies)
+    from app.schemas.moderation import ContentModerationActionRequest, ContentReportAppealRequest
+    from app.services.moderation import appeal_content_report, moderate_content_report
+
     taken = await _file(client, cookies, user_id, trip)
+    appealed = await _file(client, cookies, user_id, trip)
     hidden = await _file(client, cookies, user_id, trip)
     await _takedown_report(
         session_factory, user_id=user_id, trip=trip, attachment_id=taken["attachment_id"]
     )
+    # takedown → 이의제기 → 거절: 신고 상태는 rejected지만 확정 takedown 이력이 있다.
+    report_id = await _takedown_report(
+        session_factory, user_id=user_id, trip=trip, attachment_id=appealed["attachment_id"]
+    )
+    async with session_factory() as db:
+        await appeal_content_report(
+            db,
+            report_id=report_id,
+            actor_user_id=uuid.UUID(user_id),
+            body=ContentReportAppealRequest(appeal_reason="appeal"),
+        )
+        await moderate_content_report(
+            db,
+            report_id=report_id,
+            actor_user_id=uuid.UUID(user_id),
+            action="reject",
+            body=ContentModerationActionRequest(
+                access_reason="retention regression", resolution_summary="appeal rejected"
+            ),
+        )
+        await db.commit()
     await _takedown_report(
         session_factory,
         user_id=user_id,
@@ -1610,7 +1635,7 @@ async def test_0107_backfills_only_confirmed_takedown_holds(
         action="hide",
     )
     async with session_factory() as db:
-        for aid in (taken["attachment_id"], hidden["attachment_id"]):
+        for aid in (taken["attachment_id"], appealed["attachment_id"], hidden["attachment_id"]):
             row = await db.get(CuratedPlanAttachment, uuid.UUID(aid))
             row.evidence_hold_started_at = None  # 0107 이전 상태
         await db.commit()
@@ -1637,5 +1662,47 @@ async def test_0107_backfills_only_confirmed_takedown_holds(
         hidden_row = await db.get(
             CuratedPlanAttachment, uuid.UUID(hidden["attachment_id"]), populate_existing=True
         )
+        appealed_row = await db.get(
+            CuratedPlanAttachment, uuid.UUID(appealed["attachment_id"]), populate_existing=True
+        )
         assert taken_row.evidence_hold_started_at is not None
+        assert appealed_row.evidence_hold_started_at is not None
         assert hidden_row.evidence_hold_started_at is None
+
+
+async def test_appeal_after_cleanup_is_queued_does_not_strand_row_or_trash_trip(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    """정리 예약 뒤 삭제 전에 이의제기가 들어와도 객체 삭제 뒤 참조가 정리되고 휴지통 여행이 남지 않는다."""
+    from app.schemas.moderation import ContentReportAppealRequest
+    from app.services.moderation import appeal_content_report
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip = await _make_trip(client, cookies)
+    file = await _file(client, cookies, user_id, trip)
+    report_id = await _takedown_report(
+        session_factory, user_id=user_id, trip=trip, attachment_id=file["attachment_id"]
+    )
+    await _trash(session_factory, trip, 31)
+    await _age_evidence(session_factory, file["attachment_id"], 181)
+    async with session_factory() as db:
+        await gc._stage(db, datetime.now(UTC), 20)
+    async with session_factory() as db:
+        await appeal_content_report(
+            db,
+            report_id=report_id,
+            actor_user_id=uuid.UUID(user_id),
+            body=ContentReportAppealRequest(appeal_reason="late appeal"),
+        )
+        await db.commit()
+
+    async def delete(bucket, key):
+        return None
+
+    monkeypatch.setattr(gc, "delete_attachment_object", delete)
+    async with session_factory() as db:
+        result = await gc.execute_attachment_retention(db)
+        assert result["objects_deleted"] == 1 and result["trips_deleted"] == 1, result
+    async with session_factory() as db:
+        assert await db.get(Trip, uuid.UUID(trip)) is None

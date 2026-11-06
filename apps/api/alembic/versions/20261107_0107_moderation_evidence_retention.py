@@ -37,17 +37,19 @@ def upgrade() -> None:
         sa.Column("evidence_hold_started_at", sa.DateTime(timezone=True)),
         schema="app",
     )
-    # 지금 hold 중이고 확정 takedown 신고가 있는 첨부는 그 조치 시각부터 보존 기간을 센다.
-    # 열린 신고(접수·검토·숨김·이의제기)가 함께 있으면 런타임이 그 신고가 끝날 때까지 지우지 않는다.
+    # 지금 hold 중인 첨부에 takedown 조치 이력이 있으면 마지막 takedown 시각부터 보존 기간을 센다.
+    # 신고 상태가 그 뒤 이의제기·거절로 바뀌었어도 런타임과 같이 takedown 시각을 쓴다(restore는 hold를
+    # 이미 풀었으므로 대상이 아니다). 열린 신고가 있으면 런타임이 그 신고가 끝날 때까지 지우지 않는다.
     op.execute(
         """
         UPDATE app.curated_plan_attachments AS a
         SET evidence_hold_started_at = r.taken_down_at
         FROM (
-            SELECT target_id, max(COALESCE(actioned_at, updated_at)) AS taken_down_at
-            FROM app.content_reports
-            WHERE target_type = 'attachment' AND status = 'taken_down'
-            GROUP BY target_id
+            SELECT cr.target_id, max(act.created_at) AS taken_down_at
+            FROM app.content_moderation_actions AS act
+            JOIN app.content_reports AS cr ON cr.report_id = act.report_id
+            WHERE cr.target_type = 'attachment' AND act.action = 'takedown'
+            GROUP BY cr.target_id
         ) AS r
         WHERE a.attachment_id = r.target_id
           AND a.moderation_hold
