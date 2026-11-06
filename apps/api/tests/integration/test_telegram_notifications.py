@@ -348,8 +348,14 @@ async def test_kst_daily_weekly_dedup_and_consent_revocation(
         await db.commit()
     before = await plan_due(now=datetime(2026, 11, 4, 22, 59, tzinfo=UTC))
     assert before["enqueued"] == 0
+    from app.services.telegram_planner import _plan_users
+
     now = datetime(2026, 11, 4, 23, 0, tzinfo=UTC)  # 한국 11/5 목요일08:00
-    first, second = await asyncio.gather(plan_due(now=now), plan_due(now=now))
+    # 단일 실행 잠금 아래가 아니라도(잠금 연결이 끊긴 경우) 발생키가 중복 적재를 막는다.
+    first, second = await asyncio.gather(
+        _plan_users(now=now, map_client=None, weather_client=None),
+        _plan_users(now=now, map_client=None, weather_client=None),
+    )
     assert first["enqueued"] + second["enqueued"] == 3
     async with session_factory() as db:
         rows = list((await db.scalars(select(TelegramNotification))).all())
@@ -1141,8 +1147,10 @@ async def test_notification_body_is_purged_after_retention_but_dedupe_remains(
             row = await db.get(TelegramNotification, notification_id)
             row.created_at = datetime.now(UTC) - timedelta(days=31)
         await db.commit()
-    async with session_factory() as db:
-        assert await purge(db) == 1
+    from app.services.telegram_outbox import run_body_retention
+
+    # API worker 주기 정리 경로(Dagster planner가 멈춰 있어도 돈다)
+    assert await run_body_retention() == 1
     async with session_factory() as db:
         purged = await db.get(TelegramNotification, aged[0])
         assert purged.body_purged_at is not None

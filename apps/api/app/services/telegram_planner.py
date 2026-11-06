@@ -14,13 +14,15 @@ from typing import Any
 
 from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.clients.kor_travel_map import KorTravelMapClient
 from app.clients.kor_travel_map_weather import create_map_weather_client
 from app.clients.kor_travel_weather import KorTravelWeatherClient
 from app.core.config import settings
 from app.db import session as db_session
+from app.db.session import SESSION_TIMEOUT_SERVER_SETTINGS
 from app.models.kasi import TripDayRiseSet
 from app.models.poi import TripDayPoi
 from app.models.telegram_notification import TelegramNotification, TelegramPreferences
@@ -36,7 +38,6 @@ from app.services.telegram_notifications import (
     itinerary,
     linked_targets,
     preferences,
-    purge_expired_bodies,
 )
 from app.services.telegram_weather import plan_weather, prepare_weather
 from app.services.trip_weather_batch import (
@@ -333,8 +334,18 @@ _PLANNER_LOCK_RESOURCE = 0x504C414E  # "PLAN"
 
 @asynccontextmanager
 async def _single_flight() -> AsyncIterator[bool]:
-    """잠금을 얻으면 True. 연결은 끝에 폐기해 어떤 경로로 끝나도 잠금이 남지 않게 한다."""
-    connection = db_session.engine.connect()
+    """잠금을 얻으면 True.
+
+    잠금 연결은 요청 pool 밖의 전용 NullPool 연결이다 — 매 tick 최대 예산 동안 pool 연결 하나를
+    묶어 두지 않는다. 끝에는 연결을 닫아 어떤 경로로 끝나도 잠금이 남지 않게 한다. 연결이 tick 도중
+    끊기면 잠금도 풀려 다음 tick이 겹칠 수 있지만, 발생키 unique가 중복 적재를 막는다.
+    """
+    lock_engine = create_async_engine(
+        db_session.engine.url,
+        poolclass=NullPool,
+        connect_args={"server_settings": SESSION_TIMEOUT_SERVER_SETTINGS},
+    )
+    connection = lock_engine.connect()
     started = False
     try:
         await connection.start()
@@ -347,20 +358,24 @@ async def _single_flight() -> AsyncIterator[bool]:
         await connection.commit()
         yield acquired is True
     finally:
-        if started:
 
-            async def discard() -> None:
-                try:
-                    await connection.invalidate()
-                finally:
-                    await connection.close()
-
-            task = asyncio.create_task(discard())
+        async def discard() -> None:
+            # 연결을 폐기하면 backend가 끝나며 session 잠금도 함께 풀린다(unlock 실패 경로 없음).
             try:
-                await asyncio.shield(task)
-            except asyncio.CancelledError:
-                await task
-                raise
+                if started:
+                    try:
+                        await connection.invalidate()
+                    finally:
+                        await connection.close()
+            finally:
+                await lock_engine.dispose()
+
+        task = asyncio.create_task(discard())
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            await task
+            raise
 
 
 async def plan_due(
@@ -373,18 +388,7 @@ async def plan_due(
     async with _single_flight() as acquired:
         if not acquired:
             return {"users": 0, "enqueued": 0, "failed": 0, "skipped": 1}
-        result = await _plan_users(
-            now=now, map_client=map_client, weather_client=weather_client
-        )
-        try:
-            async with db_session.async_session_factory() as db:
-                result["purged"] = await purge_expired_bodies(db)
-        except Exception as exc:
-            # 이미 commit한 예약 적재 결과를 정리 실패로 되돌려 보고하지 않는다. 다음 tick에 재시도한다.
-            PLANNING_FAILURES.labels(code="BODY_RETENTION_FAILED").inc()
-            logger.warning("telegram notification body retention failed: %s", type(exc).__name__)
-            result["purged"] = 0
-        return result
+        return await _plan_users(now=now, map_client=map_client, weather_client=weather_client)
 
 
 async def _plan_users(
@@ -421,15 +425,15 @@ async def _plan_users(
         if processed and monotonic() - started >= budget:
             break
         processed += 1
-        # 처리 전에 cursor를 옮긴다. 이 사용자가 실패해도 다음 tick은 뒤 사용자부터 시작한다.
-        async with db_session.async_session_factory() as cursor_db:
-            await cursor_db.execute(
-                update(TelegramPreferences)
-                .where(TelegramPreferences.user_id == user_id)
-                .values(last_planned_at=func.clock_timestamp())
-            )
-            await cursor_db.commit()
         try:
+            # 처리 전에 cursor를 옮긴다. 이 사용자가 실패해도 다음 tick은 뒤 사용자부터 시작한다.
+            async with db_session.async_session_factory() as cursor_db:
+                await cursor_db.execute(
+                    update(TelegramPreferences)
+                    .where(TelegramPreferences.user_id == user_id)
+                    .values(last_planned_at=func.clock_timestamp())
+                )
+                await cursor_db.commit()
             weather_prepared = await prepare_weather(
                 user_id,
                 now=current + timedelta(seconds=monotonic() - started),

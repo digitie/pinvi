@@ -898,8 +898,8 @@ telegram_notification_preferences에 기본 false weather_enabled와 nullable ti
 모두 nullable 열과 부분 index라 기존 행과 이전 코드에 영향이 없다.
 
 - telegram_notification_preferences.last_planned_at (timestamptz): planner 순환 cursor. 시간 예산을 넘긴 tick 뒤 다음 tick은 이 값이 가장 오래된(NULL 먼저) 사용자부터 처리한다. 동의 generation과 무관한 운영 상태다.
-- telegram_notification_deliveries.claim_token (uuid): Telegram 호출 동안의 lease token. 설정된 동안 scheduled_at은 lease 만료 시각이며, 결과는 같은 token일 때만 기록한다. 만료된 예약의 조기 정리는 lease 중인 행을 건너뛴다.
+- telegram_notification_deliveries.claim_token (uuid): Telegram 호출 동안의 lease token. 설정된 동안 scheduled_at은 lease 만료 시각이며, 결과는 같은 token·pending일 때만 기록한다. 만료된 예약의 조기 정리는 lease 중인 행을 건너뛴다.
 - telegram_notifications.body_purged_at (timestamptz): 보존 기한(기본 30일, `PINVI_TELEGRAM_NOTIFICATION_RETENTION_DAYS`)이 지나 본문을 지운 시각. chunks는 같은 개수의 빈 문자열, schedule_snapshot은 `{}`, 전송 오류 상세 문구는 NULL이 된다. 발생키·분류·상태·시각·오류 코드는 남는다.
-- ix_telegram_notifications_body_retained: `created_at` 부분 index(`WHERE body_purged_at IS NULL`). 매 tick 정리 후보 조회용.
+- ix_telegram_notifications_body_retained: `created_at` 부분 index(`WHERE body_purged_at IS NULL`). API worker의 1시간 주기 정리 후보 조회용.
 
 기존 telegram_notifications/deliveries를 재사용한다. 취소 tombstone은 관측 순서와 무관하게 유지하며 모호한 비취소 관측은 전송하지 않는다. Trip 잠금 아래 관측을 합치고 worker는 Delivery→Pref→Trip→User→Target 정책 순서를 보존한다.

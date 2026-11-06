@@ -67,14 +67,14 @@ async def test_planner_calls_narrow_boundary_and_keeps_error_body_private(
             {"users": 0, "enqueued": 0, "failed": 0, "skipped": 1},
         ),
         (
-            {"users": 5, "enqueued": 2, "failed": 0, "processed": 3, "deferred": 2, "purged": 7},
-            {"users": 5, "enqueued": 2, "failed": 0, "processed": 3, "deferred": 2, "purged": 7},
+            {"users": 5, "enqueued": 2, "failed": 0, "processed": 3, "deferred": 2},
+            {"users": 5, "enqueued": 2, "failed": 0, "processed": 3, "deferred": 2},
         ),
         ({"users": 1, "enqueued": 0, "skipped": -1}, None),
         ({"users": 1, "enqueued": 0, "deferred": True}, None),
     ],
 )
-async def test_planner_reports_single_flight_budget_and_retention_counts(
+async def test_planner_reports_single_flight_and_budget_counts(
     monkeypatch: pytest.MonkeyPatch, data: dict, expected: dict | None
 ) -> None:
     monkeypatch.setattr(

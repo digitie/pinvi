@@ -571,7 +571,7 @@
   cleanup:
     - "fixture 여행·연결·대상 정리"
   automation: manual
-  notes: "0106(2026-11-06 소유자 결정). 공정 drain은 사용자당 한 바퀴 5 chunk, Telegram 호출 전 정책 잠금 해제(60초 lease). 결정론적 회귀는 API test_fair_drain_does_not_let_one_user_backlog_delay_another·test_trip_lock_is_not_held_while_calling_telegram. 실제 봇 한도 때문에 scripted로 두지 않는다."
+  notes: "0106(2026-11-06 소유자 결정). 공정 drain은 사용자별 순번으로 한 바퀴(첫 chunk가 모두 나간 뒤 두 번째), Telegram 호출 전 정책 잠금 해제(60초 lease). 결정론적 회귀는 API test_fair_drain_does_not_let_one_user_backlog_delay_another·test_trip_lock_is_not_held_while_calling_telegram. 실제 봇 한도 때문에 scripted로 두지 않는다."
 
 - id: NTF-032
   title: 30일 지난 발송 내역 — 상태·진행률은 남고 본문은 정리됨
@@ -588,4 +588,4 @@
   cleanup:
     - "없음"
   automation: manual
-  notes: "0106(2026-11-06 소유자 결정). 보존 기간 PINVI_TELEGRAM_NOTIFICATION_RETENTION_DAYS(기본 30일), planner tick마다 최대 500건. 본문 삭제는 DB 확인이 필요해 manual이며 API 회귀 test_notification_body_is_purged_after_retention_but_dedupe_remains가 고정한다."
+  notes: "0106(2026-11-06 소유자 결정). 보존 기간 PINVI_TELEGRAM_NOTIFICATION_RETENTION_DAYS(기본 30일), API worker가 1시간마다 정리한다. 본문 삭제는 DB 확인이 필요해 manual이며 API 회귀 test_notification_body_is_purged_after_retention_but_dedupe_remains가 고정한다."

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from time import monotonic
@@ -43,6 +44,8 @@ from app.services.telegram_itinerary import KST, effective_date, itinerary_text,
 from app.services.telegram_metrics import record_step
 from app.services.telegram_outbox import MAX_TELEGRAM_ATTEMPTS, _retry_delay
 from app.services.trip import TripNotFoundError, TripPermissionError, TripValidationError
+
+logger = logging.getLogger(__name__)
 
 _SAFE_ERRORS = {
     "missing_chat_id": "Telegram 대상 ID가 없습니다.",
@@ -454,8 +457,6 @@ async def _guard(
 # 전송 timeout(기본 5초)보다 충분히 길다. 결과를 기록하지 못한 채 프로세스가 죽으면 이 시간 뒤
 # 다시 보낸다 — provider 수락 뒤 ACK 유실과 같은 기존 중복 가능성이며 새로 생기지 않는다.
 CLAIM_LEASE_SECONDS = 60
-# 공정 drain 한 바퀴에서 한 사용자가 차지할 수 있는 최대 chunk 수.
-FAIR_DRAIN_PER_USER = 5
 
 _REJECTIONS = {
     "account_inactive": "계정이 비활성화되어 알림을 보내지 않았습니다.",
@@ -480,8 +481,11 @@ def _due(current: datetime) -> ColumnElement[bool]:
 
 
 async def fair_batch(db: AsyncSession, *, now: datetime, limit: int) -> list[uuid.UUID]:
-    """사용자별 순번을 먼저 정렬해 한 사용자의 backlog가 다른 사용자의 기한 있는 알림을 밀지 않게 한다.
+    """사용자별 순번(rank)을 먼저 정렬해 한 사용자의 backlog가 다른 사용자의 기한 있는 알림을 밀지 않게 한다.
 
+    각 사용자의 첫 chunk가 모두 나간 뒤에 두 번째 chunk가 나간다. 다른 사용자가 없으면 한 사용자가
+    한 바퀴를 모두 쓴다(처리량 제한 없음). 대기 사용자가 limit보다 많으면 각자의 가장 오래된 chunk
+    순서로 limit명까지 처리하고 나머지는 다음 바퀴에 처리한다.
     잠그지 않는 계획일 뿐이다. 실제 claim은 process_one이 SKIP LOCKED로 다시 확인한다.
     """
     rank = (
@@ -499,10 +503,7 @@ async def fair_batch(db: AsyncSession, *, now: datetime, limit: int) -> list[uui
         .subquery()
     )
     ids = await db.scalars(
-        select(ranked.c.id)
-        .where(ranked.c.rank <= FAIR_DRAIN_PER_USER)
-        .order_by(ranked.c.rank, ranked.c.at, ranked.c.id)
-        .limit(limit)
+        select(ranked.c.id).order_by(ranked.c.rank, ranked.c.at, ranked.c.id).limit(limit)
     )
     result = list(ids.all())
     await db.commit()
@@ -580,7 +581,7 @@ async def process_one(
         return True
 
     # 보낼 내용·대상을 고정하고 lease를 commit한다. 이후에는 어떤 정책 잠금도 쥐지 않는다.
-    claimed_id, target_id = delivery.id, target.id
+    claimed_id, target_id, target_generation = delivery.id, target.id, target.generation
     chat_id, thread_id = target.telegram_chat_id, target.telegram_message_thread_id
     chunk, total = row.chunks[delivery.next_chunk], len(row.chunks)
     lease, previous_at, previous_attempts = uuid.uuid4(), delivery.scheduled_at, delivery.attempts
@@ -613,9 +614,15 @@ async def process_one(
         await client.aclose()
 
     finished = current + timedelta(seconds=monotonic() - started)
+    # 결과 기록이 잠금을 오래 기다려 lease를 넘기면 다른 worker가 같은 chunk를 다시 보낸다.
+    await db.execute(text("SET LOCAL lock_timeout = '5s'"))
     delivery = await db.scalar(
         select(TelegramDelivery)
-        .where(TelegramDelivery.id == claimed_id, TelegramDelivery.claim_token == lease)
+        .where(
+            TelegramDelivery.id == claimed_id,
+            TelegramDelivery.claim_token == lease,
+            TelegramDelivery.status == "pending",
+        )
         .with_for_update()
         .execution_options(populate_existing=True)
     )
@@ -623,12 +630,23 @@ async def process_one(
         # lease가 만료되어 다른 worker가 인수했다. 그쪽 결과를 덮어쓰지 않는다.
         await db.rollback()
         return True
+    # 비키 열만 바꾸므로 NO KEY UPDATE로 충분하다. enqueue의 FK 검사(KEY SHARE)와 충돌하지 않는다.
     target = await db.scalar(
         select(TelegramTarget)
         .where(TelegramTarget.id == target_id)
-        .with_for_update()
+        .with_for_update(key_share=True)
         .execution_options(populate_existing=True)
     )
+    if (
+        target is not None
+        and (
+            target.generation != target_generation
+            or target.deleted_at is not None
+            or not target.is_enabled
+        )
+    ):
+        # 전송 중 재검증·삭제·비활성화된 대상의 새 상태를 이 결과로 덮어쓰지 않는다.
+        target = None
     delivery.claim_token = None
     if unexpected:
         # 원문 SQL/transport traceback은 사용자에게 공개하지 않는다.
@@ -688,9 +706,14 @@ async def drain_fair(*, now: datetime | None = None, limit: int) -> int:
         planned = await fair_batch(db, now=current, limit=limit)
     processed = 0
     for delivery_id in planned:
-        async with db_session.async_session_factory() as db:
-            if await process_one(db, now=now, delivery_id=delivery_id):
-                processed += 1
+        try:
+            async with db_session.async_session_factory() as db:
+                if await process_one(db, now=now, delivery_id=delivery_id):
+                    processed += 1
+        except Exception as exc:
+            # 한 건의 잠금 timeout·deadlock·손상 행이 같은 바퀴 뒤 사용자들을 멈추지 않게 한다.
+            # 미커밋 변경은 세션 종료로 롤백되고 lease가 있으면 만료 뒤 다시 처리된다.
+            logger.warning("telegram delivery step failed: %s", type(exc).__name__)
     return processed
 
 

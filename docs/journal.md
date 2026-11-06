@@ -2,8 +2,8 @@
 
 - 소유자가 #697에서 보고만 한 7건을 결정했다. 각 건은 실패 테스트를 먼저 커밋하고(n150 red) 고쳤다. migration 0106은 nullable 열 셋과 부분 index 하나라 forward-safe다.
 - planner: session advisory lock으로 단일 실행(겹친 tick은 `skipped`), 60초 예산 뒤 남은 사용자는 `deferred`, `last_planned_at` 순환으로 뒤 사용자가 굶지 않는다. 중복 방지는 기존 발생키 그대로.
-- drain: 사용자별 순번(window, 사용자당 5 chunk) 한 바퀴. 전송: 정책 확인 뒤 60초 lease(`claim_token`)를 commit해 Trip·User·대상 잠금을 풀고 Telegram을 부른 뒤 새 transaction에 같은 token일 때만 기록한다. 취소는 lease를 즉시 돌려준다.
-- 보존: 대기 없는 알림은 30일(`PINVI_TELEGRAM_NOTIFICATION_RETENTION_DAYS`) 뒤 planner tick에서 본문을 같은 개수의 빈 문자열로, 스냅샷·전송 오류 상세를 지운다. 발생키·상태·시각·코드는 남는다.
+- drain: 사용자별 순번(window) 한 바퀴, 건별 오류 격리. 전송: 정책 확인 뒤 60초 lease(`claim_token`)를 commit해 Trip·User·대상 잠금을 풀고 Telegram을 부른 뒤 새 transaction에 같은 token일 때만 기록한다. 취소는 lease를 즉시 돌려준다.
+- 보존: 대기 없는 알림은 30일(`PINVI_TELEGRAM_NOTIFICATION_RETENTION_DAYS`) 뒤 API worker가 1시간마다 본문을 같은 개수의 빈 문자열로, 스냅샷·전송 오류 상세를 지운다. 발생키·상태·시각·코드는 남는다.
 - 특보: `since`·응답 범위·발표·동의·관측 시각을 초 단위 UTC instant로 맞춰 비교한다(KST 표기 응답도 통과).
 - 브리프: 저장 시각 뒤에 켜면 당일 즉시 발송 — 유지, 테스트로 고정·카탈로그 NTF-019/029 메모.
 - moderation hold: 장소·일자·여행 삭제와 휴지통 만료가 hold 파일을 지우지 않는다(일자 삭제가 hold를 풀던 줄도 제거). 복원 자리가 영구히 없으면 신고 restore가 hold만 푼다(영구 보존 누수 방지). 기존 `test_expired_parent_overrides_moderation_hold`는 결정에 따라 반대로 바꿨다.

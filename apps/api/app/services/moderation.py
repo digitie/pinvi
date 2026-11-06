@@ -561,9 +561,7 @@ async def _permanently_detached(db: AsyncSession, row: CuratedPlanAttachment) ->
         return True
     trip_id = row.trip_id
     if row.trip_poi_id is not None:
-        poi = await db.scalar(
-            select(TripDayPoi).where(TripDayPoi.attachment_id == row.trip_poi_id)
-        )
+        poi = await db.scalar(select(TripDayPoi).where(TripDayPoi.attachment_id == row.trip_poi_id))
         if poi is None:
             return True
         trip_id = poi.trip_id

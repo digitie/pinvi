@@ -36,9 +36,9 @@ async def pinvi_telegram_notification_planner(
         ):
             raise RuntimeError("알림 planner 응답 형식 오류")
     result = {"users": int(data["users"]), "enqueued": int(data["enqueued"])}
-    # skipped: 이전 실행이 아직 돌고 있어 건너뜀, deferred: 시간 예산으로 다음 tick에 넘긴 사용자,
-    # purged: 보존 기한이 지나 본문을 지운 알림 수. 모두 선택 필드다.
-    for key in ("failed", "processed", "deferred", "skipped", "purged"):
+    # skipped: 이전 실행이 아직 돌고 있어 건너뜀, deferred: 시간 예산으로 다음 tick에 넘긴 사용자.
+    # 모두 선택 필드다.
+    for key in ("failed", "processed", "deferred", "skipped"):
         if key in data:
             if type(data[key]) is not int or data[key] < 0:
                 raise RuntimeError(f"알림 planner {key} 집계 형식 오류")
