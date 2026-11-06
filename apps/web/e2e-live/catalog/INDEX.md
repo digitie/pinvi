@@ -367,7 +367,7 @@ Spec files: 57.
 | CORE-018 | core | VWorld attribution '공간정보 오픈플랫폼 브이월드' 노출 | P2 | desktop, mobile | scripted | `specs/core/core-map.live.spec.ts#CORE-018` |
 | CORE-019 | core | 모바일 상세 바텀시트 — 본문 스크롤, 배경 스크롤 잠금, Escape/닫기/배경 탭 닫힘 | P1 | mobile, poi | scripted | `specs/core/core-mobile.live.spec.ts#CORE-019` |
 | CORE-020 | core | 모바일 일자 패널 열기/일자 전환/닫기(스와이프 미구현 → 버튼 경로) | P2 | mobile, mutating | scripted | `specs/core/core-mobile.live.spec.ts#CORE-020` |
-| CORE-021 | core | 모바일 통계 칩 vs 남쪽 핀 겹침(#623 known) | P2 | mobile, mutating, poi | scripted | `specs/core/core-mobile.live.spec.ts#CORE-021` |
+| CORE-021 | core | 모바일 통계 칩 vs 남쪽 핀 겹침(#623 회귀 감시 — PR693 수정) | P2 | mobile, mutating, poi | scripted | `specs/core/core-mobile.live.spec.ts#CORE-021` |
 | CORE-022 | core | 오버레이 키보드 Tab 순서 — 검색창이 캔버스/마커보다 먼저 포커스 | P2 | mobile, a11y | scripted | `specs/core/core-mobile.live.spec.ts#CORE-022` |
 | CORE-023 | core | 상세 카드가 날씨 지연과 무관하게 3초 안에 뜬다(#622, detail-card 경로) | P1 | desktop, mobile, weather, poi | scripted | `specs/core/core-resilience.live.spec.ts#CORE-023` |
 | CORE-024 | core | 마커 팝업 상세 텍스트가 날씨 응답을 기다리지 않는다(#622, 팝업 경로) | P2 | desktop, weather, poi | scripted | `specs/core/core-resilience.live.spec.ts#CORE-024` |
