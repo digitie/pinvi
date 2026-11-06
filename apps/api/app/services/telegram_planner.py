@@ -418,6 +418,8 @@ async def plan_due(
                 "telegram planning failed for user %s: %s at %s",
                 user_id,
                 type(exc).__name__,
-                " <- ".join(f"{f.filename.rsplit('/', 1)[-1]}:{f.lineno}" for f in reversed(frames)),
+                " <- ".join(
+                    f"{f.filename.rsplit('/', 1)[-1]}:{f.lineno}" for f in reversed(frames)
+                ),
             )
     return {"users": len(user_ids), "enqueued": enqueued, "failed": failed}

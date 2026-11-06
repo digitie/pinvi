@@ -154,11 +154,7 @@ test.describe('SHR-032 여행 내보내기', () => {
     await expect(dialog.getByTestId('trip-export-calendar-summary')).toHaveText(
       '캘린더에 2개 일정이 포함됩니다.',
     );
-    await shot(
-      page,
-      'SHR-032',
-      isMobile(info) ? 'mobile-owner-preview' : 'owner-preview',
-    );
+    await shot(page, 'SHR-032', isMobile(info) ? 'mobile-owner-preview' : 'owner-preview');
 
     // 2) ICS 다운로드
     const ics = await downloadIcs(page);
@@ -187,7 +183,11 @@ test.describe('SHR-032 여행 내보내기', () => {
       const sharedIcs = await downloadIcs(fresh.page);
       checkCalendar(sharedIcs.content, { events: 2, dates: [start, end], secret: link.token });
       await checkPrintWindow(fresh.page, title, link.token);
-      await shot(fresh.page, 'SHR-032', isMobile(info) ? 'mobile-shared-preview' : 'shared-preview');
+      await shot(
+        fresh.page,
+        'SHR-032',
+        isMobile(info) ? 'mobile-shared-preview' : 'shared-preview',
+      );
     } finally {
       await fresh.context.close();
     }
