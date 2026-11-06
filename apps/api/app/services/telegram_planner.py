@@ -376,8 +376,14 @@ async def plan_due(
         result = await _plan_users(
             now=now, map_client=map_client, weather_client=weather_client
         )
-        async with db_session.async_session_factory() as db:
-            result["purged"] = await purge_expired_bodies(db)
+        try:
+            async with db_session.async_session_factory() as db:
+                result["purged"] = await purge_expired_bodies(db)
+        except Exception as exc:
+            # 이미 commit한 예약 적재 결과를 정리 실패로 되돌려 보고하지 않는다. 다음 tick에 재시도한다.
+            PLANNING_FAILURES.labels(code="BODY_RETENTION_FAILED").inc()
+            logger.warning("telegram notification body retention failed: %s", type(exc).__name__)
+            result["purged"] = 0
         return result
 
 
