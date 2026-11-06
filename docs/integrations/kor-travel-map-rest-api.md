@@ -16,6 +16,7 @@
 > `BeachPublicView.latest_weather`·`FeatureSummary`/`AdminFeatureMapItem.weather_summary`를
 > 지웠다. Pinvi는 T-365에서 이미 그 경로를 호출하지 않으므로 공개 `PublicBeachView.latest_weather`만
 > 함께 걷어냈다. Map이 squash merge하면 핀(`map_release_revision` 등)을 merge commit으로 다시 올린다.
+> **2026-11-06 재vendor 확인 (admin/full만)**: Map main `70b86c5234e5f34b623945767e3db563a9edb9ef`(#1451 미확정 명령 reconcile·#1452/#1453 KNPS 포함, alembic head `437_feature_command_fingerprints`)의 `packages/kor-travel-map-api/openapi.json`이 vendored admin(full) 바이트와 같다 — SHA-256 `0027b8e8a6c1c88250ae562bb4ac04fa1b10fd17e278177a4089871dda87a072`. #683은 이 바이트를 #1451 머지 전 브랜치 커밋 `0afad078…`로 핀했으므로 스냅샷 핀만 머지된 main 커밋으로 옮겼다. service(`fd2aaa9e…aaff`)·user는 불변이라 service provenance의 `map_release_revision`(`ad75031a…`)과 M05 pair 계약은 바꾸지 않는다.
 > **2026-11-04 재vendor (admin/full만)**: Map `ad75031ad0efe81c269ae334f656f1232000e405`(#1448 MCST 결과·#1449 리뷰 보완 머지)의
 > `packages/kor-travel-map-api/openapi.json`을 byte-exact로 vendor했다 — admin(full) SHA-256
 > `43df297363745e3c618b0c757caa2e61b3218a5ae8cde4939c9c8938420d97c6`. service(`fd2aaa9e…aaff`)·user(`3a847c8a…2da4`)는 불변,
