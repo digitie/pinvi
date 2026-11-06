@@ -1,0 +1,2047 @@
+{
+  "작업": "#618/#623/#686 WSL 검사 격리·지도 UI 회귀",
+  "실제_UI_소스": "1a05f9d9a0bcdbfdba1d4bba00c05286b47734e7",
+  "통합_백엔드_병합": "a3129a957cd9fb13913faffebbd58241fb3fecd2",
+  "상태": "WSL 실제UI8·mocked 새 빌드202 PASS/기존3 SKIP·단위608 PASS. 두 최종 독립 리뷰와 정확 최종HEAD CI는 PR693 최종 댓글을 확인한다.",
+  "명령": "PINVI623_BASELINE=false <소유 Map Python> pinvi623_live_stack.py control",
+  "구성": "WSL 소유 PostGIS/Valkey·실제 Map API/Pinvi API와 새 Next production build. API mock 없음. 배경 타일만 생성 fixture. 외부 Maki CDN은 전송 전에 거절하며 실제 provider/Geo/Telegram/운영에 접근하지 않는다.",
+  "범위_한계": "고정 지리 fixture는 운영 입력의 공식 원천 실측·현재 prod 데이터와 동일하다고 주장하지 않는다. Chromium SwiftShader이며 실제 GPU/Firefox/운영 full catalog는 Claude Code 담당이다.",
+  "실제_UI_결과": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "tripId": "64300000-0000-4000-8000-000000623001",
+      "initial": {
+        "surface": {
+          "left": 460,
+          "right": 1440,
+          "top": 207,
+          "bottom": 1379,
+          "width": 980,
+          "height": 1172
+        },
+        "stats": {
+          "left": 476,
+          "right": 614,
+          "top": 1331,
+          "bottom": 1363,
+          "width": 138,
+          "height": 32
+        },
+        "panel": {
+          "left": 476,
+          "right": 732,
+          "top": 291,
+          "bottom": 345,
+          "width": 256,
+          "height": 54
+        },
+        "search": {
+          "left": 34,
+          "right": 427,
+          "top": 453,
+          "bottom": 499,
+          "width": 393,
+          "height": 46
+        },
+        "pins": [
+          {
+            "label": "영월 고씨굴",
+            "box": {
+              "left": 734.5,
+              "right": 761.5,
+              "top": 305.5,
+              "bottom": 346,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 734.5,
+              "right": 761.5,
+              "top": 305.5,
+              "bottom": 346,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 748,
+              "y": 346
+            },
+            "selected": "false"
+          },
+          {
+            "label": "소수서원",
+            "box": {
+              "left": 794.5,
+              "right": 821.5,
+              "top": 649.5,
+              "bottom": 690,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 794.5,
+              "right": 821.5,
+              "top": 649.5,
+              "bottom": 690,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 808,
+              "y": 690
+            },
+            "selected": "false"
+          },
+          {
+            "label": "도산서원",
+            "box": {
+              "left": 1146.5,
+              "right": 1173.5,
+              "top": 979.5,
+              "bottom": 1020,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 1146.5,
+              "right": 1173.5,
+              "top": 979.5,
+              "bottom": 1020,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 1160,
+              "y": 1020
+            },
+            "selected": "false"
+          },
+          {
+            "label": "안동하회마을",
+            "box": {
+              "left": 726.5,
+              "right": 753.5,
+              "top": 1274.5,
+              "bottom": 1315,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 726.5,
+              "right": 753.5,
+              "top": 1274.5,
+              "bottom": 1315,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 740,
+              "y": 1315
+            },
+            "selected": "false"
+          }
+        ],
+        "center": [
+          128.68629150000004,
+          36.86360488134572
+        ],
+        "bounds": [
+          [
+            128.31944844050776,
+            36.51179929730867
+          ],
+          [
+            129.05313455948698,
+            37.21379815583052
+          ]
+        ],
+        "zoom": 9.875256139961149,
+        "projected": [
+          {
+            "name": "영월 고씨굴",
+            "x": 748.4804316514994,
+            "y": 346.0000000000339
+          },
+          {
+            "name": "소수서원",
+            "x": 808.0736267099473,
+            "y": 689.7987911715782
+          },
+          {
+            "name": "도산서원",
+            "x": 1160.2311410969028,
+            "y": 1020.1303884180875
+          },
+          {
+            "name": "안동하회마을",
+            "x": 739.7688589030972,
+            "y": 1315.0000000000339
+          }
+        ],
+        "allContained": true
+      },
+      "clickBox": {
+        "x": 734.5,
+        "y": 305.5,
+        "width": 27,
+        "height": 40.5
+      },
+      "clicked": true,
+      "clickError": null,
+      "selected": {
+        "surface": {
+          "left": 460,
+          "right": 1440,
+          "top": 207,
+          "bottom": 1379,
+          "width": 980,
+          "height": 1172
+        },
+        "stats": {
+          "left": 476,
+          "right": 614,
+          "top": 1331,
+          "bottom": 1363,
+          "width": 138,
+          "height": 32
+        },
+        "panel": {
+          "left": 476,
+          "right": 732,
+          "top": 291,
+          "bottom": 345,
+          "width": 256,
+          "height": 54
+        },
+        "search": {
+          "left": 34,
+          "right": 427,
+          "top": 453,
+          "bottom": 499,
+          "width": 393,
+          "height": 46
+        },
+        "pins": [
+          {
+            "label": "영월 고씨굴",
+            "box": {
+              "left": 936.5,
+              "right": 963.5,
+              "top": 789.5,
+              "bottom": 830,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 934.0700073242188,
+              "right": 965.9299926757812,
+              "top": 782.2100219726562,
+              "bottom": 830,
+              "width": 31.8599853515625,
+              "height": 47.78997802734375
+            },
+            "tip": {
+              "x": 950,
+              "y": 830
+            },
+            "selected": "true"
+          },
+          {
+            "label": "소수서원",
+            "box": {
+              "left": 996.5,
+              "right": 1023.5,
+              "top": 1133.5,
+              "bottom": 1174,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 996.5,
+              "right": 1023.5,
+              "top": 1133.5,
+              "bottom": 1174,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 1010,
+              "y": 1174
+            },
+            "selected": "false"
+          }
+        ],
+        "center": [
+          128.53542200000004,
+          37.153257508326504
+        ],
+        "bounds": [
+          [
+            128.16857894051287,
+            36.80278455780254
+          ],
+          [
+            128.9022650594921,
+            37.50211347300376
+          ]
+        ],
+        "zoom": 9.875256139961149,
+        "projected": [
+          {
+            "name": "영월 고씨굴",
+            "x": 949.9999999999322,
+            "y": 830.4999999995592
+          },
+          {
+            "name": "소수서원",
+            "x": 1009.5931950583799,
+            "y": 1174.2987911711034
+          },
+          {
+            "name": "도산서원",
+            "x": 1361.7507094453354,
+            "y": 1504.630388417613
+          },
+          {
+            "name": "안동하회마을",
+            "x": 941.2884272515299,
+            "y": 1799.4999999995593
+          }
+        ],
+        "allContained": false
+      },
+      "denied": [
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg",
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg"
+      ],
+      "responses": [
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.319%2C36.511%2C129.054%2C37.214&zoom=10&layers=highway_incident&limit=200",
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.168%2C36.802%2C128.903%2C37.503&zoom=10&layers=highway_incident&limit=200"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "tripId": "64300000-0000-4000-8000-000000623002",
+      "initial": {
+        "surface": {
+          "left": 460,
+          "right": 1440,
+          "top": 207,
+          "bottom": 1101,
+          "width": 980,
+          "height": 894
+        },
+        "stats": {
+          "left": 476,
+          "right": 614,
+          "top": 1053,
+          "bottom": 1085,
+          "width": 138,
+          "height": 32
+        },
+        "panel": {
+          "left": 476,
+          "right": 732,
+          "top": 291,
+          "bottom": 345,
+          "width": 256,
+          "height": 54
+        },
+        "search": {
+          "left": 34,
+          "right": 427,
+          "top": 453,
+          "bottom": 499,
+          "width": 393,
+          "height": 46
+        },
+        "pins": [
+          {
+            "label": "영월 고씨굴",
+            "box": {
+              "left": 939.5,
+              "right": 966.5,
+              "top": 305.5,
+              "bottom": 346,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 939.5,
+              "right": 966.5,
+              "top": 305.5,
+              "bottom": 346,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 953,
+              "y": 346
+            },
+            "selected": "false"
+          },
+          {
+            "label": "안동하회마을",
+            "box": {
+              "left": 933.5,
+              "right": 960.5,
+              "top": 996.5,
+              "bottom": 1037,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 933.5,
+              "right": 960.5,
+              "top": 996.5,
+              "bottom": 1037,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 947,
+              "y": 1037
+            },
+            "selected": "false"
+          }
+        ],
+        "center": [
+          128.5321610000001,
+          36.872641008171215
+        ],
+        "bounds": [
+          [
+            128.01773129718777,
+            36.49630446282828
+          ],
+          [
+            129.04659070281872,
+            37.247132543202966
+          ]
+        ],
+        "zoom": 9.387445184934325,
+        "projected": [
+          {
+            "name": "영월 고씨굴",
+            "x": 953.1061386837166,
+            "y": 346
+          },
+          {
+            "name": "안동하회마을",
+            "x": 946.8938613161056,
+            "y": 1037
+          }
+        ],
+        "allContained": true
+      },
+      "clickBox": {
+        "x": 939.5,
+        "y": 305.5,
+        "width": 27,
+        "height": 40.5
+      },
+      "clicked": true,
+      "clickError": null,
+      "selected": {
+        "surface": {
+          "left": 460,
+          "right": 1440,
+          "top": 207,
+          "bottom": 1101,
+          "width": 980,
+          "height": 894
+        },
+        "stats": {
+          "left": 476,
+          "right": 614,
+          "top": 1053,
+          "bottom": 1085,
+          "width": 138,
+          "height": 32
+        },
+        "panel": {
+          "left": 476,
+          "right": 732,
+          "top": 291,
+          "bottom": 345,
+          "width": 256,
+          "height": 54
+        },
+        "search": {
+          "left": 34,
+          "right": 427,
+          "top": 453,
+          "bottom": 499,
+          "width": 393,
+          "height": 46
+        },
+        "pins": [
+          {
+            "label": "영월 고씨굴",
+            "box": {
+              "left": 936.5,
+              "right": 963.5,
+              "top": 650.5,
+              "bottom": 691,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 934.0700073242188,
+              "right": 965.9299926757812,
+              "top": 643.2099609375,
+              "bottom": 691,
+              "width": 31.8599853515625,
+              "height": 47.7900390625
+            },
+            "tip": {
+              "x": 950,
+              "y": 690.9999389648438
+            },
+            "selected": "true"
+          }
+        ],
+        "center": [
+          128.53542200000004,
+          37.16225926321444
+        ],
+        "bounds": [
+          [
+            128.02099229718357,
+            36.78734816705099
+          ],
+          [
+            129.04985170281452,
+            37.535320004828364
+          ]
+        ],
+        "zoom": 9.387445184934325,
+        "projected": [
+          {
+            "name": "영월 고씨굴",
+            "x": 950,
+            "y": 691.4999999996
+          },
+          {
+            "name": "안동하회마을",
+            "x": 943.787722632389,
+            "y": 1382.4999999996
+          }
+        ],
+        "allContained": false
+      },
+      "denied": [
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg",
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg",
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg",
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg"
+      ],
+      "responses": [
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.319%2C36.511%2C129.054%2C37.214&zoom=10&layers=highway_incident&limit=200",
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.168%2C36.802%2C128.903%2C37.503&zoom=10&layers=highway_incident&limit=200",
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.017%2C36.496%2C129.047%2C37.248&zoom=9&layers=highway_incident&limit=200",
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.020%2C36.787%2C129.050%2C37.536&zoom=9&layers=highway_incident&limit=200"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "transportDetail": "rest_area exact ID200",
+      "featureSelection": {
+        "idA": "00000000-0000-7000-8000-000000623201",
+        "idB": "00000000-0000-7000-8000-000000623202",
+        "stale": false
+      }
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "gesturePreserved": {
+        "moved": [
+          128.71324323497834,
+          36.87438570264379
+        ],
+        "after": [
+          128.71324323497834,
+          36.87438570264379
+        ],
+        "status": 200,
+        "panelBefore": 136,
+        "panelAfter": 152
+      }
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "tripId": "64300000-0000-4000-8000-000000623001",
+      "initial": {
+        "surface": {
+          "left": 0,
+          "right": 390,
+          "top": 0,
+          "bottom": 844,
+          "width": 390,
+          "height": 844
+        },
+        "stats": {
+          "left": 12,
+          "right": 150,
+          "top": 748,
+          "bottom": 780,
+          "width": 138,
+          "height": 32
+        },
+        "panel": {
+          "left": 8,
+          "right": 264,
+          "top": 152,
+          "bottom": 206,
+          "width": 256,
+          "height": 54
+        },
+        "search": {
+          "left": 0,
+          "right": 0,
+          "top": 0,
+          "bottom": 0,
+          "width": 0,
+          "height": 0
+        },
+        "pins": [
+          {
+            "label": "영월 고씨굴",
+            "box": {
+              "left": 122.5,
+              "right": 149.5,
+              "top": 397.5,
+              "bottom": 438,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 122.5,
+              "right": 149.5,
+              "top": 397.5,
+              "bottom": 438,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 136,
+              "y": 438
+            },
+            "selected": "false"
+          },
+          {
+            "label": "소수서원",
+            "box": {
+              "left": 139.5,
+              "right": 166.5,
+              "top": 498.5,
+              "bottom": 539,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 139.5,
+              "right": 166.5,
+              "top": 498.5,
+              "bottom": 539,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 153,
+              "y": 539
+            },
+            "selected": "false"
+          },
+          {
+            "label": "도산서원",
+            "box": {
+              "left": 243.5,
+              "right": 270.5,
+              "top": 596.5,
+              "bottom": 637,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 243.5,
+              "right": 270.5,
+              "top": 596.5,
+              "bottom": 637,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 257,
+              "y": 637
+            },
+            "selected": "false"
+          },
+          {
+            "label": "안동하회마을",
+            "box": {
+              "left": 119.5,
+              "right": 146.5,
+              "top": 683.5,
+              "bottom": 724,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 119.5,
+              "right": 146.5,
+              "top": 683.5,
+              "bottom": 724,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 133,
+              "y": 724
+            },
+            "selected": "false"
+          }
+        ],
+        "center": [
+          128.68629149999992,
+          37.16322755939467
+        ],
+        "bounds": [
+          [
+            128.19166590911914,
+            36.305390620601145
+          ],
+          [
+            129.1809170908785,
+            38.01143808988982
+          ]
+        ],
+        "zoom": 8.114774621324457,
+        "projected": [
+          {
+            "name": "영월 고씨굴",
+            "x": 135.52157219027362,
+            "y": 437.99999999998823
+          },
+          {
+            "name": "소수서원",
+            "x": 153.1104821868794,
+            "y": 539.4720890351334
+          },
+          {
+            "name": "도산서원",
+            "x": 257.04964535988245,
+            "y": 636.969340647637
+          },
+          {
+            "name": "안동하회마을",
+            "x": 132.95035464016465,
+            "y": 723.9999999999882
+          }
+        ],
+        "allContained": true
+      },
+      "clickBox": {
+        "x": 122.5,
+        "y": 397.5,
+        "width": 27,
+        "height": 40.5
+      },
+      "clicked": true,
+      "clickError": null,
+      "selected": {
+        "surface": {
+          "left": 0,
+          "right": 390,
+          "top": 0,
+          "bottom": 844,
+          "width": 390,
+          "height": 844
+        },
+        "stats": {
+          "left": 12,
+          "right": 150,
+          "top": 748,
+          "bottom": 780,
+          "width": 138,
+          "height": 32
+        },
+        "panel": {
+          "left": 8,
+          "right": 264,
+          "top": 152,
+          "bottom": 206,
+          "width": 256,
+          "height": 54
+        },
+        "search": {
+          "left": 0,
+          "right": 0,
+          "top": 0,
+          "bottom": 0,
+          "width": 0,
+          "height": 0
+        },
+        "pins": [
+          {
+            "label": "영월 고씨굴",
+            "box": {
+              "left": 181.5,
+              "right": 208.5,
+              "top": 568.5,
+              "bottom": 609,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 179.07000732421875,
+              "right": 210.92999267578125,
+              "top": 561.2100219726562,
+              "bottom": 609,
+              "width": 31.8599853515625,
+              "height": 47.78997802734375
+            },
+            "tip": {
+              "x": 195,
+              "y": 609
+            },
+            "selected": "true"
+          },
+          {
+            "label": "소수서원",
+            "box": {
+              "left": 199.5,
+              "right": 226.5,
+              "top": 669.5,
+              "bottom": 710,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 199.5,
+              "right": 226.5,
+              "top": 669.5,
+              "bottom": 710,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 213,
+              "y": 710
+            },
+            "selected": "false"
+          },
+          {
+            "label": "도산서원",
+            "box": {
+              "left": 303.5,
+              "right": 330.5,
+              "top": 767.5,
+              "bottom": 808,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 303.5,
+              "right": 330.5,
+              "top": 767.5,
+              "bottom": 808,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 317,
+              "y": 808
+            },
+            "selected": "false"
+          }
+        ],
+        "center": [
+          128.53542200000004,
+          37.50809826587903
+        ],
+        "bounds": [
+          [
+            128.04079640912,
+            36.65415234485545
+          ],
+          [
+            129.03004759087924,
+            38.352385950995284
+          ]
+        ],
+        "zoom": 8.114774621324457,
+        "projected": [
+          {
+            "name": "영월 고씨굴",
+            "x": 195,
+            "y": 609.000000000106
+          },
+          {
+            "name": "소수서원",
+            "x": 212.5889099966058,
+            "y": 710.4720890352511
+          },
+          {
+            "name": "도산서원",
+            "x": 316.52807316960883,
+            "y": 807.9693406477547
+          },
+          {
+            "name": "안동하회마을",
+            "x": 192.42878244989103,
+            "y": 895.000000000106
+          }
+        ],
+        "allContained": false
+      },
+      "denied": [
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg",
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg"
+      ],
+      "responses": [
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.217%2C36.318%2C129.155%2C37.935&zoom=8&layers=highway_incident&limit=200",
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.191%2C36.305%2C129.181%2C38.012&zoom=8&layers=highway_incident&limit=200",
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.040%2C36.654%2C129.031%2C38.353&zoom=8&layers=highway_incident&limit=200"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "tripId": "64300000-0000-4000-8000-000000623002",
+      "initial": {
+        "surface": {
+          "left": 0,
+          "right": 390,
+          "top": 0,
+          "bottom": 844,
+          "width": 390,
+          "height": 844
+        },
+        "stats": {
+          "left": 12,
+          "right": 150,
+          "top": 748,
+          "bottom": 780,
+          "width": 138,
+          "height": 32
+        },
+        "panel": {
+          "left": 8,
+          "right": 264,
+          "top": 152,
+          "bottom": 206,
+          "width": 256,
+          "height": 54
+        },
+        "search": {
+          "left": 0,
+          "right": 0,
+          "top": 0,
+          "bottom": 0,
+          "width": 0,
+          "height": 0
+        },
+        "pins": [
+          {
+            "label": "영월 고씨굴",
+            "box": {
+              "left": 183.5,
+              "right": 210.5,
+              "top": 397.5,
+              "bottom": 438,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 183.5,
+              "right": 210.5,
+              "top": 397.5,
+              "bottom": 438,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 197,
+              "y": 438
+            },
+            "selected": "false"
+          },
+          {
+            "label": "안동하회마을",
+            "box": {
+              "left": 179.5,
+              "right": 206.5,
+              "top": 739.5,
+              "bottom": 780,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 179.5,
+              "right": 206.5,
+              "top": 739.5,
+              "bottom": 780,
+              "width": 27,
+              "height": 40.5
+            },
+            "tip": {
+              "x": 193,
+              "y": 780
+            },
+            "selected": "false"
+          }
+        ],
+        "center": [
+          128.5321610000001,
+          37.157931502916924
+        ],
+        "bounds": [
+          [
+            128.11852673394264,
+            36.44116491504104
+          ],
+          [
+            128.94579526605713,
+            37.867966274340944
+          ]
+        ],
+        "zoom": 8.372755799431967,
+        "projected": [
+          {
+            "name": "영월 고씨굴",
+            "x": 196.53733636735458,
+            "y": 438.00000000001177
+          },
+          {
+            "name": "안동하회마을",
+            "x": 193.46266363259835,
+            "y": 780.0000000000118
+          }
+        ],
+        "allContained": true
+      },
+      "clickBox": {
+        "x": 183.5,
+        "y": 397.5,
+        "width": 27,
+        "height": 40.5
+      },
+      "clicked": true,
+      "clickError": null,
+      "selected": {
+        "surface": {
+          "left": 0,
+          "right": 390,
+          "top": 0,
+          "bottom": 844,
+          "width": 390,
+          "height": 844
+        },
+        "stats": {
+          "left": 12,
+          "right": 150,
+          "top": 748,
+          "bottom": 780,
+          "width": 138,
+          "height": 32
+        },
+        "panel": {
+          "left": 8,
+          "right": 264,
+          "top": 152,
+          "bottom": 206,
+          "width": 256,
+          "height": 54
+        },
+        "search": {
+          "left": 0,
+          "right": 0,
+          "top": 0,
+          "bottom": 0,
+          "width": 0,
+          "height": 0
+        },
+        "pins": [
+          {
+            "label": "영월 고씨굴",
+            "box": {
+              "left": 181.5,
+              "right": 208.5,
+              "top": 568.5,
+              "bottom": 609,
+              "width": 27,
+              "height": 40.5
+            },
+            "svg": {
+              "left": 179.07000732421875,
+              "right": 210.92999267578125,
+              "top": 561.2100219726562,
+              "bottom": 609,
+              "width": 31.8599853515625,
+              "height": 47.78997802734375
+            },
+            "tip": {
+              "x": 195,
+              "y": 609
+            },
+            "selected": "true"
+          }
+        ],
+        "center": [
+          128.53542200000004,
+          37.446460881566
+        ],
+        "bounds": [
+          [
+            128.1217877339409,
+            36.73241642401091
+          ],
+          [
+            128.94905626605532,
+            38.153754822948
+          ]
+        ],
+        "zoom": 8.372755799431967,
+        "projected": [
+          {
+            "name": "영월 고씨굴",
+            "x": 195,
+            "y": 609.0000000000824
+          },
+          {
+            "name": "안동하회마을",
+            "x": 191.92532726524377,
+            "y": 951.0000000000824
+          }
+        ],
+        "allContained": false
+      },
+      "denied": [
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg",
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg",
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg",
+        "https://unpkg.com/@mapbox/maki@8.0.0/icons/marker.svg"
+      ],
+      "responses": [
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.217%2C36.318%2C129.155%2C37.935&zoom=8&layers=highway_incident&limit=200",
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.191%2C36.305%2C129.181%2C38.012&zoom=8&layers=highway_incident&limit=200",
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.040%2C36.654%2C129.031%2C38.353&zoom=8&layers=highway_incident&limit=200",
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.137%2C36.446%2C128.928%2C37.810&zoom=8&layers=highway_incident&limit=200",
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.118%2C36.441%2C128.946%2C37.868&zoom=8&layers=highway_incident&limit=200",
+        "http://127.0.0.2:16432/transport/markers-in-bounds?bbox=128.121%2C36.732%2C128.950%2C38.154&zoom=8&layers=highway_incident&limit=200"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "transportDetail": "rest_area exact ID200",
+      "featureSelection": {
+        "idA": "00000000-0000-7000-8000-000000623201",
+        "idB": "00000000-0000-7000-8000-000000623202",
+        "stale": false
+      }
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "gesturePreserved": {
+        "moved": [
+          128.77276908675458,
+          37.16534265280984
+        ],
+        "after": [
+          128.77276908675458,
+          37.16534265280984
+        ],
+        "status": 200,
+        "panelBefore": 136,
+        "panelAfter": 152
+      }
+    }
+  ],
+  "실패_우선": {
+    "기존_mocked_빌드_누수": "소유 수신 서버4건→reserved origin 새 빌드0건",
+    "network_리뷰": "브라우저 redirect2종+page/context request4경로의 소유 수신 회귀3FAIL→3PASS",
+    "optimizer": "동일 앱 optimizer 요청 거절2FAIL→2PASS. 이 검사는 정책 수준의 소유 서버 재현이며 실제 Next optimizer의 내부 fetch를 실행한 증거는 아니다.",
+    "닫기": "소유 지연 HTTP1FAIL 및 전체 실행의 disposal/Test ended 전역오류를 보완. 진행 중 오류는 전파하며 명시 lifecycle 종료만 정리한다.",
+    "실제_모바일": "원본4핀 남쪽 SVG 꼬리780이 통계칩748~780과 겹쳤고 북쪽 핀 클릭 timeout. 2핀은 교통패널214 위의 경로/영역 카드152~206에 핀이 숨음.",
+    "단위": "선택 offset·하단 여백 실패 후 보완; 상시 영역 union/gesture/실패널 관찰/한국 경계 clamp 회귀 포함"
+  },
+  "라이브러리": {
+    "PR": "https://github.com/digitie/maplibre-vworld-react/pull/31",
+    "merge": "9c46c57181d433c91f7e8837c4e4396204e9b583",
+    "reviewed": "16f6e3e8bf528858112b5ed9074822b52b4bf0d0",
+    "tree": "998f7ee2cbe39083d82ebf0f4a44bb904468f647",
+    "tree_identical": true,
+    "web_sha256": "aaee266dddca63e1b68bb3cd2eeb0583b74153fa13511ab09cc30d0c3bc5fe02",
+    "Marker_js_sha256": "d314d9c5629fe3eee5b4bc5f6cb60c6947dff828de3501ec01cf6dc9bdcea74b",
+    "core_sha256": "0b4c444667a1e25ec2dc2637cc4ef3dab183e4fd436ad2505b60c2f1fc3d3554",
+    "검증": "독립 전문 리뷰2건 무차단·exact CI 성공(기존21/실제browser17/별도tarball소비17). 실제 병합본 강제build/pack 전체바이트 일치. PR30 OPEN은 별도 보존."
+  },
+  "최종_UI_source_sha256": {
+    "apps/api/app/__init__.py": "b351348df216bc338f50df6c21e0b9bc9ccf95bad7a2ceb58ed7b528babf6f4c",
+    "apps/api/app/api/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "apps/api/app/api/request_url.py": "72968ad917a02cfcc5fbc0ee5b0351f1e9356e294414b9eaec4b2d2d9793a7fe",
+    "apps/api/app/api/v1/__init__.py": "f95cbe34cf992d94be5ce402721558207da6edadb33b60ec0387dcc8c4a96b74",
+    "apps/api/app/api/v1/admin/__init__.py": "6847708aa61f8be7143a5fe1d6b7461a3126bc0a31b61a3229ca7907c0747331",
+    "apps/api/app/api/v1/admin/abuse.py": "a41b53d3e6f6ecc9997d2f2368ad818d125527c167d88cb39e5e8a5c16b3b426",
+    "apps/api/app/api/v1/admin/api_calls.py": "2d05157f1a56199b9f49637c590dfc5c50cee43f5115eb21b6889018634f3262",
+    "apps/api/app/api/v1/admin/audit.py": "4f6b46d1f2253a1ab59cfa6383ceb48a4351aeb8d677a8fa76d6b52d57989faa",
+    "apps/api/app/api/v1/admin/backup.py": "f52f4dbf5429664edbe1fcd9172be0aa83d6d309da6de07e9bb99dc3884c652e",
+    "apps/api/app/api/v1/admin/category_mappings.py": "1f79d746eef243f72de22b9cb8047edc2b80cb0120750cd119c61a74c075d90b",
+    "apps/api/app/api/v1/admin/debug_logs.py": "e9bbfec59a3548b6aca0b00a563595f797f877058bc790a386b46ad626263ff5",
+    "apps/api/app/api/v1/admin/debug_request.py": "5c2f13bfaa79591531e6bbd1bda482e21951bd4b03e60ccce121ca461428751e",
+    "apps/api/app/api/v1/admin/dedup_review.py": "cacf7cc7eeb87de4afd5109fb4dc3d0252106e8c1603c339fc09b8dd70591632",
+    "apps/api/app/api/v1/admin/dev_safety.py": "004ad37c15289a424fc680db1e387d3d3eaaf5d63f6ac1a97f23bc3c1969fd9b",
+    "apps/api/app/api/v1/admin/dsr.py": "5856eb0547f072e767af37873e333151ef80465b56dfaed8a5f37b01da168562",
+    "apps/api/app/api/v1/admin/emails.py": "027af4e04573a737d2bfd2246195a6c1c5c690bd94e45fb9f9a5448a3efeeac8",
+    "apps/api/app/api/v1/admin/etl.py": "6fb9752db032c5305e780c131e8fd35d431cbd634b772698891ead27111e9a67",
+    "apps/api/app/api/v1/admin/feature_reference_reconciliations.py": "7010c6d512bd87758e182a19c133ed8980aa6a8e06de72167b398f3922e126d7",
+    "apps/api/app/api/v1/admin/feature_requests.py": "bb08ea52b7cd7f182830b68466ab10c63d182a6cffa8097b91ceade83c2b76b9",
+    "apps/api/app/api/v1/admin/features.py": "5c22e3379104fd315de9ef327f9ca1cef1183a5029f9a67ef2cb08eaf4a516af",
+    "apps/api/app/api/v1/admin/files.py": "36061738378e03c0b788a371a7693e760377821d8729f2df6cc9a4f68a16b101",
+    "apps/api/app/api/v1/admin/incidents.py": "5669772bb846eaabc158c9065f4b3dfeaf7db9c8c493321900a6ff7cb0dd11b4",
+    "apps/api/app/api/v1/admin/integrity.py": "920cd53b0a8e1869ed821e9a3e879b811fb9fcb0ff1d7b7f353a679c9b80724d",
+    "apps/api/app/api/v1/admin/mcp_tokens.py": "9b23bc4011fe0d027f1de020f79353fbafed2800f4b24287f5b6737ef1c2b657",
+    "apps/api/app/api/v1/admin/moderation.py": "b05c93535aa9e2827adc563193a08333e9e84cbf1e82ebe369d705f11942d85a",
+    "apps/api/app/api/v1/admin/notice_plans.py": "be177fa08fa374ea79418e97b7ed2cb92ab5db85f5fd7a052ce1032c3b143409",
+    "apps/api/app/api/v1/admin/ops_proxy.py": "63c4d54f180ef5534e8e799b64d06a53f583b3437508ae2ee736e34f53559292",
+    "apps/api/app/api/v1/admin/pois.py": "17b3bca109a477aa91f94d65d4d6bf0f5388468ea33c0dbeacb6eb2eb2987441",
+    "apps/api/app/api/v1/admin/provider_sync.py": "6b1e0132b3f0250202e22eacc5abd0a7529d3c763819d7f58a9a46f646dc5130",
+    "apps/api/app/api/v1/admin/rbac.py": "b311687fb19c19f15df2e835e98fdb927d795843cc2d1e92861a95142d24e729",
+    "apps/api/app/api/v1/admin/reset.py": "e8eaeb1bc273f22ee7b98832578b7f4edd6812c7f39dd0bb56a2864dccd7cb7a",
+    "apps/api/app/api/v1/admin/retention.py": "1a690f95e63e5a78feaeb2c7c1479b454465f4d78a3de292b06bd8b2e650287a",
+    "apps/api/app/api/v1/admin/rustfs.py": "2eaac3e80cfd75e3e19891b839016763facac68b801735503b0cce860adba632",
+    "apps/api/app/api/v1/admin/seed.py": "c49452d82791eed77cf5cfd7676a729e5a16abeee5921bf3275936a9156a40ae",
+    "apps/api/app/api/v1/admin/settings.py": "ffbc79a7cc89903c22ac89a6dd1ca9c5f6a66afc4c48744e4958e4dee86020c2",
+    "apps/api/app/api/v1/admin/stats.py": "5326210ee97d8a36c8aceae1debaf5a450d30a3d37ea1c1080d3a689d3e1eb7e",
+    "apps/api/app/api/v1/admin/storage_retention.py": "fa0320c05327133cafdec1423048869dc82c54fcb6a849b04bb78c392563f44f",
+    "apps/api/app/api/v1/admin/system.py": "60e0ec6e11a4d5e9e64b5e4d01519541a4ca4e8419731af91ffe1bc5f8d88422",
+    "apps/api/app/api/v1/admin/trips.py": "46760ad5bd5e9cbf3a90274039a0f1d8d859e838fde89988def488c6119abf4e",
+    "apps/api/app/api/v1/admin/users.py": "8e8cfd1c64c0bcf6d29f7079cd88119c832f0db8b18817c11aac27c2cd61df8e",
+    "apps/api/app/api/v1/auth.py": "a118e2b614e46679df0d5b74baa906f0d68262165a74fb7fc29c801510001cd4",
+    "apps/api/app/api/v1/features.py": "b8c8f8960377ebf88473ba7c8b08f2d66db699beaaa2fa8ed512f0a172683bfa",
+    "apps/api/app/api/v1/geo.py": "4af254b9551aab38499d7eee63da6b1b78145a6ac9cda980611285ecd1231621",
+    "apps/api/app/api/v1/healthz.py": "f498c59a03ec52ecaa5637e1058c7319493c1d7359913ecf2c1bf5198236f840",
+    "apps/api/app/api/v1/mobile.py": "a05ed01cbd69a49e0c456093b69872b825ea7c85af0a0b8903f91182d16c0c23",
+    "apps/api/app/api/v1/notice_plans.py": "fc377ee2b23f0d0e9f18e7cf4e806890bbd027eb62f53b0ca96944142b12b372",
+    "apps/api/app/api/v1/oauth.py": "4c6cb229ffcda6e0316056b5f4aabdae6ed370663d3d42238f6409587c250114",
+    "apps/api/app/api/v1/pois.py": "03fb2ba07efa0c6242de26d53cf771ce10ca0a327e4a7a84c9ab06e21c5875bc",
+    "apps/api/app/api/v1/public.py": "7a200ede2edd6f9a4921ff2ca3a0e1e7d265ffed371a0d3abdb4921fca5a8d6a",
+    "apps/api/app/api/v1/search.py": "2276a57471c881f0be98a09ec02684bdfcf08a83bac2469d8c9b27519f213286",
+    "apps/api/app/api/v1/storage.py": "1e02787941d8162fe848dc89d2ea1f50eb1ff0c9e816e2d4c218f0ad95b602b5",
+    "apps/api/app/api/v1/telegram_notifications.py": "ea65fe5f82c9f588b597b54b470e624491842600f67f535aecaa97b1cd80dafe",
+    "apps/api/app/api/v1/telegram_planner.py": "882d6e7f0c49c7d84b5c84e6160e39ca3809cf2a0628a7cf4e68e57135eb98bf",
+    "apps/api/app/api/v1/telegram_targets.py": "bd601a6343f8746097a555a6e0da2d1a988c729008a294e45be10dd7dd3212d7",
+    "apps/api/app/api/v1/transport.py": "07b813dd72c14b4310f378a99062d9dc4583db5cfc85b166db3b38a84877ac42",
+    "apps/api/app/api/v1/trip_telegram_targets.py": "bd2c6d838ffb2d592425c857eb489e89bc2e2b21db1b4b0716f660df583446fc",
+    "apps/api/app/api/v1/trips.py": "6ef2475e1c763df8216e46d2cbccea426f99567cd78a6ff6cff9d666ae17d87f",
+    "apps/api/app/api/v1/users.py": "c320de86e6c58c9c66a8ebb85ab593fcb032e17e910c5cb1b237446874679ccd",
+    "apps/api/app/api/v1/weather_markers.py": "2aacc478c5ce776ee46ebac1fc958842b43839dd51ad97ca0f2466a9895f84e5",
+    "apps/api/app/api/v1/ws.py": "74ffb5e6e4a5916456d2632802870a93d053939886875888bc2496a9e6e29b9f",
+    "apps/api/app/clients/__init__.py": "995f72b32f66de9518308b6b49c128143d174c26567df3771484dd8bdb35e280",
+    "apps/api/app/clients/_resilience.py": "7930822d8b63fd0cba8d517902b7d33d09e5d3aef591191b3f6ff8514375ebb7",
+    "apps/api/app/clients/kakao_local.py": "56b9ad47d16e34b8cc2d55caa2c4487f056ee8e46cedff95bf2021f31b78f615",
+    "apps/api/app/clients/kor_travel_geo.py": "8764be39af1a9982189e07465890c4b20e7a370b0b128e821c8d3ce62070816d",
+    "apps/api/app/clients/kor_travel_map.py": "40d1a05d1100c40fa5c3e09a22da24bdcf8ef2c952d523bc00f2ccb080b06132",
+    "apps/api/app/clients/kor_travel_map_admin.py": "55ac1939904ebaaa9774beaf8815fc380c8742b5e3ac912b9cb7a5a9544d4998",
+    "apps/api/app/clients/kor_travel_map_alias_map.py": "717de74dc21b3c7fcbd17dc9019e677fe9a81d552991f3553eece38c52e90caf",
+    "apps/api/app/clients/kor_travel_map_cache_target.py": "54924f0faab70940f658ff9be3da3c5cd19f0488e79ba84e70f87523ce7e9151",
+    "apps/api/app/clients/kor_travel_map_curation.py": "d6f3e5b4d9b3a54543efbc373a6eab50d3d9e9a0539c32586fe130e8af73d867",
+    "apps/api/app/clients/kor_travel_map_feature_reference_reconciliation.py": "dd20febd3e2a049d428a1979865a0e11f4f3f7ef32ab8b732b85354c3ce7a711",
+    "apps/api/app/clients/kor_travel_map_feature_request.py": "1ca46b5e0487fbe63c183af6448275912ed0d7cf34f5d18864a02d4afa73e3d3",
+    "apps/api/app/clients/kor_travel_map_transport.py": "ddc027c14ce4c28b169e77545e28dd2045a7e26c2f23e0fcac372f76b41b9ad7",
+    "apps/api/app/clients/kor_travel_map_weather.py": "4535f77d0e88a60177c9dd105e6e432e573ef63e61a3aa4009038605e3c363db",
+    "apps/api/app/clients/kor_travel_weather.py": "cd334acf6b4f575b38d846a8318f2954c240882dfccd5a3a150dfa6c428c2646",
+    "apps/api/app/clients/naver_local.py": "d4b01637a5b7f24e41bf48747706f57e56a1df87fe84cbdb9cdf0d4169d98ccb",
+    "apps/api/app/clients/resend.py": "f1f7e4eeb070689c3779899b7e0c1e55b93c53e72b566df4dd2dee0e7b3a11d7",
+    "apps/api/app/clients/telegram.py": "45d37def721f10e359177f7c454ff10696c7fe0579135e174939461712aad78d",
+    "apps/api/app/clients/weather_alert_events.py": "805f82deb553456bedfe4daf04f915b1da4345b8b277ebb96ce0267f9f51e911",
+    "apps/api/app/commands/__init__.py": "6edff1726498e2933739e571342e08fc113e2adc8479ea286b905dbfa8ef4d18",
+    "apps/api/app/commands/admin_bootstrap.py": "2cb4dbfa239c2724d6d9529e61bc2185c05c2b2b41017538869c04212a0f4aff",
+    "apps/api/app/commands/cache_target_causal_canary.py": "590cf521d8943cb911065fbab4626e676b35b61a8913232f0ab1a1be9ec6c777",
+    "apps/api/app/commands/cache_target_final_boundary.py": "040032e3880eae9e71d3b14e06be001a9d25e159f517579d818195c9e7481cf2",
+    "apps/api/app/commands/cache_target_initial_cutover.py": "20b60af9183f8c1dbaa1530105b9206543889e0e8befdda3c16e6356214d4bae",
+    "apps/api/app/commands/cache_target_restore_fence.py": "c2125ef60ef9e6cd998c4c0cb5862aab10a197ad57e4c7af0ecda667a534775b",
+    "apps/api/app/commands/feature_uuid_cutover.py": "60427c530227718a7b17f416a2c02f95c714e54cf47242a616a4b8b3999f63eb",
+    "apps/api/app/core/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "apps/api/app/core/bbox.py": "ad83875c38138f630b6ff59467bcd652d5c4deb637915727196583a725e18286",
+    "apps/api/app/core/cache_target_contract.py": "624141539322923f718ecce2c78e66a8e0ad590a2136a55ac6501e03dcaf6df7",
+    "apps/api/app/core/config.py": "ccfca46dc126d112ff94e89fbf33dd4caed0add0a7ba94e7592c8ea3723c9c18",
+    "apps/api/app/core/consent_deps.py": "967d927e9710cfa710165a3d61d7e26e0aab6ee52b267165ea0c7474255638ec",
+    "apps/api/app/core/coord_range.py": "b98a606d60a3ced82bc3dd110ee838cb36cfd0e19c05c92710905c9cd8b20806",
+    "apps/api/app/core/coord_source.py": "bf38f8499b89aee398898bc36a357f2af9e771d3984ee1db783abcd07b01c0c1",
+    "apps/api/app/core/db_pool.py": "ba2cf8fcb8bd75e872bfe00815caaa358443b45f567ee30f915c284ca2db8290",
+    "apps/api/app/core/deps.py": "f88d2edb219229ccd35f5ef8b2322a612a2ea6e6ce22b3a65980722ca17e086b",
+    "apps/api/app/core/errors.py": "0d32f1addd1a120e852a1320929b3eea79e0c88daaacf1ac6d3a67a25a6e4767",
+    "apps/api/app/core/feature_alias_contract.py": "81d6a4266e3d36ed9ed6dd58b388387abb326e15187c888c3f947f7f55d5c12d",
+    "apps/api/app/core/logging.py": "c00accf8a8528cf6a3166c396709619e65b5993ebc8952e46f03a37452ee7e0c",
+    "apps/api/app/core/m05_runtime_lease.py": "3dbe74f0f962d2d4aee818e4686cfc5546733de453423d42b37647573f1fd826",
+    "apps/api/app/core/markers.py": "56a4d76ec5e1291afc26a7ab3825ef9504bd48737e9e614185016d49ec5c076c",
+    "apps/api/app/core/rbac.py": "3141b5029692ed11806d9e66100fc85c79d41d1ce43fee56f601a3fbad499303",
+    "apps/api/app/core/redaction.py": "519e371fdbcc4fb09ed8cc4fed2cdb649ce27c5717a85986901c6a76a97b07e2",
+    "apps/api/app/core/security.py": "047f697a2d6f48e3045eddc19af536fef5f56ca3caf3d2c84f0213f2f8ebfe01",
+    "apps/api/app/core/session_cookies.py": "7a350320fa2d3e977d0fe51cc9ca4b3eb8361f9c98e2dfdcbb10830da4b79e81",
+    "apps/api/app/core/time.py": "c3d9c82e3f4e6ccc5408b452ccbdddacb1374c7ef2c13727aa85f2dff530def9",
+    "apps/api/app/db/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "apps/api/app/db/base.py": "32fb390a4fc6c219a62f57403e1c49957e25ec4b7ff0829e52bae0f8cb167c8f",
+    "apps/api/app/db/m05_catalog_fingerprint.py": "7d4da9354e12c4f364479fd0faf009b0e26a1827d24754d14b014c401517e299",
+    "apps/api/app/db/session.py": "10724b1750c14c687dc9ffbba6020f25a2275762c1e5438681e844f2156c957d",
+    "apps/api/app/main.py": "2c485fdb9f9e5cb6ee3c87090e9ab282cb6acbc64b7aa1dc92e2b84c9c9dba09",
+    "apps/api/app/mcp/__init__.py": "60cb1c8c6eab8e6184f1bc7656e38a5908453a2eaa5a966e006e824bd8d99164",
+    "apps/api/app/mcp/auth.py": "88c12af5e1a9af59e27fd959bf6583280fe741b74ff84cfae713fd12a53aaa38",
+    "apps/api/app/mcp/server.py": "3b8e8f438eca33dc40f5ad202b7fd407f00f0ea170d964467c373af91eed17db",
+    "apps/api/app/mcp/tools/__init__.py": "79354d430950ddd4824b911b946a42fc7b01867450b916c1dc692f44a70015ca",
+    "apps/api/app/mcp/tools/registry.py": "aebff7b05ff483a08ffeec4cf1b32f0f5111baa81329cb30201458dd0e9d50ea",
+    "apps/api/app/middleware/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "apps/api/app/middleware/api_call_logging.py": "06c9e2f3eee5f5ca69565160d18bf4f848cc84d2cef11608bdbe45dcb63b28b7",
+    "apps/api/app/middleware/geofence.py": "8a1272ddd36e819824cdb00b5ea2e6e556c693b0b7db1cdf1e242d54611e468f",
+    "apps/api/app/middleware/location_audit.py": "3a1ec0f496547f6cc4c86461f9c137479406c4cdbd6fb505ecef601bb3362b59",
+    "apps/api/app/middleware/prometheus.py": "6f5a86072455a9fdea74e3bc253ba6856cd619810947ff14ce3d796c9642218e",
+    "apps/api/app/middleware/rate_limit.py": "53385fa4c3fb1e9598505c0db373de05eeff057e20815524285dd8e57a0c37b5",
+    "apps/api/app/middleware/request_id.py": "348e6864255e91a1f1f2fca4339621f31bb98be205ced34eaea05f3d9d3a4203",
+    "apps/api/app/middleware/resilience_runtime.py": "0fbbf02f0c92ad220d4b6c561b70778c83c5ae98113eec2c212ba5bc018a1d47",
+    "apps/api/app/middleware/security_headers.py": "16247f0fe4cd7ae754352a71c4a76f02fec267dc617674563e9af9c6850ad5c9",
+    "apps/api/app/models/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "apps/api/app/models/api_call_log.py": "91c0f895753ede051a6e6a868bcc53b521e5b8420fd7ba321f74a0b5a907c5bb",
+    "apps/api/app/models/attachment.py": "5155f351d6a0ee7149da8b3d948cd45350d543ac57a0245e9f01c6f475a0690a",
+    "apps/api/app/models/audit.py": "1dd022580486b3fe98693079a91e829c95cb23afa6fcd29b11cb7c929bada3a9",
+    "apps/api/app/models/cache_target_sync.py": "728ec62ab10cfb645cffb0b0ea28d21f577dfc36d3ce4b9cad1daa00947c1be7",
+    "apps/api/app/models/category_mapping.py": "ba194c19f36b7ef7e7d192d253ac2e49fda4d98b04212ed24199b2b1e1a454ab",
+    "apps/api/app/models/comment.py": "a258caf408bfc97dae64b5939de7b31eb245e756499fe8786059e2f6ded1f33c",
+    "apps/api/app/models/companion.py": "0fd0a0619411d43a97eb70ffcd4ee288ed691b2378337fda251d2163fd37f368",
+    "apps/api/app/models/curated_plan.py": "15fadebf8ea9fb048c5c042ff1b65466fa07953865cee982e7938ce5b1d1780b",
+    "apps/api/app/models/data_integrity.py": "4a1064aefffff22bce0639aa0489d9bca66c6e856c43c3d2d26a632ff4f9de0b",
+    "apps/api/app/models/dsr.py": "953755d703d6debb8bf0b4a9adc4af9cadff63622200eb3967a8d66a04ee4f32",
+    "apps/api/app/models/email_deliverability.py": "befe7375345300e2bb8bdcf28eb5060e7227d10c8ee5fb9efad146f113e318ab",
+    "apps/api/app/models/email_queue.py": "01c05f9eb5cfebe3884980194c48fd55177f96104843240422ce818c21aa7032",
+    "apps/api/app/models/feature_reference_reconciliation.py": "ebc7062f9e5cbd94eb73cb29e5aea3c2e6c23f0c7990e79c9174e9acc8b61f56",
+    "apps/api/app/models/feature_suggestion.py": "493fd6fc02638e455b12004b969265cdd2c829dcc8beab8a380499f7b4196891",
+    "apps/api/app/models/kasi.py": "e9276ed6394551e2f1b8a70b8b89395ae21cba61d4de13af41cce4b8fee927ba",
+    "apps/api/app/models/mcp_token.py": "9a9b1a053e34396dc35928f81adbdcab36520d9ac8aa75c40e741fcfd30c121b",
+    "apps/api/app/models/mixins.py": "18f8b1e8943f880621f0a5b6dc735f29ad9af7cff3c60a973da8acb0ceb237cd",
+    "apps/api/app/models/moderation.py": "1b59781a0edde91eb4e4258f493a5a2cf446904acd195ce34cd0cd05e13793e4",
+    "apps/api/app/models/notice_plan.py": "6b25b4185d1a9c8707e561e1d78df714c0049834f96b45b07356ba335e5718c2",
+    "apps/api/app/models/oauth_identity.py": "3be1bb6d9cf1c91d40e4c88f0b30ff034f7bc3db1dc4403f7618fa384ccda461",
+    "apps/api/app/models/poi.py": "d9bc780fb1dafbf7cfbd0c0a50919f251b2e8e0dcbb2609596fd8c426836b2cf",
+    "apps/api/app/models/rate_limit.py": "ccaab09fc3a62ba24e74604c4b6f8f78cc23f83eaf69bfbc4f7747de4ea501aa",
+    "apps/api/app/models/security.py": "225c30337cf003e1aff75a6fca19f4ab8e6545fe84f7a7133d5719be72525751",
+    "apps/api/app/models/session.py": "3acded1f95df22c1fee1f1b47888c2a1d3992cbab56ac7613251dbd1ceb92606",
+    "apps/api/app/models/share_link.py": "b8233fb0f4c64cdc53b00d02a9542aa9c6adcf52ef60e24792a892e7e21ec1e8",
+    "apps/api/app/models/storage_lifecycle.py": "ae49d21694801bcf331ec0abeceadba762539e9670e167ac49fc892f9bedb5c2",
+    "apps/api/app/models/storage_settings.py": "db5c96e0b7d16c77227062e6a43a3798c7546d769fdd820ca9ce2da0354feac4",
+    "apps/api/app/models/telegram_notification.py": "a243696f4c6318ffb73386787005c7d9a19f5a677ceb787c64009dd6846e1bdd",
+    "apps/api/app/models/telegram_outbox.py": "96ec4eec752f80e00ab29f6c130162ea947e6ebc69cdbd4a068b25ef8ec8a94e",
+    "apps/api/app/models/telegram_target.py": "de7f304ad288d9091fd8f260b85c9f5a66a018c9e637ac935dc7d065edc234bb",
+    "apps/api/app/models/trip.py": "a9b307a2da34670f64a14729c2b0e876b8b5b87f00885824dc17ceebf91cc4d7",
+    "apps/api/app/models/trip_day.py": "28be1caa85e05c955fb8baed6cac61cbdbeb59cf8869be36d8438465cd921782",
+    "apps/api/app/models/trip_telegram_target.py": "9db427b600123ddc7ec7d64dc282be006ec1119b6c4737694e1d6baef33825f8",
+    "apps/api/app/models/user.py": "e1293de488ac92f1e4396907fcb0b0e15ac4f3da11d9113fc34629cf95536674",
+    "apps/api/app/models/user_consent.py": "620173535ae803688ff669a3056f27da64bd83795d756373a39dc49fc3de3a02",
+    "apps/api/app/models/user_consent_event.py": "b8039d348625117c186469d5e856ab9cc2069004792004b608f2be05fa4ea316",
+    "apps/api/app/models/user_email_verification.py": "d8044282e0b171409b55665c7bcc023f7f8a34153b20b7a50fe48bda272dbac9",
+    "apps/api/app/models/weather_location_link.py": "158b4ac73d62fa7ce8719d3ffd1b72b458d5009d493a9d341b94db487e8689c5",
+    "apps/api/app/schemas/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "apps/api/app/schemas/admin.py": "8bed719b71d484bb8d0a668be48abdfbc6e04f3e4ac64a5bb30237fc37753a02",
+    "apps/api/app/schemas/admin_feature_reference_reconciliation.py": "f1f8add3e9ca6f8708cd7ee288595f860e797abb693939b807ac38fc01294f99",
+    "apps/api/app/schemas/admin_feature_request.py": "775661a36a98773aa5a2db89797a3991f245a88db37c58023f715d387b6df81e",
+    "apps/api/app/schemas/auth.py": "7f7393ff9de4b10044a806fd2505c41b6558ed10216e01e0571d14dbe69c0b7b",
+    "apps/api/app/schemas/consent.py": "59166a5cf84b7ad9694cad9ba76b4d330d27267bd8b79894ad7c1eae3225c78e",
+    "apps/api/app/schemas/dsr.py": "4616dc089e7883452de358282dc074205df60c2ba5b7dff583c28668f26a3537",
+    "apps/api/app/schemas/envelope.py": "c5ddd3fd1aef1141a936de45987e1f46c16f6d2eb85f5b6ed3fc4395d1143014",
+    "apps/api/app/schemas/feature.py": "8140d1af6f6173424785eaef8088328400ae59f411f1af0f96af333aab5eaba7",
+    "apps/api/app/schemas/geo.py": "5fafec92895fbfbcf8a50f5b622aa32e7450c934925b829c103963606036e60d",
+    "apps/api/app/schemas/health.py": "afbd2de5d43a5a5e320f7d66840600abdef82bb0997ed661dfaacfde54b1f5f6",
+    "apps/api/app/schemas/mcp.py": "e1dea0cba3e7f5bf4fd953a000a36fc53c4034722999fb44a892e052c86c668e",
+    "apps/api/app/schemas/mobile.py": "7513150dbe86490e0ad836a918285762e184932e48326c6245ba98b7a75b0b57",
+    "apps/api/app/schemas/moderation.py": "8475cac7d563da3b20f150b72e0b2a7e15b8f31e6b2c4cd87defcfc081b31f5d",
+    "apps/api/app/schemas/notice.py": "e06370393c5ae18a0af4a1349fb8aa4646b14ee652f8bade0c353c6a7ea9d3ad",
+    "apps/api/app/schemas/oauth.py": "ff08ed3b92926b9aff7d32ad81e28469e4abfcce9beeb7ae975129a9bbe73c22",
+    "apps/api/app/schemas/poi.py": "6d15e8894a2a1a4e1fd57d2e6f81427dbcf003460bdb873c7b26f51275b56611",
+    "apps/api/app/schemas/public.py": "9528842967f1503324f1f64f3d2829d4cb237dd7b8f39b63cc813622e3ab0c7f",
+    "apps/api/app/schemas/search.py": "1ece44f26060ab484c1397a5163fb4a343e2915a223db292542c1f94b519d96e",
+    "apps/api/app/schemas/share_link.py": "562fd76d38171688e0e74e59dceac32cfe066f44eb455e2ae1858fd9e72780f2",
+    "apps/api/app/schemas/storage.py": "23c90a17d121c96b5d0a50aa734ba3bd689738cdcca25c04e5b873c6ce6f00a5",
+    "apps/api/app/schemas/storage_retention.py": "780ffc7d1762789ab66ba11ad220b8e9d8749c13cafc1b5ad8eb33b425ddb726",
+    "apps/api/app/schemas/telegram.py": "83b93ad035a8b49ad106bc1f896c1b5defadb7c57f842e3dc19e50b28caf3941",
+    "apps/api/app/schemas/telegram_notifications.py": "21fc7cf6d36d2efd6c407734557366f23af811165cc2cfba7aa34cd903f93b64",
+    "apps/api/app/schemas/transport.py": "58a662a0298502750d729bd290e507c7e1e94c3fb3383895405815962d0e1814",
+    "apps/api/app/schemas/trip.py": "393f1b659788b10eb29326d75297382759c658a92b1c598ccef0bfed50406cc5",
+    "apps/api/app/schemas/weather_map.py": "f96475ed59082d2f013288123ca9a928bd5fc1225596f9b29bed0f4094a86509",
+    "apps/api/app/services/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "apps/api/app/services/admin_app_integrity.py": "bcb1973fe6421b1ef1985102dfaeed37032bdb977bd665cb84219e3a0ba7d796",
+    "apps/api/app/services/admin_audit.py": "a5ab49302b25e8b26c0c959bd012710452d08f8e99e0e232f88ed5185c27f787",
+    "apps/api/app/services/admin_curated_attachment.py": "dbba78db6f17777eaa7f14d68771ab6da6ac6afe7916a84715c22a919b72ff1c",
+    "apps/api/app/services/admin_etl.py": "2be932a5a3d06b10f8c966f5d9305ffa67bc72fafa0d70a8c6b92cfd6290d56b",
+    "apps/api/app/services/admin_pois.py": "e66ddb45714422a27f67a302014b0c4e7c22205bd347a4e79da5ee3f117cd092",
+    "apps/api/app/services/admin_rate_limit_abuse.py": "cb20b9e8fdd630b0fd1c7757767d7a933a4e69256ab6753894bac2f74eac48cb",
+    "apps/api/app/services/admin_rbac.py": "f7dd6f825bc23d4e49faf773e7a7527629edfb5b81bd6e76cc22d1ddadabac06",
+    "apps/api/app/services/admin_request_timeline.py": "aeda702ce04f515ee35846d370d405397b1f4ae1108d186caaa9285b924dc66b",
+    "apps/api/app/services/admin_retention.py": "193ded396e127566ddb9176d73e1bb8b5ff9c6e028787d631dd19a50f01f95da",
+    "apps/api/app/services/admin_security_incidents.py": "7134f5026c4fcee311a4013b2b6a274fd2cf5301800b11d8b20d47ed5a292997",
+    "apps/api/app/services/admin_trip_operations.py": "1570e591274f7bbe8ce12b8badacc5d2d3bc4be454113565cf2ba725a823086d",
+    "apps/api/app/services/admin_trips.py": "3152287cbdf608dc26e11632a772f4af9336d08a438af36687e608326c4945e8",
+    "apps/api/app/services/admin_user_lifecycle.py": "99bc405c5c2df883b344bc894c4b20218377584a0346ca1cf9126d74024ff4cc",
+    "apps/api/app/services/admin_users.py": "81fb32446b38f2a6d8ba66888cd2de0e91d7142bb8cc33db1ce63947072675be",
+    "apps/api/app/services/admin_weather_values.py": "24bd9f1ab7f6c83e03c11d83596390fa7eec87c14bf1e68634a9567e64a382b8",
+    "apps/api/app/services/attachment_retention.py": "0d0dfc06504b7048ee7a28d3b5f38e53b490ebab3a08746b8ec454d77235dfa1",
+    "apps/api/app/services/auth_session.py": "7d3c0e7eae8062e3c46aab80cd64b93131cc6b886c747db1965ee6beb1ed3940",
+    "apps/api/app/services/avatar_storage.py": "45fbbf12bfad950ad25fde3c35fbf5d12b71798bd1965c4d78532f3e39e47913",
+    "apps/api/app/services/backup_service.py": "9f7607b01df9689183a60726b4a18006e55ec1ce19901d2cff7bbefb175b2ddd",
+    "apps/api/app/services/bootstrap_admin.py": "371cd07a7d6748bac8788d49bba672919d8d14eecb56266a08920b3a46ca686d",
+    "apps/api/app/services/cache_target_boundary_evidence.py": "9b46853c6ad89a585922b1d62f9723639e2d26f518b06fb42fb07e68875496eb",
+    "apps/api/app/services/cache_target_causal_canary.py": "da73f7be60fa15e6c0f6f89cc1e7ccf514ee3ee10f542c569ec1e2f7bb3aaec7",
+    "apps/api/app/services/cache_target_command_publisher.py": "15fc99b27c3bd464deb6528b36c2c10d38b79ef7546b950f20708e00e03b38fd",
+    "apps/api/app/services/cache_target_event_consumer.py": "c91cd0860830073487e613e116275d154f0cacea4a760bbf5419645b73d87854",
+    "apps/api/app/services/cache_target_final_boundary.py": "b29e83325ac7545ff82128db36e3a981e1dabbb022ee3952a29b75af69ed3088",
+    "apps/api/app/services/cache_target_initial_cutover.py": "8eddf34ca9ffed0516577993c092cdf295cfedafa3570dc228f3569f082e6ad0",
+    "apps/api/app/services/cache_target_restore_fence.py": "91dee70efb054bfe61b409c952fc7f54119ce03baa8f97e7b72c242e0de82c2f",
+    "apps/api/app/services/cache_target_sync_worker.py": "f16d7add2c04b6f8dc2cf450886aa6a956285b4ee9be47445580b1818002ad90",
+    "apps/api/app/services/category_labels.py": "2f08235c0d88007a4f6bfb84c8a60fd9a049c6db1777733257de88f829703126",
+    "apps/api/app/services/consent.py": "e2e2f913dd0db2423260ec4caf6bd3b1fcec6fe670ed8a028575cc6f1b7d2711",
+    "apps/api/app/services/curation_collection_import.py": "b480b01ac18668582f28c99dcad646f27b8df7cb93b70992e8b4cc60aac4f2bc",
+    "apps/api/app/services/curation_cutover_backfill.py": "a4f83b2b2a7320c2d06f69d779b0ad7bcf468dbec690ed28ce8cf49ffd72ba41",
+    "apps/api/app/services/curation_cutover_legacy_preflight.py": "664e86d333a74c2684d0b36e4778babdb79c4a89b80d20c8af598c2a9911e213",
+    "apps/api/app/services/curation_cutover_mapping_receipt.py": "e8e2d567fba0ec0ed93de3be9c8c2ed0c70e1235e571384408920a80059d47c5",
+    "apps/api/app/services/dsr_requests.py": "dea78dcbd37cbf57391469450a0c93e76dda070d0789eb77b3bbee2fb8203ef0",
+    "apps/api/app/services/email_deliverability.py": "d3a2186b600bbe138d5c8e4cc75030da225550a01056cd5d9cc8c79a8e431a10",
+    "apps/api/app/services/email_service.py": "8284d39d9cfad9afb670339cd944f2ada44da6176fca6be79e0346a9cc2569d5",
+    "apps/api/app/services/feature_cache.py": "aacdaa7bbaec9c4b97b4f33a462b745927a5d83036bbfb18ab7231a0d847966a",
+    "apps/api/app/services/feature_detail.py": "b4e9578fb429a66d42d609c9520e952bf2f9dd9aacecdf6caa2bd635f7a893a9",
+    "apps/api/app/services/feature_reference_reconciliation.py": "3104a8dfff5101ae1a163b6593fa73f2d33f110491077b8a2bb92ad83b0130ed",
+    "apps/api/app/services/feature_reference_reconciliation_worker.py": "d0bb9ff798a7e8df28db710a945727705dd3e2640a805633b6b8c6985465ece4",
+    "apps/api/app/services/feature_request.py": "2a1931befe1795f3cb4b44dbd84664e1acc6e9f3f7076f5c6fbca50c0bd58e6b",
+    "apps/api/app/services/feature_uuid_cutover.py": "9cdc762fc9715a15e0107085c3522cc1391d4b444c9ae887fb307de429d42ef1",
+    "apps/api/app/services/hash_chain.py": "b084c0c667d3708812820c1581d7ed7d29b76f4ae67a7f257bf035d37a8abbf8",
+    "apps/api/app/services/kasi.py": "4432bc7dfd79c247110331b3ed8c2db8f30ec20c7c7e379b4b3c66eba1737bec",
+    "apps/api/app/services/kor_travel_map_ops_projection.py": "2e65d6bf97f77e7b3e2cba1798ee7bf4e7d2b23ee4d1a4fd67d1f0c5616be6c7",
+    "apps/api/app/services/lexorank.py": "99b9214d66280cad42204be1c888dca44dcd96976ad856b6784fff809db407e3",
+    "apps/api/app/services/location_audit.py": "f65948dc3c1d22cedf56e90de92dcb176353b6f1d08d66f7f7bec36635bd35c1",
+    "apps/api/app/services/m05_activation_anchor.py": "dd9f7675c71f2b6909fd4c4ada13090eba39c8ad068f5c224e796df986e7c04a",
+    "apps/api/app/services/mcp_tokens.py": "5b06141565b7f25e0e360691d5967dbaaa2d36bce82cd9147b95d27c91f788b2",
+    "apps/api/app/services/moderation.py": "836fa190482815dd519b0626db9776a75e971f9a338788bce0c012123f62f79d",
+    "apps/api/app/services/notice_plan.py": "eed33aecde0084689cc3b1f5723f06b80d30da7ae76424c906e260b328662ac9",
+    "apps/api/app/services/oauth_google.py": "85cd56562694d3d4e88c9ad0f5e04fe97050dbb43aef283effbb4a9f47d287ad",
+    "apps/api/app/services/place_search.py": "2bf37024143d275379705b807459ca508e803e055883b64c9a970ec5cbe370ce",
+    "apps/api/app/services/poi.py": "75040c5a245682691e754509481c83552024098d6bf4d2550eddbbe43c95472d",
+    "apps/api/app/services/realtime_broker.py": "1ed64644c7d85d37b549bf51a53c236121704bfb8637e1c3f53dadd7668e55ac",
+    "apps/api/app/services/realtime_metrics.py": "2f9c408f4aae7b264f9385ca60d65611345aed6bd6ceba36b66707aba5299caa",
+    "apps/api/app/services/rustfs_admin.py": "152f067aa8218f59c77236f75dd859461b5aa423a4ab0f608d3f686c4196e08a",
+    "apps/api/app/services/rustfs_storage.py": "b76cbef01a2827121492517362f78178aa8beab81e4b1b4e4bfdd27be8ef987a",
+    "apps/api/app/services/storage_lifecycle.py": "a9af4f68bb0f7348e5bb33782ec7ce3204abeb830da65cc8572b7593af5eff6b",
+    "apps/api/app/services/storage_policy.py": "f7d316bd2ae3c0f1e64bdf37d0208c2cc9d0356994d2d3556864d2cc0e8161c3",
+    "apps/api/app/services/telegram_itinerary.py": "0eee4f18f887bc6f31edb119069a1e2eff6e74dcd857a25ec71bb635fc0c05ed",
+    "apps/api/app/services/telegram_messages.py": "bbc87a5a4aa8d06111361327c06ab7db678c519b886234fa07374cd5474905aa",
+    "apps/api/app/services/telegram_metrics.py": "38e4051709fa74cd2e102406e0aa8661286b35af150de0f7ddb01dfa32e2ee37",
+    "apps/api/app/services/telegram_notifications.py": "ddf42678a124c8dcc74484acd8b2b38e258bc74b15f4be79e8876119f2dde67c",
+    "apps/api/app/services/telegram_notify.py": "99b63a800e767801492b9e5960d7c3c24cf5b54d181d5453c450323506b19ba1",
+    "apps/api/app/services/telegram_outbox.py": "d2cddad98f693ced26ac49b93028b462d2f93421271c444e610609e2546b1665",
+    "apps/api/app/services/telegram_planner.py": "bedecf94229460cead4f6398542150da8cf91c027f9c58077f861eb795f87dba",
+    "apps/api/app/services/telegram_targets.py": "082f5e273ac8bf5639c912f585cf6794f5fe18599aa3591927f59bef3f7ef20e",
+    "apps/api/app/services/telegram_weather.py": "8ff296f93201b7f80acae99eb755d33b1e204dc564e19d9c7fe938f40ee70ce6",
+    "apps/api/app/services/transport_layers.py": "c12cce22184f48b1799a41d6e17c99290b0626856efabf5daeb18b4881146d7a",
+    "apps/api/app/services/trip.py": "0383bba8dfb740fb551cb1eca2aa647cc7c75d29caae578a3d758f3400d8171e",
+    "apps/api/app/services/trip_day_rise_set.py": "b3f5748d5953c993a385ea2df40cef4feb5b3dc0810778e0f4338bca8d7b7244",
+    "apps/api/app/services/trip_view_builder.py": "88c91362bdb9d75677481c1b69aac9d9f83c33378debd211eaae82fde7a8a7ef",
+    "apps/api/app/services/trip_weather_batch.py": "caa9c05d38a42fe0f2c369dfde87a5a0f7d779935f7540560fe4121e08f3317b",
+    "apps/api/app/services/user_registration.py": "2dab8a6d6a5dc5dcc19564a1fea3dc7847c8bc25868b8710a3ca8a1840f7a69e",
+    "apps/api/app/services/weather_card.py": "d6b24484b3b0340acb03c3d8c88ccb8c7580255e7bcbd9718c7fa04828025139",
+    "apps/api/app/services/weather_location_resolver.py": "7f61b782b4daa4029ee37ef88b57dba19a58b89731c3ae7ff7c76dea8191dbd4",
+    "apps/api/app/services/weather_map_markers.py": "96afc9ce6c11f0b44c692f13b3cd30d759919c43c4d320917ba0dd29111c945c",
+    "apps/api/app/services/weather_map_resolver.py": "bf57268cd40183bb90b0ad8f2c959ea2acb23f1596cf3e30d9fd3b2988294f0d",
+    "apps/api/app/services/weather_map_state.py": "43913af5fc57ded8dde1d2a40aea299bdd4794421a35a1e8800fe5320ad0d9a5",
+    "apps/api/app/services/weather_metrics.py": "808704169a5856cac7dda352db8d3104b6f4ef830dbdfc7b4c4a812a49826cfe",
+    "apps/api/app/services/weather_resolve_worker.py": "0c06167b5c2db7e994e101ae661b3a025b7ce23fd4080dae87e84d26fad58d3e",
+    "apps/api/app/webhooks/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "apps/api/app/webhooks/resend.py": "033086c5a065d26b557a0a991075a2ebc9e4646830de8bd6c24abea2d28f8cc0",
+    "apps/api/pyproject.toml": "90a83dd408ad9a4aac36bf7f08c09f88771a0f53643382635049709196751758",
+    "apps/web/app/(admin)/admin/abuse/page.tsx": "a0f0ee5248801fbfa4c6ddb9be6104085aecd056d18006d1bd34283ca004aa19",
+    "apps/web/app/(admin)/admin/api-calls/page.tsx": "f6a1295c3f691e1dce184c88da66523c1740f0f0fd4603684d34058c4b521fb4",
+    "apps/web/app/(admin)/admin/audit/location/page.tsx": "819e4f026338807f19234a3583d3f8c015333e85fcff9a840ce7d65681b706a5",
+    "apps/web/app/(admin)/admin/audit/page.tsx": "538318d5cbd5a969ab0323cf41fa1996817de6409c7f56354bb695746e8b3717",
+    "apps/web/app/(admin)/admin/backup/page.tsx": "4b194f945f8f3c82a40c878b65d35c89dba038f07a68d98830c0b57667e890a2",
+    "apps/web/app/(admin)/admin/category-mapping/page.tsx": "e4562f6ca732d57935359176afca986d7f57b26d678cf315302b903108e6eacb",
+    "apps/web/app/(admin)/admin/debug/logs/page.tsx": "1ceac72f037dda3cb2c2bd95e6fb82863eef72fd315fc51839a9be0a550f8b10",
+    "apps/web/app/(admin)/admin/debug/request/[request_id]/page.tsx": "59c68466857dcb65d92c9fd828823984e4d593512e5415eadc430e68cfaf835b",
+    "apps/web/app/(admin)/admin/dedup-review/page.tsx": "4db0bba352a85b214095c5fb1afaf7570b0f619bf5a238dcd7676ff67e9e1bf6",
+    "apps/web/app/(admin)/admin/dsr/page.tsx": "4ba47e4f1242a37f5512184a5d74c895d1668a69efac8090699929f54bc11f69",
+    "apps/web/app/(admin)/admin/emails/page.tsx": "b2ae27310a57f4034268b6083fcb22a29134f00d3e7796fe00038c6f71a21138",
+    "apps/web/app/(admin)/admin/etl/page.tsx": "e50f9513ee803742f2822d2f9edab22adb0b2a64d094650620a000779d31b977",
+    "apps/web/app/(admin)/admin/feature-reference-reconciliations/page.tsx": "86c6e6648eac06396818fa9b15253bf807a96c527491b476aaf13c6a1d290e53",
+    "apps/web/app/(admin)/admin/feature-requests/page.tsx": "5b0a1176d1a6ef0629526a62ef32ab5648a58f9ad8306657c95ccea3e5bf9519",
+    "apps/web/app/(admin)/admin/features/AdminFeaturesClient.tsx": "a94bd507a17449d09c970927270d750bf56bd15e3a3609ac08fc81e4a3c18ee7",
+    "apps/web/app/(admin)/admin/features/[feature_id]/FeatureDetailSubpage.tsx": "9861c9c26247517ef4fa19e3b9ac79e4af63805b3c70fb2d35438afa7f3e727d",
+    "apps/web/app/(admin)/admin/features/[feature_id]/overrides/page.tsx": "b844a648079349cdac016907e0545c47c63ade6ab121295cf049194bfc65ed23",
+    "apps/web/app/(admin)/admin/features/[feature_id]/sources/page.tsx": "de29818c6fccdaf4be31f1686c8b1d3ce7038b2032408fe89370bf67479e99d3",
+    "apps/web/app/(admin)/admin/features/[feature_id]/weather-values/page.tsx": "d1dae2673446e42077e89a9ebe7440b5f21cac10415511dfa10ba27a64136470",
+    "apps/web/app/(admin)/admin/features/change-requests/page.tsx": "a45ed27e1dec7592e727087ca144986322fc10bcf33af4d6c49f5cd6b111b7ea",
+    "apps/web/app/(admin)/admin/features/page.tsx": "1e3dff4159af40202f0d3a85af6a47a2e5a3dbd752b3aafa00a0438e5a64eaa3",
+    "apps/web/app/(admin)/admin/files/page.tsx": "8abad8b34799fbf15a15783cb74511d928ee5b5f24401bad4a531faeabc57776",
+    "apps/web/app/(admin)/admin/grafana/health/route.ts": "548aebf7a9a1d6554de98c0df71ae7ac3cd3c1d7e8fdbd146f34163d81e9979d",
+    "apps/web/app/(admin)/admin/grafana/page.tsx": "5604b97cac4cf2c84b0408cf1fb557fecf9e583ce94c343da9156b8bf46c8c4e",
+    "apps/web/app/(admin)/admin/incidents/page.tsx": "ad76a4b0a83ea2e9f8bf5ba8ca67ad759aff4c32837ae71fbcde877c5b9cea0d",
+    "apps/web/app/(admin)/admin/integrity/page.tsx": "52dab9db05958b5a498004a38b9218e3f52a3aabf25ced28bc3ab94b477739e0",
+    "apps/web/app/(admin)/admin/layout.tsx": "e7b77f4852927aedf9e128d3b8e46d73cf305ea35745408274100626086bd41c",
+    "apps/web/app/(admin)/admin/login/page.tsx": "240a749a881773c46fcd8787b2eb7631ff2b1242e63deb8c341332ab1ed058f7",
+    "apps/web/app/(admin)/admin/mcp-tokens/page.tsx": "35291f753f50d34850c2b5348509bfb6641956f50fe2132568a6d0dc0f433e3a",
+    "apps/web/app/(admin)/admin/moderation/page.tsx": "5bf07be65bf5a8d610468a8e0a1d4216a3d3860b5976eb7fe7c07ea081e4a957",
+    "apps/web/app/(admin)/admin/notice-plans/[planId]/page.tsx": "e75cf77c6cce5a600efc6859913a4bcb60585726830d85bc60901cd8471783c5",
+    "apps/web/app/(admin)/admin/notice-plans/new/page.tsx": "338ee92d5ecc582280daa931382c2944f706aa6ad26e245ab2aed835492469b1",
+    "apps/web/app/(admin)/admin/notice-plans/page.tsx": "db810e6dc7b4d66a0a5b42d6b07125cb9e1f14fc9363f804776060cf01bddc80",
+    "apps/web/app/(admin)/admin/page.tsx": "84622e13be28099bcfdd4306ce81d43041f499fc9936fe15f2ee382f6a30c9fb",
+    "apps/web/app/(admin)/admin/pois/[poi_id]/page.tsx": "de7663a0ed0a3a330c6d511eb7bc25d18756e18719c5c07b761fbed31e9729d4",
+    "apps/web/app/(admin)/admin/pois/page.tsx": "ef3edf2ac93bb5d4924c497bc20b9f51071fe23e7de8e5de076b0f354f7b8276",
+    "apps/web/app/(admin)/admin/provider-sync/page.tsx": "b7244de5f33f169bc8c731f9577cadf8c1892493d5fb36259ef8324b56fe973f",
+    "apps/web/app/(admin)/admin/rbac/page.tsx": "536c77db779d395e67cf97a2953e40d965353f06b6bd6980c70bc2266f69531c",
+    "apps/web/app/(admin)/admin/reset/page.tsx": "c289bbaaac77a9fd087b31742346ac2dd845cede74f9d0bacddcf37899180d84",
+    "apps/web/app/(admin)/admin/retention/page.tsx": "bc3867baeb7ff9878b600070e12e9bca730d8531df5d01841b5ca506ec18ec56",
+    "apps/web/app/(admin)/admin/seed/page.tsx": "ef7459ecf19cb4ae9a37beae3b73cab8231995cb13e5c9ba6b70d18d01bf9184",
+    "apps/web/app/(admin)/admin/system/page.tsx": "f8ae4468397b1ab89e42174f20b01dc479c69008f81333ef05c24a33fd1e27bc",
+    "apps/web/app/(admin)/admin/trips/[trip_id]/page.tsx": "79353ab85c6845bbf73ab676aba11da8867bf36586d45c1bc5efa4402bab8951",
+    "apps/web/app/(admin)/admin/trips/page.tsx": "6ca2cb9d36c0c5a458765bb9306d0c650b63ce5976f2f7b62f0b94ae156d28bb",
+    "apps/web/app/(admin)/admin/users/[user_id]/page.tsx": "7dd4ddae51e22517f7819155e50e11cb4f80ee30abfa05de9ba3385b019e7d66",
+    "apps/web/app/(admin)/admin/users/page.tsx": "17ba271a35263e972620f7ac13784aee73c7bd09005c6662a555fe7facede33f",
+    "apps/web/app/(admin)/layout.tsx": "7bf320e5f8e576e3addb1c5f927ddd97a7c9f740030819669ad04226dba9941d",
+    "apps/web/app/(app)/error.tsx": "cfc76321d9580eb2c2052307c986446ebdc4148509f21c96470e8ec164444b13",
+    "apps/web/app/(app)/files/page.tsx": "785c273c1ad66c3558607a0b9c3e98b6bceda1320c3cde753447a35355785571",
+    "apps/web/app/(app)/layout.tsx": "ba6c0c7bc853079719d85700f417e7c653720f70afaa1414497ddb7d253999ab",
+    "apps/web/app/(app)/loading.tsx": "705843ee0bc279726361b19c35aac32b97cc956dced672258c78e7949e7267f3",
+    "apps/web/app/(app)/map/page.tsx": "9238f37119594cf78722321f27fa75be5c374cfae624b0c24dfe8ac53d2fffc8",
+    "apps/web/app/(app)/notice-plans/page.tsx": "3717c7062755690fc7445f1a4bf799ba56c2521d3bcf6faa22532ce8e6f4e784",
+    "apps/web/app/(app)/settings/consents/page.tsx": "6d8a0f46c92f7e9b0add6b69edef5cc487b1a6b8e737f6486144f1ec0b484ae4",
+    "apps/web/app/(app)/settings/dsr/page.tsx": "3c75fb033b10011e087f39f98c75747f22a98a2ace0a73ae543ed2719514d2dc",
+    "apps/web/app/(app)/settings/layout.tsx": "61471ec364b244290139311ad16d409cf086e2dd8c417badedcff894b8189942",
+    "apps/web/app/(app)/settings/mcp-tokens/page.tsx": "e1806ac10f64e31a6b1bc43bf2090237265d2e81563698e7d2bfd74e7b358f87",
+    "apps/web/app/(app)/settings/moderation/page.tsx": "c53f6463c6a858e2483fe7185e75f1596922726c24a0e9fa5e27f14616bd0023",
+    "apps/web/app/(app)/settings/telegram/page.tsx": "5ce29770895453ed2e7348f08ba782e747e2023cac3dcae46a71bd87aef62869",
+    "apps/web/app/(app)/trips/[tripId]/page.tsx": "f3bc87094eef841880a80ad4d1f7da0e28094f439e2888dcec37317909ea2cf9",
+    "apps/web/app/(app)/trips/map-shell/page.tsx": "6a68318753fd346b0d96e3c1195af67234df8fd6d199158229c8e8ec10376af1",
+    "apps/web/app/(app)/trips/page.tsx": "a35525282973e026100c9320b7ed0a69afa0f0e645420509315a90ae170b4d75",
+    "apps/web/app/(app)/trips/trash/page.tsx": "9496f8969855d6284123c5225c294c558299a081f9d5b5c53ad55b11ecbdbb6d",
+    "apps/web/app/(auth)/layout.tsx": "967852ca208af50f005fe80cc3d8e60b9d798734b600412aa1d36a3ed7ea9789",
+    "apps/web/app/(auth)/login/page.tsx": "f48ea8e1bd4d59e487369ef3d20ab958310c9625cbf055a5d208e7468e180934",
+    "apps/web/app/(auth)/profile-complete/page.tsx": "1030f72650f682dfa6b632c86268517af4a4bb34e26c690ff7e809adaddee7d4",
+    "apps/web/app/(auth)/profile/page.tsx": "9dc6dc782a76e7fe5588c31009b284f2cfbcccb18c67fad879a9b0853fb49ab6",
+    "apps/web/app/(auth)/signup/page.tsx": "389e2caeac5374bd1560c0389415e1a513a0016fa9311da6b05afb8050dc67b9",
+    "apps/web/app/(auth)/signup/verify-pending/page.tsx": "5b765a3b7a1eabc7532c65583b8882a36b528a91e92ff86ad1ff5f84399d3e1e",
+    "apps/web/app/(auth)/verify-email/page.tsx": "4d33c5b08a7777c2cc9d04aa25905062e2d872ae25b044a20cdc71337411a61c",
+    "apps/web/app/error.tsx": "9364685150ddd35c522e5347ed8d65d143a36d73a466b9a1e1bf34add5848a5d",
+    "apps/web/app/global-error.tsx": "27f7fae576452477aa9a6025b2ba86a84b9aec0675f1a0ceeddff4a6c2d0fae1",
+    "apps/web/app/globals.css": "cc29e3475f6851cda0b6eafbc8bfe5c469074781faaab5c86acb1396664bd538",
+    "apps/web/app/layout.tsx": "dabceceb6fe61b7552e43ea1c03b8cdef8aa440bf00f9b0945fc57d75b1a6638",
+    "apps/web/app/legal/[slug]/page.tsx": "01f49328c459916adfb627eaf4b2bb0977fe19258928357bcdb53a8e94137c4d",
+    "apps/web/app/legal/layout.tsx": "8c044ee91f5eccd59c89ad2e96752b995677a1e9c60cb983abec79d3b5562b47",
+    "apps/web/app/loading.tsx": "bfcda280806b4ae23050ebff0c61bbe68ff3d05ef92386beb26ff519cbb60872",
+    "apps/web/app/not-found.tsx": "bb3c9fe9e00c59cebda14afe44dcbded5570897ec70940433ac0113174148937",
+    "apps/web/app/page.tsx": "674307706e78c11b3d0fccbfc48bf4584648092b587e55893091ac7200ea6632",
+    "apps/web/app/shared/[tripId]/[token]/page.tsx": "95faa2f1034eb682e2113029060ad18700194c3965c43a40f7597ee7a3b6a407",
+    "apps/web/app/shared/[tripId]/page.tsx": "5dcb78b35b3ead365fd14dccc704e1bce5b64de0d81592ccdac28954394cb684",
+    "apps/web/components/admin/AdminPage.tsx": "ba22e03e05876583cc634f2247fe0d05b3371fb0c33a8e13f2556bed12d7b2fd",
+    "apps/web/components/admin/AdminQueryProvider.tsx": "c0d0af48f8717ea3156bee601ede846f1326f537ba5598cd969bda90daaca9de",
+    "apps/web/components/admin/AdminTable.tsx": "3922173781cb4d441b00d25fb55620aef6c2d2e79aeb50990adff6def942c1f0",
+    "apps/web/components/admin/DataTable.tsx": "5b6427e00ad95f3bd88b39a1cc8ac32f1879c34207d79ca05477a95fe5691721",
+    "apps/web/components/admin/KorTravelMapCurationCollectionImportPanel.tsx": "1f6d23026bd642dd86e1bc5ba92c503aec99ea1490b4be993ecca1c3d95ca1b1",
+    "apps/web/components/admin/KorTravelMapCurationCutoverBackfillPanel.tsx": "ff1cbe4a91e71f708d86be8acb16c11fb9340cc3fcc7dcbb3a3b21b12c6d0a6d",
+    "apps/web/components/admin/NoticeAttachmentPanel.tsx": "ac78445e54539f425a4db7c16927c2ddc63379dab069285f87df452303de11b7",
+    "apps/web/components/admin/NoticePlanEditor.tsx": "0a838fac0b9ab357ac98ab923b14a77636fafc007a09b9986dd1af7affe72fc5",
+    "apps/web/components/admin/NoticePoiEditor.tsx": "a911d5bbba656a5fa27db21664a555e5ea7232ab44cff3a45cec102ec086092b",
+    "apps/web/components/admin/Placeholder.tsx": "30c0e8e1c96f8f92a58d52491f08a361d2317b7111900f488be93bd040708d28",
+    "apps/web/components/admin/RestoreHotswapDialog.tsx": "7a5fd76eda62adcc6a3db72dad350a4f4794c0e04be7d7217811b3255470539a",
+    "apps/web/components/admin/StorageRetentionPanel.tsx": "61c400073094fcbc9b8401d4f3abb0322efa9598a4093b8a79294eb4385507f0",
+    "apps/web/components/admin/admin-shell-parts.tsx": "fdcfaad75802779c1b3eca3cddf11e832eb7e5eaf2ae1d7f16e0d5c3fbee667a",
+    "apps/web/components/admin/copy-button.tsx": "a2ccf629e38315f9495dab0908042cc3c8891baee0df16afd9146e4ef8e74092",
+    "apps/web/components/admin/detail-list.tsx": "be4fed4d996adacaf4077d2e1c09a091625dd3f06fd8d129a9719604ca7534da",
+    "apps/web/components/admin/empty-state.tsx": "e3062df239a4d976b8866a6552d9f627a35d7ca94b0ee797d702de0a5dc2a2f0",
+    "apps/web/components/admin/filter-bar.tsx": "987f6a8892e2ab7b7edb4b47d1512d349f7d68e8db6eec7164b93a546344de26",
+    "apps/web/components/admin/json-viewer.tsx": "af29413da684c687daefe8641b8f2ad9fb8a3e967b2bb0b8924dd2e03ca68789",
+    "apps/web/components/admin/pagination-bar.tsx": "1d5389e124bfef75a24b953f83108ffd9e5de8cef9f13db310d422b2483437c0",
+    "apps/web/components/admin/section-card.tsx": "e6c6500b9af30b411ad1df01fa841cf2c75d6f92fabb42c36b2937ad1932856e",
+    "apps/web/components/admin/stat-strip.tsx": "787e6aab479a7c66a1041f7859c8d2920ef9086937a17806d03d8e2779dbe778",
+    "apps/web/components/admin/status-badge-variants.ts": "0b74174f2271774a45a07910b1e8a26875865956e1afb83ab281941fece452ca",
+    "apps/web/components/admin/status-badge.tsx": "a048a3ce9e7ac90d8dc8099db88d77dfe58174d993364d6b67425fbc0e12b05b",
+    "apps/web/components/admin/ui/alert-dialog.tsx": "d192280316f51fdb943b0676dd8b643771d53eacf0696a868e54f35f62aadbd3",
+    "apps/web/components/admin/ui/alert.tsx": "2a5658e81d330f5d392edf7ed59e9e2207da4d8aca4ce4e045f13707b00316e3",
+    "apps/web/components/admin/ui/badge-variants.ts": "2dc1ce821d7ab588e3a5582aecb08344530970713be0fbd1992041685516e50a",
+    "apps/web/components/admin/ui/badge.tsx": "2e0eb6be4485364b2560414ffed8af5ce9b7d43ffc0a645e724465d053b8d524",
+    "apps/web/components/admin/ui/breadcrumb.tsx": "798e8a3ad86b8236ad7b230d95239b187bcf0d24e43bf09469f92fb39daa2b00",
+    "apps/web/components/admin/ui/button-variants.ts": "bde6e066f67e69038724fd76fc770a84bcc1c3d5b2502e855d89e05fc3bee91b",
+    "apps/web/components/admin/ui/button.tsx": "e2a053c51d44f09807aaf86b9e2574d73f0c424392e54c644012ac573c87a610",
+    "apps/web/components/admin/ui/card.tsx": "a442a90e1c0a90c46d06c2a27d6afd48c4fe5a77949863c4fcd35ffd3364a662",
+    "apps/web/components/admin/ui/checkbox.tsx": "6d94d5d2689c6da7c875d34a4bd169c73f2f058cd0006e2794e73e7097ffedf1",
+    "apps/web/components/admin/ui/data-table.tsx": "dc59b5077559ea92c42d86c8fe68f9e59cae40000496545130fa5cdef87e9a26",
+    "apps/web/components/admin/ui/dialog.tsx": "42f15d9ff3e0c214bd1fa364213c9273e5ecb43737515ebe39815413c0bbfd56",
+    "apps/web/components/admin/ui/field-variants.ts": "d395aef6b4bb202742126acbd2fb2b90e441e64839449ce95cc98c06e46e2f31",
+    "apps/web/components/admin/ui/field.tsx": "5808ae63bbae8fe745347855ba3a0699f7449b3ec64ecda561eb2f7567d62230",
+    "apps/web/components/admin/ui/form-field-input.tsx": "47c5b37e93efd8d62b9dec21fc2b284b53599e038a4af18b4aa30ded624f8c16",
+    "apps/web/components/admin/ui/form-field-shared.ts": "a6e692860de3ed378f7e23dc24eba2db2541f50691e3a0b13cf5713b7cabac91",
+    "apps/web/components/admin/ui/form-field.ts": "1fcb39b8654be54a41e9a03e041784584414fa0d1c91dcaa6bffbc5d0645ec35",
+    "apps/web/components/admin/ui/form-select.tsx": "e7576286129b49d0f734354acca5e7dc5ae864975f1262dd72fed2a6567c2073",
+    "apps/web/components/admin/ui/form-textarea.tsx": "dedb583392dc7a717c7507e5ab502cd512010050ac7f7b3840eeee7edaac4e08",
+    "apps/web/components/admin/ui/help-tip.tsx": "5ce5b1f2650b05f28f079f2ca31340e834281fe33e7086ab7b875135d7471274",
+    "apps/web/components/admin/ui/input.tsx": "526b4ac60537115ca1a932d39eb61f6a05a14c8ce6947046abfc5d118490c669",
+    "apps/web/components/admin/ui/native-select-option.tsx": "403af2f767f67f0d3b5e065dc8e4f781bd5c466b167ac90e9bcff4e170db1617",
+    "apps/web/components/admin/ui/native-select.tsx": "b73c7b675407ac10722f51a174a38ea3556b465a8bc83f27a8c7378f4d88a8c1",
+    "apps/web/components/admin/ui/popover.tsx": "67808f45ccdf147300596eaa550facfcba0a1ef44b3129cc818dc41439daac88",
+    "apps/web/components/admin/ui/separator.tsx": "fc2de260755d9cd92bc0a5b89c593931a6c48db767c374cb8263a6e514056fd0",
+    "apps/web/components/admin/ui/skeleton.tsx": "31096a24938838c78a08e546b50ac3895b87c8c3b0fa09ac1ef0c4a23336b5e4",
+    "apps/web/components/admin/ui/table.tsx": "0e3680d37c9ccd390c1111cae8e39b6b7cc300b547ed9f04493d1efeffadbf23",
+    "apps/web/components/admin/ui/textarea.tsx": "3d0be948f1cddc750b3c3b8cb36d5c300040be5eac5cf8e6e23b362b6503c9ad",
+    "apps/web/components/admin/ui/tooltip.tsx": "f0cd203dd795c9af81ee44a73ea710bbbe64345d3b4cbce4a6d6edcae26ade69",
+    "apps/web/components/app/AppShell.tsx": "0d0f224a1c13e5326aa4a2dac06eeec35e3683b47f3e4d8ab6c348beda18489e",
+    "apps/web/components/app/LogoutButton.tsx": "06dbb00769ae36fcf3976bfcc57c5b8664a8db65157b2ab95037ee14f6f0ada9",
+    "apps/web/components/app/PublicChrome.tsx": "a7371993d832d994cac6645233172c9f7b9b01a5bdca3200dabcbbe87c8eef9c",
+    "apps/web/components/app/SettingsSurface.tsx": "ec0f1b6ed94e7302df4e0d39b015675786bff876d90e3a46b99d09dd19e948e5",
+    "apps/web/components/app/SkipToContentLink.tsx": "3d6a8273bda0b910cd4a597cc1e3ecab44b773b9f3e9c1bb276a6ea87720a521",
+    "apps/web/components/app/Wordmark.tsx": "9da647d06ebc281ae0087b416d92884043ef85a958a9e7159820e9ce96550b59",
+    "apps/web/components/feedback/FullPageMessage.tsx": "86ba930658d748bce54f90ad345349b8b52d69c0192b35441a4991d15142174a",
+    "apps/web/components/feedback/PageLoading.tsx": "d697456f32fea434a3385a74694ba435a519f5396ac65535151cd0c3f1f4db5c",
+    "apps/web/components/feedback/RouteError.tsx": "f199795edc470953741c32afb0798fde0c8e6ad41c8abd170b66c0b4fded4a27",
+    "apps/web/components/forms/FormField.tsx": "c9375de83c1c3461329c657e86846f9db10f01f5325989b79a03d2a3a3c5c5ec",
+    "apps/web/components/forms/FormSelect.tsx": "27a4a043cd9694393ce39a7a5aa6281163bbf27c150d95d6b18f9dcb4be6cd52",
+    "apps/web/components/forms/FormTextArea.tsx": "77788180d850d8cd3b0c815a812475c0fb04ded10e44930e5e4e59036ba36e2a",
+    "apps/web/components/forms/ResendVerificationButton.tsx": "dc89fda8ee602d90dbccc4c64fdc48f64f2311cc1cf33aa136955b0df79915fb",
+    "apps/web/components/map/FeatureDetailCardBody.tsx": "724db6775fbee51976b966b8cb96bb30cd7ed8aca11153eb6f336b03a9e5dfd1",
+    "apps/web/components/map/FeatureDetailModal.tsx": "af78a62e159b601c7f37126fb6a22d9eb5dcf394acb63b80f1b8ebef1015875f",
+    "apps/web/components/map/FeatureDetailModalController.tsx": "d5d9d3b6c05cfd8c95d8bd92f9718cd6822ad45c09cc78dab054edd21228fac7",
+    "apps/web/components/map/FeatureGeometryLayer.tsx": "e5022096c6dd9a382b57e3a666092f8891fdd2c332cdf3ff33f7a8d773a18c8f",
+    "apps/web/components/map/FeatureMapView.tsx": "370d76150c01e36f9e1bcc582a62ce6a24acf8f53bc0404324091a86aa1eb8e4",
+    "apps/web/components/map/FeatureRequestDialog.tsx": "63c39d728f46915e77d795622a86037cf036e4374e8ca8142d6f14836658401d",
+    "apps/web/components/map/LocationConsentDialog.tsx": "96b6d5edb6796b4889f2efc016c66c5ef7f0109b5349d83be655336d1f75dd71",
+    "apps/web/components/map/MapSearchBox.tsx": "7fcc7103f6c9fdce43e772c27e99775490edbc5044d51dd79a0b5af21bf28b7e",
+    "apps/web/components/map/MapView.tsx": "e84f85a43a5a044cf9a0992cd1ae29364322d1a490a43bf71f1cb1133d166c31",
+    "apps/web/components/map/TransportDetailDialog.tsx": "3545e50d07989a5b8c38e8f474ecefabc50441bb4001b1a1bf06b6485227d59a",
+    "apps/web/components/map/TransportLayerControls.tsx": "11917a056ac4a1f89bad175d25e5fd3cf60fb6d6afeab22720e5a59d64bbe0d4",
+    "apps/web/components/map/TransportMarkers.tsx": "3202b25f122b72f37be2f6ae0fd75db6f05fd9a3fc285947e1f97382603d1146",
+    "apps/web/components/map/vworldPrimitives.tsx": "b2517dd09f7981ece2335c7ea8e9e395783e93abce9e45768358cab9186b1feb",
+    "apps/web/components/navigation/DocumentNavLink.tsx": "810f5fa98d02404346fcc1f270e6e815cd5373e755f82c49d9a1ac77f9ab1ba2",
+    "apps/web/components/notice-plans/NoticePlanCopyDialog.tsx": "f3876499b0fc4a2edf3a2ff91f6b77814f6dac610d88c32a299092f70e26433f",
+    "apps/web/components/notice-plans/NoticePlanShelf.tsx": "9900b3e1442aa62a8a51d4e7ac01429718598699e8086a977fac84ae113ef71e",
+    "apps/web/components/trips/ConflictDialog.tsx": "2b7b08144203b70bfc0a75b043ded44afb7b9670587cde54ede81b860a596384",
+    "apps/web/components/trips/PoiEditor.tsx": "0822fb2af5177115295c508c1760e9c8aef277fad77b5721b9c611da168ebba3",
+    "apps/web/components/trips/SharedTripEditor.tsx": "4fad3d78db8dcd2a248e0518895672f3fd252e3e04a9dd04356e987372327b2a",
+    "apps/web/components/trips/SharedTripView.tsx": "85eb7777a635fa4ce76e7f0e0f08473d8160799c8caad3f2193d79a9eb8498a5",
+    "apps/web/components/trips/TelegramNotificationHistory.tsx": "992c1a585cdf78226f829e79495a3574494c64882b36a05683530b3b6e1197af",
+    "apps/web/components/trips/TelegramNotificationPreferences.tsx": "ae76ef3c6c39a70f04bcdbfa25c5c6d0ec97501ecc2ed717c2117e64ff938f2f",
+    "apps/web/components/trips/TripActions.tsx": "197b8889552fee1d954e70ec058c9dec46931c2bac361ae9d1965f5fe3a0812d",
+    "apps/web/components/trips/TripAttachments.tsx": "3b9974865dbf7f962352c205b48a62fee7b1796bbbd94e09d7d6d8448bb73ef3",
+    "apps/web/components/trips/TripComments.tsx": "b3a759186d4d0b38c10e20ec92098a9126068984923be90b812e6f21f60d9513",
+    "apps/web/components/trips/TripCompanions.tsx": "02b8fba4e0f9340b808ba98754d243e6df594fe5fafae2e22f42ff1b4e13c511",
+    "apps/web/components/trips/TripDashboard.tsx": "1e6336a435ca674f14aab1641b31da05e7a317d7d502dc70a2fe08ff0feb96eb",
+    "apps/web/components/trips/TripDayControls.tsx": "1aee646af7a76872234b02765ddeb8bd7313e960c63461a256bffee6b8e59932",
+    "apps/web/components/trips/TripDayHeader.tsx": "360e20b60172d32d51a92090fb1be5d8e48522f53eec78672528565a88158a0b",
+    "apps/web/components/trips/TripDayOptimize.tsx": "59a7e020b0c067a324eed5c524ac4e0f790081e06de43a68337cf837459cebb2",
+    "apps/web/components/trips/TripDetail.tsx": "3d05e6808a968ecada6a98155213a217d6e9d87a704dbdc72378f15b14a12cf0",
+    "apps/web/components/trips/TripEditDialog.tsx": "1778e3d7faea1dabdf25255a31f22d7fe6198396dc9173a96b06e6d9fe1b81ee",
+    "apps/web/components/trips/TripExportButton.tsx": "fff5b9e86ea86f9430361657e6dcf7db7fe0b615249305de4dff86e9e7768a7d",
+    "apps/web/components/trips/TripExportDocument.tsx": "7cfdca60830759ef1cfc6e326f9bb4e5927c9b51c43df44a68de7ba3420184f8",
+    "apps/web/components/trips/TripManualPoiDialog.tsx": "1955409aaab564ff1656a3558f1e53d7407760bc4382a58e9a7226b3254af40d",
+    "apps/web/components/trips/TripMapView.tsx": "a1a1806cc007fdbd74ebad50d5e3880b02b0d87bed2b4ef3430aed8eb92a445c",
+    "apps/web/components/trips/TripPoiList.tsx": "2c4a3a4333a203430d65d032eb29b4bf9541943aaafc3a3f63e31b13005de19f",
+    "apps/web/components/trips/TripShareLinks.tsx": "24714721f28e7de2a50a72db39b4ffd1f87513a34ec7342e3770cffd931727b9",
+    "apps/web/components/trips/TripTelegramTargets.tsx": "611aa40cd96688b6cd4cf050ee6e75bdfd2b4dc03697758823e2c6d735ca9e78",
+    "apps/web/components/trips/TripTrash.tsx": "a4eeb1df71dfad7fe27f0fb62f0c8275a6457adcebd027c84f7e01357022dc09",
+    "apps/web/components/trips/TripWeatherSummary.tsx": "0fbb6fe38b73330d122168b3959588886c551aea25a0ab3554ddd01cd382e0f5",
+    "apps/web/components/ui/Button.tsx": "908bb74d1f13b3151c81c367e8e098cc9a5d5b058f997ccf9eb1e8be09ee981a",
+    "apps/web/components/ui/ConfirmDialog.tsx": "73579de8ca66e2ba27b1115944d370e65529d7e49e319d41fa3824ef3fe2b761",
+    "apps/web/components/ui/Dialog.tsx": "60590887f94894de115631a6a9eaecf74ec0202dcd7a0c087bb42a854a261efe",
+    "apps/web/e2e-live/helpers/admin.ts": "9fb73f2e0bc195dc43da6a309b6d7262bf6d4efe24b82da6520e311b8d361e12",
+    "apps/web/e2e-live/helpers/core.ts": "a2728fce8b9bf67f6c1f8b8d85f4af67af20caf5072604b169d1f15291f1c5d4",
+    "apps/web/e2e-live/helpers/geometry.ts": "ee8a238469b12406e5807f2b7d3ebd66b04c0646033884e4b5730c2801a5f317",
+    "apps/web/e2e-live/helpers/live.ts": "251b9c18b611f7379b594e0df99a0ca7983547ad3cdcc0b8f5684ea47ba7f7c8",
+    "apps/web/e2e-live/helpers/nearby.ts": "0aa7b5d3965907f4b54da35f25f3cca57880683f59514feea19032d23578b106",
+    "apps/web/e2e-live/helpers/notify.ts": "3d9708e9d749c59040aa7868968e893e3c8cdb2c2e043917dd6414021d0c1476",
+    "apps/web/e2e-live/helpers/poi.ts": "cdc1710af758e1aba76bff4f4f34478a66ba8744aa5ae8bb5bbed711fb279c0d",
+    "apps/web/e2e-live/helpers/search.ts": "5c4512474734a23d61698b789e7f24f40880bca44f3184c21c0b4cbd40100199",
+    "apps/web/e2e-live/helpers/searchFixture.ts": "2b28091dc4a71e281da772a8e902400fb987a21f1c5bf47ef46a72b6e9f8d36d",
+    "apps/web/e2e-live/helpers/share.ts": "f278ffdf4c308dc5a0c203658f37dfbf0473ee3897fcac2d19e330ddef009149",
+    "apps/web/e2e-live/helpers/sun.ts": "1cf4a28c1b62fd6608db07013d10fe3c1d3c49582beb0e2c08c7dff340dc52fc",
+    "apps/web/e2e-live/helpers/trip.ts": "5bba9b1a8a38d6f8be2aa3702deca073262547914ff43254229c4a8a32423cea",
+    "apps/web/e2e-live/helpers/viewportBbox.ts": "020be1b4e405c6d01d9f9b8ca98d6dc093963a422af52037857876728ae1799d",
+    "apps/web/e2e-live/helpers/weather.ts": "a879287633d3567d569c8e753dcbcc0ab66fb7c867f943c8b1579eab19c80c63",
+    "apps/web/lib/abort.ts": "f12345af7ecaa35e2f9a6b6aaa3e260e6eb4c6eae0ae6a2f237ff2a87a743255",
+    "apps/web/lib/admin/cn.ts": "aa4416f87e6d565775852f9b2c0d2a8246710980d6ded3622301fde9cb26da1c",
+    "apps/web/lib/admin/format.ts": "738d54e19cdc373e13770c7ac633c467366ab0cdc131d70de3ce028f01147481",
+    "apps/web/lib/admin/grafana.ts": "05fae6eb1c2bf3ba2d1b61ef8dc87476bdb8f9245ca61ff7dab56293a3643c50",
+    "apps/web/lib/admin/status-label.ts": "5cfaf20dad5b41803e9ec401f987c56b59a869af6efb13bdda73d8f081de40f4",
+    "apps/web/lib/adminTableWindow.ts": "7ccf79ad71d1544a0601a06479e98fe280188c2c9d23648355d9faf951c36060",
+    "apps/web/lib/api.ts": "8c4e886e935f19dc5f43742b00ccb0a75c55b94e9320539c5f11bd4ed201bef5",
+    "apps/web/lib/conflictResolution.ts": "fe462bd71cb111ee1d523789b89cfa7ff31dcaf6affe2ffd10ab401cfdb2ab94",
+    "apps/web/lib/error-recovery.ts": "a5d5c197633ed4d7ec480ab12c6a20687a8c49cf62b8cd28579baa3ec51fedfe",
+    "apps/web/lib/featureAddress.ts": "212a0387157ee11ab2fbba851acf583ba9c686dcad6c7ca8cc16719706ec4ff8",
+    "apps/web/lib/featureBounds.ts": "82b46c26185bd73f185dcd322da2d981ad4cc5edf5daa12aa9969354a4861e39",
+    "apps/web/lib/featureGeometry.ts": "9c7c2cef366bed9a51c2ce29d2091e3e90d77f57a9062b949178b920504f56bd",
+    "apps/web/lib/focusTarget.ts": "c4654fa0256c4639c0b3fef50a9063acd10c86ca847c478b197ecba1769be29f",
+    "apps/web/lib/legalDocs.ts": "eba5716f359824d426f0d85b7348c27ba657dbd6f9aac193f1cfa72cccd1ee4b",
+    "apps/web/lib/locationAdapter.ts": "d58bbb067a9bda2739960d10300875ab71522488e629730ebf79ec24179e53cb",
+    "apps/web/lib/locationConsent.ts": "ff2ca8bc11a82397979dd4071889580574cddee8e613c234a866a3ec1836b83f",
+    "apps/web/lib/loginReturnTo.ts": "6370a189f89b889a1eb8b8e302525524f57da637312a1d1e8ac936b5547e5840",
+    "apps/web/lib/mapFitPadding.ts": "cfdc4df5cbb2a8c59b65284f937208adc055836ba071be7561ed955fb2d8b8d0",
+    "apps/web/lib/searchBias.ts": "9040172e50335ae0205a76600ab193b0c72e2a575bb019ab4a2f2012feee9bcc",
+    "apps/web/lib/sharedTokenStash.ts": "bbf3bfa88fb26f33610b9d96dcafc9cc45ab24dcd4e3b001b0a14981ca09cd0f",
+    "apps/web/lib/tripDateLabels.ts": "e6ff2701fde72c74915f222776a1cb36251966f2ad12e361bb2bf3a1908463c3",
+    "apps/web/lib/tripExport.ts": "e9074aef118ee35c11281dc7864deb6c58683aa8e462fd3a68c06ba3267b9287",
+    "apps/web/lib/tripPrintWindow.ts": "8c94b305b671f724ddffe3bcb4fd96d933cbbe8f65921931190943d51a7b22ef",
+    "apps/web/lib/useAbortableLoad.ts": "b79769b958b145392c923e0184e5ee44f29bd7da554c88cf23b4c0d440caf14d",
+    "apps/web/lib/useFeatureDetailCard.ts": "3abc95e788f363cd20277138afa4d7b68547512958d2c70b7f78e518f4763121",
+    "apps/web/lib/useFeatureGeometry.ts": "274445928e1de84214629dec9705648d36ec8766abd8c410935091239cb08d8e",
+    "apps/web/lib/useMobileWebLayout.ts": "05564e0a6839d9c7ccb7b7ddbbe9488d8326e77f7ec87a948cc60440d78cadec",
+    "apps/web/lib/useModalDialog.ts": "fd45ee44fa9f098305fde19926bbd9fdfc55c47b123f1ebcb49e51cac853133b",
+    "apps/web/lib/useTransportLayers.ts": "910980bf119c28dd6fa84b9eb073208f2bfb1affa3884878754313ef9bdc6ad8",
+    "apps/web/lib/weatherProviderLabels.ts": "1a2fb2ad406fdbb581778d0a761eeb7b12d5868f28c6b84ab29ed199995c00d4",
+    "apps/web/next.config.mjs": "0a8f469a890c6d032b59ddcc5692ecae59c8d89b0b6737f2e2b1f9f97539d8ee",
+    "apps/web/package.json": "7ba784b5e086bfc222ff643b8abf33c11008825dbb5ed1f7f99c11a31840fe9c",
+    "apps/web/public/.gitkeep": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "apps/web/public/apple-touch-icon.png": "32f465164f42d7746e47e7971e41c991b699da02e84cc31ab18de2e17567a364",
+    "apps/web/public/favicon.ico": "234d3431c4801f966aa3324fc40d596e6905183f33e7316d05700493e69c94bf",
+    "apps/web/public/favicon.svg": "44118c63aac96d9931ebacdb0c645230168a47b87901039a9e92b6e20b089dbe",
+    "apps/web/public/icons/pinvi-app-icon-192.png": "303a8fb9bac54586a5e9d9512121d325158c075f6e86e05a8b69a6c24e9724f8",
+    "apps/web/public/icons/pinvi-app-icon-512.png": "e58a117655e73a782775385264b9d738d1850f9376d2cfac76a74a76288c31fd",
+    "apps/web/public/icons/pinvi-app-icon.svg": "47484a954724142d64a42d5300b3157ea42e34ad4184efefb12452f9bb206cc7",
+    "apps/web/public/site.webmanifest": "4741a7af6eb1e5d9eedf87f5f2e0ac7df3c83b28016457b5f288c03f532ed736",
+    "apps/web/scripts/copy-maplibre-worker.mjs": "794ebc47ba8097e31df2bbfcdcffdc103f0c254889c50e9480baa7778c192c3c",
+    "apps/web/tsconfig.json": "9f8988ed9084b5925abc83b066fc32a44c7b5ae9bef6f7da067e98d91e68ae3f",
+    "apps/web/vendor/kor-travel-common-PROVENANCE.md": "4a672c74cb74da779a023a8a134780d06a6467670e2d91d39ea98fef738b2042",
+    "apps/web/vendor/kor-travel-tokens-0.1.0.tgz": "554ae3f6a18cbf453130b29f8a2d737ddb880101b55e14535cf8d63174b47505",
+    "apps/web/vendor/kor-travel-ui-0.1.0-dev.9.tgz": "b738d8824e36eb6e58d8cc6b78af7dc31233b6763248d634286044def795b403",
+    "apps/web/vendor/vworld-map-web-1.0.2.tgz": "aaee266dddca63e1b68bb3cd2eeb0583b74153fa13511ab09cc30d0c3bc5fe02",
+    "package-lock.json": "e9e8639708a48d82c8d4c4896d7851977033f766583427ee5522b644f5cc49ba",
+    "package.json": "55428730cb77c95b0dd80c09c6f299f19eb35cc1f3921bbde69c26a19fcf634a",
+    "packages/api-client/package.json": "28a59245010f081d09c35574006e3cf2e20d65e937d189d7d7f917f9ffe83c74",
+    "packages/api-client/src/client.ts": "02293614c501f296d1d7b173990b46266c5b4d9d296c917083efbb93dc758350",
+    "packages/api-client/src/endpoints/admin.ts": "a533b12d6ba293b40952a25f2fb4272ced6f6d03119db6fa8724768368ce8ba1",
+    "packages/api-client/src/endpoints/auth.ts": "15dab8e85de3e4cc3e873e14011c6593a8dc1b35e38abaf778e0b3ba27ac986d",
+    "packages/api-client/src/endpoints/feature.ts": "f929544ad4ef620549a8233328ccd6ecb5b4663da1bea58efde653122cbed295",
+    "packages/api-client/src/endpoints/geo.ts": "1d316c02bc08a6ae21307df03d8860804bceecae265c81be1f29e642fdcb9a5d",
+    "packages/api-client/src/endpoints/mobile.ts": "ff4d9b2e3b04d04cb24fb0f3b994c0ae9e60ca4f81658bd652ef5c6c56821237",
+    "packages/api-client/src/endpoints/notice-plans.ts": "a6a06a0d15e8532f30b7e36265fa11998379bd907db62e5b7253a7fd492df32e",
+    "packages/api-client/src/endpoints/pois.ts": "483ba41e886ae91ecb04a50249702ddd5584f79bb59fddd9c3e8043577f1b8d3",
+    "packages/api-client/src/endpoints/public.ts": "8f9f13e102035e80c8371e498c8b7a72fc8a90b70f2c449a847dea8f370529a6",
+    "packages/api-client/src/endpoints/storage.ts": "54cdcfda90f51836451d1b1c5f6bb93d8fd08c11c001fa72ad5f18d6dedcf818",
+    "packages/api-client/src/endpoints/telegram.ts": "0582b48b62357c97747c31b34605801ceb9679afd3e5ac4ffa7bbbd140fc06e5",
+    "packages/api-client/src/endpoints/transport.ts": "060ec4e950327e36a8a86e2c54b8f2739b71852280d0ebebb2ab439ef2e705c4",
+    "packages/api-client/src/endpoints/trips.ts": "e8fafacff709c181cf22b86df5c7de0fae8262cc175e98a1bbe39153cac6b126",
+    "packages/api-client/src/endpoints/users.ts": "0aaff9b4cc3c7a7df161aaf37c2ce5c69a36c4e8df649368199ef5a13acb5c50",
+    "packages/api-client/src/endpoints/weather.ts": "33b06cb1c8f664ab491d45a59f681d4c36c640b3baca53d7cebb3b92d1731425",
+    "packages/api-client/src/index.ts": "6741f5cfc5df4df0ddf598313ea926713d5c723cf5c9cbed24bbf5b254768e41",
+    "packages/api-client/src/query-keys.ts": "22b332367f7e95f827b032806302f419f9b97f8f376a11ad81413961df8d3586",
+    "packages/api-client/src/websocket.ts": "8b72a84ece341e369ce38496a975d63fa40c3b8bfe14fe60c3c482f76743eb45",
+    "packages/api-client/tsconfig.json": "1501fcd14749e296e8de3df97106e9dccef61cbdaf9eef30394891cff9772470",
+    "packages/design-tokens/package.json": "7632df0d1343b8774f46e9d3461e73a710446ae6f70a15c8028c05281fbfb710",
+    "packages/design-tokens/src/colors.ts": "b084cb1ed7b3cb7a1b889808218576a5efcfd001a17354450dbcd7e814b2e172",
+    "packages/design-tokens/src/index.ts": "4ba1e2844a5ba89fc38a8745ea75106dbc8c8e986e7457a2ddbd62f287b2603b",
+    "packages/design-tokens/src/motion.ts": "218d43e2ee40c1292308e4e2315027edca7555c705d7e8ea7713b6165b70f75d",
+    "packages/design-tokens/src/spacing.ts": "fcb178b1603747691e6b03d418fd99252e323582cbcf382f84542e14e323aa75",
+    "packages/design-tokens/src/typography.ts": "cc103abb83a7b875653ea8c4c2d0a5ba1e3286e3b22ebf7446eaee51adca8edf",
+    "packages/design-tokens/tailwind-preset.cjs": "69ac575215ca10e6d865432835b5ea7ea104b69070b6201e45a80531e5164a4c",
+    "packages/design-tokens/tsconfig.json": "1501fcd14749e296e8de3df97106e9dccef61cbdaf9eef30394891cff9772470",
+    "packages/domain/package.json": "c4a22684e031f05cac397783700bd427e38a6e6801f32f0bb4963c196a07e3e1",
+    "packages/domain/src/comments.test.ts": "ef81c616d3f8dc0cf97b1a6e1bee80fdc39cdc707d76314e65049358cc2e312e",
+    "packages/domain/src/comments.ts": "6eacaed864a246adfd4d63588464a684f458eb86105bd260b78f8070622f66df",
+    "packages/domain/src/companion.test.ts": "be69d863bfe0635f64ad6cf7638311d5e587df9e08f7f8bdd9d61ad744f2b358",
+    "packages/domain/src/companion.ts": "66dcc41bdbcede7a31cc6c8cbcf41bee298f95371026f2a6b404ef84b4ad36be",
+    "packages/domain/src/distance.test.ts": "739cc3175d5568f57071fa60489a3a804b2fe93519adf9b1b7a4209965ed1269",
+    "packages/domain/src/distance.ts": "efb38303515e4f09b8fe58a43a075df9e2b95729b09f9698599161b5c3d35efc",
+    "packages/domain/src/errorMessage.test.ts": "1d46ad14176244cb9aef528a40e987b968348e1d762ac9c46d155c44c0dcc7f2",
+    "packages/domain/src/errorMessage.ts": "35b32c96caa14b66f2dacc84aea17448cac3f46eca4acd88761a677d1f1a933a",
+    "packages/domain/src/featureRequest.test.ts": "5a70e655805b5438b6edb29c3abd7bab46d24842759ecc993485916280172f84",
+    "packages/domain/src/featureRequest.ts": "25fb7141215982ccc0c8321bc9cb6725d4f24f26327695e1c35b1164f8b7dca5",
+    "packages/domain/src/formValidation.test.ts": "5929e5c28ac50cb149e76bb2eef596ddfc534dbb3404947cac5f4ec653a25e2b",
+    "packages/domain/src/formValidation.ts": "5d2da24cee279f0a1f9b7b6444dd6ab11c0bfd6ed2dfe104ea4d75ecec964f23",
+    "packages/domain/src/index.ts": "43b60dd284980b398016bf553daed25771710717d06448c3728a4a684a3a5c9b",
+    "packages/domain/src/locationConsent.test.ts": "b01d09e5d580024a6a8164992bffcf648e7c1c931cc7b6ff1235b821ef6d894d",
+    "packages/domain/src/locationConsent.ts": "cfa7429275e92a938392da8d91e5b3bb0958190352f1342c250e1400ca0c7c8c",
+    "packages/domain/src/mapCenter.test.ts": "2ce232ac09d7a37df4096b5588e3f9d966f506dbff29a95748f7a6808a165bde",
+    "packages/domain/src/mapCenter.ts": "22998731e5d0f545d214c4eaa199e5e7423c994871541da6fbce2d65c32e2816",
+    "packages/domain/src/marker.test.ts": "9b0b273675b707e55ffd28c06487c6b56105e546131e365f27a7b8bcdfa119af",
+    "packages/domain/src/marker.ts": "4644e801ee17d9411eb32b6194bb4a7e5a31d4141f87688aaa41a849c995583b",
+    "packages/domain/src/noticePlanCopy.test.ts": "c75acea1ac88dcc0c937637a227987fb27619c25e7b4eb6bf59cc8f61c57e86b",
+    "packages/domain/src/noticePlanCopy.ts": "dff3efc5de86168ada8408e3f9f6a4a57f3d76b1e8eda9359b9923c13c3041b9",
+    "packages/domain/src/poiDetail.test.ts": "b80bfc8cf8602ba14ceab9819387f7ebbcd06fd1fc66175bf8adf90c1fb9f56d",
+    "packages/domain/src/poiDetail.ts": "21c49d262c8b44b02aec8e8199863dcb11ee48093dc15fbf72ed7d471dc3be8a",
+    "packages/domain/src/poiRank.test.ts": "bd1a74f3b468f4fdabdee49b3108119825d7b4144db817d17c7061d2d5f000a2",
+    "packages/domain/src/poiRank.ts": "df81c6039eaa904e4300111b5c9307a4b3dec06a56d6771363d301d8f6dcbf0c",
+    "packages/domain/src/shareLink.test.ts": "7bc98bbfad30434e03cd43648b2db0bb54b43c931b9c575372955927665dda7d",
+    "packages/domain/src/shareLink.ts": "07c4767d3bc0bc3554a7a49294be94f8eab97be73d6a4c0b8fa424a767088955",
+    "packages/domain/src/shareUrl.test.ts": "9ee7f669121ce844f1941331199a3861735cd2b30b71a290f8d8bc6d89fd47d5",
+    "packages/domain/src/shareUrl.ts": "b3bb7be44a77beaee5ae032027e74d64c87349226608ece2fdbb11add87d109d",
+    "packages/domain/src/suggestParam.test.ts": "d03d1453a5fbcafe642b9ae2b4133f552d59bb2bcdcc63e6ac55a1834f14924c",
+    "packages/domain/src/suggestParam.ts": "6267f5ca77d96a26a4adb33fdf1dd11e4936e25d3b35d836dc2121382621b32f",
+    "packages/domain/src/transport.test.ts": "390654f9636b551e76a56134afa847e5ea078810e5cc6cb6b655e85dee56fa99",
+    "packages/domain/src/transport.ts": "9f87356b6f84df7477803fe1c968e1223cfa5cd9e90c7af3dfbaa280b28ec22d",
+    "packages/domain/src/tripDateLabels.test.ts": "bcbcdf4852a6aaa9dfb03923a35e055688843f9307fb64bbf29fd1f636ad3c9c",
+    "packages/domain/src/tripDateLabels.ts": "2cd0068304ea30fb3d9dc9cb827d01a12bc3d9a84bdbed3877d0cfd1506ca561",
+    "packages/domain/src/tripEdit.test.ts": "b153fb13521fe9118b5de5b7d9909d7b4d62167ebf225694c963610e2e296178",
+    "packages/domain/src/tripEdit.ts": "0d2f4c3246d8d4d7638abc176461f811484e5a44ff945b5b7aebf3c19d7c5653",
+    "packages/domain/src/tripFeatureResolution.test.ts": "30508bbd0ce089ff2395ac01faa7bdc2ecaea63a13496f2e010562609edf49d6",
+    "packages/domain/src/tripFeatureResolution.ts": "cf99182cc4228220b262ddf987d4bfbb558dcf98152f655dacc9468923b04438",
+    "packages/domain/src/tripMapPoints.test.ts": "a7c6498bf0abf5f278ec45500623260e8b440d9c0e1f73ee95e20056e7060187",
+    "packages/domain/src/tripMapPoints.ts": "2c2e68d2423c42458dc1b4a6bf1826f5346634335f7f25d3228a86da80b12ec5",
+    "packages/domain/src/upload.test.ts": "9c91d1c51b824675f462b805339d3d210af06b373fb1724f3af995b81c0aeac6",
+    "packages/domain/src/upload.ts": "05b445bc196ccf5efed074f6f54a3157fbe85a9799cc0afda4a1ca04a58fb285",
+    "packages/domain/tsconfig.json": "1501fcd14749e296e8de3df97106e9dccef61cbdaf9eef30394891cff9772470",
+    "packages/hooks/package.json": "1491ad444a0859d8849ea87eaa9d3c4345d5cb68ad470190db8a7cac3df3b8fe",
+    "packages/hooks/src/index.ts": "f145d44ce59684cca30e0fcbbb1394105b1dca1018fe90fd3751a0b5169c4d7a",
+    "packages/hooks/src/useDebounce.ts": "17fdf5c11a2d30c1dfa59d29d4ac0bdbcf00e3a5a96697a1678e5aef7e4708f7",
+    "packages/hooks/src/useUserLocation.ts": "65bcbb2e7902dd20e0ee08563e358de1d6b939c809f58991592d1d0dfa25c13c",
+    "packages/hooks/tsconfig.json": "10ca7d531800ce2da3e2ea29d0427f041abb8fbf5feba9263cd15c475ed73f08",
+    "packages/i18n/messages/ko.json": "4addc5fd0fa00fb4786c4bc336b7d1da2bfded59f1257f3fca363a80e98bf1de",
+    "packages/i18n/package.json": "8005a7d6334487cb25114889121a48473876bbf72f4185097e1767d234cf5559",
+    "packages/i18n/src/index.ts": "59477d5739d4608d7138052ece97ae812ed9b5a2d4611d06b6917d0619f55e77",
+    "packages/i18n/tsconfig.json": "4bf58b679d35a56176f02e77c9507381ac7c187c130ee9d380a6aa7917b91867",
+    "packages/schemas/package.json": "6969c457dee4ee822b4be92ffc7e4f206982977c757ebe8bc0323d1ec7f9f4d6",
+    "packages/schemas/src/admin.test.ts": "adf54845c3385808d5eb035282becfe3027adea4c155698c14d96df1cd506d7e",
+    "packages/schemas/src/admin.ts": "68c4cb47efae6dd8fdf68b586fc45ba74045989d480614cacb3960b8d3375c05",
+    "packages/schemas/src/admin_feature_reference_reconciliation.test.ts": "fdce43047f6052765c68a5992019f675070367c0035264c31c4daa3e0616f25e",
+    "packages/schemas/src/admin_feature_reference_reconciliation.ts": "9fae3286612138d4e58aede3ec344337cd37a81189e258f6d72a8ac53f0f530f",
+    "packages/schemas/src/admin_feature_request.test.ts": "c0af3696e2999cd7d80698d59bf4b636ea3c0fec885f3083fb260b9968146c19",
+    "packages/schemas/src/admin_feature_request.ts": "a293aea92f5c498a04b4aedd00f5ad40a7dc077f61aeeb836080f495ecb4392f",
+    "packages/schemas/src/auth.ts": "2cf9836ea0c812021ad5899541c1a721c820c5c9c1e348cc83ec6955865e422f",
+    "packages/schemas/src/common.ts": "f50abc473a16f89eaeaae066ef882d6facefe5ebcaa10814402aa51119dc3bc1",
+    "packages/schemas/src/feature.ts": "f7168936185c59ae93b54392eb26038beb923a03dfa59819fd89af0c23a12f72",
+    "packages/schemas/src/geo.ts": "42d302f6d19df622caf926bac66d113d8182f3b03317679de042a941e0457f63",
+    "packages/schemas/src/health.ts": "a76f62eee995207bcbf270fb9e100607f105a600d43bbffce0908f0b61f0d7c0",
+    "packages/schemas/src/index.ts": "040fbc3608156cb6d42af711e1aedd671cc6084893099998ce495094f013a90d",
+    "packages/schemas/src/mcp.ts": "49a6e1fb6f46140442bed9dde2a56822a6da1686e7c55901855fd1ba23c1ad67",
+    "packages/schemas/src/moderation.ts": "151165f05cedf346381c0418d2873dbcd0add6e12225f788ab0fe967f2115a50",
+    "packages/schemas/src/money.test.ts": "0b65579203701b0339a85c608c1fe6e2eb1d61617c8d1541ef861374c8ebacaa",
+    "packages/schemas/src/notice-plan.ts": "ec9119e84e1f0a47456589b69607c0150c0d7f29ef9248ffec90458e5fe3285a",
+    "packages/schemas/src/poi.test.ts": "8406bf89e65116a55d4db1c12d2294b44b8fad20fe4c94eb9585db55add3b47b",
+    "packages/schemas/src/poi.ts": "9bde7c432d47a63fcb637fb96583accad4d2da652d7e290e9a9aa3f79d74ea1f",
+    "packages/schemas/src/public.ts": "8efb70fc30d75905e5735471c28356d31a30ccc5ccf5ad759fd0ed95c12bc82c",
+    "packages/schemas/src/storage.test.ts": "80531726ab68ad80136d9886076c44649e769791b9f5301ffa6f13b2758be9da",
+    "packages/schemas/src/storage.ts": "3fe223fb12b895b6485df941d9f628761e6ef69c43617ecb05b758881a6bce11",
+    "packages/schemas/src/telegram.ts": "c02e03604f5157b6c0978d27c87d8c55209dcd8766f15219dc3acb33aecb36ff",
+    "packages/schemas/src/transport.test.ts": "1b3bac7cba4594e72b31e37193235e4f75c02a3cdb2f2ea45a949d1753de3ea4",
+    "packages/schemas/src/transport.ts": "c91457264d242549a0fa1a672d17a055852447df2ef492cdccae12bdace687f9",
+    "packages/schemas/src/trip.test.ts": "caf5decbe2074fbc6e85f8256160f5bf658f06bbc2be3687cfc46288822d1a2e",
+    "packages/schemas/src/trip.ts": "3991393c9482a35ef3e7f600066dea736ad8056b3e5d64504ca707a568c15884",
+    "packages/schemas/src/user.ts": "56c02d7ccf38ba2b7bf0f77c80d94e30d72b713b98bd7469c7bad90eb6a01e89",
+    "packages/schemas/src/weather-map.ts": "9c8b239a933daff45cc9b037722f86409e682dc129f7087b16af84068c9ee0c1",
+    "packages/schemas/tsconfig.json": "1501fcd14749e296e8de3df97106e9dccef61cbdaf9eef30394891cff9772470",
+    "packages/state/package.json": "6ef0332ca3c46a3f9ac41ce7379a4d38c7a391d89989e52170b2b7335479c289",
+    "packages/state/src/auth-store.ts": "50b67d444da1446775542919b0bb3fe64f5cb5d9526a3c8b0be98de06f063145",
+    "packages/state/src/index.ts": "841db9bf7e261c734124394b7d1eacee24524cf797d34af84d7969069560062d",
+    "packages/state/src/ui-store.ts": "31de92673670e8c83657d99abf0852024be1feff77d30755762853af6aa2c2c1",
+    "packages/state/tsconfig.json": "10ca7d531800ce2da3e2ea29d0427f041abb8fbf5feba9263cd15c475ed73f08"
+  },
+  "선택_결과": "모든 선택 SVG 끝점과 실제 map.project 오차1px 미만; mobile/desktop 실제 마우스 드래그 유지 중1.2초 지연 응답200과 상시 패널136→152px에도 중심 동일.",
+  "비밀정보": "fixture 계정/비밀번호·service token·실제 운영 주소/자격증명은 이 보고서에 포함하지 않는다.",
+  "실제_서비스_시작_snapshot": {
+    "pinvi": {
+      "gitSha": "1a05f9d9a0bcdbfdba1d4bba00c05286b47734e7",
+      "trackedStatus": [],
+      "trackedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "map": {
+      "gitSha": "0afad078eae3405efc7fa375d66d771c95d5b049",
+      "trackedStatus": [],
+      "trackedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "소유_harness_sha256": {
+    "pinvi623_live_stack.py": "fc6a235b85361309e85f1bd08d8be657f2f4c14e38c71d430b8d333c6a1563db",
+    "map_detail_live_stack.py": "bda7056309b6682200bb6eadbca7cfa2bed382caa60d714ffebb5fc4bd963600",
+    "weather_live_stack.py": "b7a35a4f07009e5e438cd1d955f0ec05601344c788ae5ab12709fed5f39f51b0",
+    "pinvi623_live_browser.cjs": "ad9d7290b021e97b56ccf20d32633938df2af668f05803bb5218990336b52f48"
+  },
+  "화면_증거": {
+    "pinvi-623-before-mobile.png": "272b4e79a79b7bdead986454c17539217a06ed0f10583e1d4e1f8d57cba292b8",
+    "pinvi-623-after-mobile.png": "686988a298c8aa1c05c159d77841f5473537d4597d919e423ea6c8b4a0e9f5f1",
+    "pinvi-623-selected-mobile.png": "6b781a8ec28b814218110622d14e82b0400bb27960aa379e3e1f1d1f0137a32c"
+  },
+  "최종_mocked_새_빌드": {
+    "명령": "PLAYWRIGHT_BASE_URL=http://127.0.0.1:13805 npx playwright test --workers=2",
+    "결과": "202 passed /3 existing skipped /0 failed /0 did-not-run /0 global errors",
+    "로그_sha256": "0bca57f1b805d38d10fe5d8ec67727afdb3116a0089cd15bcb5aa57fb16cc43f",
+    "기존_skip": [
+      "  -    3 [chromium] › e2e/admin-backup.e2e.ts:127:5 › Admin backup restore dialog가 확인 문구, focus, 단계 표시, POST body를 검증한다",
+      "  -    4 [chromium] › e2e/admin-backup.e2e.ts:244:5 › Admin backup restore dialog가 restore POST 500 오류를 표시하고 재시도를 허용한다",
+      "  -  177 [chromium] › e2e/trip-detail.e2e.ts:652:5 › 여행 지도는 feature를 보이고 빈 좌표에서 주소 포함 POI를 생성한다"
+    ]
+  },
+  "검증": {
+    "단위": "web446/domain138/schemas24=608 PASS. runner 실제 CLI parser2건 포함.",
+    "typecheck": "PASS",
+    "격리_소유_HTTP_정책": "12 PASS (별도 정책 전용; 전체와 중복)",
+    "실제_UI": "8 PASS (Map/Pinvi API+PG/Valkey+새 Next build, desktop/mobile)",
+    "lint": "0 errors /기존5 warnings. 생성 trace/report 번들은 제외.",
+    "Bash": "bash -n PASS, ShellCheck 기존2 warnings/신규0",
+    "범위": "전체 live catalog는 실행하지 않았다. 원래 운영4케이스와 최종 prod는 Claude Code 담당."
+  },
+  "mocked_및_단위_입력_sha256": {
+    ".github/workflows/web.yml": "d1c377213eb5b009d281006018f7e1cd70c064b59ba9491d9d52215aaacc33ec",
+    "apps/web/e2e/admin-abuse.e2e.ts": "c9e0e3b7e216d02b0a2c75d224f244d70d90da2c1f4b285cb6ab4e0b32cb26ed",
+    "apps/web/e2e/admin-backup-live-mutating.live.ts": "720d0d04529c8574e1d2021c75e45871cb8955d1b5a93ecd958aee1f2788b367",
+    "apps/web/e2e/admin-backup.e2e.ts": "a4fcc7cb9499e78921b194535be21ab885d5beb0571eac1e55b829c54511c477",
+    "apps/web/e2e/admin-category-mapping.e2e.ts": "b37269e1cc6ce42105710df6c02c06f303fc137f998470d3f2c3dfe4ecb1b94a",
+    "apps/web/e2e/admin-common-dagster.live.ts": "a99fce7c20726cc52b88ea24872cc9f4bcd5151c20dd883d6ecef03a3ab17cd0",
+    "apps/web/e2e/admin-debug-live.live.ts": "abbff9f0ed5a3e03465d3368f6c6f8719e67cd4037a948dc31b77abee609b89a",
+    "apps/web/e2e/admin-dedup-integrity-debug.e2e.ts": "171c96450f6a704feef197b7eca5a7b53b4e11e56639e83b6f495805fbc30d3e",
+    "apps/web/e2e/admin-dsr.e2e.ts": "143e975eb42b4ddd80ccded3da1e8fa46f89623f237ec701cbc291bb59c7bb44",
+    "apps/web/e2e/admin-emails.e2e.ts": "63ae372332255373f3026df8c1a5d49ebbc8037d6f571b532c02933b0e73ccc3",
+    "apps/web/e2e/admin-etl-provider-sync.e2e.ts": "ef11f0f8ab999a7328e0b6ef9004824b3f90bc15410701adcb52d3990e30836f",
+    "apps/web/e2e/admin-feature-change-requests.e2e.ts": "5c0e0e19373559366674938bd668c73d9596876b5a497e31b6020ef3f8373939",
+    "apps/web/e2e/admin-feature-detail-subpages.e2e.ts": "5520c39307f18fc1c66e32b69698ca963df7fc70bd676d159ec97f995c43820f",
+    "apps/web/e2e/admin-feature-reference-reconciliations-live-mutating.live.ts": "69c51ce2eaa8358032e15787aa939870e89b2d7cf39ec2a75d576f0e5193482f",
+    "apps/web/e2e/admin-feature-reference-reconciliations.e2e.ts": "50eebfe5a379e57c5312d9a1a966582ae24bef33b72a9d9094907745bf3c64ec",
+    "apps/web/e2e/admin-feature-request-queue-live-mutating.live.ts": "42710f7f3648a40797bb54b4b6c02b3d9028721c6127754cf8e28f6cad896849",
+    "apps/web/e2e/admin-feature-requests.e2e.ts": "d0b3f82f705aba07a04fb405c5f871c78d5894d47ddd0f1919a262eb29401f70",
+    "apps/web/e2e/admin-files.e2e.ts": "efbf58d1e22a73340722dfde9742ee431153f100ce2779ad126c5ce20075648a",
+    "apps/web/e2e/admin-grafana.e2e.ts": "634f1d8b6b842eaf042e0f145bec99868da10a45a365dde82675157425e52cc9",
+    "apps/web/e2e/admin-incidents.e2e.ts": "65eef7970cd1401f88396f4f9d7d8a164de9cc57609d2d966c3b4f44fb577e6f",
+    "apps/web/e2e/admin-live-backup.live.ts": "cb3aa4b905f6e0cd7c17ab4809fbb47ae604d5cb0554cda0baf473908a4ae3ac",
+    "apps/web/e2e/admin-live-grafana.live.ts": "a6e1ec5c2638f281da46e3f07e41779c0e2b3980eca4075e2ee6428f20e02027",
+    "apps/web/e2e/admin-live-map-marker-parity.live.ts": "153e595cfa4da9e90e2b66e460b61459f327d2d27e2355cc0302038c07c441b4",
+    "apps/web/e2e/admin-live-matrix.live.ts": "b5788907f548e2565c48b4d1e8024628eaaf4c67f86eb6c4df67fccdcecaac79",
+    "apps/web/e2e/admin-login.e2e.ts": "096baf944cae81c26cf8dbb0abd8417d6ca24f134c72105eb3144e9e36bc8705",
+    "apps/web/e2e/admin-mcp-tokens.e2e.ts": "b74e207fd9913d673e1ec42d702729d02d54d3bc05f4a339543bf4a4cb00ad0b",
+    "apps/web/e2e/admin-moderation.e2e.ts": "a5a71db11c9ba9860fbfc28f7bb9f79ca665010f5dc313cf1bd53f95c054e664",
+    "apps/web/e2e/admin-notice-plans.e2e.ts": "bd8e67bed0700ec6057495a3ad192aa2f0eae3a0408173d39b2aa71c1f7a8f6b",
+    "apps/web/e2e/admin-pois.e2e.ts": "22eb9f670341e38cab351ad737b9793706969ef3bd9a33b89cd2131cfeb608e2",
+    "apps/web/e2e/admin-priority3.e2e.ts": "fe641dd906a5a1653353519c5d310bde5be7a82638eaa741ab11003038c053f9",
+    "apps/web/e2e/admin-retention.e2e.ts": "43c0f005e83d87049549dc0d8f2b0a046c26730ddb1ea144e774d948975e7487",
+    "apps/web/e2e/admin-seed-reset.e2e.ts": "773460d6019f90eda308e1c04b2b74e13a9d400465c2060d1d74e7459e32e446",
+    "apps/web/e2e/admin-table.e2e.ts": "7ac81fc49f06068caf9bc894b25186a1a60ea9785fd92eb6a15adb8b6cb59506",
+    "apps/web/e2e/admin-trips.e2e.ts": "e4ede250537668af92b8bc89cdb62e7dc2d8cb68cbf1ed97adf7ec533a2d4dde",
+    "apps/web/e2e/admin-users.e2e.ts": "2a422d822be00519931fe8ac4180c647404e4486f323b9e2773ad2e0541a662a",
+    "apps/web/e2e/api-isolation.e2e.ts": "7f94c5b4a9fbb6ea99635361c1caa17edf30d47ed0d9fcd54b50324e8ad401e5",
+    "apps/web/e2e/app-shell-mobile.e2e.ts": "653dbc5661b442c3b1d0b3b1f005a6d4954281e6da16baca71cef9c8756c0bfd",
+    "apps/web/e2e/auth-form-a11y.e2e.ts": "cde285061c6406777d8176dee138648b681e81c167ca967241f26d91dbed5248",
+    "apps/web/e2e/dialog-focus.e2e.ts": "3c8ed9fd9ba7ba55325962e1a2826e48ae7ec1717a0e3a145397972005ba6c33",
+    "apps/web/e2e/feature-request.e2e.ts": "5905064860160439060d08394dbc9c04928c8a0f5fd773bcaf55a08b2884034b",
+    "apps/web/e2e/fixtures.ts": "a4cf760b3fa7139f369933b2fc9ce327e2356cebbfb685508a5805ca74e8ee51",
+    "apps/web/e2e/form-a11y.e2e.ts": "f59b2439ad6516e92071fe07761219e7334f385a574710987f8691e08498efa2",
+    "apps/web/e2e/legal.e2e.ts": "c354586b1801dba7440e07f7d4be071faf66aad76d9a79cb37744c19a49cf4b1",
+    "apps/web/e2e/map-auto-center.e2e.ts": "56f0483316c75cc3075d15d7240979d7fd21f605d063d0e34e6f26d138cd8fbb",
+    "apps/web/e2e/map-consent.e2e.ts": "569fa7ac0440483afb65e5a157fd3b54c3edbe124ff847b6380628fec4f812ef",
+    "apps/web/e2e/map-explore.e2e.ts": "4bfa8503a48458c2f01f927af95f5cea123eff9db78db2e7e1415900c2667b20",
+    "apps/web/e2e/map-shell.e2e.ts": "b8a687fcfd83d8330cd0afaff7dbe025e4ad48f5ecae4cead100d5cbc2805762",
+    "apps/web/e2e/map-transport.e2e.ts": "6c42dffce82a762742d7b75cd838eec61e2acac112a9b99090cf3e59eafdc493",
+    "apps/web/e2e/maplibre-worker.e2e.ts": "92c95363a9d48fefcf37d31b8649868dc585a62a0bb281a8c4c1b4a4949ca368",
+    "apps/web/e2e/mocked-network.ts": "51799b18b3c7cd76f4707175cb336a6b49bee3f4bb7fbdcc37b970d7a8fc955f",
+    "apps/web/e2e/mocked-origins.ts": "7eb56784cc0e703ee791ca2cfa34a688ba3864d596b9ba74cca970351b4a284e",
+    "apps/web/e2e/my-files.e2e.ts": "d0d912955ea3715f886f1f479cfd775a3a16174bb632d94e1d05c0ed95b61dfc",
+    "apps/web/e2e/not-found.e2e.ts": "eab05c2167587663fda1055560f252a1509b8a9a5d6b3bb8b176a088e8002bdb",
+    "apps/web/e2e/notice-copy.e2e.ts": "4b5448795db567a0cd102aed49c3b17ae8c2f726be04d162f278131fe3df2d46",
+    "apps/web/e2e/oauth-account-match.e2e.ts": "2f368fdcfaab5ba5cb1a9a5e6ca99338ed6ceb0c4d6b0d34abdf2597a2f8ca3d",
+    "apps/web/e2e/profile-avatar.e2e.ts": "413e0a5bddd7099119bdbc0facf84ba207a6598dfb79aa3a99af2f67da7f7001",
+    "apps/web/e2e/settings-dsr.e2e.ts": "d917932953423d6a8d280984c45a1dd4e7b85fdc319fc247d86835bd9a63d7c0",
+    "apps/web/e2e/settings-mcp-tokens.e2e.ts": "2d32fc526fb3b66f644030c37505e30a81e3a99ac33bf868d437e66e3fb46f65",
+    "apps/web/e2e/settings-moderation.e2e.ts": "141f7a25d937e5eb666ef7234dfba032e5c66e47b5c71d9cfde180341c22ee12",
+    "apps/web/e2e/settings-telegram.e2e.ts": "f3a81d16688bed31c69039925a7d2a044776531fdd3a655d1e1d86af2dd46374",
+    "apps/web/e2e/shared-trip.e2e.ts": "5b81a88e4a8ea27f7772d2d876634bb8ca4df0fe393e4c01097ff70a113dd862",
+    "apps/web/e2e/signup-consents.e2e.ts": "e1905feed5b00347b1f520e05d1b4a59eda48facd51969eb32310a736ee3f4f9",
+    "apps/web/e2e/trip-actions.e2e.ts": "6db07bea8bebfffc7f98dcde25a06c04a65ca7a59ddef5fd0c05a9e718937d85",
+    "apps/web/e2e/trip-attachment.e2e.ts": "78a01813f5ceded00abf1330d47e212f40dafc505de20b732a255168236fa881",
+    "apps/web/e2e/trip-collab.e2e.ts": "284675df7372d321d4fa2a6d13ec20f54ea52e43f6116d2d5f8baaa07dd0ced3",
+    "apps/web/e2e/trip-conflict.e2e.ts": "814ec35b3671fac289158c91f20a5da17428fee7366bd6b2b17ded84726d1415",
+    "apps/web/e2e/trip-day-hole-live-mutating.live.ts": "3532ab4266dee47ab3d15ad6479988fe2c7922570fd87eb9c1880f54aabb8471",
+    "apps/web/e2e/trip-detail.e2e.ts": "4723904d89c4b7fa0b930c82e6b014c5a598b6d1354ecba95336a23700926d48",
+    "apps/web/e2e/trip-edit.e2e.ts": "aa320a82f7f692c3f1c33d7fc34583c7a5691806afbd6387ad0132df9f4b7d03",
+    "apps/web/e2e/trip-feature-resolution-live-mutating.live.ts": "74d74e531a64997b9b7be12d072dac645f7e3ce89db5ea76fce9a25905182e44",
+    "apps/web/e2e/trip-mutations.e2e.ts": "7bd588567933239e90da20a191e101ce8b8427a1c8dd7c7c7cd178f9dc789be9",
+    "apps/web/e2e/trip-realtime-live-mutating.live.ts": "e3c5fe9ada278fd9ae4d890a123b26d68848e70bf99d3e1f685c8e80feefbf2f",
+    "apps/web/e2e/trip-telegram.e2e.ts": "80d5f4be679ea6de5d7a7c6136420a6623177661ded062f56fad11f24b972642",
+    "apps/web/e2e/trip-upload-layout-live-mutating.live.ts": "f3e67beb844bebcd446bb4d81e0447432c623dd208512a9963edc2e7b0e357c1",
+    "apps/web/e2e/trips-dashboard.e2e.ts": "e608c1911f6c96b8973e80d14759c4024d0720efed219d17cd314138ed098c3b",
+    "apps/web/e2e/user-shells.e2e.ts": "190501a69ea5f38e84f299620e6db3a42574bd1890d69e5a19507f61862bef30",
+    "apps/web/e2e/weather-proxy-upstream.ts": "c8d284dfe2565f12c5e827ffc47e35f552603ef48cd4ce03509b5b339ce2623a",
+    "apps/web/eslint.config.mjs": "8f996d1f407fd614ba3d81483a95075704fb75eecd2e731a55d893d0ee0c2bce",
+    "apps/web/playwright.config.ts": "626716469409944d6282f2f317344b494c25fc348dea12dc387ef37392f06a38",
+    "apps/web/tests/AdminCommonDagster.test.tsx": "7708a02bdd4131631dccaa62048839a5f088360793c9119da2c3b64ceab3c746",
+    "apps/web/tests/AdminSectionContract.test.tsx": "452a8949cbbd48f7b253b7aec2e2081e5ce4d8fd2d710f0c3b92d1e9f14e01ce",
+    "apps/web/tests/AdminTable.test.tsx": "d0827661072a648904a7f271b9ef543a167fcc6d11427b3d745d259ce2953c99",
+    "apps/web/tests/AdminTableServerSort.test.tsx": "02291abcafa7cc5d7e5c0c85a888ff886b738dbc615061f1a06ce1a77a6b7eb8",
+    "apps/web/tests/AdminTableVirtualization.test.tsx": "370975ba8bfddc4e883c62e2ec34a6a291ac9529b463dba8d02420a29ee5fbf0",
+    "apps/web/tests/AdminWeatherValues.test.tsx": "781a6611f77ec07a311c16b7ccf59eef1b80aa9a28d33c34477eeee99b7dae88",
+    "apps/web/tests/ConfirmDialog.test.tsx": "7bf091dc40548fc3ceeaa1e4b798401a326c73d68b7a640c10c4f4b20bca3315",
+    "apps/web/tests/FeatureDetailCardBody.test.tsx": "a2d7c849d36a93f9e164b50b6b8f18b9480f6d2755a3196eff25c8d950ac7194",
+    "apps/web/tests/FeatureDetailModal.test.tsx": "ceca9ad7952709acfe5efef267b9adc2abedfc3c5f3637436bcc5e5cf7f697a0",
+    "apps/web/tests/FeatureGeometryLayer.test.tsx": "7cfc1d4fc97197e4d1cc40a43d6c07c4b89f34e433974173127a4d218c25be52",
+    "apps/web/tests/FeatureMapView.weatherMarkers.test.ts": "e36c23bff1d93967fc58e8efa9acc907f1de57586c41c56446030e3238206e09",
+    "apps/web/tests/LogoutButton.test.tsx": "b724f5d9415f3805498038b22ef6c3961d4262ff5afcada6482630492e288a06",
+    "apps/web/tests/MapSearchBox.test.tsx": "bb4e89531b16f9ba036c6ca7f7cec4d3ddf44d06f4a5756849275c56ab2b9440",
+    "apps/web/tests/PoiEditorMove.test.tsx": "b3afe1df82cb8d3c4d7a9f19603ce82a28c76b813adacab1e5cce1f60a2dc825",
+    "apps/web/tests/SharedTripEditor.test.tsx": "ef04697274d8105a1a52eeb6c3972918ab7f72ef805a33241e8165e88e499981",
+    "apps/web/tests/SharedTripExport.test.tsx": "65866aae266c282706fa21d8b5f95b38ce0a08e8bfe49a4aff5e21a6b96c52d7",
+    "apps/web/tests/StorageRetentionPanel.test.tsx": "c9076e325dd9493b1f67e5610529da36dcca2bda304e6580f8839a4d01ae06b2",
+    "apps/web/tests/TelegramNotificationHistory.test.tsx": "aded3e015a1083aa3c903228a21cb170f87814791d6f7c52351a5409c71e88c8",
+    "apps/web/tests/TelegramNotificationPreferences.test.tsx": "39dbb594d89cf3f1909af956d4e3cd296cd27fa53dff41f3adece8337da2fcf3",
+    "apps/web/tests/TransportDetailDialog.test.tsx": "04a295895eebfd797fb317143524df5adccdc6a6baeab6620ec894625135c251",
+    "apps/web/tests/TransportLayerControls.test.tsx": "898275975930bc93876db21b84b86421a562d10377c2aa316b1e9e467941ece9",
+    "apps/web/tests/TripComments.test.tsx": "8fa73428f20d9182bfbc67f84c9c89ee042d7722e1d05c46632455f6b3995f0a",
+    "apps/web/tests/TripDayHeader.test.tsx": "ac711ac68e7436590b7b7319e0fa819471e2dbeba0cdb79d6abb8e0c912ea2c4",
+    "apps/web/tests/TripEditDialogDates.test.tsx": "9ab62a03abcad7891476fae324ae8c9a2d9844b218c03f3df86c2e3610139302",
+    "apps/web/tests/TripExportButton.test.tsx": "39a82a0d431f7e53e984901e4e60015d4a2876d2d662455431b0e6f9aab2b2f9",
+    "apps/web/tests/TripShareLinksExpiry.test.tsx": "2f4e034840a93a409e20ba5d97e593060cd5566caa6908e795a6c83acb3e043d",
+    "apps/web/tests/TripTrash.test.tsx": "f294adb7a325e4af9e89c0a815864116a11b22fa199ea099e3b7ffdecfa68c7f",
+    "apps/web/tests/TripWeatherSummary.test.tsx": "28c63c8bd331cc3b1badf3d48b1a85695f1462ea0d12768550062786741fd779",
+    "apps/web/tests/adminCn.test.ts": "8ae6b6d7ab71bb660c1f09a180f60413600b21b4b3975ebe1a9855ddebfe4c03",
+    "apps/web/tests/adminDialogDismissal.test.tsx": "55f3f665966aa6aaa50ea7f4fcea4bfc43344e3e585043f40435ee4a028cfff7",
+    "apps/web/tests/adminFormFieldInput.test.tsx": "c463df614f2effe7c790a039d34a64d45f572cf1e58f2315314ea344cee6c4ed",
+    "apps/web/tests/adminPortalScope.test.tsx": "94c885a1b8545115c8a47fda646f44d65088cf8aaaf9f357f1e6913f3dfd62e9",
+    "apps/web/tests/adminStatusLabel.test.ts": "8dec7ea15852d75c5a3887c202aa4a4733d23b335eea2641956be4abcacded24",
+    "apps/web/tests/adminTableWindow.test.ts": "98d4a0c57bf2bca05718fbf7e4957d64628dd66ef5d58aaf08e6602cf6e63ac8",
+    "apps/web/tests/adminTypographyScope.test.ts": "9320021bc76238cbc0f9b210fa04ccbaf185648f03008a175aac867b5159326d",
+    "apps/web/tests/apiClientRequestLifetime.test.ts": "4ac6a03085e161633dbebcb289a95214ab98788bb21fd2dd9fdcb75fa663df80",
+    "apps/web/tests/apiClientSessionRefresh.test.ts": "7d01d100b82c3c40c7ee31756a6699d05abb8c32316a692994e537f328c20394",
+    "apps/web/tests/apiClientSignal.test.ts": "f7be617c2a82ea703b4350ecf32350e260ab565e6dba6effe7c4a10d076ebebe",
+    "apps/web/tests/conflictResolution.test.ts": "8e89af9357f63e734f30d282040bba858e8475e8adcc14cf3f7988cedd85e6d4",
+    "apps/web/tests/daysNotesTime.test.tsx": "862187fc6fd35ad2f4492a750ba82fc220b9cc02708e9f6364391e05f0e7f9cf",
+    "apps/web/tests/errorRecovery.test.ts": "a0d58b13e849e2b67d3ac8a5789cd0d76a4360a92c8e34cef3521b75b0a4f55a",
+    "apps/web/tests/featureAddress.test.ts": "16ef862a443421357320c81677d381a98f0a650e544784754e260f43725a5cfe",
+    "apps/web/tests/featureBounds.test.ts": "8543f806c2ca54ae217e9411232d003c3aec9583ef25c98aee3437416042971b",
+    "apps/web/tests/featureCommandReconcileClient.test.ts": "638a889f461b3aa131e53366c5d19b065145f54e7124eac3c7d2784e8ee2f653",
+    "apps/web/tests/featureCommandReconcileDialog.test.tsx": "96509bbb5d0e6664c0de85f355ed5a8730a2cca76b83bd14fcac651f5f0cb35e",
+    "apps/web/tests/featureContract.test.ts": "c7f753c6537597709b448640aaab73d420fa00873a8abaa3086ab39aaa760d31",
+    "apps/web/tests/featureGeometry.test.ts": "a98809d80fe3534b17d56569dc2be9835ae1de5a680dafd20e43eb23f6f9ba2a",
+    "apps/web/tests/featureGeometryContract.test.ts": "9a820859635945ea0fef8866a9a8e5ee0f1676e156b939442cffe23ea7087c0b",
+    "apps/web/tests/fixtures/tripExport.ts": "ab1a261c5a217d9e398b912abd5e56579522b4b94879fed4cd8dbe9b3e98ee21",
+    "apps/web/tests/grafanaEmbedConfig.test.ts": "5120da93b3623dba4847da8cadf324e23b37f73903d0035e0645b99094b9b78e",
+    "apps/web/tests/liveCatalogRunner.test.ts": "c7dac12e468ee08c9b946f854bb683ec39666350cf824a4a3a579d93b65e75ee",
+    "apps/web/tests/loginHydration.test.tsx": "762d62b3d63977e5e3c11a53796ef3b83cc4057c4e03226cbd4976a4a2a564ec",
+    "apps/web/tests/loginReturnTo.test.ts": "0048f0c48c1aaca642b711386ce40c638273c6a88f203136c6b28d5e1973cccb",
+    "apps/web/tests/mapFitPadding.test.ts": "5ebe17c4c1f09635571a06db9a0b810aae382193efbcf46a3bcc5d228638baed",
+    "apps/web/tests/maplibreWorkerWiring.test.ts": "64d19dc48e0ee97ade6bfa94454b891f41a5195eb2540f553654749369b86647",
+    "apps/web/tests/mockedOrigins.test.ts": "4100819dfeed4d5ac25c1ec3c895ecbcd4cf1f1eae250b9e8f9f2c898ec43aa0",
+    "apps/web/tests/poiMoveConflict.test.ts": "c9311712757f15228c061c640e7aa1ea2ba4383fb82ff3a6154dc7d90550b21c",
+    "apps/web/tests/redirectToLogin.test.ts": "91ee7a39fdaf4831972b0865c039d3ed19acfe34acc2d00074e41b0477f8b2be",
+    "apps/web/tests/searchBias.test.ts": "945c219579c5733fc0c5cd2b38aceee06c1a3b7c71a35358deb9f71d70162f0d",
+    "apps/web/tests/searchFixtureSelection.test.ts": "a2e9c8e17882d6d5ca3958c6990660c0ed66bbb15a562495d2711dc2665c44df",
+    "apps/web/tests/skipToContent.test.tsx": "6b8fd677b9e46c97b920729da9047af591d8e339b8f998614b15d8ebf9d9e586",
+    "apps/web/tests/tripDateLabels.test.ts": "1be2ebdca251a3d2f402fe738f1dd7665efa968005819241e725eba3f2ba6d90",
+    "apps/web/tests/tripExport.test.ts": "594302502b82dc5aa908dbadb0c792ff5d767eec22703beb2bcbb8541d7a0977",
+    "apps/web/tests/tripMapViewFit.test.tsx": "0a992dce53939cbdebea26b67e07e1eba7062728a69975fd06c10044fb9c4481",
+    "apps/web/tests/tripPrintWindow.test.ts": "574598d7a2a13a35dec0a898c86fad80c0e49cbc51e05b63ddf26cc2d15e8bbc",
+    "apps/web/tests/tripRealtimeClient.test.ts": "8deaa6e4b752442cdf9b3979141c2bd4d3d28f56a7eb04f33ff1b7932287f6f6",
+    "apps/web/tests/useAbortableLoad.test.ts": "9160fdc77cdd88149ee3604cc607aa2648eca5e708ce010c23f2c9678a2e293b",
+    "apps/web/tests/useFeatureGeometry.test.tsx": "eb2bf20eb8ce9b0782a8b6cd7bae74a0e4a5d3f3a04422362bec4865b9169759",
+    "apps/web/tests/useModalDialog.test.tsx": "e9e8e8253ba404e8bf1d961435f5c123e025b7e34b982677d579e2add4e38f65",
+    "apps/web/tests/viewportBbox.test.ts": "abd1223b3d2200bf5ea543a83b9672a40c4046420893f085997afd37e1260864",
+    "apps/web/tests/vitest.setup.ts": "fa70dd9f4ab0361b2747e81596c8e32854849892855dbac30eff10edb9705742",
+    "apps/web/tests/weatherProxyUpstream.test.ts": "b6c57b5b55b58e8f23fc2d7a80f8b418d3b33afb58cb9afd789407cbeb5a71f2",
+    "scripts/n150-live-catalog.sh": "6bc0ab83f66cb8d8a354178c26f8e22fb84a9b870c3068cf9cd89c36a02374aa"
+  }
+}

@@ -119,8 +119,7 @@ test.describe('CORE mobile', () => {
     });
 
     test('CORE-021 통계 칩이 남쪽 핀을 가리지 않는다(#623)', async ({ page }) => {
-      // #623 (open) is position-dependent: it did not reproduce on the 2026-11-03 mobile run, so this is a
-      // plain assertion of the correct behaviour — a failure here means #623 reproduced.
+      // #623의 조건부 하단 여백 회귀. 실제 SVG 핀을 통계 칩이 가리지 않아야 한다.
       await page.goto(`/trips/${tripId}`);
       await waitForMapCanvas(page);
       const pins = tripPins(page);

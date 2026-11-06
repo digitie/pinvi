@@ -1,10 +1,10 @@
 # Claude Code 운영 검증 인계
 
-2026-11-06 기준 #643 후속 구현은 머지됐으며 우산에서 직전 미완료로 남은 항목은 Pinvi #650과 Map #1450이며, 이번 열린 이슈 감사에서 Map #1440의 재오픈도 확인했다. Codex는 WSL 작업·검증·머지, Claude Code는 운영 진단·필요한 적재·최종 UI 검증을 담당한다. 아래 머지 SHA는 운영 배포 완료를 뜻하지 않는다.
+2026-11-06 최신 운영 댓글 기준 #650은 해결·CLOSED이며 Map #1450도 초회 적재·SRCH028 검증을 마쳤다. 남은 범위는 #621/#686 운영 확인, Map #1440 과거 날씨와 #1450 갱신 정책 결정이다. Codex는 WSL 작업·검증·머지, Claude Code는 운영 진단·필요한 적재·최종 UI 검증을 담당한다. 아래 머지 SHA는 운영 배포 완료를 뜻하지 않는다.
 
 ## 머지 내역과 실행 기준
 
-Pinvi 제품 기준은 `efc01affd4267e4e6c75411db3cb902e38d2c7aa`, Map은 `27033b116d8d7328689b19a20de830417937dd73`, Geo는 `305777d561a98588e310756981d3a984908be2ee`, Weather는 `d8534aeae8852f9c514e39d625ea7dded956f3ed`다. 운영 시작 시 각 서비스의 실제 실행 image digest/revision·worker 시작 시각과 이 변경의 포함 여부를 확인한다. Pinvi revision만으로 Map/Geo/Weather의 실행 버전을 대신하지 않는다. 이후 릴리스를 쓰면 실제 전체 SHA와 변경 포함 관계를 기록한다.
+Pinvi는 이 문서를 포함한 [PR693](https://github.com/digitie/pinvi/pull/693)의 실제 mergeCommit full SHA를 운영 검증 기준으로 고정한다. API PR695/a3129a957cd9fb13913faffebbd58241fb3fecd2와 frontend 묶음이 모두 포함돼야 한다. 기존 별도 서비스의 최소 포함 기준은 Map `27033b116d8d7328689b19a20de830417937dd73`, Geo는 `305777d561a98588e310756981d3a984908be2ee`, Weather는 `d8534aeae8852f9c514e39d625ea7dded956f3ed`다. 운영 시작 시 각 서비스의 실제 실행 image digest/revision·worker 시작 시각과 이 변경의 포함 여부를 확인한다. Pinvi revision만으로 Map/Geo/Weather의 실행 버전을 대신하지 않는다. 이후 릴리스를 쓰면 실제 전체 SHA와 변경 포함 관계를 기록한다.
 
 | 병합 PR                                                                                         | 내용                                                                                     | merge SHA  |
 | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------- |
@@ -19,6 +19,11 @@ Pinvi 제품 기준은 `efc01affd4267e4e6c75411db3cb902e38d2c7aa`, Map은 `27033
 | [pinvi #688](https://github.com/digitie/pinvi/pull/688)                                         | feat: Telegram 일정 전송과 KST 일간·주간 브리프                                          | `5602cf3d` |
 | [pinvi #689](https://github.com/digitie/pinvi/pull/689)                                         | feat: 여행 기상특보 Telegram 알림                                                        | `22d35778` |
 | [pinvi #690](https://github.com/digitie/pinvi/pull/690)                                         | feat: 여행 인쇄·PDF 저장·ICS 내보내기와 공유 진입 정합성                                 | `efc01aff` |
+| [pinvi #691](https://github.com/digitie/pinvi/pull/691) | geometry anchor 전달·운영 인계 보완 | `ff5c2386` |
+| [pinvi #692](https://github.com/digitie/pinvi/pull/692) | Claude Code의 SRCH028 운영 성공·scripted 복귀 | `d02a35d5` |
+| [pinvi #694](https://github.com/digitie/pinvi/pull/694) | 소유 서버 lock 해제까지 hotswap cleanup 관찰 | `a5a21547` |
+| [pinvi #695](https://github.com/digitie/pinvi/pull/695) | Map 계약·HTTP 관측·날씨 배경화·rate/pool 복원력 | `a3129a95` |
+| [maplibre-vworld-react #31](https://github.com/digitie/maplibre-vworld-react/pull/31) | 선택 SVG 위치 보존·실제 병합본 tarball 소비 | `9c46c571` |
 | [kor-travel-map #1448](https://github.com/digitie/kor-travel-map/pull/1448)                     | MCST SDK 승인형 CSV와 데이터셋별 적재 결과를 반영                                        | `dd0238c3` |
 | [kor-travel-map #1451](https://github.com/digitie/kor-travel-map/pull/1451)                     | fix(admin): safely reconcile uncertain feature commands                                  | `27033b11` |
 | [kor-travel-geo #623](https://github.com/digitie/kor-travel-geo/pull/623)                       | test(search): 공식 Juso 원천으로 Pinvi 전체 주소 회귀 확인                               | `305777d5` |
@@ -30,6 +35,8 @@ Pinvi 제품 기준은 `efc01affd4267e4e6c75411db3cb902e38d2c7aa`, Map은 `27033
 검증 증거는 Pinvi `docs/reviews/`의 이슈별 JSON과 각 PR 최종 댓글에 있다. #690은 두 독립 전문 적대 리뷰 무차단·최종 필수 CI11성공, WSL 실제 UI7/pageerror0·웹421·공유 PG9·ICS2파일 독립 파서·PDF9페이지 검수를 마쳤다. 이 수치는 WSL 검증이다. #641 PDF는 브라우저 인쇄 대상에서 PDF 저장을 선택하며, 위치도는 배경지도·도로 경로가 없는 방문 순서 개요다.
 
 ## Pinvi 650 주소 검색 진단
+
+**최신 상태: CLOSED.** [Claude Code 운영 결과](https://github.com/digitie/pinvi/issues/650#issuecomment-6670875765)는 Geo 실행 이미지가 구조화 주소 검색 수정 전이었던 것이 원인이며305777d 배포 뒤 원래 약칭/정식명40이 각각 정확1행, 운영 SRCH-004가 통과했다고 기록했다. Pinvi 추가 제품 수정은 없다. 이는 Claude Code의 운영 증거이며 Codex가 직접 수행한 결과가 아니다. 아래 절차는 재발 시 진단용으로 보존한다.
 
 [원래 이슈와 운영 댓글](https://github.com/digitie/pinvi/issues/650)을 먼저 읽는다. 2026-11-05 운영 기록은 약칭과 정식명 모두 Geo 직접 호출에서도 NOT_FOUND/0건이며, 도로명만은67건이다.
 
@@ -50,6 +57,8 @@ Geo623은 공식202605 보존 원천67행을 실제COPY/generated columns/정본
 현재 spec은 정상 단언이며 test.fail이 없다. 카탈로그의 과거 종료 기록만 재오픈 상태로 정정한다. 실제 운영 성공을 확인하기 전 #650을 닫거나 #643 체크를 완료로 바꾸지 않는다.
 
 ## Map 1450 국립공원 경계 적재
+
+**최신 상태: 최초 적재·운영 검증 완료, 갱신 정책 때문에 OPEN.** [Claude Code 운영 결과](https://github.com/digitie/kor-travel-map/issues/1450#issuecomment-6670520886)는 정식 경계21건·서빙 Polygon·실제 SRCH-028 통과를 확인했다. [Pinvi PR692](https://github.com/digitie/pinvi/pull/692)/d02a35d가 scripted 복귀를 반영했다. 남은 것은 갱신 주기와 다른 미적재 dataset 포함 여부의 소유자 결정이다. 초회 요청을 다시 제출하지 않는다. 아래는 재발 진단 절차다.
 
 [Map1450](https://github.com/digitie/kor-travel-map/issues/1450)은 2026-11-05 zoom7 전국 조회에서 items/clusters가0건이었다는 운영 기록이다. 이 zoom은 시·도 cluster 모드이고 행정코드NULL을 제외하므로 이 응답만으로 DB 전체 area0건을 확정할 수 없다. 국립공원 경계는 `knps_park_boundaries`이고 `knps_protected_areas`는 한국보호지역 데이터다. 후자를 적재했다고 설악산 국립공원 경계를 확인한 것으로 처리하지 않는다.
 
@@ -98,18 +107,30 @@ scripts/n150-live-catalog.sh --area search --area weather --project desktop --gr
 
 표적 세 건 후 search/nearby/core/share/weather/notify/admin/trip/poi를 최종 회귀한다. blocked·skip·manual과 실제 pass를 분리하고 결과의 API/웹/Map/Geo/Weather revision·image digest, 실제 fixture, 원인·조치, pass/fail/skip, 민감값을 가린 증거를 남긴다. #653의 실제 UUID별 상한 설정·기존 임시 allowed6건 정리, #667 관리자 명시 GC, #668 미확정 명령 확인, #636/#638/#637의 실제 Telegram 대상·예약·Prometheus Docker 실행 확인과 인증 scrape, #641 인쇄/PDF/ICS도 운영 인계 범위다. 운영 Prometheus가 없으면 Manager 소유의 정본 Compose 절차로 띄우고 실제 API target과 발송/실패 고정 label을 확인한다. 실제 전송은 승인된 전용 테스트 대상만 쓰며 일반 사용자 대상에 보내지 않는다.
 
-## 체크리스트 밖의 추가 열린 이슈
+## 추가 묶음과 남은 운영 확인
 
-이번 감사 시점 #643은 GitHub에서 CLOSED이며 본문 미체크는650/Map1450 두 건이었다. Map1440은 개별 이슈가 재오픈되어 우산의 완료 기록도 정정해야 한다. 전체 저장소의 모든 이슈가 끝났다는 의미는 아니다. 2026-11-06 Pinvi의 열린 이슈는 다음7건이며 별도 조사/작업 범위를 유지한다. 관련 PR이 머지됐다는 이유만으로 원래 운영 재현을 완료 처리하지 않는다.
+2026-11-06 개별 이슈·최신 운영 댓글을 다시 확인했다. 오래된 우산의 미체크만으로 실제 운영 상태를 덮어쓰지 않는다.
 
-- [616 Map 응답 envelope 정확-집합 검사 3곳을 런타임 검증으로 (additive 변경 내성)](https://github.com/digitie/pinvi/issues/616): OPEN.
-- [618 N150 mocked e2e: mock 안 된 API 호출이 localhost:12801(운영 PinVi API)로 샌다](https://github.com/digitie/pinvi/issues/618): OPEN.
-- [621 PinVi 의존 서비스 지연 대비 복원력 — 남은 항목(로깅 outbox·rate limit·동시성 상한·풀 설정·edge HTTP/2)](https://github.com/digitie/pinvi/issues/621): OPEN.
-- [623 여행 지도 기존 결함 3건 — 모바일 통계 칩이 남쪽 핀을 가림·선택 마커 CSS scale 위치 이동 의심·선택 POI flyTo offset 없음](https://github.com/digitie/pinvi/issues/623): OPEN.
-- [650 통합 검색: 전체 도로명 주소(시·도 약칭) 질의에 주소 행 0건](https://github.com/digitie/pinvi/issues/650): OPEN.
-- [658 restore hotswap cleanup 반환 직후 advisory lock 해제 검증 경합 조사](https://github.com/digitie/pinvi/issues/658): OPEN.
-- [686 #677 이후 운영 지도 케이스 잔여 실패 — NEAR-024(desktop 맞춤 중심)·CORE-025/NEAR-025(mobile)·NEAR-006(휴게소 상세 미오픈)](https://github.com/digitie/pinvi/issues/686): OPEN.
+| 항목 | 현재 근거와 남은 범위 |
+| --- | --- |
+| #658 | PR694/a5a2154로 WSL 소유 PG 잠금 지연 회귀·독립2리뷰·적용CI8성공 뒤 병합, CLOSED. |
+| #616·#621 | PR695/a3129a9로 WSL 구현·검증 병합. #616 CLOSED, #621은 운영 flag·edgeHTTP2·지연/pool/worker 확인으로 OPEN 유지. |
+| #618·#623 | PR693에 검사 격리·실제 지도 가림·선택 위치/offset을 함께 보완. 이 PR의 Closes 대상이며 운영 배포는 Claude Code가 담당. |
+| #686 | PR693의 layer/ID 선택·정확 응답/본문·native viewport oracle과 WSL 실제UI8흐름으로 보완. 원래 운영 NEAR024/025/006·CORE025 재실행 뒤 Claude Code가 종료한다. |
+| #650 | Geo 배포와 원래 SRCH004 운영 성공으로 Claude Code가 CLOSED. 2문자 Geo query timeout은 별도 관측이며 이 결과로 해결됐다고 하지 않는다. |
+| Map1440 | 과거 daily_summaries 원천/보관/실행 경로와 WX004 운영 재검증으로 OPEN. |
+| Map1450 | 공식 국립공원 경계21건·SRCH028 성공 및 PR692 반영 완료. 갱신 정책/추가 dataset 선택 때문에 OPEN. |
 
-#616은 additive envelope와 서명 경계를 구분한 회귀, #618은 mocked E2E의 미등록 API 요청 차단, #621은 이미 보완된 항목과 남은 로깅/동시성/풀/edge를 재분류한다. #623과 #686은 실제 제품 결함·marker/카메라·helper 실패를 각각 재현해 구분하며, #658은 소유 DB에서 클라이언트 종료 뒤 서버 lock 해제 지연과 지속 잔류를 나눈다. 이 항목들을 현재 두 운영 이슈가 해결된 것으로 함께 닫지 않는다.
+검증 근거는 [PR693 WSL 실제 UI 기록](../reviews/pinvi-618-623-686-wsl-ui.json), [PR695 API 기록](../reviews/pinvi-616-621-wsl-resilience.json)과 각 PR 최종 댓글이다. Codex는 운영/SSH·실제 provider·Telegram을 호출하지 않았다. #671/#672 보호 stash와 다른 Code의 upstream PR30도 보존했다.
 
-Map 열린 이슈는 #1440·#1450 두 건이고 열린 PR은0건이었다. Pinvi 열린 PR은 이번 인계/러너 보완 #691이다. #1438의 운영 데이터 대기는 CLOSED 이슈의 후속 검증으로 별도 기록한다.
+### 새 배포 후 우선 확인
+
+Pinvi는 PR695의 API와 PR693의 web을 함께 적용한 정확 revision을 기록한다. 독립적으로 낡은 web/API를 섞어 비교하지 않는다. source/tree·lockfile·image gate와 정본 Manager 절차를 유지한다.
+
+- #686의 원래 네 케이스를 desktop/mobile로 실행한다. 같은 이름의 feature/transport는 실제 interaction ID로 구분하고 정상 클릭의 상세 HTTP200·본문 ID를 확인한다. 강제 dispatch로 다른 마커를 누르지 않는다.
+- 선택 SVG 끝점과 native projection, 경로/영역·교통 패널과 통계 칩의 교차, 선택 offset, 사용자 드래그 중 지연 응답을 확인한다. 고정 높이 스택의 내부 패널 변경도 관찰한다.
+- #621의 직접 날씨 cold miss는 즉시 Pending/빈 카드이며 배경 single-flight 후 warm hit가 된다. durable outbox처럼 누락 없는 수행을 가정하지 않는다. pool acquisition 대기·관측 손실·회로/포화 counter를 운영 latency와 함께 확인한다.
+- mocked suite는 전용 reserved API/Grafana origin과13805를 사용한다. live env·실제 제공자를 섞지 않는다. context/page request·HTTP redirect·서버 proxy/optimizer도 guard 대상이다.
+- live runner의 variadic project 오류는 PR693에서 --project=값으로 수정했다. WSL 실제 --list로 단일/반복 area·project2건을 확인했으며 이 검사는 운영 실행이 아니다.
+
+Map1438의 MCST/MOIS 운영 재투영과 분류 재검증, Telegram 전용 테스트 대상·Prometheus 인증 scrape 및 나머지 최종 운영 카탈로그는 기존 인계 범위를 유지한다.

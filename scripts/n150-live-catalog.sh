@@ -161,7 +161,8 @@ export PINVI_PLAYWRIGHT_RUNNER_IMAGE="${PINVI_PLAYWRIGHT_RUNNER_IMAGE:-mcr.micro
 # ── playwright args ──
 pw_args=()
 for p in "${projects[@]}"; do
-  pw_args+=(--project "$p")
+  # Playwright의 variadic --project가 뒤 spec 경로를 삼키지 않게 값 경계를 고정한다.
+  pw_args+=("--project=$p")
   if [[ "$p" == "session" ]]; then
     export PINVI_E2E_SESSION=1
   fi

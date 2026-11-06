@@ -65,3 +65,15 @@ WSL 소유 Map/PostGIS/Valkey와 Pinvi/PG를 연결한 Chromium에서 desktop/mo
 새 최종 독립 검토의 P2 네 건은 사용자 movestart 즉시 보존, max-height 스택 안의 실제 패널과 추가/제거 관찰, image optimizer 서버 proxy 경로 거절, NEAR025의 한국 경계 clamp다. optimizer2개 실패우선과 보완 뒤 격리12개, 관찰·viewport·맞춤 관련 단위23개/typecheck를 확인했다. 수정 이후 전체 실행·실제 UI·두 리뷰와 exact CI는 계속 진행한다.
 
 일반 push의 commit_refs 오류로 f5b453a의 모든 blob/tree 해시를 대조한 뒤 GitHub API로 동일 tree442b20ecfbc009d757dc4225c807c495f0235811를 d18d37d10dc3ea0cad14972e5b5d5a01967c308e로 게시했다. expected 원격506d15e를 조건으로 fast-forward했으며 force는 없었다. 원래 로컬 commit은 refs/codex/checkpoints/pr693-f5b453a로 보존했다.
+
+## WSL 최종 결과
+
+통합 API/앱의 실제 UI8흐름은 모두 통과했다. desktop/mobile 2핀/4핀·선택 SVG 오차1px 미만·동명 feature와 휴게소의 정확ID HTTP200·A→B stale 없음·마우스 드래그 유지 중1.2초 지연 응답200과 상시 패널136→152px에도 native 중심 동일을 확인했다. 실제 앱/API/native helper 입력644개는 UI 실행1a05f9d와 byte동일하며 보고서에 지문을 보존했다.
+
+새 mocked production build 전체는202 PASS/기존3 SKIP, 실패·미실행·전역오류0이다. 종료 disposal에 이어 Playwright worker의 명시 Test ended 사유도 구분했고, 진행 중의 비종료 오류는 계속 전파한다. 단위608(web446/domain138/schemas24), typecheck, 격리 정책12건이 통과했다.
+
+최신 #650 운영 댓글에서 보고한 --area+--project 오류는 실제 --list CLI에서 실패를 재현한 뒤 --project=값으로 보완했다. 단일/반복 area/project2건이 통과했고 env 파일·Docker·브라우저·운영 API는 사용하지 않았다. lint는 소유 trace 생성물을 읽던 진단을 분리해 표준 생성 디렉터리만 제외하며 기존 소스 경고5개를 유지한다. Bash 문법 통과, ShellCheck 기존2/신규0이다.
+
+API PR695는 정확aa6c987에서 두 독립 전문 재리뷰 무차단·적용CI9+aggregate/reminder 총11 SUCCESS 후a3129a9로 일반 squash 병합했고 후보/병합 tree가 같다. #616 CLOSED/#621 운영 잔여OPEN을 재확인했다. #650은 Claude Code의 Geo 배포·SRCH004 성공으로 CLOSED, Map1450은 초회21경계 적재·SRCH028 성공/PR692 반영을 마쳤으며 갱신 정책 때문에 OPEN이다. #686 원래 운영 재실행과 Map1440도 Claude Code 담당으로 유지한다.
+
+코드와 UI 증거는 docs/reviews/pinvi-618-623-686-wsl-ui.json 및 before/after/selected 모바일 화면에 보존한다. 실제 GPU/Firefox/외부 지도 타일·아이콘 CDN·운영 full catalog 결과로 확대하지 않는다. 최종 리뷰·exact CI·병합은 PR693 최종 댓글을 확인한다.

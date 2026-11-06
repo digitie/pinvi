@@ -1,4 +1,4 @@
-import type { APIRequestContext, BrowserContext } from '@playwright/test';
+import type { APIRequestContext, BrowserContext, Route } from '@playwright/test';
 import { MOCK_API_ORIGIN } from './mocked-origins';
 
 const SAFE_SEGMENTS = new Set([
@@ -73,9 +73,16 @@ export async function installMockedNetwork(
 ): Promise<MockedNetworkFence> {
   const violations: string[] = [];
   let closing = false;
-  const disposedDuringClose = (error: unknown) =>
-    closing && error instanceof Error &&
-    /Request context disposed|Fetch response has been disposed|Target page, context or browser has been closed/.test(error.message);
+  context.on('close', () => { closing = true; });
+  const disposedDuringClose = (error: unknown, route?: Route) => {
+    if (!(error instanceof Error)) return false;
+    const terminal = /Request context disposed|Fetch response has been disposed|Target page, context or browser has been closed|route\.(?:fetch|fulfill|abort): Test ended\./.test(error.message);
+    let pageClosed = false;
+    try { pageClosed = route?.request().frame().page().isClosed() ?? false; } catch { /* frame 생성 전 요청 */ }
+    // page fixture와 worker가 context보다 먼저 끝내는 요청도 Playwright의 명시 종료 사유로 구분한다.
+    const testEnded = /route\.(?:fetch|fulfill|abort): Test ended\./.test(error.message);
+    return terminal && (closing || pageClosed || testEnded);
+  };
   const close = context.close.bind(context);
   context.close = async (...args: Parameters<BrowserContext['close']>) => {
     closing = true;
@@ -110,7 +117,7 @@ export async function installMockedNetwork(
       await route.abort('blockedbyclient');
     } catch (error) {
       // context.close가 취소한 로컬 prefetch만 정리한다. 실행 중의 오류는 계속 실패시킨다.
-      if (!disposedDuringClose(error)) throw error;
+      if (!disposedDuringClose(error, route)) throw error;
     }
   });
   // 공통 새 사용자/새 여행의 명시적인 read-only 초기 상태. POST/PUT은
@@ -145,7 +152,7 @@ export async function installMockedNetwork(
       try {
         await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data }) });
       } catch (error) {
-        if (!disposedDuringClose(error)) throw error;
+        if (!disposedDuringClose(error, route)) throw error;
       }
     },
   );

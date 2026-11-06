@@ -204,7 +204,7 @@ config.push({
   },
 });
 
-// prebuild/predev가 복사한 maplibre worker(생성물, 518KB minified) — lint 대상이 아니다.
-config.unshift({ ignores: ['public/maplibre/**'] });
+// worker와 Playwright trace/report의 번들 생성물은 소스 lint 대상이 아니다.
+config.unshift({ ignores: ['public/maplibre/**', 'test-results/**', 'playwright-report/**', 'blob-report/**'] });
 
 export default config;

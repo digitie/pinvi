@@ -268,7 +268,7 @@ test.describe('CORE map — trip map first render & fit (#613/#619)', () => {
       expect(pin.y + pin.height, `pin ${label} not below surface`).toBeLessThanOrEqual(surface.y + surface.height + 1);
       expect(intersects(pin, search), `pin ${label} vs search card`).toBe(false);
       if (panel) expect(intersects(pin, panel), `pin ${label} vs transport panel`).toBe(false);
-      if (!isMobileViewport(page)) expect(intersects(pin, stats), `pin ${label} vs stats chips`).toBe(false);
+      expect(intersects(pin, stats), `pin ${label} vs stats chips`).toBe(false);
     }
     annotate(testInfo, 'verified-against', 'origin/main mapFitPadding.ts + TripMapView.fitToPoints');
     await shot(page, 'CORE-012', isMobileViewport(page) ? 'mobile-fit' : 'desktop-fit');
