@@ -44,7 +44,7 @@
     "shell-quote": "1.12.0"
   },
   "dependencies": {
-    "expo": "57.0.31"
+    "expo": "57.0.32"
   },
   "devDependencies": {
     "prettier": "3.9.10",
