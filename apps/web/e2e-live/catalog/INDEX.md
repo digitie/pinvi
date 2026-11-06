@@ -13,10 +13,10 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | weather | 29 | 24 | 2 | 3 |
 | share | 35 | 31 | 1 | 3 |
 | poi | 32 | 25 | 5 | 2 |
-| notify | 30 | 23 | 2 | 5 |
-| admin | 43 | 37 | 4 | 2 |
+| notify | 32 | 23 | 4 | 5 |
+| admin | 44 | 37 | 5 | 2 |
 | core | 31 | 30 | 1 | 0 |
-| **all** | **354** | **306** | **25** | **23** |
+| **all** | **357** | **306** | **28** | **23** |
 
 Spec files: 57.
 
@@ -304,6 +304,8 @@ Spec files: 57.
 | NTF-028 | notify | 주간 요약 대상 — 검증된 [e2e] 대상 선택·저장·reload 보존, 대상 삭제 뒤에도 수신 해제 저장 | P3 | desktop, mobile, telegram, mutating | scripted | `specs/notify/notify-schedule.live.spec.ts#NTF-028` |
 | NTF-029 | notify | 예약 회차 실제 발송 — 일간(전날·당일)·주간 요약이 KST 지정 시각에 한 번만 | P3 | telegram, mutating | manual |  |
 | NTF-030 | notify | 공식 기상특보 실제 발송 — 여행 기간·대표 지역의 발표·해제·취소, 중복 없음 | P3 | telegram, weather, mutating | manual |  |
+| NTF-031 | notify | 다른 사용자 대기열이 많아도 내 특보·브리프가 첫 바퀴에 발송, 전송 중에도 여행 편집 가능 | P3 | telegram, mutating | manual |  |
+| NTF-032 | notify | 30일 지난 발송 내역 — 상태·진행률은 남고 본문은 정리됨 | P3 | telegram | manual |  |
 | ADM-001 | admin | 관리자 계정으로 /admin/login 로그인 후 대시보드 진입과 사이드바 사용자 표시 | P1 | desktop, admin, auth | scripted | `specs/admin/admin-auth.live.spec.ts#ADM-001` |
 | ADM-002 | admin | 일반 사용자 계정으로 /admin/login 시도 시 '관리자 권한이 없는 계정입니다' 와 세션 미생성 | P1 | desktop, admin, auth | scripted | `specs/admin/admin-auth.live.spec.ts#ADM-002` |
 | ADM-003 | admin | 사용자 세션으로 /admin 직접 진입 시 forbidden 사유로 로그인 페이지 리다이렉트 | P1 | desktop, mobile, admin, auth | scripted | `specs/admin/admin-auth.live.spec.ts#ADM-003` |
@@ -347,6 +349,7 @@ Spec files: 57.
 | ADM-041 | admin | 여행 휴지통·첨부 보존 상태와 정리 확인창 취소 | P2 | desktop, mobile, admin, a11y | scripted | `specs/admin/admin-readonly-pages.live.spec.ts#ADM-041` |
 | ADM-042 | admin | 미확정 Map 명령의 실행 기록 확인·미실행 봉인·새 승인 | P1 | desktop, mobile, admin, a11y | manual |  |
 | ADM-043 | admin | 과거 Map 명령·실행 계정 변경과 확인창 열린 뒤 시도 교체 | P1 | desktop, mobile, admin | manual |  |
+| ADM-044 | admin | 신고로 숨긴 첨부는 장소·일자·여행 삭제와 휴지통 만료 뒤에도 보존, 신고 복원 뒤 정리 | P2 | desktop, admin, mutating | manual |  |
 | CORE-001 | core | 로그인 — 하이드레이션 전 클릭이 입력을 지우지 않고 제출된다(#619) | P1 | desktop, mobile, auth | scripted | `specs/core/core-auth-session.live.spec.ts#CORE-001` |
 | CORE-002 | core | 잘못된 비밀번호 — '이메일 또는 비밀번호가 올바르지 않습니다.' 알림, URL 유지, 쿠키 미발급 | P1 | desktop, mobile, auth | scripted | `specs/core/core-auth-session.live.spec.ts#CORE-002` |
 | CORE-003 | core | 로그아웃 뒤 보호 페이지 접근은 /login으로 간다 | P1 | desktop, auth | scripted | `specs/core/core-auth-session.live.spec.ts#CORE-003` |

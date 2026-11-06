@@ -883,14 +883,23 @@ SPEC V8 O-6 / M-14에 따라 컬럼 추가:
 
 ## 보존 첨부의 수명 (ADR-078)
 
-여행 삭제는 30일 휴지통이며 purge_started_at 뒤 영구 정리로 진행한다. 파일 참조의 purged_at은 물리 정리 확인 또는 다른 살아 있는 참조가 보호하는 객체에 대한 참조 정리 완료를 뜻한다. moderation_hold는 신고 복원용 보존이며 미과금 면제를 뜻하지 않는다.
+여행 삭제는 30일 휴지통이며 purge_started_at 뒤 영구 정리로 진행한다. 파일 참조의 purged_at은 물리 정리 확인 또는 다른 살아 있는 참조가 보호하는 객체에 대한 참조 정리 완료를 뜻한다. moderation_hold는 신고 복원용 보존이며 미과금 면제를 뜻하지 않는다. hold 파일은 신고 처리(restore)로 풀릴 때까지 장소·일자·여행 삭제와 휴지통 만료에도 정리하지 않으며, 그 여행 행도 최종 삭제되지 않는다.
 
 attachment_upload_intents가 미등록 업로드의 예약·일회성 시작/완료를 기록하고 attachment_gc_objects가 영구 폐기 키·lease·안전한 실패·재확인을 기록한다. 삭제 부모를 포함한 보존 참조와 미등록 예약은 총량을 계속 차지한다. 신뢰할 수 있는 원장 없이 버킷 전체를 추측해 GC하지 않는다.
 
-일자 CASCADE 전 과금 보존용으로 분리한 첨부는 restore_blocked=true로 원래 부모 소실을 영속화한다. 신고 복원으로 여행 수준 파일을 되살리지 못하며, moderation_hold는 해제하여 정리 자격을 유지한다. 관리자 파일 목록·count·다운로드도 purged_at이 있는 실제 폐기 파일을 제외한다.
+일자 CASCADE 전 과금 보존용으로 분리한 첨부는 restore_blocked=true로 원래 부모 소실을 영속화한다. 신고 복원으로 여행 수준 파일을 되살리지 못한다. moderation_hold는 일자 삭제로 풀지 않으며(2026-11-06 소유자 결정), 복원할 자리가 영구히 없을 때(restore_blocked·부모 POI 소실·여행 휴지통 기한 경과/정리 시작) 신고 restore는 파일을 되살리지 않고 hold만 풀어 정리 자격을 돌려준다. 관리자 파일 목록·count·다운로드도 purged_at이 있는 실제 폐기 파일을 제외한다.
 
 ## #637 Telegram 기상특보 (0105)
 
 telegram_notification_preferences에 기본 false weather_enabled와 nullable timezone-aware weather_enabled_at을 추가한다. 서버의 off→on 전환 시각이며 클라이언트 입력을 받지 않는다. telegram_weather_observations는 trip_id/announcement_id 복합 PK와 event_id/cancelled/ambiguous/generation을 저장한다. Trip FK는 영구 삭제 시 CASCADE이며 여행 soft delete는 worker 정책에서 차단한다. 원천 raw·수신자 credential은 저장하지 않는다.
+
+## Telegram planner 상한·전송 lease·본문 보존 (0106)
+
+모두 nullable 열과 부분 index라 기존 행과 이전 코드에 영향이 없다.
+
+- telegram_notification_preferences.last_planned_at (timestamptz): planner 순환 cursor. 시간 예산을 넘긴 tick 뒤 다음 tick은 이 값이 가장 오래된(NULL 먼저) 사용자부터 처리한다. 동의 generation과 무관한 운영 상태다.
+- telegram_notification_deliveries.claim_token (uuid): Telegram 호출 동안의 lease token. 설정된 동안 scheduled_at은 lease 만료 시각이며, 결과는 같은 token일 때만 기록한다. 만료된 예약의 조기 정리는 lease 중인 행을 건너뛴다.
+- telegram_notifications.body_purged_at (timestamptz): 보존 기한(기본 30일, `PINVI_TELEGRAM_NOTIFICATION_RETENTION_DAYS`)이 지나 본문을 지운 시각. chunks는 같은 개수의 빈 문자열, schedule_snapshot은 `{}`, 전송 오류 상세 문구는 NULL이 된다. 발생키·분류·상태·시각·오류 코드는 남는다.
+- ix_telegram_notifications_body_retained: `created_at` 부분 index(`WHERE body_purged_at IS NULL`). 매 tick 정리 후보 조회용.
 
 기존 telegram_notifications/deliveries를 재사용한다. 취소 tombstone은 관측 순서와 무관하게 유지하며 모호한 비취소 관측은 전송하지 않는다. Trip 잠금 아래 관측을 합치고 worker는 Delivery→Pref→Trip→User→Target 정책 순서를 보존한다.

@@ -77,6 +77,7 @@ CREATE TABLE app.telegram_system_notification_outbox (
 - telegram_notifications: 사용자별 고유 발생키, 최초 메시지 snapshot, 예약 기준 날짜·만료와 안전한 부모 오류.
 - telegram_notification_deliveries: 대상·연결 generation, chunk 진행, 시도·재시도 시각과 정제 오류.
 - 대상 검증·재연결은 generation으로 구분한다. 기존 system outbox와 분리해 기존 batch의 잠금을 중간에 풀지 않는다.
+- 0106: planner 순환 cursor(`last_planned_at`), Telegram 호출 중 lease(`claim_token`), 본문 보존 기한 정리 시각(`body_purged_at`). 동작은 `docs/runbooks/telegram-notifications.md` §0106.
 
 ## 3. 환경변수
 
@@ -86,6 +87,8 @@ CREATE TABLE app.telegram_system_notification_outbox (
 | `PINVI_TELEGRAM_ADMIN_CHAT_ID`     | 운영자 채널 ID                 |
 | `PINVI_TELEGRAM_API_BASE`          | `https://api.telegram.org`     |
 | `PINVI_TELEGRAM_TIMEOUT_SECONDS`   | `5`                            |
+| `PINVI_TELEGRAM_PLANNER_BUDGET_SECONDS` | `60` — planner 한 tick의 사용자 처리 예산(Dagster 호출 timeout 120초보다 짧게) |
+| `PINVI_TELEGRAM_NOTIFICATION_RETENTION_DAYS` | `30` — 발송이 끝난 알림 본문 보존 기간 |
 
 사용자 봇 토큰은 vault 또는 사용자별 env 변수에 (`telegram_bot_token_ref`).
 
