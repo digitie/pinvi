@@ -9,6 +9,10 @@ React Native 앱이다.
 [ADR-043](../../docs/decisions.md) / [ADR-044](../../docs/decisions.md) /
 [ADR-045](../../docs/decisions.md)를 본다.
 
+## 현재 의존성 기준 (SDK57 패치)
+
+현재 manifest와 root Expo pin은 모두 SDK57 `57.0.32`다. 이 문서의 SDK56 활성화 이력은 당시 기록이며 현재 설치 버전은 `package.json`·루트 `package-lock.json`을 기준으로 한다. 변경 후 설치는 저장소 지정 Node `22.23.1`과 npm `12.0.1`로 루트에서 `npm ci --no-audit --no-fund`를 실행한다. 루트 Expo와 앱 Expo는 함께 맞춰야 native module 중복 설치를 막을 수 있다. React/RN 고정과 기존 Expo 진단 제외 항목은 유지한다.
+
 ## 현재 상태 — 활성화됨 (Sprint M-1, 2026-06-16)
 
 이 디렉터리는 **활성화된 Expo SDK 56 앱**이다(구조 스캐폴드 → 활성화). 다음이 반영됐다:
@@ -143,8 +147,8 @@ ADR-051대로 설치·git은 Linux(WSL)에서 하되, Android 에뮬레이터는
 API(`12801`)는 WSL에서 `127.0.0.1`(IPv4)로 바인딩되므로 `10.0.2.2:12801`로 그대로 닿는다.
 `adb shell input text`는 ASCII만 보낸다 — 한글 입력이 필요한 검증은 UI 조작 대신 API 시드로 만든다.
 
-> **선행 차단 요인(T-318)**: 클린 체크아웃에서는 위 2번이 `Cannot find module 'expo-router/_ctx-shared'`로
-> 죽는다. `expo-router`가 `apps/mobile/node_modules`에 nest되는데 그 의존 `@expo/router-server`는 root로
-> hoist되기 때문이다. 저장소 차원 해법이 정해지기 전까지는
-> `ln -sfn ../apps/mobile/node_modules/expo-router node_modules/expo-router`로 우회한다.
-> 지도 표면까지 확인하려면 서버에 `PINVI_VWORLD_API_KEY`가 있어야 한다(키가 없으면 지도는 키 오류 화면에서 멈춘다).
+> **T-318 이력과 현재 설치**: 당시에는 nested `expo-router`를 root의 `@expo/router-server`가
+> 찾지 못해 `Cannot find module 'expo-router/_ctx-shared'`가 발생했다. SDK57 패치 lockfile의
+> clean npm ci에서는 실제 CLI → router-server → `expo-router/_ctx-shared` 해석과 Android Metro export를
+> 수동 symlink 없이 확인했다. 예전 symlink 우회는 추가하지 않는다. 이 확인은 native Dev Client의
+> 기기 실행 성공을 뜻하지 않는다. 지도 표면 확인에는 서버의 `PINVI_VWORLD_API_KEY`가 필요하다.

@@ -1,0 +1,92 @@
+{
+  "scope": "WSL SDK57 patch alignment; no deployment",
+  "source_base": "cdc78ca77b1ffcc81ec9caf42d9f440feccc1c8c",
+  "code_candidate": "cbc2469619f1e07807a71dc383e03da658e6f1e3",
+  "environment": {
+    "node": "22.23.1",
+    "npm": "12.0.1",
+    "os": "Ubuntu-26.04 WSL Linux",
+    "install": "npx --yes npm@12.0.1 ci --no-audit --no-fund"
+  },
+  "direct_versions": {
+    "expo": "57.0.32",
+    "expo-build-properties": "57.0.23",
+    "expo-constants": "57.0.23",
+    "expo-dev-client": "57.0.21",
+    "expo-location": "57.0.23",
+    "expo-router": "57.0.30"
+  },
+  "failure_first": {
+    "doctor_before": "20/21; six SDK patch mismatches",
+    "after_mobile_only": "20/21; root Expo57.0.31 caused duplicate native modules"
+  },
+  "results": {
+    "clean_install": true,
+    "lock_integrity": {
+      "hashed": 1226,
+      "total": 1226
+    },
+    "doctor": {
+      "passed": 21,
+      "total": 21
+    },
+    "workspace_lint": true,
+    "workspace_typecheck": true,
+    "unit": {
+      "web": 446,
+      "domain": 138,
+      "schemas": 24,
+      "total": 608
+    },
+    "metro": {
+      "android": "Hermes export success",
+      "ios": "Hermes export success",
+      "web": "static export 35 routes"
+    },
+    "web_ui": {
+      "browser": "Chromium",
+      "passed": 202,
+      "skipped": 3,
+      "api": "strict mocked origins; real production Next build and browser",
+      "test_files": 58
+    },
+    "router_resolution": "actual CLI -> router-server -> expo-router/_ctx-shared; Expo/router directories are not symlinks"
+  },
+  "lock_notes": [
+    "Root Expo and mobile are aligned together.",
+    "Regenerated with npm12 full install; restored complete baseline lock entries for unrelated optional fonts/type/gesture-handler packages; clean ci verifies resulting graph.",
+    "No dedupe-wide changes retained.",
+    "Existing install.exclude, overrides and CI policy preserved."
+  ],
+  "limitations": [
+    "Native Dev Client device/emulator binary was not built or executed.",
+    "EAS/native signing and production were not accessed.",
+    "Metro export does not establish native runtime compatibility.",
+    "Mobile web static export is build coverage; no authenticated mobile browser runtime claim.",
+    "Three existing skipped E2E cases are not successes."
+  ],
+  "inputs_sha256": {
+    "package.json": "27d1dd22be1defac38e903211e0844ef31e34442b98ededdb6f06e00eb1d6f7d",
+    "package-lock.json": "1375e6e353e5ab2a6bd2a434a871e0e9ac9ae153289178f115bc61357b39fea1",
+    "apps/mobile/package.json": "40555cceb9e72fa22c885c4f4f7fc53b6250ca0701ac3c9726e878dec38f75ec",
+    "apps/mobile/metro.config.js": "d4817ffc305fd51f2d78eb63ab3187b5a5979d61fa449fb8b227ed7a76f76c27",
+    "apps/mobile/babel.config.js": "e7f7555f0da77e056e5b1ece6f05af78b3bef9e9e4cfb46e46878b24cb2d524a",
+    "apps/mobile/app.json": "75bfaf388919fc5fab0641b837fd5f8d8efaa3f1e9253191bac35d0fc55b6a07",
+    ".github/workflows/mobile.yml": "ca76b11c725c11c5eb95fc1ed74ae2fa6ae995ff432f36a70f6dddf000c84e39",
+    ".github/workflows/web.yml": "d1c377213eb5b009d281006018f7e1cd70c064b59ba9491d9d52215aaacc33ec",
+    ".github/workflows/aggregate-ci.yml": "ef242dd8dd2cf6ce9e590dba7dd48d5ff8c1051137b09b9a7c6347f700f18b1f",
+    "apps/web/playwright.config.ts": "626716469409944d6282f2f317344b494c25fc348dea12dc387ef37392f06a38"
+  },
+  "local_log_sha256": {
+    "expo57-clean-ci-verified.log": "3518530b245cfcbc9ce52e5e1bd62e46606cb62100b1790495466d35770f2e98",
+    "expo57-doctor-verified.log": "b619666ca007a1704d14d6848f0d0ac005b94a30bb51c389a366599a24daac3c",
+    "expo57-lint-final.log": "c8755c6c2ed7d8f0a5d69ec6dfd6510ab58c5c5b5317f0abea0ba3d8531e4257",
+    "expo57-types-final.log": "3f322d99811494bed17e3e525d91345b7e954b432dde295ab80be3238ee82e75",
+    "expo57-tests-final.log": "3f42785fe8498f17305129d7ebeb2e4a76df4a576baecbd5796d7d3fe570bf18",
+    "expo57-export-android.log": "68ef9fc0ecaba18eec96a7abc58836f08233575da0945f18408b52575b3271b2",
+    "expo57-export-ios.log": "d01a5a5eccd864ad0f03c511b50dbfaf818082dfbfb4e10ab512e73016bfb8e2",
+    "expo57-export-web.log": "77d6bdff34a4089457bb1bee461a7b290603ade5f9fd52c3311e22795c0267cd",
+    "expo57-web-e2e.log": "9b22ca7fccc8d0209990198b923b05d81a7d11a3186e330001d5b53c3cc3bd2d",
+    "expo57-codegraph-sync.log": "93aec33221e9d98be36f24e5d952732706a172221b93834466e47289bffcfac8"
+  }
+}
