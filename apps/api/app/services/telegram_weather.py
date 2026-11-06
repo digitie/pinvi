@@ -7,7 +7,7 @@ import hashlib
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from time import monotonic
 
 from sqlalchemy import select
@@ -48,6 +48,18 @@ ACTIONS = {
     "changed_release": "변경 해제 발표",
     "cancelled": "발표 취소",
 }
+
+
+def whole_seconds(value: datetime) -> datetime:
+    """특보 시각 비교·조회 범위는 초 단위 UTC instant로 맞춘다.
+
+    Weather·KMA 시각은 초(대개 분) 단위이고 offset 표기(+09:00/Z)도 제각각이다. PinVi 시계의
+    microsecond가 남으면 같은 순간이 엄격 비교에서 어긋나 응답 범위 검사가 실패하거나 동의 직후
+    발표가 빠진다. 버림(floor)이라 미래 시각을 만들지 않는다.
+    """
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("특보 시각에는 UTC offset이 필요합니다.")
+    return value.astimezone(UTC).replace(microsecond=0)
 
 
 @dataclass(frozen=True)
@@ -104,7 +116,7 @@ async def prepare_weather(
                     with kor_travel_weather_call_deadline(deadline):
                         async with asyncio.timeout_at(deadline):
                             data = await client.alert_events(
-                                bjd_code=code, since=now - timedelta(hours=1)
+                                bjd_code=code, since=whole_seconds(now - timedelta(hours=1))
                             )
                     results[code] = (data, None)
                 except KorTravelWeatherContractError:
@@ -280,12 +292,14 @@ async def plan_weather(
                         db, user_id, trip.trip_id, "WEATHER_ALERT_AMBIGUOUS", now=when
                     )
                 continue
+            if event.action not in ACTIONS or event.issued_at is None:
+                continue
+            issued = whole_seconds(event.issued_at)
+            observed_at = whole_seconds(when)
             if (
-                event.action not in ACTIONS
-                or event.issued_at is None
-                or not pref.weather_enabled_at <= event.issued_at <= when
-                or when - event.issued_at >= timedelta(minutes=30)
-                or event.first_seen_at > when
+                not whole_seconds(pref.weather_enabled_at) <= issued <= observed_at
+                or observed_at - issued >= timedelta(minutes=30)
+                or whole_seconds(event.first_seen_at) > observed_at
             ):
                 continue
             key = (
@@ -307,7 +321,7 @@ async def plan_weather(
                 continue
             expires = min(
                 when + timedelta(minutes=15),
-                event.issued_at + timedelta(minutes=30),
+                issued + timedelta(minutes=30),
                 datetime.combine(trip.end_date + timedelta(days=1), time.min, tzinfo=KST),
             )
             await enqueue(

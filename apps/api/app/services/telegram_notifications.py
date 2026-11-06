@@ -1,20 +1,23 @@
-"""소유자 일정 알림 큐. 한 DB transaction이 한 대상의 한 chunk만 전송한다.
+"""소유자 일정 알림 큐. 한 번의 처리가 한 대상의 한 chunk만 전송한다.
 
-SKIP LOCKED claim의 transaction 안에서 동의→여행→대상을 검사·잠근다.
-ACK 지점을 commit한 뒤 다음 chunk를 처리하므로 다른 claim의 잠금을 풀지 않는다.
+SKIP LOCKED claim의 transaction 안에서 동의→여행→대상을 검사·잠근 뒤 짧은 lease를 commit하고
+잠금 없이 Telegram을 호출한다. 결과는 새 transaction에서 같은 lease token일 때만 기록한다.
 Telegram에 idempotency key가 없어 provider 수락 후 DB ACK 유실은 중복 가능하다.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from time import monotonic
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, exists, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.clients.telegram import TelegramError, mask_token
 from app.core.config import settings
@@ -41,6 +44,8 @@ from app.services.telegram_itinerary import KST, effective_date, itinerary_text,
 from app.services.telegram_metrics import record_step
 from app.services.telegram_outbox import MAX_TELEGRAM_ATTEMPTS, _retry_delay
 from app.services.trip import TripNotFoundError, TripPermissionError, TripValidationError
+
+logger = logging.getLogger(__name__)
 
 _SAFE_ERRORS = {
     "missing_chat_id": "Telegram 대상 ID가 없습니다.",
@@ -448,27 +453,108 @@ async def _guard(
     return target, None
 
 
-async def process_one(db: AsyncSession, *, now: datetime | None = None) -> bool:
-    """한 chunk만 claim한다. DB commit 실패·취소는 호출자 rollback으로 잠금을 반납한다."""
+# Telegram 호출 동안 같은 chunk를 다른 worker가 다시 claim하지 않게 하는 lease(초).
+# 전송 timeout(기본 5초)보다 충분히 길다. 결과를 기록하지 못한 채 프로세스가 죽으면 이 시간 뒤
+# 다시 보낸다 — provider 수락 뒤 ACK 유실과 같은 기존 중복 가능성이며 새로 생기지 않는다.
+CLAIM_LEASE_SECONDS = 60
+
+_REJECTIONS = {
+    "account_inactive": "계정이 비활성화되어 알림을 보내지 않았습니다.",
+    "schedule_expired": "알림 유효 시간이 지나 전송하지 않았습니다.",
+    "weather_observation_changed": "공식 발표의 취소·상충 관측이 확인되어 이전 알림을 전송하지 않았습니다.",
+    "schedule_changed": "여행·일자 날짜가 바뀌어 예약 알림을 전송하지 않았습니다.",
+}
+
+
+def _due(current: datetime) -> ColumnElement[bool]:
+    # 만료된 예약은 retry 시각 전에도 닫는다. 단 전송 중(lease)인 chunk는 결과 기록을 기다린다.
+    return and_(
+        TelegramDelivery.status == "pending",
+        or_(
+            TelegramDelivery.scheduled_at <= current,
+            and_(
+                TelegramDelivery.claim_token.is_(None),
+                TelegramNotification.expires_at <= current,
+            ),
+        ),
+    )
+
+
+async def fair_batch(db: AsyncSession, *, now: datetime, limit: int) -> list[uuid.UUID]:
+    """사용자별 순번(rank)을 먼저 정렬해 한 사용자의 backlog가 다른 사용자의 기한 있는 알림을 밀지 않게 한다.
+
+    각 사용자의 첫 chunk가 모두 나간 뒤에 두 번째 chunk가 나간다. 다른 사용자가 없으면 한 사용자가
+    한 바퀴를 모두 쓴다(처리량 제한 없음). 대기 사용자가 limit보다 많으면 각자의 가장 오래된 chunk
+    순서로 limit명까지 처리하고 나머지는 다음 바퀴에 처리한다.
+    잠그지 않는 계획일 뿐이다. 실제 claim은 process_one이 SKIP LOCKED로 다시 확인한다.
+    """
+    rank = (
+        func.row_number()
+        .over(
+            partition_by=TelegramNotification.user_id,
+            order_by=(TelegramDelivery.scheduled_at, TelegramDelivery.id),
+        )
+        .label("rank")
+    )
+    ranked = (
+        select(TelegramDelivery.id.label("id"), TelegramDelivery.scheduled_at.label("at"), rank)
+        .join(TelegramNotification, TelegramNotification.id == TelegramDelivery.notification_id)
+        .where(_due(now))
+        .subquery()
+    )
+    ids = await db.scalars(
+        select(ranked.c.id).order_by(ranked.c.rank, ranked.c.at, ranked.c.id).limit(limit)
+    )
+    result = list(ids.all())
+    await db.commit()
+    return result
+
+
+async def _release_claim(
+    delivery_id: uuid.UUID, lease: uuid.UUID, scheduled_at: datetime, attempts: int
+) -> None:
+    from app.db import session as db_session
+
+    async with db_session.async_session_factory() as db:
+        await db.execute(
+            update(TelegramDelivery)
+            .where(TelegramDelivery.id == delivery_id, TelegramDelivery.claim_token == lease)
+            .values(claim_token=None, scheduled_at=scheduled_at, attempts=attempts)
+        )
+        await db.commit()
+
+
+async def process_one(
+    db: AsyncSession, *, now: datetime | None = None, delivery_id: uuid.UUID | None = None
+) -> bool:
+    """한 chunk만 처리한다.
+
+    정책 확인은 claim transaction 안에서 Trip→User→대상 잠금으로 한다. 보낼 내용과 대상을 정한 뒤
+    lease를 commit해 잠금을 모두 풀고 Telegram을 호출한다 — 느린 Telegram 응답이 여행 편집·동의 철회를
+    막지 않는다. 결과는 새 transaction에서 같은 lease token일 때만 기록한다. 따라서 정책 확인 commit
+    뒤 전송 직전까지 사이의 철회는 이미 결정된 그 한 chunk를 막지 못한다(전송 중 철회와 같다).
+    """
     current = now or datetime.now(UTC)
     started = monotonic()
-    delivery = await db.scalar(
+    query = (
         select(TelegramDelivery)
         .join(TelegramNotification, TelegramNotification.id == TelegramDelivery.notification_id)
-        .where(
-            TelegramDelivery.status == "pending",
-            or_(
-                TelegramDelivery.scheduled_at <= current, TelegramNotification.expires_at <= current
-            ),
-        )
-        .order_by(TelegramDelivery.scheduled_at, TelegramDelivery.id)
+        .where(_due(current))
+    )
+    if delivery_id is not None:
+        query = query.where(TelegramDelivery.id == delivery_id)
+    delivery = await db.scalar(
+        query.order_by(TelegramDelivery.scheduled_at, TelegramDelivery.id)
         .limit(1)
         .with_for_update(of=TelegramDelivery, skip_locked=True)
+        .execution_options(populate_existing=True)
     )
     if delivery is None:
+        await db.rollback()
         return False
     row = await db.get(TelegramNotification, delivery.notification_id)
     assert row is not None
+    category = row.category
     target, rejection = await _guard(
         db, row, delivery, now=current + timedelta(seconds=monotonic() - started)
     )
@@ -476,75 +562,210 @@ async def process_one(db: AsyncSession, *, now: datetime | None = None) -> bool:
     observed = current + timedelta(seconds=monotonic() - started)
     if target is not None and row.expires_at is not None and observed >= row.expires_at:
         target, rejection = None, "schedule_expired"
-    if target is None:
-        delivery.status, delivery.error_code = "skipped", rejection
-        delivery.error_message = {
-            "account_inactive": "계정이 비활성화되어 알림을 보내지 않았습니다.",
-            "schedule_expired": "알림 유효 시간이 지나 전송하지 않았습니다.",
-            "weather_observation_changed": "공식 발표의 취소·상충 관측이 확인되어 이전 알림을 전송하지 않았습니다.",
-            "schedule_changed": "여행·일자 날짜가 바뀌어 예약 알림을 전송하지 않았습니다.",
-        }.get(rejection or "", "대상·연결·동의·여행 권한이 바뀌어 전송하지 않았습니다.")
-    elif not settings.pinvi_telegram_bot_token_default:
-        delivery.status, delivery.error_code = "failed", "bot_not_configured"
-        delivery.error_message = "Telegram 봇이 설정되지 않았습니다. 관리자에게 문의하세요."
-    else:
-        client = telegram_notify._make_client()
-        delivery.attempts += 1
+    token = settings.pinvi_telegram_bot_token_default
+    if target is None or not token:
+        if target is None:
+            delivery.status, delivery.error_code = "skipped", rejection
+            delivery.error_message = _REJECTIONS.get(
+                rejection or "", "대상·연결·동의·여행 권한이 바뀌어 전송하지 않았습니다."
+            )
+        else:
+            delivery.status, delivery.error_code = "failed", "bot_not_configured"
+            delivery.error_message = "Telegram 봇이 설정되지 않았습니다. 관리자에게 문의하세요."
+        delivery.claim_token = None
+        final_status, has_error = delivery.status, delivery.error_code is not None
+        await db.commit()
+        record_step(
+            category, status=final_status, has_error=has_error, duration=monotonic() - started
+        )
+        return True
+
+    # 보낼 내용·대상을 고정하고 lease를 commit한다. 이후에는 어떤 정책 잠금도 쥐지 않는다.
+    claimed_id, target_id, target_generation = delivery.id, target.id, target.generation
+    chat_id, thread_id = target.telegram_chat_id, target.telegram_message_thread_id
+    chunk, total = row.chunks[delivery.next_chunk], len(row.chunks)
+    lease, previous_at, previous_attempts = uuid.uuid4(), delivery.scheduled_at, delivery.attempts
+    delivery.claim_token = lease
+    delivery.attempts += 1
+    attempts = delivery.attempts
+    delivery.scheduled_at = observed + timedelta(seconds=CLAIM_LEASE_SECONDS)
+    await db.commit()
+
+    failure: TelegramError | None = None
+    unexpected = False
+    client = telegram_notify._make_client()
+    try:
+        await client.send_to_target(token, chat_id, chunk, thread_id=thread_id, parse_mode=None)
+    except TelegramError as exc:
+        failure = exc
+    except asyncio.CancelledError:
+        # 취소된 전송의 결과는 알 수 없다. 이전과 같이 claim을 즉시 돌려 다음 worker가 재시도한다.
+        release = asyncio.create_task(
+            _release_claim(claimed_id, lease, previous_at, previous_attempts)
+        )
         try:
-            await client.send_to_target(
-                settings.pinvi_telegram_bot_token_default,
-                target.telegram_chat_id,
-                row.chunks[delivery.next_chunk],
-                thread_id=target.telegram_message_thread_id,
-                parse_mode=None,
-            )
-        except TelegramError as exc:
-            code = exc.code if exc.code in _SAFE_ERRORS else "unknown_error"
-            token = settings.pinvi_telegram_bot_token_default
-            detail = mask_token(str(exc).replace(token, "***")).replace(
-                target.telegram_chat_id, "[대상]"
-            )
-            delivery.error_code = code
-            delivery.error_message = _SAFE_ERRORS[code] + (
-                f" Telegram: {detail[:240]}" if detail else ""
-            )
-            retry = exc.retry_after if type(exc.retry_after) is int and exc.retry_after > 0 else 0
-            if (
-                code not in {"rate_limited", "network_error", "unknown_error"}
-                or delivery.attempts >= MAX_TELEGRAM_ATTEMPTS
-            ):
+            await asyncio.shield(release)
+        except asyncio.CancelledError:
+            await release
+        raise
+    except Exception:
+        unexpected = True
+    finally:
+        await client.aclose()
+
+    finished = current + timedelta(seconds=monotonic() - started)
+    # 결과 기록이 잠금을 오래 기다려 lease를 넘기면 다른 worker가 같은 chunk를 다시 보낸다.
+    await db.execute(text("SET LOCAL lock_timeout = '5s'"))
+    delivery = await db.scalar(
+        select(TelegramDelivery)
+        .where(
+            TelegramDelivery.id == claimed_id,
+            TelegramDelivery.claim_token == lease,
+            TelegramDelivery.status == "pending",
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if delivery is None:
+        # lease가 만료되어 다른 worker가 인수했다. 그쪽 결과를 덮어쓰지 않는다.
+        await db.rollback()
+        return True
+    # 비키 열만 바꾸므로 NO KEY UPDATE로 충분하다. enqueue의 FK 검사(KEY SHARE)와 충돌하지 않는다.
+    target = await db.scalar(
+        select(TelegramTarget)
+        .where(TelegramTarget.id == target_id)
+        .with_for_update(key_share=True)
+        .execution_options(populate_existing=True)
+    )
+    if target is not None and (
+        target.generation != target_generation
+        or target.deleted_at is not None
+        or not target.is_enabled
+    ):
+        # 전송 중 재검증·삭제·비활성화된 대상의 새 상태를 이 결과로 덮어쓰지 않는다.
+        target = None
+    delivery.claim_token = None
+    if unexpected:
+        # 원문 SQL/transport traceback은 사용자에게 공개하지 않는다.
+        delivery.status, delivery.error_code = "failed", "delivery_error"
+        delivery.error_message = "알림 처리에 실패했습니다. 관리자에게 문의하세요."
+    elif failure is not None:
+        code = failure.code if failure.code in _SAFE_ERRORS else "unknown_error"
+        detail = mask_token(str(failure).replace(token, "***")).replace(chat_id, "[대상]")
+        delivery.error_code = code
+        delivery.error_message = _SAFE_ERRORS[code] + (
+            f" Telegram: {detail[:240]}" if detail else ""
+        )
+        retry = (
+            failure.retry_after
+            if type(failure.retry_after) is int and failure.retry_after > 0
+            else 0
+        )
+        if (
+            code not in {"rate_limited", "network_error", "unknown_error"}
+            or attempts >= MAX_TELEGRAM_ATTEMPTS
+        ):
+            delivery.status = "failed"
+        else:
+            try:
+                delivery.scheduled_at = finished + timedelta(
+                    seconds=max(_retry_delay(attempts), retry)
+                )
+            except OverflowError:
                 delivery.status = "failed"
-            else:
-                try:
-                    delivery.scheduled_at = current + timedelta(
-                        seconds=monotonic() - started + max(_retry_delay(delivery.attempts), retry)
-                    )
-                except OverflowError:
-                    delivery.status = "failed"
+        if target is not None:
             if code == "bot_forbidden":
                 target.is_enabled = False
                 target.generation = uuid.uuid4()
             target.last_send_status = f"failed:{code}"
-        except Exception:
-            # 원문 SQL/transport traceback은 사용자에게 공개하지 않는다.
-            delivery.status, delivery.error_code = "failed", "delivery_error"
-            delivery.error_message = "알림 처리에 실패했습니다. 관리자에게 문의하세요."
-        else:
-            delivery.next_chunk += 1
-            delivery.attempts = 0
-            delivery.error_code = delivery.error_message = None
+    else:
+        delivery.next_chunk += 1
+        delivery.attempts = 0
+        delivery.error_code = delivery.error_message = None
+        if target is not None:
             target.last_send_status = "ok"
-            if delivery.next_chunk == len(row.chunks):
-                delivery.status, delivery.sent_at = "sent", current
-            else:
-                delivery.scheduled_at = current + timedelta(seconds=3)
-        finally:
-            await client.aclose()
-    category, final_status, has_error = (
-        row.category,
-        delivery.status,
-        delivery.error_code is not None,
-    )
+        if delivery.next_chunk >= total:
+            delivery.status, delivery.sent_at = "sent", finished
+        else:
+            delivery.scheduled_at = finished + timedelta(seconds=3)
+    final_status, has_error = delivery.status, delivery.error_code is not None
     await db.commit()
     record_step(category, status=final_status, has_error=has_error, duration=monotonic() - started)
     return True
+
+
+async def drain_fair(*, now: datetime | None = None, limit: int) -> int:
+    """사용자 순번 순서로 한 바퀴를 처리한다. 처리한 chunk 수를 돌려준다."""
+    from app.db import session as db_session
+
+    current = now or datetime.now(UTC)
+    async with db_session.async_session_factory() as db:
+        planned = await fair_batch(db, now=current, limit=limit)
+    processed = 0
+    for delivery_id in planned:
+        try:
+            async with db_session.async_session_factory() as db:
+                if await process_one(db, now=now, delivery_id=delivery_id):
+                    processed += 1
+        except Exception as exc:
+            # 한 건의 잠금 timeout·deadlock·손상 행이 같은 바퀴 뒤 사용자들을 멈추지 않게 한다.
+            # 미커밋 변경은 세션 종료로 롤백되고 lease가 있으면 만료 뒤 다시 처리된다.
+            logger.warning("telegram delivery step failed: %s", type(exc).__name__)
+    return processed
+
+
+async def purge_expired_bodies(
+    db: AsyncSession, *, now: datetime | None = None, limit: int = 500
+) -> int:
+    """보존 기한이 지난, 대기 중 전송이 없는 알림의 본문·스냅샷·전송 오류 상세를 지운다.
+
+    발생키(중복 방지)·분류·상태·시각·오류 코드는 남긴다. chunk 개수는 이력의 진행률 표시를
+    위해 빈 문자열로 유지한다.
+    """
+    current = now or datetime.now(UTC)
+    cutoff = current - timedelta(days=settings.pinvi_telegram_notification_retention_days)
+    pending = exists(
+        select(TelegramDelivery.id).where(
+            TelegramDelivery.notification_id == TelegramNotification.id,
+            TelegramDelivery.status == "pending",
+        )
+    )
+    ids = list(
+        (
+            await db.scalars(
+                select(TelegramNotification.id)
+                .where(
+                    TelegramNotification.body_purged_at.is_(None),
+                    TelegramNotification.created_at <= cutoff,
+                    ~pending,
+                )
+                .order_by(TelegramNotification.created_at, TelegramNotification.id)
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            )
+        ).all()
+    )
+    if not ids:
+        await db.rollback()
+        return 0
+    blank = text(
+        "(SELECT COALESCE(jsonb_agg(to_jsonb(''::text)), '[]'::jsonb) "
+        "FROM jsonb_array_elements(app.telegram_notifications.chunks))"
+    )
+    await db.execute(
+        update(TelegramNotification)
+        .where(TelegramNotification.id.in_(ids))
+        .values(chunks=blank, schedule_snapshot=text("'{}'::jsonb"), body_purged_at=current)
+        .execution_options(synchronize_session=False)
+    )
+    await db.execute(
+        update(TelegramDelivery)
+        .where(
+            TelegramDelivery.notification_id.in_(ids),
+            TelegramDelivery.error_message.is_not(None),
+        )
+        .values(error_message=None)
+        .execution_options(synchronize_session=False)
+    )
+    await db.commit()
+    return len(ids)

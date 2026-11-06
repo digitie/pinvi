@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -383,3 +383,34 @@ async def test_invalid_weekly_destination_cannot_block_weather_optout(
     async with session_factory() as db:
         assert await process_one(db, now=NOW)
     assert provider.sent == []
+
+
+class SecondsWeather(Weather):
+    """초 단위로 범위를 돌려주고 KST offset으로 표기하는 Weather(실제 서버가 바뀌어도 맞아야 한다)."""
+
+    def request(self, request: httpx.Request) -> httpx.Response:
+        since = datetime.fromisoformat(request.url.params["since"])
+        kst = timezone(timedelta(hours=9))
+        self.overrides["queried_since"] = since.replace(microsecond=0).astimezone(kst).isoformat()
+        return super().request(request)
+
+
+async def test_subsecond_clock_does_not_break_scope_check_or_same_second_consent(
+    client: Any,
+    verified_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    provider: Provider,
+) -> None:
+    """PinVi 시계의 microsecond가 응답 범위 엄격 비교와 동의 경계를 어긋나게 하지 않는다."""
+    now = NOW.replace(microsecond=500_000)
+    _, user_id, _ = await setup(client, verified_user, auth_cookies, session_factory, now=now)
+    weather = SecondsWeather()  # 발표 시각은 NOW-1분(초 단위)
+    async with session_factory() as db:
+        pref = await db.get(TelegramPreferences, user_id)
+        # 발표와 같은 초 안에서(0.4초 뒤) 동의했다.
+        pref.weather_enabled_at = NOW - timedelta(minutes=1) + timedelta(milliseconds=400)
+        await db.commit()
+    result = await run(weather, now=now)
+    assert result["failed"] == 0, result
+    assert result["enqueued"] == 1

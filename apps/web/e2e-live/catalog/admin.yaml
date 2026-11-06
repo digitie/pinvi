@@ -763,6 +763,7 @@
     - 없음
   automation: scripted
   spec: specs/admin/admin-readonly-pages.live.spec.ts#ADM-041
+  notes: "0106 회차(2026-11-06 소유자 결정)부터 '보존(hold)' 집계는 신고로 숨긴 파일 전부다 — 장소·일자 삭제와 휴지통 만료 뒤에도 신고가 복원으로 처리될 때까지 남는다(ADM-044)."
 
 - id: ADM-042
   title: 미확정 Map 명령의 실행 기록 확인·미실행 봉인·새 승인
@@ -805,3 +806,21 @@
     - 소유 fixture만 종료
   automation: manual
   notes: "#668. 확인창 교체는 웹 단위 회귀의 실제 QueryClient 재조회로도 고정한다. 운영 데이터의 강제 해제는 제공하지 않는다."
+
+- id: ADM-044
+  title: 신고로 숨긴 첨부는 장소·일자·여행 삭제와 휴지통 만료 뒤에도 보존, 신고 복원 뒤 정리
+  priority: P2
+  tags: [desktop, admin, mutating]
+  preconditions:
+    - "0106 적용. 전용 테스트 계정의 첨부 1개와 그 첨부에 대한 신고"
+  data_sources: [pinvi:storage-retention]
+  steps:
+    - "신고 숨김(hide) → 소유자가 그 장소를 삭제 → /admin/retention 정리 실행"
+    - "신고 restore 처리 → 다시 정리 실행"
+  expected:
+    - "숨김 뒤 장소를 지워도 첫 정리에서 파일이 지워지지 않고 '보존(hold)' 집계에 남음"
+    - "복원할 자리가 영구히 없는(일자 삭제·휴지통 기한 경과) 첨부는 restore가 파일을 되살리지 않고 보존만 풀며 다음 정리에서 지워짐"
+  cleanup:
+    - "fixture 여행·신고 정리"
+  automation: manual
+  notes: "2026-11-06 소유자 결정으로 변경(이전에는 부모 삭제·만료가 hold보다 우선). 비가역 정리 실행이라 prod catalog에서 자동화하지 않는다. API 회귀 test_moderation_hold_survives_parent_deletion_until_moderation_resolves·test_hard_deleted_day_keeps_attachment_charge[held]."

@@ -52,8 +52,12 @@ def eligible_attachment(now: datetime, *, preview: bool = False) -> Any:
             ),
         )
     )
-    return or_(
-        and_(A.deleted_at.is_not(None), A.moderation_hold.is_(False)), expired_trip, deleted_poi
+    # moderation hold는 신고 처리(복원)로 풀릴 때까지 어떤 삭제 경로보다 우선한다. 장소·일자·여행 삭제와
+    # 휴지통 만료도 증거 파일을 지우지 않는다. 같은 객체를 공유하는 다른 행도 이 행이 살아 있는 참조로
+    # 남아 S3 삭제가 예약되지 않으며, 여행 행도 남은 첨부 때문에 최종 삭제되지 않는다.
+    return and_(
+        A.moderation_hold.is_(False),
+        or_(A.deleted_at.is_not(None), expired_trip, deleted_poi),
     )
 
 
@@ -79,12 +83,7 @@ async def retention_status(db: AsyncSession) -> dict[str, Any]:
         await db.scalar(
             select(func.count())
             .select_from(A)
-            .where(
-                A.purged_at.is_(None),
-                A.deleted_at.is_not(None),
-                A.moderation_hold.is_(True),
-                ~eligible_attachment(now, preview=True),
-            )
+            .where(A.purged_at.is_(None), A.moderation_hold.is_(True))
         )
         or 0
     )

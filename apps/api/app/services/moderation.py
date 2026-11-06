@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
 from sqlalchemy import func, or_, select
@@ -26,7 +26,11 @@ from app.schemas.moderation import (
     ContentReportRecord,
 )
 from app.services.rustfs_storage import InvalidStorageRefError
-from app.services.storage_lifecycle import lock_restorable_attachment, lock_restorable_trip
+from app.services.storage_lifecycle import (
+    TRASH_RETENTION_DAYS,
+    lock_restorable_attachment,
+    lock_restorable_trip,
+)
 
 ContentModerationActionName = Literal["review", "hide", "takedown", "restore", "reject"]
 OPEN_REVIEW_STATUSES = {"received", "reviewing", "appealed"}
@@ -551,6 +555,29 @@ async def _hide_target(
     await db.flush()
 
 
+async def _permanently_detached(db: AsyncSession, row: CuratedPlanAttachment) -> bool:
+    """복원 경로가 영구히 닫혔는가. 휴지통 안의 장소·여행은 소유자가 되살릴 수 있어 아니다."""
+    if row.restore_blocked:
+        return True
+    trip_id = row.trip_id
+    if row.trip_poi_id is not None:
+        poi = await db.scalar(select(TripDayPoi).where(TripDayPoi.attachment_id == row.trip_poi_id))
+        if poi is None:
+            return True
+        trip_id = poi.trip_id
+    if trip_id is None:
+        return False
+    trip = await db.get(Trip, trip_id, populate_existing=True)
+    return (
+        trip is None
+        or trip.purge_started_at is not None
+        or (
+            trip.deleted_at is not None
+            and trip.deleted_at <= datetime.now(UTC) - timedelta(days=TRASH_RETENTION_DAYS)
+        )
+    )
+
+
 async def _restore_target(db: AsyncSession, row: ContentReport) -> None:
     target = await _load_target_model(db, row)
     if target is None:
@@ -561,6 +588,25 @@ async def _restore_target(db: AsyncSession, row: ContentReport) -> None:
         elif isinstance(target, CuratedPlanAttachment):
             target = await lock_restorable_attachment(db, target.attachment_id)
     except InvalidStorageRefError as exc:
+        if isinstance(target, CuratedPlanAttachment):
+            held = await db.scalar(
+                select(CuratedPlanAttachment)
+                .where(CuratedPlanAttachment.attachment_id == target.attachment_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if (
+                held is not None
+                and held.moderation_hold
+                and held.purged_at is None
+                and await _permanently_detached(db, held)
+            ):
+                # 소유자가 일자를 지웠거나 여행이 휴지통 기한을 넘겨 복원할 자리가 영구히 없다.
+                # 신고 처리는 끝내고 hold만 푼다 — 파일은 삭제 상태로 남아 다음 정리에서 지워진다.
+                # 그렇지 않으면 hold가 영구히 남아 파일과 여행 행이 끝내 정리되지 않는다.
+                held.moderation_hold = False
+                await db.flush()
+                return
         raise ContentReportTransitionError(str(exc)) from exc
     snapshot = row.target_snapshot or {}
     if isinstance(target, Trip):

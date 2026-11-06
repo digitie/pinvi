@@ -353,7 +353,7 @@
     - "afterEach PUT 원래 설정"
   automation: scripted
   spec: specs/notify/notify-schedule.live.spec.ts#NTF-019
-  notes: "#638(PR688). planner 는 'KST 현재 ≥ send_time' 이면 그날 회차를 즉시 보낸다(늦게 켜면 바로 따라잡음) — 그래서 23:59 로 저장한다. 예약 회차 실제 발송은 NTF-029(manual)."
+  notes: "#638(PR688). planner 는 'KST 현재 ≥ send_time' 이면 그날 회차를 즉시 보낸다(늦게 켜면 바로 따라잡음) — 그래서 23:59 로 저장한다. 이 동작은 소유자 결정(2026-11-06)으로 유지하며 API 회귀 test_daily_brief_enabled_after_send_time_is_planned_today가 고정한다. 예약 회차 실제 발송은 NTF-029(manual)."
 
 - id: NTF-020
   title: 일정 정보 알람으로 보내기 — 여행 전체·2일차 전송 완료, 같은 요청 ID 멱등·다른 범위 재사용 422
@@ -534,7 +534,7 @@
   cleanup:
     - "예약 설정 복원, fixture 여행·연결·대상 정리"
   automation: manual
-  notes: "#638. 지정 시각·Dagster 실행에 묶여 자동화하지 않는다. WSL 회귀·소유 fixture 증거는 docs/reviews/pinvi-636-638-telegram-wsl-live.json. 늦게 켜면 그날 회차를 즉시 보낸다."
+  notes: "#638. 지정 시각·Dagster 실행에 묶여 자동화하지 않는다. WSL 회귀·소유 fixture 증거는 docs/reviews/pinvi-636-638-telegram-wsl-live.json. 늦게 켜면 그날 회차를 즉시 보낸다(소유자 결정 유지). 0106부터 planner는 한 번에 하나만 돌고(겹친 tick은 Dagster 메타데이터 skipped=1) 한 tick 60초 예산을 넘긴 사용자는 deferred로 다음 tick에 처리된다 — 사용자가 많으면 지정 시각 뒤 1~2분 늦을 수 있다."
 
 - id: NTF-030
   title: 공식 기상특보 실제 발송 — 여행 기간·대표 지역의 발표·해제·취소, 중복 없음
@@ -552,4 +552,40 @@
   cleanup:
     - "동의 복원, fixture 여행·연결·대상 정리"
   automation: manual
-  notes: "#637. 실제 발표 시점에 의존한다. 취소 역행·동률·만료는 WSL 실제 PG 회귀(docs/reviews/pinvi-637-weather-alerts-wsl-live.json)."
+  notes: "#637. 실제 발표 시점에 의존한다. 취소 역행·동률·만료는 WSL 실제 PG 회귀(docs/reviews/pinvi-637-weather-alerts-wsl-live.json). 0106부터 조회 범위·발표·동의 시각은 초 단위 UTC로 맞춰 비교한다(test_subsecond_clock_does_not_break_scope_check_or_same_second_consent)."
+
+- id: NTF-031
+  title: 다른 사용자 대기열이 많아도 내 특보·브리프가 첫 바퀴에 발송, 전송 중에도 여행 편집 가능
+  priority: P3
+  tags: [telegram, mutating]
+  preconditions:
+    - "0106 적용. 전용 테스트 계정 둘과 각자의 검증된 수신 대화방"
+    - "실제 개인 대상·여행에는 발송하지 않음"
+  data_sources: [pinvi:telegram-notifications]
+  steps:
+    - "계정 A가 여러 여행에서 일정 보내기를 연속 실행(사용자당 대기 3건 상한) → 곧바로 계정 B가 일정 보내기"
+    - "A 전송이 진행되는 동안 B 여행의 제목을 수정·저장"
+  expected:
+    - "B의 전송이 A의 대기열이 모두 끝나기 전에 '전송 완료'가 됨"
+    - "전송 중 여행 저장이 지연·실패 없이 반영됨"
+  cleanup:
+    - "fixture 여행·연결·대상 정리"
+  automation: manual
+  notes: "0106(2026-11-06 소유자 결정). 공정 drain은 사용자별 순번으로 한 바퀴(첫 chunk가 모두 나간 뒤 두 번째), Telegram 호출 전 정책 잠금 해제(60초 lease). 결정론적 회귀는 API test_fair_drain_does_not_let_one_user_backlog_delay_another·test_trip_lock_is_not_held_while_calling_telegram. 실제 봇 한도 때문에 scripted로 두지 않는다."
+
+- id: NTF-032
+  title: 30일 지난 발송 내역 — 상태·진행률은 남고 본문은 정리됨
+  priority: P3
+  tags: [telegram]
+  preconditions:
+    - "0106 적용. 31일 이상 지난 발송 완료 내역이 있는 테스트 계정"
+  data_sources: [pinvi:telegram-notifications]
+  steps:
+    - "설정·공유 탭 '최근 발송 내역' 확인"
+  expected:
+    - "오래된 행도 분류·상태·전송 진행률·시각이 그대로 보임"
+    - "같은 요청 ID 재전송은 같은 행을 돌려줌(중복 생성 없음)"
+  cleanup:
+    - "없음"
+  automation: manual
+  notes: "0106(2026-11-06 소유자 결정). 보존 기간 PINVI_TELEGRAM_NOTIFICATION_RETENTION_DAYS(기본 30일), API worker가 1시간마다 정리한다. 본문 삭제는 DB 확인이 필요해 manual이며 API 회귀 test_notification_body_is_purged_after_retention_but_dedupe_remains가 고정한다."

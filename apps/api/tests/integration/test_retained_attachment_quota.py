@@ -185,6 +185,33 @@ async def test_hard_deleted_day_keeps_attachment_charge(
         calls.append(key)
 
     monkeypatch.setattr(gc, "delete_attachment_object", delete)
+    if held:
+        # 일자 삭제는 moderation hold를 풀지 않는다(2026-11-06 소유자 결정).
+        async with session_factory() as db:
+            result = await gc.execute_attachment_retention(db)
+            assert result["objects_deleted"] == 0 and calls == []
+            assert result["status"]["held_attachments"] == 1
+            assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 60
+        from app.models.attachment import CuratedPlanAttachment
+        from app.models.moderation import ContentReport
+        from app.services.moderation import _restore_target
+
+        async with session_factory() as db:
+            await _restore_target(
+                db,
+                ContentReport(
+                    target_type="attachment",
+                    target_id=uuid.UUID(uploaded.json()["data"]["attachment_id"]),
+                    reason_code="other",
+                    reason_text="resolved",
+                    status="hidden",
+                ),
+            )
+            await db.commit()
+            row = await db.get(
+                CuratedPlanAttachment, uuid.UUID(uploaded.json()["data"]["attachment_id"])
+            )
+            assert not row.moderation_hold and row.deleted_at is not None
     async with session_factory() as db:
         result = await gc.execute_attachment_retention(db)
         assert result["objects_deleted"] == 1 and len(calls) == 1

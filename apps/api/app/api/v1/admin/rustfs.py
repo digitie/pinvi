@@ -76,6 +76,22 @@ async def delete_rustfs_object(
             CuratedPlanAttachment.purged_at.is_(None),
         )
     )
+    held = await db.scalar(
+        select(CuratedPlanAttachment.attachment_id).where(
+            CuratedPlanAttachment.storage_key == key,
+            CuratedPlanAttachment.purged_at.is_(None),
+            CuratedPlanAttachment.moderation_hold.is_(True),
+        )
+    )
+    if held is not None:
+        # 신고 보존 파일은 신고 처리(복원) 전까지 force로도 지우지 않는다(2026-11-06 소유자 결정).
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "OBJECT_MODERATION_HOLD",
+                "message": f"첨부 {held}가 신고 처리를 위해 보존 중입니다. 신고 처리 뒤 다시 시도하세요.",
+            },
+        )
     upload = await db.get(AttachmentUploadIntent, (settings.pinvi_rustfs_bucket, key))
     if (referencing is not None or (upload is not None and upload.purged_at is None)) and not force:
         raise HTTPException(

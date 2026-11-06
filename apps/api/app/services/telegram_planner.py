@@ -2,22 +2,27 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import traceback
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from time import monotonic
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.clients.kor_travel_map import KorTravelMapClient
 from app.clients.kor_travel_map_weather import create_map_weather_client
 from app.clients.kor_travel_weather import KorTravelWeatherClient
 from app.core.config import settings
 from app.db import session as db_session
+from app.db.session import SESSION_TIMEOUT_SERVER_SETTINGS
 from app.models.kasi import TripDayRiseSet
 from app.models.poi import TripDayPoi
 from app.models.telegram_notification import TelegramNotification, TelegramPreferences
@@ -321,15 +326,82 @@ async def plan_user(
     return count
 
 
+# planner 단일 실행 잠금. Dagster 호출이 timeout으로 끊겨도 API 쪽 실행은 끝까지 돌므로
+# 다음 tick이 겹치지 않도록 프로세스 경계를 넘는 session advisory lock으로 막는다.
+_PLANNER_LOCK_NAMESPACE = 0x54474C50  # "TGLP"
+_PLANNER_LOCK_RESOURCE = 0x504C414E  # "PLAN"
+
+
+@asynccontextmanager
+async def _single_flight() -> AsyncIterator[bool]:
+    """잠금을 얻으면 True.
+
+    잠금 연결은 요청 pool 밖의 전용 NullPool 연결이다 — 매 tick 최대 예산 동안 pool 연결 하나를
+    묶어 두지 않는다. 끝에는 연결을 닫아 어떤 경로로 끝나도 잠금이 남지 않게 한다. 연결이 tick 도중
+    끊기면 잠금도 풀려 다음 tick이 겹칠 수 있지만, 발생키 unique가 중복 적재를 막는다.
+    """
+    lock_engine = create_async_engine(
+        db_session.engine.url,
+        poolclass=NullPool,
+        connect_args={"server_settings": SESSION_TIMEOUT_SERVER_SETTINGS},
+    )
+    connection = lock_engine.connect()
+    started = False
+    try:
+        await connection.start()
+        started = True
+        acquired = await connection.scalar(
+            text("SELECT pg_try_advisory_lock(:namespace, :resource)"),
+            {"namespace": _PLANNER_LOCK_NAMESPACE, "resource": _PLANNER_LOCK_RESOURCE},
+        )
+        # transaction을 닫아 idle-in-transaction timeout과 무관하게 session 잠금만 유지한다.
+        await connection.commit()
+        yield acquired is True
+    finally:
+
+        async def discard() -> None:
+            # 연결을 폐기하면 backend가 끝나며 session 잠금도 함께 풀린다(unlock 실패 경로 없음).
+            try:
+                if started:
+                    try:
+                        await connection.invalidate()
+                    finally:
+                        await connection.close()
+            finally:
+                await lock_engine.dispose()
+
+        task = asyncio.create_task(discard())
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            await task
+            raise
+
+
 async def plan_due(
     *,
     now: datetime | None = None,
     map_client: KorTravelMapClient | None = None,
     weather_client: KorTravelWeatherClient | None = None,
 ) -> dict[str, int]:
+    """한 tick. 이전 실행이 남아 있으면 건너뛰고, 시간 예산을 넘기면 남은 사용자를 다음 tick으로 미룬다."""
+    async with _single_flight() as acquired:
+        if not acquired:
+            return {"users": 0, "enqueued": 0, "failed": 0, "skipped": 1}
+        return await _plan_users(now=now, map_client=map_client, weather_client=weather_client)
+
+
+async def _plan_users(
+    *,
+    now: datetime | None,
+    map_client: KorTravelMapClient | None,
+    weather_client: KorTravelWeatherClient | None,
+) -> dict[str, int]:
     current = now or datetime.now(UTC)
     started = monotonic()
+    budget = settings.pinvi_telegram_planner_budget_seconds
     async with db_session.async_session_factory() as db:
+        # 지난 tick에서 처리하지 못한(가장 오래 기다린) 사용자부터 처리한다.
         user_ids = list(
             (
                 await db.scalars(
@@ -341,13 +413,27 @@ async def plan_due(
                             TelegramPreferences.weekly_enabled.is_(True),
                         )
                     )
-                    .order_by(TelegramPreferences.user_id)
+                    .order_by(
+                        TelegramPreferences.last_planned_at.asc().nulls_first(),
+                        TelegramPreferences.user_id,
+                    )
                 )
             ).all()
         )
-    enqueued = failed = 0
+    enqueued = failed = processed = 0
     for user_id in user_ids:
+        if processed and monotonic() - started >= budget:
+            break
+        processed += 1
         try:
+            # 처리 전에 cursor를 옮긴다. 이 사용자가 실패해도 다음 tick은 뒤 사용자부터 시작한다.
+            async with db_session.async_session_factory() as cursor_db:
+                await cursor_db.execute(
+                    update(TelegramPreferences)
+                    .where(TelegramPreferences.user_id == user_id)
+                    .values(last_planned_at=func.clock_timestamp())
+                )
+                await cursor_db.commit()
             weather_prepared = await prepare_weather(
                 user_id,
                 now=current + timedelta(seconds=monotonic() - started),
@@ -422,4 +508,10 @@ async def plan_due(
                     f"{f.filename.rsplit('/', 1)[-1]}:{f.lineno}" for f in reversed(frames)
                 ),
             )
-    return {"users": len(user_ids), "enqueued": enqueued, "failed": failed}
+    return {
+        "users": len(user_ids),
+        "enqueued": enqueued,
+        "failed": failed,
+        "processed": processed,
+        "deferred": len(user_ids) - processed,
+    }

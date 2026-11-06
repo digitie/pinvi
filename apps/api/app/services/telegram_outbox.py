@@ -167,21 +167,51 @@ async def process_pending_telegram_batch(
     )
 
 
+# 발송이 끝난 일정 알림 본문의 보존 기한 정리 주기(초)와 한 번에 처리할 최대 batch 수.
+# planner(Dagster)가 멈춰 있어도 보존 기한이 지켜지도록 API worker가 직접 돈다.
+BODY_RETENTION_INTERVAL_SECONDS = 3600.0
+_BODY_RETENTION_MAX_BATCHES = 20
+
+
+async def run_body_retention() -> int:
+    """보존 기한이 지난 알림 본문을 정리한다. 실패는 다음 주기에 재시도하며 drain을 멈추지 않는다."""
+    from app.db import session as db_session
+    from app.services.telegram_notifications import purge_expired_bodies
+
+    purged = 0
+    try:
+        for _ in range(_BODY_RETENTION_MAX_BATCHES):
+            async with db_session.async_session_factory() as session:
+                count = await purge_expired_bodies(session, limit=500)
+            purged += count
+            if count < 500:
+                break
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning("telegram notification body retention failed: %s", type(exc).__name__)
+    return purged
+
+
 async def _drain_loop(interval: float, batch_size: int) -> None:
     from app.db import session as db_session
 
+    last_retention: float | None = None
     while True:
+        if last_retention is None or time.monotonic() - last_retention >= (
+            BODY_RETENTION_INTERVAL_SECONDS
+        ):
+            last_retention = time.monotonic()
+            await run_body_retention()
         try:
             async with db_session.async_session_factory() as session:
                 result = await process_pending_telegram_batch(session, limit=batch_size)
-            from app.services.telegram_notifications import process_one
+            from app.services.telegram_notifications import drain_fair
 
-            for _ in range(batch_size):
-                async with db_session.async_session_factory() as session:
-                    if not await process_one(session):
-                        break
-            # 배치가 가득이면 즉시 한 번 더, 아니면 interval 대기.
-            if result.claimed < batch_size:
+            # 사용자별 순번으로 한 바퀴 처리한다. 한 사용자의 backlog가 다른 사용자를 밀지 않는다.
+            notified = await drain_fair(limit=batch_size)
+            # 어느 쪽이든 배치가 가득이면 즉시 한 번 더, 아니면 interval 대기.
+            if result.claimed < batch_size and notified < batch_size:
                 await asyncio.sleep(interval)
         except asyncio.CancelledError:
             raise

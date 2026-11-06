@@ -94,3 +94,23 @@ async def test_alert_invalid_query_never_calls_provider(code: str, since: dateti
     ) as http:
         with pytest.raises(ValueError):
             await KorTravelWeatherClient(http).alert_events(bjd_code=code, since=since)
+
+
+async def test_alert_events_scope_is_compared_at_whole_seconds_across_offsets() -> None:
+    """서버가 초 단위·KST 표기로 범위를 돌려줘도 같은 순간이면 받는다."""
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        body = alert_response()
+        body["queried_since"] = "2026-11-05T18:30:00+09:00"
+        return httpx.Response(200, json={"data": body})
+
+    async with httpx.AsyncClient(
+        base_url="http://weather.test", transport=httpx.MockTransport(handler)
+    ) as http:
+        value = await KorTravelWeatherClient(http).alert_events(
+            bjd_code="26", since=datetime(2026, 11, 5, 9, 30, 0, 700_000, tzinfo=UTC)
+        )
+    assert value.absence_is_clear is False
+    assert seen[0].url.params["since"] == "2026-11-05T09:30:00+00:00"

@@ -57,3 +57,38 @@ async def test_planner_calls_narrow_boundary_and_keeps_error_body_private(
             )
     assert seen[0].method == "POST" and seen[0].url.path == "/internal/telegram/plan"
     assert seen[0].headers["X-Pinvi-Notification-Planner-Key"] == "owned-planner-test-key"
+
+
+@pytest.mark.parametrize(
+    "data,expected",
+    [
+        (
+            {"users": 0, "enqueued": 0, "failed": 0, "skipped": 1},
+            {"users": 0, "enqueued": 0, "failed": 0, "skipped": 1},
+        ),
+        (
+            {"users": 5, "enqueued": 2, "failed": 0, "processed": 3, "deferred": 2},
+            {"users": 5, "enqueued": 2, "failed": 0, "processed": 3, "deferred": 2},
+        ),
+        ({"users": 1, "enqueued": 0, "skipped": -1}, None),
+        ({"users": 1, "enqueued": 0, "deferred": True}, None),
+    ],
+)
+async def test_planner_reports_single_flight_and_budget_counts(
+    monkeypatch: pytest.MonkeyPatch, data: dict, expected: dict | None
+) -> None:
+    monkeypatch.setattr(
+        PinviNotificationPlannerResource,
+        "create_client",
+        lambda self: httpx.AsyncClient(
+            base_url="http://owned.test",
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"data": data})),
+        ),
+    )
+    resource = PinviNotificationPlannerResource(planner_key="owned-planner-test-key")
+    with build_asset_context() as context:
+        if expected is None:
+            with pytest.raises(RuntimeError):
+                await pinvi_telegram_notification_planner(context, resource)
+        else:
+            assert await pinvi_telegram_notification_planner(context, resource) == expected

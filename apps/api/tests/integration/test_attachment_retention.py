@@ -898,29 +898,75 @@ async def test_0103_moderation_backfill_uses_action_history_conservatively(
             assert row.moderation_hold is hold
 
 
-async def test_expired_parent_overrides_moderation_hold(
-    client, verified_user, auth_cookies, session_factory, monkeypatch
+@pytest.mark.parametrize("parent", ["trip_purge", "poi_delete"])
+async def test_moderation_hold_survives_parent_deletion_until_moderation_resolves(
+    client, verified_user, auth_cookies, session_factory, monkeypatch, parent
 ):
+    """소유자 결정(2026-11-06): 장소 삭제·여행 휴지통 만료도 moderation hold 파일을 지우지 않는다."""
+    from app.models.moderation import ContentReport
+    from app.services.moderation import _restore_target
+    from tests.integration.test_pois_reorder import _add_poi
+
     user_id, _ = verified_user
     cookies = auth_cookies(user_id)
     trip = await _make_trip(client, cookies)
-    file = await _file(client, cookies, user_id, trip)
+    if parent == "poi_delete":
+        poi = await _add_poi(client, cookies, trip, sort_order="a0", feature_id=None)
+        uploaded = await client.post(
+            f"/trips/{trip}/pois/{poi['attachment_id']}/attachments",
+            json=_attachment_payload(user_id, byte_size=60, purpose="poi_attachment"),
+            cookies=cookies,
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        file = uploaded.json()["data"]
+    else:
+        file = await _file(client, cookies, user_id, trip)
+    aid = uuid.UUID(file["attachment_id"])
     async with session_factory() as db:
-        row = await db.get(CuratedPlanAttachment, uuid.UUID(file["attachment_id"]))
+        row = await db.get(CuratedPlanAttachment, aid)
         row.deleted_at = datetime.now(UTC)
         row.moderation_hold = True
         await db.commit()
-    await _trash(session_factory, trip, 31)
+    if parent == "poi_delete":
+        removed = await client.delete(f"/trips/{trip}/pois/{poi['attachment_id']}", cookies=cookies)
+        assert removed.status_code == 204, removed.text
+    else:
+        await _trash(session_factory, trip, 31)
     calls = []
 
     async def delete(bucket, key):
         calls.append(key)
 
     monkeypatch.setattr(gc, "delete_attachment_object", delete)
+    for _ in range(2):  # 반복 실행에서도 hold가 풀리지 않는다.
+        async with session_factory() as db:
+            result = await gc.execute_attachment_retention(db)
+            assert result["objects_deleted"] == 0 and result["trips_deleted"] == 0
+            assert result["status"]["held_attachments"] == 1
+    assert calls == []
+    async with session_factory() as db:
+        row = await db.get(CuratedPlanAttachment, aid)
+        assert row.purged_at is None and row.moderation_hold
+        assert await db.get(Trip, uuid.UUID(trip)) is not None
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 60
+    if parent == "poi_delete":
+        return  # 휴지통 안의 장소는 되살릴 수 있어 hold가 그대로 남는다.
+    # 휴지통 기한이 지나 복원할 자리가 영구히 없으면 신고 복원 처리는 hold만 풀고 끝난다.
+    report = ContentReport(
+        target_type="attachment",
+        target_id=aid,
+        target_trip_id=uuid.UUID(trip),
+        reason_code="other",
+        reason_text="resolved after parent expiry",
+        status="hidden",
+    )
+    async with session_factory() as db:
+        await _restore_target(db, report)
+        await db.commit()
     async with session_factory() as db:
         result = await gc.execute_attachment_retention(db)
         assert result["objects_deleted"] == 1 and result["trips_deleted"] == 1
-        assert calls == [file["storage_key"]]
+    assert calls == [file["storage_key"]]
 
 
 @pytest.mark.parametrize(
@@ -1112,7 +1158,7 @@ async def test_deleted_poi_then_hard_deleted_day_cannot_restore_detached_file(
     client, verified_user, auth_cookies, session_factory
 ):
     from app.models.moderation import ContentReport
-    from app.services.moderation import ContentReportTransitionError, _restore_target
+    from app.services.moderation import _restore_target
     from tests.integration.test_pois_reorder import _add_poi
 
     user_id, _ = verified_user
@@ -1145,11 +1191,14 @@ async def test_deleted_poi_then_hard_deleted_day_cannot_restore_detached_file(
         status="hidden",
     )
     async with session_factory() as db:
-        with pytest.raises(ContentReportTransitionError):
-            await _restore_target(db, report)
-        await db.rollback()
         row = await db.get(CuratedPlanAttachment, aid)
-        assert row.deleted_at is not None
+        assert row.moderation_hold  # 일자 삭제가 hold를 풀지 않는다.
+        # 복원할 자리가 영구히 없으므로 신고 복원은 파일을 되살리지 않고 hold만 푼다.
+        await _restore_target(db, report)
+        await db.commit()
+    async with session_factory() as db:
+        row = await db.get(CuratedPlanAttachment, aid)
+        assert row.deleted_at is not None and not row.moderation_hold
     files = await client.get("/users/me/files", cookies=cookies)
     assert files.json()["data"]["total"] == 0
 

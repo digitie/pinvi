@@ -1,3 +1,9 @@
+## #697 리뷰 잔여 7건 반영 (2026-11-06)
+
+PR claude/telegram-gc-improvements-20261106: planner 단일 실행·60초 예산·순환, 사용자 공정 drain, 전송 중 잠금 해제(lease),
+알림 본문 30일 보존, 특보 초 단위 비교, 늦게 켠 브리프 당일 발송 유지(고정), moderation hold가 부모 삭제·만료보다 우선.
+migration 0106(nullable 열 3·부분 index 1). 다음: 머지 SHA로 다음 rotation(현재 n150 91eaccd2 rotation 진행 중), 배포 뒤 NTF-031/032·ADM-044 수동 확인.
+
 ## Codex 묶음 리뷰 보완·live 카탈로그 (2026-11-06)
 
 PR claude/codex-review3-20261106: 18aba131..a7f1b730 적대 리뷰 2인 → 검증 Medium 3·Low 2 수정(failing-first),
