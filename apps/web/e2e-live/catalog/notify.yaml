@@ -319,68 +319,64 @@
   notes: 단위/통합 테스트(apps/api/tests/unit/test_telegram_client.py)로 커버. 라이브에서는 수행하지 않음.
 
 - id: NTF-018
-  title: 여행 기간·대표 지역 기준 공식 기상특보 Telegram 알림
-  priority: P3
-  tags: [telegram, weather, mutating]
+  title: 기상특보 동의 — 기본 안내(KST·안전 보장 아님), 켜고 저장·reload 보존, 끄기 저장
+  priority: P2
+  tags: [desktop, mobile, telegram, weather, mutating]
   preconditions:
-    - PR689와 Weather201의 병합 계약. 전용 테스트 여행·검증된 대상·기본 off 특보 동의
-    - 공식 발표 fixture만 사용하며 실제 개인 수신자나 운영 원천에 가짜 발표를 넣지 않음
-  data_sources: [weather:public-rest, pinvi:telegram-notifications]
+    - "account: test@test.com (user). 시작 시 예약 설정을 읽어 두고 afterEach 에서 그대로 되돌린다"
+  data_sources: [pinvi:telegram-notifications]
   steps:
-    - 대표 지역·현재 여행 기간·대상 연결 뒤 특보만 켜고 저장·reload 보존을 확인
-    - 소유 fixture의 발령·명시적 해제·취소와 정상 빈 응답·반복 planner를 대조
-    - 최신성·불완전·HTTP 실패 원인을 발송 이력에서 확인하고 수신 해제 후 새 발송이 없음을 확인
-    - 취소 역행·동률·정책 변경·만료는 WSL 실제 PG 회귀와 증거로 대조
+    - "/settings/telegram '예약 알림' → '여행 중 기상 특보 발표' 켬, 발송 시각 23:59 → '예약 설정 저장' → reload → 끔 → 저장"
   expected:
-    - 공식 발표와 action별 여행 중복이 없고 빈 응답/실패가 해제를 만들지 않음
-    - 취소/상충은 이전 대기를 무효화하고 검증되지 않은 구역을 전 지역 안전으로 표시하지 않음
-    - 상세 한국어 실패 원인·코드를 UI에서 확인하며 credential 원문이 없음
+    - "안내 'KST 기준'·'현재 안전 상태를 보장하지 않습니다.' 표시, 체크 상태 = 저장값"
+    - "PUT 200 + status '예약 설정을 저장했습니다.', reload 후 체크 유지·GET weather_enabled=true; 끄기 저장 후 false"
   cleanup:
-    - 보존한 동의를 복원하고 이번 fixture의 여행·연결·대상만 정리
-  automation: manual
-  notes: 제품·WSL 실제 PG/소유 TCP fixture UI 검증은 구현됨. 최종 운영 시험은 Claude Code 담당이며 실수신자 전송은 별도 전용 자격 확인 후 수행.
+    - "afterEach PUT 원래 설정"
+  automation: scripted
+  spec: specs/notify/notify-schedule.live.spec.ts#NTF-018
+  notes: "#637(PR689). 실제 공식 발표 발송은 NTF-030(manual). 켠 뒤의 발표만 알린다(weather_enabled_at). KST 23:30 이후에는 예약 경계 때문에 skip."
 
 - id: NTF-019
-  title: KST 일간·주간 브리프 설정과 예약 회차 발송
-  priority: P3
-  tags: [telegram, mutating]
+  title: 일간·주간 브리프 설정 — 일간·시각·요일 저장 보존, 주간은 대상 필수(브라우저 required·API 422)
+  priority: P2
+  tags: [desktop, mobile, telegram, mutating]
   preconditions:
-    - PR688 적용. 시스템 봇·planner 전용 키와 Dagster schedule이 구성된 전용 테스트 계정·수신 대화방
-    - 기존 예약 설정을 보존하고 실제 개인 대상·여행에는 발송하지 않는 독립 fixture만 사용
-  data_sources: [pinvi:etl, pinvi:telegram-notifications]
+    - "account: test@test.com (user). 예약 설정 보존·복원"
+  data_sources: [pinvi:telegram-notifications]
   steps:
-    - 설정에서 일간·주간 기본 off, KST 시각·요일·주간 대상 선택과 저장 후 reload 보존을 확인
-    - 전용 대상에 연결한 오늘·내일 테스트 일정과 앞으로7일 내 여행을 준비하고 지정 시각의 회차를 확인
-    - 발송 내역에서 장소·KST 시각·메모·날씨/일출의 확인 상태와 주간 여행 목록을 확인
-    - 반복 planner·수신 해제·일정 날짜 변경·KST 만료 경계는 WSL 실제 PG 회귀와 검증 증거로 대조
+    - "일간 브리프 켬, 발송 시각 23:59, 주간 요일 금요일, 주간 끔 → 저장 → reload"
+    - "주간 켬 + 대상 미선택 → 저장 클릭; API PUT weekly_enabled=true·target null / 없는 target"
   expected:
-    - 일간/주간 동의·시각·요일·대상이 저장되고 같은 회차의 중복 발송이 없다
-    - 무효화된 주간 대상이 있어도 수신 해제가 저장되고 대기 예약은 전송하지 않는다
-    - 실패 원인·다음 시각과 수신자 없는 예약 실패도 UI에서 확인할 수 있다
+    - "GET = daily_enabled true·weekly_enabled false·send_time 23:59·weekly_day 4·weekly_target_id null; 폼 값 유지"
+    - "대상 select validity.valueMissing, PUT 요청 0건; API 두 경우 모두 422, 저장값 불변"
   cleanup:
-    - 보존한 예약 설정을 복원하고 이번 fixture의 여행·연결·대상만 정리
-  automation: manual
-  notes: 제품과 WSL 회귀·소유 HTTP fixture UI 검증은 구현됨. 운영 실행은 Claude Code 담당이며 자격·수신 대화방을 확인하기 전 실제 발송하지 않음.
+    - "afterEach PUT 원래 설정"
+  automation: scripted
+  spec: specs/notify/notify-schedule.live.spec.ts#NTF-019
+  notes: "#638(PR688). planner 는 'KST 현재 ≥ send_time' 이면 그날 회차를 즉시 보낸다(늦게 켜면 바로 따라잡음) — 그래서 23:59 로 저장한다. 예약 회차 실제 발송은 NTF-029(manual)."
 
 - id: NTF-020
-  title: 일정 정보 알람으로 보내기 — 여행 전체·특정 일자 수동 전송 요청
-  priority: P3
-  tags: [telegram, mutating]
+  title: 일정 정보 알람으로 보내기 — 여행 전체·2일차 전송 완료, 같은 요청 ID 멱등·다른 범위 재사용 422
+  priority: P2
+  tags: [desktop, mobile, telegram, mutating]
   preconditions:
-    - PR688 적용. 전용 테스트 대화방에 검증된 대상과 소유 테스트 여행만 연결
-  data_sources: [pinvi:trips, pinvi:telegram-notifications]
+    - "account: test@test.com (user)"
+    - "env: PINVI_E2E_TELEGRAM_CHAT_ID (전용 테스트 chat, prod Pinvi 봇이 멤버) — 없으면 skip"
+    - "env: prod PINVI_TELEGRAM_BOT_TOKEN_DEFAULT 설정(미검증 대상이면 skip)"
+  data_sources: [pinvi:trips, pinvi:telegram-targets, pinvi:telegram-notifications, telegram:sendMessage]
   steps:
-    - 공유 탭에서 여행 전체 또는 특정 일자를 선택하고 알람으로 보내기를 누름
-    - 대상별 대기·전송 진행·완료를 확인하고 실제 수신 내용을 대조
-    - 소유 로컬 provider fixture에서429와403을 주입하고 재시도·실패 원인을 확인
+    - "'[e2e] NTF-020' 대상 등록(기본 아님) → 2일 여행 생성 → 공유 탭에서 대상 연결"
+    - "'보낼 일정' 여행 전체 → '알람으로 보내기', 2일차 → '알람으로 보내기'"
+    - "API: 같은 request_id 로 day 1 두 번, 같은 ID 로 trip 범위 한 번"
   expected:
-    - 202 요청 후 장소·도착/출발 KST·메모 요약이 선택한 범위의 plain text로 전송된다
-    - 긴 메시지는 분할되고 확인된 chunk는 재시도에서 반복하지 않는다
-    - 요청 한도·전송 권한 실패의 안전한 상세 원인과 다음 시도를 UI에서 확인한다
+    - "POST /trips/{id}/telegram/send 202 ×2; '최근 발송 내역' 2행 '일정 보내기', 90초 안에 둘 다 '전송 완료', '전송 실패' 0"
+    - "GET /users/me/telegram-notifications?trip_id: category itinerary ×2, delivery target=[e2e] 대상·status sent·sent_chunks=total_chunks; 응답·화면에 chat id 없음"
+    - "같은 request_id 재시도 202·같은 id, 다른 범위 재사용 422"
   cleanup:
-    - 이번 fixture의 여행·연결·대상만 정리
-  automation: manual
-  notes: 실제 API/DB/프로덕션 웹과 소유 Telegram HTTP fixture의8흐름 증거는 docs/reviews/pinvi-636-638-telegram-wsl-live.json 참조. 운영·실수신자 시험은 별도이며 이 변경에서 수행하지 않음.
+    - "afterEach 여행 삭제 + [e2e] 대상 sweep"
+  automation: scripted
+  spec: specs/notify/notify-schedule.live.spec.ts#NTF-020
+  notes: "#636(PR688). 실제 전송 3건(전체·2일차·1일차 멱등 1회)이 전용 테스트 chat 으로 간다. 수신 본문 대조는 chat reader 가 없어 NTF-013 과 같이 범위 밖. 사용자당 대기 수동 전송 3건 상한(리뷰 보완, 429 TELEGRAM_SEND_BACKLOG)."
 
 - id: NTF-021
   title: 이메일 알림 수신 — 동반자 초대 메일(Resend email_queue) 실제 수신·본문
@@ -481,3 +477,79 @@
     - "없음"
   automation: scripted
   spec: specs/notify/notify-settings.live.spec.ts#NTF-026
+
+- id: NTF-027
+  title: 대상 미연결 여행 — '알람으로 보내기' 비활성·발송 내역 없음, API 422·없는 여행 404·day 범위 검증
+  priority: P2
+  tags: [desktop, mobile, telegram, mutating]
+  preconditions:
+    - "account: test@test.com (user)"
+  data_sources: [pinvi:trips, pinvi:telegram-notifications]
+  steps:
+    - "2일 여행 생성 → 공유 탭 Telegram 섹션"
+    - "API POST /trips/{id}/telegram/send (scope trip), 임의 UUID 여행, scope day + day_index 없음"
+  expected:
+    - "telegram-send-itinerary disabled, '발송 내역이 없습니다.', '보낼 일정'에 2일차 선택지"
+    - "422 '먼저 활성·검증된 Telegram 대상을 여행에 연결하세요.' / 404 / 422; GET 알림 목록 0건"
+  cleanup:
+    - "afterEach 여행 삭제"
+  automation: scripted
+  spec: specs/notify/notify-schedule.live.spec.ts#NTF-027
+  notes: "#636. chat 없이 실행된다."
+
+- id: NTF-028
+  title: 주간 요약 대상 — 검증된 [e2e] 대상 선택·저장·reload 보존, 대상 삭제 뒤에도 수신 해제 저장
+  priority: P3
+  tags: [desktop, mobile, telegram, mutating]
+  preconditions:
+    - "account: test@test.com (user)"
+    - "env: PINVI_E2E_TELEGRAM_CHAT_ID — 없으면 skip; 미검증 대상이면 skip"
+  data_sources: [pinvi:telegram-targets, pinvi:telegram-notifications]
+  steps:
+    - "'[e2e] NTF-028' 등록 → 발송 시각 23:59, 주간 켬, 대상 선택 → 저장 → reload"
+    - "API 로 대상 삭제(204) → 주간 끔 PUT"
+  expected:
+    - "select 값 = 대상 id, GET weekly_enabled true·weekly_target_id = 대상 id"
+    - "삭제 뒤 PUT 200, GET weekly_enabled false·weekly_target_id null"
+  cleanup:
+    - "afterEach PUT 원래 설정 + sweep"
+  automation: scripted
+  spec: specs/notify/notify-schedule.live.spec.ts#NTF-028
+  notes: "#638. 무효화된 주간 대상이 수신 해제를 막지 않는다(save_preferences)."
+
+- id: NTF-029
+  title: 예약 회차 실제 발송 — 일간(전날·당일)·주간 요약이 KST 지정 시각에 한 번만
+  priority: P3
+  tags: [telegram, mutating]
+  preconditions:
+    - "PR688 적용. planner 전용 키와 Dagster schedule(pinvi_telegram_notification_planner_schedule)이 켜진 환경"
+    - "전용 테스트 계정·수신 대화방, 기존 예약 설정 보존. 실제 개인 대상·여행에는 발송하지 않음"
+  data_sources: [pinvi:etl, pinvi:telegram-notifications]
+  steps:
+    - "전용 대상에 연결한 오늘·내일 테스트 일정과 7일 내 여행 준비 → 지정 시각 회차 대기"
+    - "발송 내역에서 장소·KST 시각·메모·날씨/일출 확인 상태와 주간 여행 목록 확인; 반복 planner 실행"
+  expected:
+    - "같은 회차 중복 없음, 수신 해제 뒤 대기 예약은 전송되지 않음"
+    - "실패 원인·다음 시각과 수신자 없는 예약 실패가 UI에 보임"
+  cleanup:
+    - "예약 설정 복원, fixture 여행·연결·대상 정리"
+  automation: manual
+  notes: "#638. 지정 시각·Dagster 실행에 묶여 자동화하지 않는다. WSL 회귀·소유 fixture 증거는 docs/reviews/pinvi-636-638-telegram-wsl-live.json. 늦게 켜면 그날 회차를 즉시 보낸다."
+
+- id: NTF-030
+  title: 공식 기상특보 실제 발송 — 여행 기간·대표 지역의 발표·해제·취소, 중복 없음
+  priority: P3
+  tags: [telegram, weather, mutating]
+  preconditions:
+    - "PR689 + Weather #201 계약. 전용 테스트 여행·검증된 대상·특보 동의"
+    - "공식 발표가 실제로 있어야 하며 운영 원천에 가짜 발표를 넣지 않음"
+  data_sources: [weather:public-rest, pinvi:telegram-notifications]
+  steps:
+    - "대표 지역·현재 여행 기간·대상 연결 뒤 특보 켬 → planner 회차 → 발송 내역 확인"
+  expected:
+    - "공식 발표와 action별 여행 중복이 없고 빈 응답/실패가 해제를 만들지 않음"
+    - "상세 한국어 실패 원인·코드가 UI에 보이며 credential 원문 없음"
+  cleanup:
+    - "동의 복원, fixture 여행·연결·대상 정리"
+  automation: manual
+  notes: "#637. 실제 발표 시점에 의존한다. 취소 역행·동률·만료는 WSL 실제 PG 회귀(docs/reviews/pinvi-637-weather-alerts-wsl-live.json)."

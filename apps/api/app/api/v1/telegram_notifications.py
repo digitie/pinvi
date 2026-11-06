@@ -24,7 +24,9 @@ router = APIRouter(tags=["telegram"])
 
 def _error(exc: TripNotFoundError | TripPermissionError | TripValidationError) -> HTTPException:
     status = (
-        404
+        429
+        if isinstance(exc, service.TelegramSendBacklogError)
+        else 404
         if isinstance(exc, TripNotFoundError)
         else 403
         if isinstance(exc, TripPermissionError)

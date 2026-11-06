@@ -796,6 +796,81 @@ async def test_one_oversized_user_does_not_block_later_users_and_has_ui_error(
     assert "일정이 너무 길" in history.text and "긴메모" not in history.text
 
 
+async def test_unexpected_error_for_one_user_does_not_stop_later_users(
+    client: Any,
+    verified_user: Any,
+    auth_cookies: Any,
+    session_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """한 사용자의 예상 밖 오류가 user_id 뒤 순서의 모든 예약을 매분 멈추지 않는다."""
+    from app.models.telegram_notification import TelegramPreferences
+    from app.models.user import User
+    from app.services import telegram_planner
+
+    _, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    assert (
+        await client.put(
+            "/users/me/telegram-notification-preferences",
+            json={"daily_enabled": True},
+            cookies=cookies,
+        )
+    ).status_code == 200
+    poison_id = uuid.UUID(int=1)  # user_id 순으로 먼저 처리된다.
+    async with session_factory() as db:
+        db.add(
+            User(
+                user_id=poison_id,
+                email="planner-poison@pinvi.test",
+                status="active",
+                roles=["user"],
+                email_verified_at=datetime.now(UTC),
+            )
+        )
+        await db.flush()
+        db.add(TelegramPreferences(user_id=poison_id, daily_enabled=True, send_time="08:00"))
+        await db.commit()
+    original = telegram_planner.plan_user
+
+    async def plan_user(db: Any, user_id: uuid.UUID, **kwargs: Any) -> int:
+        if user_id == poison_id:
+            raise RuntimeError("secret-bearing message must not be stored")
+        return await original(db, user_id, **kwargs)
+
+    monkeypatch.setattr(telegram_planner, "plan_user", plan_user)
+    result = await telegram_planner.plan_due(now=datetime(2026, 11, 5, 0, tzinfo=UTC))
+    assert result["enqueued"] == 2 and result["failed"] == 1
+    async with session_factory() as db:
+        assert (
+            await db.scalar(
+                select(TelegramNotification).where(TelegramNotification.user_id == poison_id)
+            )
+        ) is None
+
+
+async def test_manual_send_backlog_is_capped_per_user(
+    client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any, provider: Provider
+) -> None:
+    """한 사용자가 대기 전송을 무한히 쌓아 다른 사용자의 기한 있는 특보를 밀어내지 않는다."""
+    from app.services.telegram_notifications import MANUAL_PENDING_LIMIT
+
+    trip_id, _, cookies = await setup_trip(client, verified_user, auth_cookies, session_factory)
+    first_id = str(uuid.uuid4())
+    accepted = [await send(client, trip_id, cookies, request_id=first_id)]
+    accepted += [await send(client, trip_id, cookies) for _ in range(MANUAL_PENDING_LIMIT - 1)]
+    assert [r.status_code for r in accepted] == [202] * MANUAL_PENDING_LIMIT
+    blocked = await send(client, trip_id, cookies)
+    assert blocked.status_code == 429, blocked.text
+    assert blocked.json()["error"]["code"] == "TELEGRAM_SEND_BACKLOG"
+    # 같은 요청의 재시도는 상한과 무관하게 기존 응답을 돌려준다.
+    retried = await send(client, trip_id, cookies, request_id=first_id)
+    assert retried.status_code == 202
+    assert retried.json()["data"]["id"] == accepted[0].json()["data"]["id"]
+    async with session_factory() as db:
+        assert await process_one(db)
+    assert (await send(client, trip_id, cookies)).status_code == 202
+
+
 async def test_expired_scheduled_retry_is_closed_before_future_retry_at(
     client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any, provider: Provider
 ) -> None:

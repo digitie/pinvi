@@ -340,7 +340,7 @@
   notes: TripDetail.tsx에 패널 스와이프 핸들러 없음(open question — 요구사항인지).
 
 - id: CORE-021
-  title: 모바일 통계 칩 vs 남쪽 핀 겹침(#623 known)
+  title: 모바일 통계 칩 vs 남쪽 핀 겹침(#623 회귀 감시 — PR693 수정)
   priority: P2
   tags: [mobile, mutating, poi]
   preconditions:

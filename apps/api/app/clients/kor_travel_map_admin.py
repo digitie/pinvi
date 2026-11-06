@@ -242,7 +242,7 @@ class FeatureCommandResolutionWire(BaseModel):
     feature_id: str = Field(min_length=1)
     request_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     command_id: int = Field(ge=1, strict=True)
-    receipt: dict[str, Any] | None
+    receipt: dict[str, Any] | None = None
 
 
 class KorTravelMapAdminClient:

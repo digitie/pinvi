@@ -167,7 +167,7 @@ soft delete. trip 연결도 함께 끊음.
 
 ### 6.7 일정·예약과 발송 결과
 
-- POST /trips/{trip_id}/telegram/send: 소유자만 사용한다. request_id(UUID), scope(trip/day), day 범위의 day_index를 받아202와 발송 식별자를 반환한다. 같은 요청 ID는 최초 snapshot을 유지하며 다른 의미로 재사용하면422다.
+- POST /trips/{trip_id}/telegram/send: 소유자만 사용한다. request_id(UUID), scope(trip/day), day 범위의 day_index를 받아202와 발송 식별자를 반환한다. 같은 요청 ID는 최초 snapshot을 유지하며 다른 의미로 재사용하면422다. 사용자당 대기 중인 수동 전송이 3건이면 새 요청은 429 `TELEGRAM_SEND_BACKLOG`다(같은 요청 ID 재시도는 상한과 무관).
 - GET/PUT /users/me/telegram-notification-preferences: 기본 off 일간·주간 설정과 KST 시각·요일·본인 주간 대상을 조회·저장한다. 무효화된 대상이 수신 해제를 막지 않는다.
 - GET /users/me/telegram-notifications: 최근 발송의 대상별 진행·실패/skip 원인·다음 시도를 조회한다. trip_id로 현재 소유 여행만 좁힐 수 있다.
 - POST /internal/telegram/plan: 전용 X-Pinvi-Notification-Planner-Key만 받는다. Dagster의 pinvi_telegram_notification_planner_job이 매분 호출한다.

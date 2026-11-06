@@ -54,6 +54,7 @@ from app.schemas.trip import (
 from app.services.poi import PoiNotFoundError, get_poi
 from app.services.realtime_broker import realtime_broker
 from app.services.rustfs_storage import make_download_url
+from app.services.storage_lifecycle import TRASH_RETENTION_DAYS
 from app.services.storage_policy import attachment_scope, list_admin_file_library
 from app.services.telegram_messages import (
     build_companion_invited_message,
@@ -139,11 +140,13 @@ def _to_response(trip) -> TripResponse:  # type: ignore[no-untyped-def]
         version=trip.version,
         created_at=trip.created_at,
         updated_at=trip.updated_at,
-        trash_expires_at=trip.deleted_at + timedelta(days=30) if trip.deleted_at else None,
+        trash_expires_at=(
+            trip.deleted_at + timedelta(days=TRASH_RETENTION_DAYS) if trip.deleted_at else None
+        ),
         can_restore=bool(
             trip.deleted_at
             and trip.purge_started_at is None
-            and trip.deleted_at + timedelta(days=30) > datetime.now(UTC)
+            and trip.deleted_at + timedelta(days=TRASH_RETENTION_DAYS) > datetime.now(UTC)
         ),
     )
 

@@ -1,8 +1,8 @@
 # Live e2e catalog runbook (`apps/web/e2e-live`)
 
 운영 PinVi 웹을 실제 브라우저로 두드리는 **라이브 UI 케이스 카탈로그**다. 9개 영역
-(trip·search·nearby·weather·share·poi·notify·admin·core) 346건 중 295건이 스크립트, 21건이
-수동, 30건이 blocked(아래 §7). 기존 `playwright.live-mutating.config.ts`(M04/M05 attested
+(trip·search·nearby·weather·share·poi·notify·admin·core) 354건 중 306건이 스크립트, 25건이
+수동, 23건이 blocked(아래 §7, 2026-11-06 — 정확한 수치는 생성 INDEX.md 가 정본). 기존 `playwright.live-mutating.config.ts`(M04/M05 attested
 suite)·`playwright.admin-live.config.ts`(admin read-only matrix)와 분리된 세 번째 live 설정이며,
 **어디에서도 `page.route` 로 mock 하지 않고 base URL 에 localhost fallback 이 없다(#618)**.
 
@@ -84,7 +84,7 @@ scripts/n150-live-catalog.sh --head --project session       # TRIP-046(@slow, ~1
 | `PINVI_E2E_USER2_EMAIL` / `PINVI_E2E_USER2_PASSWORD` | 권장 | 제2 사용자(test2@test.com, DECISIONS D2) — share 동행/격리, trip 056/057, core 009, admin 002~004 |
 | `PINVI_E2E_ADMIN_EMAIL` / `PINVI_E2E_ADMIN_PASSWORD` | admin·notify·weather-admin | 고정 admin 계정(role `admin`) |
 | `PINVI_E2E_API_URL` | 선택 | API base 를 고정. 없으면 페이지의 첫 API 요청에서 유도한다 |
-| `PINVI_E2E_TELEGRAM_CHAT_ID` | 선택 | 전용 테스트 chat(DECISIONS D4). 없으면 NTF-004~012 가 skip |
+| `PINVI_E2E_TELEGRAM_CHAT_ID` | 선택 | 전용 테스트 chat(DECISIONS D4). 없으면 NTF-004~012·016·020·028 이 skip(NTF-018·019·027 은 chat 없이 실행) |
 | `PINVI_E2E_TELEGRAM_FORBIDDEN_CHAT_ID` | 선택 | 봇이 추방된 chat — NTF-016 |
 | `PINVI_E2E_COMPANION_EMAIL` | 선택 | 미가입 sink 주소 — SHR-027 |
 | `PINVI_E2E_ALLOW_RESIDUAL_SUGGESTIONS` | 기본 `1` | admin-promotion 스펙 게이트(DECISIONS D1). `0` 이면 그 파일 전체 skip |
@@ -204,21 +204,23 @@ scripted 케이스의 spec 파일·id 존재). 목록 검증은 `test:e2e:live-c
 | WX-013/026 | manual | 날짜 미정 pending_date(이제 `createTrip` 이 날짜 없는 초안을 만들 수 있어 승격 후보), 일자 날짜 override 재계산 |
 | WX-017 | blocked | weather marker 레이어 플래그가 prod off |
 | WX-023/024 | blocked | Map 데이터셋 not_loaded 유도·stale 위치 선택에 service token 필요(#642) |
-| SHR-021/022/032 | blocked | 댓글 수정·일자/장소 댓글·내보내기 기능 없음(#641) |
+| SHR-021/022 | blocked | 댓글 수정·일자/장소 댓글 기능 없음 |
 | SHR-027 | blocked→env | 미가입 sink 주소(`PINVI_E2E_COMPANION_EMAIL`) 가 있으면 자동 활성 |
 | SHR-034 | manual | 공유 페이지 a11y 수동 점검 |
 | POI-004/005/006/029/030 | manual | 지도 정밀 패닝 불가(해상·국외), 31회 업로드는 예산 초과, 첨부 잔존 기대값 미정(#629). POI-006 은 날짜 없는 `createTrip` 으로 승격 후보 |
 | POI-014/015 | blocked | 카카오/네이버 pick 이 feature 제안을 자동 생성, 삭제 경로 없음(#634) |
 | NTF-013/015 | blocked | Bot API 로 봇 자신의 메시지 본문을 읽을 수 없음 — reader 세션 필요 |
 | NTF-017 | blocked | 429 유도 불가(단위 테스트가 커버) |
-| NTF-018/019/020 | blocked | 특보 알림·예약 브리프·수동 전송 기능 없음(#636~#638) |
+| NTF-029/030 | manual | 예약 회차(Dagster planner·KST 지정 시각)와 실제 공식 특보 발표에 묶여 유발하지 않음(#637·#638) |
 | NTF-021 | blocked | Resend 실수신 inbox 없음 |
 | NTF-025 | blocked | 실 admin 채널로 발사됨 |
 | ADM-021/037 | manual | 좌표 없는 feature 사전 탐색, correction 승인은 실 Map PATCH |
 | ADM-031/039 | blocked | 승인(승격)은 PinVi/Map 양쪽에서 비가역(#634) |
 | CORE-005 | manual | 실제 11분 유휴 — 예산 초과 |
 
-Expected-fail(`test.fail`) 로 남은 것은 Map 이슈(kor-travel-map#1438~#1440) 케이스뿐이다. #643 수정 묶음
+Expected-fail(`test.fail`) 로 남은 것은 Map 이슈(kor-travel-map#1438~#1440) 케이스뿐이다. #623/#686 에는
+`test.fail` 이 없었다 — CORE-021(#623)은 정상 단언이고 NEAR-006/024/025·CORE-025(#686)는 PR693 이 단언을
+강화했다(운영 재실행 뒤 종료). #643 수정 묶음
 (#654~#662)과 리뷰 PR 로 CORE-007(#644)·TRIP-011(#624)·TRIP-026(#649)·SRCH-004(#650)·ADM-022(#651)·
 TRIP-030(#652)의 `test.fail` 과 #648·#663 의 런타임 `test.fail` 을 해제했고(2026-11-04), SHR-005/006/024/033 과
 TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 2026-11-03 에 해제했다.
@@ -239,12 +241,12 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | #633 | fixed (#657, D8 변경) | 여행 휴지통·복원 | TRIP-043 — 삭제 → 휴지통 → 복원(초안·장소 보존) |
 | #634 | done (#659) | Kakao/Naver pick 자동 feature 제안의 admin 삭제·dry-run | POI-014/015, ADM-031, D1 |
 | #635 | done (#665 + 리뷰 PR) | route·area kind 렌더링 | SRCH-023/024 scripted(기본 근처 point 설악산국립공원·북한산성), SRCH-028 데이터 blocked |
-| #636 | enhancement | '일정 정보 알람으로 보내기' | NTF-020 |
-| #637 | enhancement | 기상 특보 Telegram 알림 | NTF-018 |
-| #638 | enhancement | 일간/주간 브리프 예약 알림 | NTF-019 |
+| #636 | done (#688) | '일정 정보 알람으로 보내기' | NTF-020(chat 필요)·NTF-027 scripted |
+| #637 | done (#689) | 기상 특보 Telegram 알림 | NTF-018 scripted(동의), NTF-030 manual(실제 발표) |
+| #638 | done (#688) | 일간/주간 브리프 예약 알림 | NTF-019·NTF-028(chat 필요) scripted, NTF-029 manual(예약 회차) |
 | #639 | done (#656) | 장소를 다른 일자로 옮기기 | TRIP-053 |
 | #640 | done (#657) | 일자 메모 UI | TRIP-054 |
-| #641 | enhancement | 여행 내보내기(인쇄/PDF/ICS) | SHR-032 |
+| #641 | done (#690) | 여행 내보내기(인쇄/PDF/ICS) | SHR-032 scripted(인쇄창 준비·print 호출까지, PDF 육안 확인은 수동) |
 | #642 | done (#661) | Map 날씨 카드 stale 배지 | WX-024 |
 | #643 | umbrella | live e2e 카탈로그 발견 사항 모음 | 전부 |
 | #644 | fixed (#655) | 로그인 후 원래 가려던 페이지로 복귀(return-to) | CORE-007 — `test.fail` 제거 |
@@ -263,6 +265,8 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | kor-travel-map#1439 | bug | event 기간·장소 누락, 축제 category·중복 | SRCH-027 (`test.fail`) |
 | kor-travel-map#1440 | reopened | #1446 배포 후에도 과거 요약 원천/보관·적재 진단 필요 | WX-004 (`test.fail`) |
 | #684 | bug | 요청 한도 미들웨어가 핸들러 DB 오류를 503 "한도 저장소 사용 불가"로 바꿈 + 여행 조회 rise/set 동시 INSERT 경합 | TRIP-003 (2026-11-05 경합, 재실행 통과) |
+| #667 | done (#681) | 휴지통 30일 보존·첨부 객체 GC | TRIP-043(안내·복원 기한), TRIP-058(만료 = 삭제 + 30일), ADM-041(정리 확인창 취소만) |
+| #618·#623·#686 | done (#693) | 검사 격리·여행 지도 가림·선택 위치/offset | CORE-021, NEAR-006/024/025, CORE-025 — 운영 재실행으로 종료 |
 | kor-travel-map#1450 | data | 운영 Map area kind 0건(KNPS 국립공원 경계 미적재) | SRCH-028 (blocked) |
 
 #624 는 prod 재확인(2026-11-03) 때 **500 INTERNAL_ERROR** 였고 #654 가 422 로 바꿨다. 리뷰 PR 이 다이얼로그에서

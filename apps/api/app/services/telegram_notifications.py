@@ -12,7 +12,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from time import monotonic
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -236,6 +236,15 @@ async def itinerary(db: AsyncSession, trip: Trip, day_index: int | None = None) 
     return itinerary_text(trip, days, pois)
 
 
+# 한 사용자가 대기 중인 수동 일정 전송의 상한. 공용 봇 큐에서 다른 사용자의 기한 있는
+# 특보·브리프가 밀려 만료되지 않게 한다. 같은 request_id 재시도는 상한과 무관하다.
+MANUAL_PENDING_LIMIT = 3
+
+
+class TelegramSendBacklogError(TripValidationError):
+    code = "TELEGRAM_SEND_BACKLOG"
+
+
 async def manual_send(
     db: AsyncSession, *, trip_id: uuid.UUID, user_id: uuid.UUID, body: TelegramSendRequest
 ) -> TelegramNotification:
@@ -255,6 +264,22 @@ async def manual_send(
     targets = await linked_targets(db, trip)
     if not targets:
         raise TripValidationError("먼저 활성·검증된 Telegram 대상을 여행에 연결하세요.")
+    # 사용자 행 잠금으로 같은 사용자의 다른 여행 전송과 상한 확인을 직렬화한다.
+    await db.scalar(select(User).where(User.user_id == user_id).with_for_update(key_share=True))
+    backlog = await db.scalar(
+        select(func.count(func.distinct(TelegramNotification.id)))
+        .select_from(TelegramNotification)
+        .join(TelegramDelivery, TelegramDelivery.notification_id == TelegramNotification.id)
+        .where(
+            TelegramNotification.user_id == user_id,
+            TelegramNotification.category == "itinerary",
+            TelegramDelivery.status == "pending",
+        )
+    )
+    if (backlog or 0) >= MANUAL_PENDING_LIMIT:
+        raise TelegramSendBacklogError(
+            "이전 일정 전송이 아직 진행 중입니다. 발송 내역에서 완료를 확인한 뒤 다시 보내세요."
+        )
     return await enqueue(
         db,
         user_id=user_id,

@@ -759,13 +759,14 @@
     - /trips 목록 → 상세
   expected:
     - 삭제 직후 /trips로 이동, 양쪽 버킷에 카드 없음, 상세 접근 시 trip-detail-error
+    - 휴지통 안내 '삭제한 여행은 30일 동안 초안으로 복원할 수 있습니다.', 항목에 '…까지 복원 가능'
     - 휴지통 목록에 여행 1건, '복원' → POST /trips/{id}/restore 200 + '"<제목>" 여행을 초안으로 복원했습니다.', 휴지통에서 사라짐
     - 목록 카드와 상세 상단에 '초안', 1일차 장소 1곳 그대로(GET /trips/{id})
   cleanup:
     - afterEach deleteTrip(id) — 복원된 여행을 다시 휴지통으로 보낸다
   automation: scripted
   spec: specs/trip/trip-list.live.spec.ts#TRIP-043
-  notes: 소유자 결정 변경(2026-11-04) — 휴지통 복원(#633, #657)을 유지한다. 삭제는 soft_delete(status=archived, deleted_at), 복원은 status=draft·version+1, 기존 공개 범위·유효 공유 링크 재적용. 휴지통 영구 삭제·보존 기한은 아직 없다.
+  notes: 소유자 결정 변경(2026-11-04) — 휴지통 복원(#633, #657)을 유지한다. 삭제는 soft_delete(status=archived, deleted_at), 복원은 status=draft·version+1, 기존 공개 범위·유효 공유 링크 재적용. #681부터 30일 보존(안내 문구·항목별 '…까지 복원 가능'), 기한·만료 수치는 TRIP-058.
 
 - id: TRIP-044
   title: 버킷 전환 — 예정/지난 여행 필터가 aria-pressed로 바뀌고 카드 집합이 분리된다
@@ -1005,3 +1006,22 @@
   automation: scripted
   spec: specs/trip/trip-user2.live.spec.ts#TRIP-057
   notes: 동행 초대/공유 링크는 다른 영역 — 여기서는 비공개 기본값의 격리만 본다.
+
+- id: TRIP-058
+  title: 휴지통 30일 보존 — 만료 시각 = 삭제 시각 + 30일, 복원 가능, 복원 응답은 기한 해제
+  priority: P1
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - "account: test@test.com (user)"
+  data_sources: [pinvi:trips]
+  steps:
+    - "당일 여행 생성 → DELETE(soft_delete) 전후 시각 기록 → GET /trips?bucket=all&trashed=true"
+    - "/trips/trash 에서 '복원'"
+  expected:
+    - "항목 can_restore=true, trash_expires_at ∈ [삭제 전 + 30일 − 2분, 삭제 후 + 30일 + 2분] — 30일보다 이르면 복원 가능한 자료를 일찍 지운다"
+    - "복원 버튼 활성, POST restore 200 응답 status draft·trash_expires_at null·can_restore false"
+  cleanup:
+    - "afterEach deleteTrip(id)"
+  automation: scripted
+  spec: specs/trip/trip-list.live.spec.ts#TRIP-058
+  notes: "#681. 만료(410 TRIP_TRASH_EXPIRED)·실제 영구 정리는 30일을 기다릴 수 없어 API 통합 테스트(test_attachment_retention.py test_restore_has_thirty_day_deadline)와 ADM-041(정리 확인창 취소만)로 본다. prod 에서 정리 실행은 하지 않는다."

@@ -247,6 +247,38 @@ async def test_expired_unregistered_upload_is_collected_and_late_reference_denie
     assert late.status_code == 422, late.text
 
 
+async def test_expired_never_written_reservation_stops_counting_before_gc(
+    client, verified_user, auth_cookies, session_factory, monkeypatch
+):
+    """취소·실패한 선택이 수동 GC 전까지 사용자 총량을 잠그지 않는다(#681 리뷰)."""
+    from app.api.v1 import storage
+    from app.models.storage_lifecycle import AttachmentUploadIntent
+    from app.models.user import User
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    async with session_factory() as db:
+        user = await db.get(User, uuid.UUID(user_id))
+        user.user_attachment_quota_bytes_override = 100
+        await db.commit()
+    abandoned = await _upload_url(client, cookies)
+    started = await _upload_url(client, cookies, size=30)
+    monkeypatch.setattr(storage, "put_storage_object", lambda **kwargs: None)
+    assert (await _put(client, started["upload_url"], size=30)).status_code == 204
+    async with session_factory() as db:
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 90
+        for up in (abandoned, started):
+            intent = await db.get(AttachmentUploadIntent, (up["bucket"], up["storage_key"]))
+            intent.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        await db.commit()
+    async with session_factory() as db:
+        # 쓰기를 시작하지 않은 만료 예약은 더 이상 바이트를 가질 수 없다(PUT 거부).
+        assert await attachment_bytes_for_user(db, user_id=uuid.UUID(user_id)) == 30
+    assert (await _put(client, abandoned["upload_url"])).status_code == 422
+    retry = await _upload_url(client, cookies)
+    assert retry["storage_key"] != abandoned["storage_key"]
+
+
 @pytest.mark.parametrize("kind", ["trip", "attachment"])
 async def test_moderation_cannot_restore_purge_started_target(
     client, verified_user, auth_cookies, session_factory, monkeypatch, kind

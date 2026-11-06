@@ -6,7 +6,7 @@ import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attachment import CuratedPlanAttachment
@@ -109,6 +109,12 @@ async def pending_upload_bytes(db: AsyncSession, user_id: uuid.UUID) -> int:
             AttachmentUploadIntent.user_id == user_id,
             AttachmentUploadIntent.registered_at.is_(None),
             AttachmentUploadIntent.purged_at.is_(None),
+            # 쓰기를 시작하지 않은 채 만료된 예약은 PUT이 거부되므로 바이트를 가질 수 없다.
+            # 수동 GC 전까지 취소·실패한 선택이 사용자 총량을 잠그지 않게 제외한다.
+            or_(
+                AttachmentUploadIntent.write_started_at.is_not(None),
+                AttachmentUploadIntent.expires_at > datetime.now(UTC),
+            ),
         )
     )
     return int(value or 0)

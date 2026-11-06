@@ -1,3 +1,11 @@
+## 2026-11-06 — Codex 묶음(#681~#696) 적대 리뷰 보완·live 카탈로그 갱신·Map admin 핀 정정
+
+- 18aba131..a7f1b730(13커밋)을 보안·데이터, 정확성·계약 두 독립 리뷰로 읽었다. Critical/High 없음. 검증된 Medium 3건·Low 2건을 failing-first 테스트로 고쳤다.
+- 고침: 만료된 미시작 업로드 예약이 수동 GC 전까지 사용자 총량을 잠금, planner 한 사용자의 예상 밖 오류가 뒤 사용자 전체 예약을 매분 멈춤, 수동 일정 전송 대기 상한 없음(사용자당 3건, 429 `TELEGRAM_SEND_BACKLOG`), Map reconcile `receipt` 를 필수로 받음, 휴지통 30일 리터럴 중복.
+- 남김(보고만): planner 직렬 처리·Dagster 120초 timeout 중첩, drain 사용자 공정성, 전송 중 Trip 잠금, 알림 본문 보존 기한, POI 삭제 시 moderation hold 해제(소유자 판단).
+- Map admin OpenAPI: 바이트(0027b8e8…)는 Map main 70b86c52와 같고 #683 핀이 미머지 브랜치 커밋 0afad078이라 핀만 옮겼다. service·user 불변.
+- live 카탈로그: NTF-018/019/020 scripted, NTF-027/028 신규 scripted, NTF-029/030 manual(예약 회차·실제 특보), SHR-032 scripted, TRIP-058 신규(30일 보존), TRIP-043 보존 안내. #623/#686 test.fail 은 원래 없었다. 354건(306 scripted/25 manual/23 blocked).
+
 ## 2026-11-06 — 원격 CI의 연결반환 구형 기대값 보완·push 서버 거절
 
 - d95c2c6 원격integration3이직접resolve구형기대값2FAIL을포착했다. 새source에서같은실패를재현하고기존6검사를냉미스즉시반환·배경1회·독립45초·종료후slot회복·warm latest/forecast요청connection반환으로보완했다. 제품추가수정없음이다.
