@@ -637,13 +637,10 @@ async def process_one(
         .with_for_update(key_share=True)
         .execution_options(populate_existing=True)
     )
-    if (
-        target is not None
-        and (
-            target.generation != target_generation
-            or target.deleted_at is not None
-            or not target.is_enabled
-        )
+    if target is not None and (
+        target.generation != target_generation
+        or target.deleted_at is not None
+        or not target.is_enabled
     ):
         # 전송 중 재검증·삭제·비활성화된 대상의 새 상태를 이 결과로 덮어쓰지 않는다.
         target = None
