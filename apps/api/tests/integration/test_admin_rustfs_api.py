@@ -31,7 +31,9 @@ async def _admin(session_factory) -> str:  # type: ignore[no-untyped-def]
         return str(user.user_id)
 
 
-async def _seed_attachment(session_factory, *, owner_id: str, storage_key: str) -> None:  # type: ignore[no-untyped-def]
+async def _seed_attachment(  # type: ignore[no-untyped-def]
+    session_factory, *, owner_id: str, storage_key: str, held: bool = False
+) -> None:
     from app.models.attachment import CuratedPlanAttachment
     from app.models.trip import Trip
 
@@ -48,6 +50,8 @@ async def _seed_attachment(session_factory, *, owner_id: str, storage_key: str) 
                 original_filename="ref.jpg",
                 content_type="image/jpeg",
                 byte_size=10,
+                moderation_hold=held,
+                deleted_at=datetime.now(UTC) if held else None,
             )
         )
         await db.commit()
@@ -101,6 +105,29 @@ async def test_delete_referenced_requires_force(
     )
     assert r2.status_code == 204, r2.text
     assert called["deleted"] is True
+
+
+async def test_delete_refuses_moderation_hold_even_with_force(
+    client, session_factory, auth_cookies, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    """소유자 결정(2026-11-06): 신고 보존 파일은 신고 처리 전까지 어떤 삭제 경로로도 지우지 않는다."""
+    admin_id = await _admin(session_factory)
+    key = f"user-uploads/{uuid.uuid4().hex}.jpg"
+    await _seed_attachment(session_factory, owner_id=admin_id, storage_key=key, held=True)
+    called: dict[str, bool] = {"deleted": False}
+
+    async def fake_delete(*, key: str) -> None:
+        called["deleted"] = True
+
+    monkeypatch.setattr(rustfs_router, "delete_object", fake_delete)
+    response = await client.request(
+        "DELETE",
+        f"/admin/rustfs/objects?key={key}&reason=cleanup&force=true",
+        cookies=auth_cookies(admin_id),
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "OBJECT_MODERATION_HOLD"
+    assert called["deleted"] is False
 
 
 async def test_non_admin_hidden(client, verified_user, auth_cookies) -> None:  # type: ignore[no-untyped-def]
