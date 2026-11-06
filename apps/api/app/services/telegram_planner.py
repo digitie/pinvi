@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import traceback
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from time import monotonic
@@ -412,8 +413,11 @@ async def plan_due(
             # 있으므로 고정 label과 예외 형식 이름만 남긴다.
             failed += 1
             PLANNING_FAILURES.labels(code="PLANNING_UNEXPECTED").inc()
+            frames = traceback.extract_tb(exc.__traceback__)[-5:]
             logger.warning(
-                "telegram planning failed for one user",
-                extra={"error_type": type(exc).__name__},
+                "telegram planning failed for user %s: %s at %s",
+                user_id,
+                type(exc).__name__,
+                " <- ".join(f"{f.filename.rsplit('/', 1)[-1]}:{f.lineno}" for f in reversed(frames)),
             )
     return {"users": len(user_ids), "enqueued": enqueued, "failed": failed}

@@ -16,7 +16,7 @@ SECONDS = Histogram(
 
 PLANNING_FAILURES = Counter(
     "pinvi_telegram_planning_failures_total",
-    "Committed Telegram planning failures",
+    "Telegram planning failures by fixed code (per planner run)",
     ["code"],
 )
 

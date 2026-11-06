@@ -84,7 +84,7 @@ scripts/n150-live-catalog.sh --head --project session       # TRIP-046(@slow, ~1
 | `PINVI_E2E_USER2_EMAIL` / `PINVI_E2E_USER2_PASSWORD` | 권장 | 제2 사용자(test2@test.com, DECISIONS D2) — share 동행/격리, trip 056/057, core 009, admin 002~004 |
 | `PINVI_E2E_ADMIN_EMAIL` / `PINVI_E2E_ADMIN_PASSWORD` | admin·notify·weather-admin | 고정 admin 계정(role `admin`) |
 | `PINVI_E2E_API_URL` | 선택 | API base 를 고정. 없으면 페이지의 첫 API 요청에서 유도한다 |
-| `PINVI_E2E_TELEGRAM_CHAT_ID` | 선택 | 전용 테스트 chat(DECISIONS D4). 없으면 NTF-004~012·016·020·024·028 이 skip(NTF-018·019·027 은 chat 없이 실행) |
+| `PINVI_E2E_TELEGRAM_CHAT_ID` | 선택 | 전용 테스트 chat(DECISIONS D4). 없으면 NTF-004~012·016·020·028 이 skip(NTF-018·019·027 은 chat 없이 실행) |
 | `PINVI_E2E_TELEGRAM_FORBIDDEN_CHAT_ID` | 선택 | 봇이 추방된 chat — NTF-016 |
 | `PINVI_E2E_COMPANION_EMAIL` | 선택 | 미가입 sink 주소 — SHR-027 |
 | `PINVI_E2E_ALLOW_RESIDUAL_SUGGESTIONS` | 기본 `1` | admin-promotion 스펙 게이트(DECISIONS D1). `0` 이면 그 파일 전체 skip |

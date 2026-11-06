@@ -861,7 +861,7 @@ async def test_manual_send_backlog_is_capped_per_user(
     assert [r.status_code for r in accepted] == [202] * MANUAL_PENDING_LIMIT
     blocked = await send(client, trip_id, cookies)
     assert blocked.status_code == 429, blocked.text
-    assert blocked.json()["detail"]["code"] == "TELEGRAM_SEND_BACKLOG"
+    assert blocked.json()["error"]["code"] == "TELEGRAM_SEND_BACKLOG"
     # 같은 요청의 재시도는 상한과 무관하게 기존 응답을 돌려준다.
     retried = await send(client, trip_id, cookies, request_id=first_id)
     assert retried.status_code == 202

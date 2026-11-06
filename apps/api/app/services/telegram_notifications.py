@@ -264,6 +264,8 @@ async def manual_send(
     targets = await linked_targets(db, trip)
     if not targets:
         raise TripValidationError("먼저 활성·검증된 Telegram 대상을 여행에 연결하세요.")
+    # 사용자 행 잠금으로 같은 사용자의 다른 여행 전송과 상한 확인을 직렬화한다.
+    await db.scalar(select(User).where(User.user_id == user_id).with_for_update(key_share=True))
     backlog = await db.scalar(
         select(func.count(func.distinct(TelegramNotification.id)))
         .select_from(TelegramNotification)

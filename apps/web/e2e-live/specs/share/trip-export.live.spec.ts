@@ -19,7 +19,7 @@ import {
   searchAndAddPlace,
   shot,
 } from '../../helpers/live';
-import { closePanelIfMobile, setPoiNote } from '../../helpers/trip';
+import { closePanelIfMobile, isMobile, setPoiNote } from '../../helpers/trip';
 import {
   createShareLink,
   gotoTrip,
@@ -157,7 +157,7 @@ test.describe('SHR-032 여행 내보내기', () => {
     await shot(
       page,
       'SHR-032',
-      info.project.name.includes('mobile') ? 'mobile-owner-preview' : 'owner-preview',
+      isMobile(info) ? 'mobile-owner-preview' : 'owner-preview',
     );
 
     // 2) ICS 다운로드
@@ -173,7 +173,8 @@ test.describe('SHR-032 여행 내보내기', () => {
     // 4) 비로그인 공유 화면에서도 같은 내보내기, token 은 파일·인쇄 본문에 없다
     await openTripTab(page, '공유');
     const link = await createShareLink(page, { visibility: 'view_only' });
-    const fresh = await openSharedInFreshContext(browser, id, link.token);
+    const viewport = page.viewportSize() ?? undefined; // mobile 프로젝트는 공유 화면도 390 폭
+    const fresh = await openSharedInFreshContext(browser, id, link.token, { viewport });
     try {
       expect(fresh.apiStatus).toBe(200);
       await expect(fresh.page.getByRole('heading', { level: 1, name: title })).toBeVisible();
@@ -186,7 +187,7 @@ test.describe('SHR-032 여행 내보내기', () => {
       const sharedIcs = await downloadIcs(fresh.page);
       checkCalendar(sharedIcs.content, { events: 2, dates: [start, end], secret: link.token });
       await checkPrintWindow(fresh.page, title, link.token);
-      await shot(fresh.page, 'SHR-032', 'shared-preview');
+      await shot(fresh.page, 'SHR-032', isMobile(info) ? 'mobile-shared-preview' : 'shared-preview');
     } finally {
       await fresh.context.close();
     }
@@ -194,8 +195,10 @@ test.describe('SHR-032 여행 내보내기', () => {
     // 5) 철회 뒤 공유 화면에는 여행도 내보내기도 없다
     const list = page.getByTestId('share-link-list');
     await list.getByRole('button', { name: '공유 링크 철회' }).click();
+    // 철회 버튼 라벨에도 '철회' 가 있으므로 버튼이 사라질 때까지(DELETE 반영) 기다린다(SHR-003 과 같음).
+    await expect(list.getByRole('button', { name: '공유 링크 철회' })).toHaveCount(0);
     await expect(list.getByRole('listitem').first()).toContainText('철회');
-    const revoked = await openSharedInFreshContext(browser, id, link.token);
+    const revoked = await openSharedInFreshContext(browser, id, link.token, { viewport });
     try {
       expect(revoked.apiStatus).toBe(404);
       await expect(revoked.page.getByTestId('trip-export-open')).toHaveCount(0);
