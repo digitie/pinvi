@@ -958,6 +958,11 @@ class Settings(BaseSettings):
     # Telegram Bot 알림 (T-106) — `docs/integrations/telegram.md`.
     # bot token 원본은 DB 저장 X(§1), 로그는 mask_token으로만(§9).
     pinvi_telegram_planner_key: str = ""
+    # 한 planner 호출의 사용자 처리 시간 예산. Dagster 호출 timeout(120초)보다 충분히 짧게 둔다.
+    # 예산을 넘기면 남은 사용자는 다음 tick으로 넘기고, 오래 기다린 사용자부터 다시 시작한다.
+    pinvi_telegram_planner_budget_seconds: float = Field(default=60.0, gt=0, le=110)
+    # 발송이 끝난 알림 본문(chunks)·스냅샷 보존 기간. 지난 행은 발생키·상태·시각만 남긴다.
+    pinvi_telegram_notification_retention_days: int = Field(default=30, ge=1, le=3650)
     pinvi_telegram_api_base: str = "https://api.telegram.org"
     pinvi_telegram_timeout_seconds: float = 5.0
     pinvi_telegram_bot_token_default: str = ""  # 시스템/Admin 봇

@@ -31,7 +31,7 @@ from collections.abc import AsyncIterator, Callable, Collection, Iterator, Mappi
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any
 from urllib.parse import quote
 
@@ -1086,6 +1086,8 @@ class KorTravelWeatherClient:
             raise ValueError("확인할 BJD 코드 형식이 올바르지 않습니다.")
         if since.tzinfo is None or since.utcoffset() is None:
             raise ValueError("since에는 UTC offset이 필요합니다.")
+        # 서버가 초 단위로 돌려줘도 범위 검사가 어긋나지 않게 초 단위 UTC로 보낸다.
+        since = since.astimezone(UTC).replace(microsecond=0)
         path = "/v1/weather/alert-events"
         resp = await self._send(
             "GET",
@@ -1102,7 +1104,7 @@ class KorTravelWeatherClient:
         if (
             result.bjd_code != bjd_code
             or result.absence_is_clear is not False
-            or result.queried_since != since
+            or result.queried_since.astimezone(UTC).replace(microsecond=0) != since
         ):
             raise KorTravelWeatherContractError("특보 발표 응답 범위가 일치하지 않습니다.")
         return result

@@ -51,6 +51,9 @@ class TelegramPreferences(Base):
     generation: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), nullable=False, server_default=text("gen_random_uuid()")
     )
+    # planner 순환 cursor. 시간 예산을 넘긴 tick 뒤에도 오래 기다린 사용자부터 처리한다.
+    # 동의(generation)와 무관한 운영 상태라 preferences_body 비교에 넣지 않는다.
+    last_planned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class TelegramNotification(Base):
@@ -77,6 +80,8 @@ class TelegramNotification(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+    # 보존 기한 뒤 본문(chunks)·스냅샷을 지운 시각. 발생키·상태·시각은 중복 방지와 감사용으로 남긴다.
+    body_purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class TelegramDelivery(Base):
@@ -110,6 +115,8 @@ class TelegramDelivery(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_message: Mapped[str | None] = mapped_column(Text)
+    # Telegram 호출 중 lease. scheduled_at이 lease 만료 시각이며, 결과 기록은 같은 token일 때만 한다.
+    claim_token: Mapped[uuid.UUID | None] = mapped_column(PgUUID(as_uuid=True))
 
 
 class TelegramWeatherObservation(Base):

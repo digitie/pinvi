@@ -174,12 +174,10 @@ async def _drain_loop(interval: float, batch_size: int) -> None:
         try:
             async with db_session.async_session_factory() as session:
                 result = await process_pending_telegram_batch(session, limit=batch_size)
-            from app.services.telegram_notifications import process_one
+            from app.services.telegram_notifications import drain_fair
 
-            for _ in range(batch_size):
-                async with db_session.async_session_factory() as session:
-                    if not await process_one(session):
-                        break
+            # 사용자별 순번으로 한 바퀴 처리한다. 한 사용자의 backlog가 다른 사용자를 밀지 않는다.
+            await drain_fair(limit=batch_size)
             # 배치가 가득이면 즉시 한 번 더, 아니면 interval 대기.
             if result.claimed < batch_size:
                 await asyncio.sleep(interval)

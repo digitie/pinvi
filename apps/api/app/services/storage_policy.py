@@ -171,7 +171,7 @@ async def preserve_deleted_day_attachment_charges(
             trip_id=trip_id,
             trip_day_index=None,
             trip_poi_id=None,
-            moderation_hold=False,
+            # moderation hold는 일자 삭제로 풀지 않는다. 신고 처리(복원)가 풀 때까지 GC가 건너뛴다.
             restore_blocked=True,
             deleted_at=func.coalesce(CuratedPlanAttachment.deleted_at, now),
         )
