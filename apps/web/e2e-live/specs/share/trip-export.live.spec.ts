@@ -10,37 +10,65 @@
  */
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { createTrip, deleteTrip, e2eTitle, isoDate, loginAsUser, searchAndAddPlace, shot } from '../../helpers/live';
+import {
+  createTrip,
+  deleteTrip,
+  e2eTitle,
+  isoDate,
+  loginAsUser,
+  searchAndAddPlace,
+  shot,
+} from '../../helpers/live';
 import { closePanelIfMobile, setPoiNote } from '../../helpers/trip';
-import { createShareLink, gotoTrip, openSharedInFreshContext, openTripTab } from '../../helpers/share';
+import {
+  createShareLink,
+  gotoTrip,
+  openSharedInFreshContext,
+  openTripTab,
+} from '../../helpers/share';
 
 test.use({ trace: 'off' }); // 공유 token 이 URL·네트워크 로그에 남는다.
 
-const exportButton = (page: Page): Locator => page.getByTestId('trip-export-open').filter({ visible: true }).first();
+const exportButton = (page: Page): Locator =>
+  page.getByTestId('trip-export-open').filter({ visible: true }).first();
 
 /** ICS 본문의 구조 검사. 줄 단위 75 octet·CRLF·VEVENT 개수·날짜를 확인한다. */
-function checkCalendar(content: string, opts: { events: number; dates: string[]; secret?: string }): void {
-  expect(content.startsWith('BEGIN:VCALENDAR\r\n'), 'ICS starts with BEGIN:VCALENDAR CRLF').toBe(true);
+function checkCalendar(
+  content: string,
+  opts: { events: number; dates: string[]; secret?: string },
+): void {
+  expect(content.startsWith('BEGIN:VCALENDAR\r\n'), 'ICS starts with BEGIN:VCALENDAR CRLF').toBe(
+    true,
+  );
   expect(content.endsWith('END:VCALENDAR\r\n'), 'ICS ends with END:VCALENDAR CRLF').toBe(true);
   const lines = content.slice(0, -2).split('\r\n');
-  expect(lines.some((l) => l.includes('\n') || l.includes('\r')), 'no bare LF/CR inside lines').toBe(false);
+  expect(
+    lines.some((l) => l.includes('\n') || l.includes('\r')),
+    'no bare LF/CR inside lines',
+  ).toBe(false);
   const encoder = new TextEncoder();
   const longest = Math.max(...lines.map((l) => encoder.encode(l).length));
   expect(longest, 'folded lines are ≤ 75 octets').toBeLessThanOrEqual(75);
   expect(lines.filter((l) => l === 'BEGIN:VEVENT')).toHaveLength(opts.events);
   expect(lines.filter((l) => l === 'END:VEVENT')).toHaveLength(opts.events);
   for (const date of opts.dates) {
-    expect(lines, `all-day DTSTART for ${date}`).toContain(`DTSTART;VALUE=DATE:${date.replace(/-/g, '')}`);
+    expect(lines, `all-day DTSTART for ${date}`).toContain(
+      `DTSTART;VALUE=DATE:${date.replace(/-/g, '')}`,
+    );
   }
   // 제목의 쉼표·세미콜론은 RFC 5545 TEXT 이스케이프로 나간다(unfold 후 비교).
   const unfolded = content.replace(/\r\n /g, '');
   expect(unfolded).toMatch(/SUMMARY:[^\r\n]*\\,[^\r\n]*\\;/);
-  if (opts.secret) expect(unfolded.includes(opts.secret), 'ICS must not contain the share token').toBe(false);
+  if (opts.secret)
+    expect(unfolded.includes(opts.secret), 'ICS must not contain the share token').toBe(false);
   expect(/https?:\/\//.test(unfolded), 'ICS carries no URL').toBe(false);
 }
 
 async function downloadIcs(page: Page): Promise<{ name: string; content: string }> {
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('trip-export-ics').click()]);
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('trip-export-ics').click(),
+  ]);
   const path = await download.path();
   return { name: download.suggestedFilename(), content: await readFile(path, 'utf8') };
 }
@@ -51,7 +79,8 @@ async function stubPrint(page: Page): Promise<void> {
     const original = window.open.bind(window);
     window.open = ((...args: Parameters<typeof window.open>) => {
       const popup = original(...args);
-      if (popup) popup.print = () => void (popup.document.documentElement.dataset.e2ePrinted = 'true');
+      if (popup)
+        popup.print = () => void (popup.document.documentElement.dataset.e2ePrinted = 'true');
       return popup;
     }) as typeof window.open;
   });
@@ -59,9 +88,14 @@ async function stubPrint(page: Page): Promise<void> {
 
 async function checkPrintWindow(page: Page, title: string, secret?: string): Promise<void> {
   await stubPrint(page);
-  const [popup] = await Promise.all([page.waitForEvent('popup'), page.getByTestId('trip-export-print').click()]);
+  const [popup] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.getByTestId('trip-export-print').click(),
+  ]);
   try {
-    await expect(popup.locator('html')).toHaveAttribute('data-print-ready', 'true', { timeout: 15_000 });
+    await expect(popup.locator('html')).toHaveAttribute('data-print-ready', 'true', {
+      timeout: 15_000,
+    });
     await expect(popup.locator('html')).toHaveAttribute('data-e2e-printed', 'true');
     await expect(popup.locator('meta[name="referrer"]')).toHaveAttribute('content', 'no-referrer');
     await expect(popup.getByRole('heading', { level: 1, name: title })).toBeVisible();
@@ -87,7 +121,10 @@ test.describe('SHR-032 여행 내보내기', () => {
     for (const id of created.splice(0)) await deleteTrip(page, id).catch(() => undefined);
   });
 
-  test('SHR-032 상세·비로그인 공유에서 미리보기·ICS·인쇄창, 철회 뒤 공유 내보내기 없음', async ({ page, browser }, info) => {
+  test('SHR-032 상세·비로그인 공유에서 미리보기·ICS·인쇄창, 철회 뒤 공유 내보내기 없음', async ({
+    page,
+    browser,
+  }, info) => {
     // 쉼표·세미콜론은 ICS TEXT 이스케이프 확인용이다.
     const title = e2eTitle('SHR-032 내보내기, 일정; 확인');
     const start = isoDate(25);
@@ -114,8 +151,14 @@ test.describe('SHR-032 여행 내보내기', () => {
     await expect(doc).toContainText('도착 미정 / 출발 미정');
     await expect(doc).toContainText('등록한 장소가 없습니다.'); // 2일차는 빈 일자
     // 1일차 장소(시각 없음) → 하루 종일 1건, 빈 2일차 → 하루 종일 1건.
-    await expect(dialog.getByTestId('trip-export-calendar-summary')).toHaveText('캘린더에 2개 일정이 포함됩니다.');
-    await shot(page, 'SHR-032', info.project.name.includes('mobile') ? 'mobile-owner-preview' : 'owner-preview');
+    await expect(dialog.getByTestId('trip-export-calendar-summary')).toHaveText(
+      '캘린더에 2개 일정이 포함됩니다.',
+    );
+    await shot(
+      page,
+      'SHR-032',
+      info.project.name.includes('mobile') ? 'mobile-owner-preview' : 'owner-preview',
+    );
 
     // 2) ICS 다운로드
     const ics = await downloadIcs(page);
@@ -137,7 +180,9 @@ test.describe('SHR-032 여행 내보내기', () => {
       await exportButton(fresh.page).click();
       const shared = fresh.page.getByTestId('trip-export-dialog');
       await expect(shared.getByTestId('trip-export-document')).toContainText(place);
-      await expect(shared.getByTestId('trip-export-calendar-summary')).toHaveText('캘린더에 2개 일정이 포함됩니다.');
+      await expect(shared.getByTestId('trip-export-calendar-summary')).toHaveText(
+        '캘린더에 2개 일정이 포함됩니다.',
+      );
       const sharedIcs = await downloadIcs(fresh.page);
       checkCalendar(sharedIcs.content, { events: 2, dates: [start, end], secret: link.token });
       await checkPrintWindow(fresh.page, title, link.token);
