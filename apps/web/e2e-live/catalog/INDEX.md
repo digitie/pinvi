@@ -7,18 +7,18 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 
 | area | total | scripted | manual | blocked |
 |---|---:|---:|---:|---:|
-| trip | 57 | 53 | 2 | 2 |
+| trip | 58 | 54 | 2 | 2 |
 | search | 55 | 47 | 6 | 2 |
 | nearby | 41 | 35 | 2 | 4 |
 | weather | 29 | 24 | 2 | 3 |
-| share | 35 | 30 | 2 | 3 |
+| share | 35 | 31 | 1 | 3 |
 | poi | 32 | 25 | 5 | 2 |
-| notify | 26 | 18 | 3 | 5 |
+| notify | 30 | 23 | 2 | 5 |
 | admin | 43 | 37 | 4 | 2 |
 | core | 31 | 30 | 1 | 0 |
-| **all** | **349** | **299** | **27** | **23** |
+| **all** | **354** | **306** | **25** | **23** |
 
-Spec files: 55.
+Spec files: 57.
 
 ## Cases
 
@@ -81,6 +81,7 @@ Spec files: 55.
 | TRIP-055 | trip | 동선 최적화 시작/끝 고정 여부 — 첫 장소(숙소)가 출발점으로 유지되는가 | P3 | desktop, mutating, poi | manual |  |
 | TRIP-056 | trip | 빈 상태 — 여행이 없는 계정(user2)에서 '아직 여행이 없습니다.' + '새 여행 만들기' CTA가 폼에 포커스 | P3 | desktop, mobile, a11y, auth | scripted | `specs/trip/trip-user2.live.spec.ts#TRIP-056` |
 | TRIP-057 | trip | 두 번째 사용자 격리 — user1의 비공개 여행은 user2 목록에 없고 URL 직접 접근도 거부 | P2 | desktop, mutating, auth | scripted | `specs/trip/trip-user2.live.spec.ts#TRIP-057` |
+| TRIP-058 | trip | 휴지통 30일 보존 — 만료 시각 = 삭제 시각 + 30일, 복원 가능, 복원 응답은 기한 해제 | P1 | desktop, mobile, mutating | scripted | `specs/trip/trip-list.live.spec.ts#TRIP-058` |
 | SRCH-001 | search | 탐색 지도에서 2글자 검색('설악') → 8초 내 결과 목록 + 소스 배지 | P1 | desktop, mobile, search, perf | scripted | `specs/search/search-basic.live.spec.ts#SRCH-001` |
 | SRCH-002 | search | 정확한 이름 '안동하회마을' 검색 → '장소' 배지 행이 첫 번째, 둘째 줄은 카테고리 라벨 | P1 | desktop, search, poi | scripted | `specs/search/search-basic.live.spec.ts#SRCH-002` |
 | SRCH-003 | search | 1글자 입력('설')은 검색을 발화하지 않는다(MIN_CHARS=2) | P2 | desktop, search | scripted | `specs/search/search-basic.live.spec.ts#SRCH-003` |
@@ -237,7 +238,7 @@ Spec files: 55.
 | SHR-029 | share | 편집자 동행 — 제목 편집 성공(소유자 화면 realtime 반영), 공유 링크·초대는 소유자 전용 | P2 | desktop, mutating, share, auth | scripted | `specs/share/companions.live.spec.ts#SHR-029` |
 | SHR-030 | share | 열람 중인 동행을 제거하면 그 화면은 권한 오류로 전환된다 | P2 | desktop, mutating, share, auth | scripted | `specs/share/companions.live.spec.ts#SHR-030` |
 | SHR-031 | share | 여행 복사 — '<제목> copy' 초안, 일자·장소 복제, 공유 링크·동행은 미복제 | P2 | desktop, mutating, share, poi | scripted | `specs/share/realtime-copy.live.spec.ts#SHR-031` |
-| SHR-032 | share | 여행 인쇄·브라우저 PDF 저장·ICS 다운로드 | P3 | desktop, mobile, share | manual |  |
+| SHR-032 | share | 여행 인쇄·브라우저 PDF 저장·ICS 다운로드 — 상세·비로그인 공유, 철회 뒤 공유 내보내기 없음 | P2 | desktop, mobile, share, mutating, search | scripted | `specs/share/trip-export.live.spec.ts#SHR-032` |
 | SHR-033 | share | 동행(test2)의 댓글 — 작성자와 여행 소유자에게 삭제 버튼 | P2 | desktop, mutating, share | scripted | `specs/share/comments.live.spec.ts#SHR-033` |
 | SHR-034 | share | 공유 페이지 접근성 수동 점검(헤딩 순서·tablist 레이블·포커스 링·공개 chrome) | P3 | desktop, mobile, share, a11y | manual |  |
 | SHR-035 | share | 권한별 링크 3개 — 목록 라벨·활성 상태·권한 옵션 집합 | P2 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-035` |
@@ -290,15 +291,19 @@ Spec files: 55.
 | NTF-015 | notify | companion_invited 알림 — 기존 사용자를 동반자로 초대하면 초대자의 기본 대상이 아니라 피초대자의 기본 대상으로 '✉️ … 여행에 초대되었습니다 — <제목>' 전송 | P2 | telegram, mutating, share | blocked |  |
 | NTF-016 | notify | bot_forbidden — 봇이 추방된 chat 등록/재검증 → 403, 'telegram verify 실패: bot_forbidden', 저장 안 됨(재검증이면 failed:bot_forbidden·비활성) | P2 | desktop, telegram | scripted | `specs/notify/notify-settings.live.spec.ts#NTF-016` |
 | NTF-017 | notify | rate_limited(429) — Retry-After 헤더 전달·alert 'telegram verify 실패: rate_limited' | P3 | telegram | blocked |  |
-| NTF-018 | notify | 여행 기간·대표 지역 기준 공식 기상특보 Telegram 알림 | P3 | telegram, weather, mutating | manual |  |
-| NTF-019 | notify | KST 일간·주간 브리프 설정과 예약 회차 발송 | P3 | telegram, mutating | manual |  |
-| NTF-020 | notify | 일정 정보 알람으로 보내기 — 여행 전체·특정 일자 수동 전송 요청 | P3 | telegram, mutating | manual |  |
+| NTF-018 | notify | 기상특보 동의 — 기본 안내(KST·안전 보장 아님), 켜고 저장·reload 보존, 끄기 저장 | P2 | desktop, mobile, telegram, weather, mutating | scripted | `specs/notify/notify-schedule.live.spec.ts#NTF-018` |
+| NTF-019 | notify | 일간·주간 브리프 설정 — 일간·시각·요일 저장 보존, 주간은 대상 필수(브라우저 required·API 422) | P2 | desktop, mobile, telegram, mutating | scripted | `specs/notify/notify-schedule.live.spec.ts#NTF-019` |
+| NTF-020 | notify | 일정 정보 알람으로 보내기 — 여행 전체·2일차 전송 완료, 같은 요청 ID 멱등·다른 범위 재사용 422 | P2 | desktop, mobile, telegram, mutating | scripted | `specs/notify/notify-schedule.live.spec.ts#NTF-020` |
 | NTF-021 | notify | 이메일 알림 수신 — 동반자 초대 메일(Resend email_queue) 실제 수신·본문 | P3 | share, mutating | blocked |  |
 | NTF-022 | notify | admin /admin/emails 이메일 큐 smoke — 제목·deliverability·상태 필터·새로고침 | P2 | desktop, admin | scripted | `specs/notify/notify-admin.live.spec.ts#NTF-022` |
 | NTF-023 | notify | admin /admin/etl Telegram outbox 카드 — due/backoff/stuck/retry exhausted·sent/skipped/failed·임계값·카테고리 | P2 | desktop, admin | scripted | `specs/notify/notify-admin.live.spec.ts#NTF-023` |
 | NTF-024 | notify | admin /admin/api-calls provider=telegram — 모든 행의 endpoint가 /bot<id>:***/(getChat\|sendMessage)로 마스킹 | P1 | desktop, admin, telegram | scripted | `specs/notify/notify-admin.live.spec.ts#NTF-024` |
 | NTF-025 | notify | 보안 incident Admin 채널 알림(category security_incident → PINVI_TELEGRAM_ADMIN_CHAT_ID) | P3 | admin, telegram | blocked |  |
 | NTF-026 | notify | Telegram 설정 모바일 390 — 설정 탭 nav 노출, 폼 세로 스택, 연결 버튼 ≥44px, 가로 스크롤 없음 | P2 | mobile, telegram, a11y | scripted | `specs/notify/notify-settings.live.spec.ts#NTF-026` |
+| NTF-027 | notify | 대상 미연결 여행 — '알람으로 보내기' 비활성·발송 내역 없음, API 422·없는 여행 404·day 범위 검증 | P2 | desktop, mobile, telegram, mutating | scripted | `specs/notify/notify-schedule.live.spec.ts#NTF-027` |
+| NTF-028 | notify | 주간 요약 대상 — 검증된 [e2e] 대상 선택·저장·reload 보존, 대상 삭제 뒤에도 수신 해제 저장 | P3 | desktop, mobile, telegram, mutating | scripted | `specs/notify/notify-schedule.live.spec.ts#NTF-028` |
+| NTF-029 | notify | 예약 회차 실제 발송 — 일간(전날·당일)·주간 요약이 KST 지정 시각에 한 번만 | P3 | telegram, mutating | manual |  |
+| NTF-030 | notify | 공식 기상특보 실제 발송 — 여행 기간·대표 지역의 발표·해제·취소, 중복 없음 | P3 | telegram, weather, mutating | manual |  |
 | ADM-001 | admin | 관리자 계정으로 /admin/login 로그인 후 대시보드 진입과 사이드바 사용자 표시 | P1 | desktop, admin, auth | scripted | `specs/admin/admin-auth.live.spec.ts#ADM-001` |
 | ADM-002 | admin | 일반 사용자 계정으로 /admin/login 시도 시 '관리자 권한이 없는 계정입니다' 와 세션 미생성 | P1 | desktop, admin, auth | scripted | `specs/admin/admin-auth.live.spec.ts#ADM-002` |
 | ADM-003 | admin | 사용자 세션으로 /admin 직접 진입 시 forbidden 사유로 로그인 페이지 리다이렉트 | P1 | desktop, mobile, admin, auth | scripted | `specs/admin/admin-auth.live.spec.ts#ADM-003` |

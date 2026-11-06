@@ -1,3 +1,10 @@
+## Codex 묶음 리뷰 보완·live 카탈로그 (2026-11-06)
+
+PR claude/codex-review3-20261106: 18aba131..a7f1b730 적대 리뷰 2인 → 검증 Medium 3·Low 2 수정(failing-first),
+NTF-018/019/020/027/028·SHR-032·TRIP-058 scripted, NTF-029/030 manual, INDEX 354건. Map admin 스냅샷 핀 70b86c52.
+다음: 소유자 운영 배포 뒤 live 카탈로그(notify·share·trip) 실행 — chat 필요한 NTF-020/028은 PINVI_E2E_TELEGRAM_CHAT_ID.
+남은 설계 항목: planner 단일 실행·시간 예산, drain 사용자 공정성, 알림 본문 보존 기한.
+
 ## #616·#621 Hume P2 보완·새후보 검증 (2026-11-06)
 
 PR695의cleanup연결오류격리와단일batch처리량P2두건을수정했다. 부모가수용한범위다.

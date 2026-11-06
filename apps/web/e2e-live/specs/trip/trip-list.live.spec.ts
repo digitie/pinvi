@@ -1,9 +1,9 @@
 /**
- * TRIP-041 … TRIP-045 — trip list: schedule sorting, draft badge → status change, delete →
- * trash → restore, bucket counts, dashboard map stats.
+ * TRIP-041 … TRIP-045, TRIP-058 — trip list: schedule sorting, draft badge → status change, delete →
+ * trash → restore (30-day retention, #681), bucket counts, dashboard map stats.
  */
 import { expect, test } from '@playwright/test';
-import { createTrip, deleteTrip, loginAsUser, searchAndAddPlace, shot, tripDayPoiCounts } from '../../helpers/live';
+import { apiBaseURL, createTrip, deleteTrip, loginAsUser, searchAndAddPlace, shot, tripDayPoiCounts, withRateLimitRetry } from '../../helpers/live';
 import {
   bucketButton,
   deleteTripViaUi,
@@ -105,8 +105,11 @@ test('[TRIP-043] 여행 삭제 → 휴지통 → 복원 — 목록·상세에서
   await page.getByRole('link', { name: '휴지통', exact: true }).click();
   await expect(page).toHaveURL(/\/trips\/trash$/);
   await expect(page.getByRole('heading', { level: 1, name: '여행 휴지통' })).toBeVisible();
+  // #681: 30일 보존 안내와 항목별 복원 기한
+  await expect(page.getByText('삭제한 여행은 30일 동안 초안으로 복원할 수 있습니다.', { exact: false })).toBeVisible();
   const trashItem = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: title }) });
   await expect(trashItem).toHaveCount(1);
+  await expect(trashItem).toContainText('까지 복원 가능');
   await shot(page, 'TRIP-043', 'trash');
 
   const restored = page.waitForResponse(
@@ -162,4 +165,40 @@ test('[TRIP-045] 대시보드 지도 — 카드의 "지도 장소 N개"와 지�
   await expect(chips).not.toContainText('장소 불러오는 중');
   await expect(chips).toContainText(/\d+개 장소/);
   await shot(page, 'TRIP-045', 'dashboard-map');
+});
+
+const DAY_MS = 86_400_000;
+
+test('[TRIP-058] 휴지통 30일 보존 — 만료 시각 = 삭제 시각 + 30일, 복원 가능, 복원 후 기한 해제', async ({ page }) => {
+  const title = e2eTitle('휴지통보존');
+  const { id } = await createTrip(page, { title, start: isoDate(14), end: isoDate(14) });
+  created.push(id);
+  const api = await apiBaseURL(page);
+  const before = Date.now();
+  await deleteTrip(page, id);
+  const after = Date.now();
+
+  const res = await withRateLimitRetry('GET /trips?trashed', () =>
+    page.context().request.get(`${api}/trips?bucket=all&trashed=true&limit=50`),
+  );
+  expect(res.ok(), `GET /trips?trashed=true → HTTP ${res.status()}`).toBeTruthy();
+  const items = ((await res.json()) as { data: { trip_id: string; trash_expires_at: string | null; can_restore?: boolean }[] }).data;
+  const item = items.find((t) => t.trip_id === id);
+  expect(item, 'deleted trip is listed in the trash').toBeTruthy();
+  expect(item!.can_restore).toBe(true);
+  const expires = Date.parse(item!.trash_expires_at ?? '');
+  // 서버 시계와의 차이를 2분까지 허용한다. 30일보다 이르게 만료되면 복원 가능한 자료를 일찍 지운다.
+  expect(expires).toBeGreaterThanOrEqual(before + 30 * DAY_MS - 120_000);
+  expect(expires).toBeLessThanOrEqual(after + 30 * DAY_MS + 120_000);
+
+  await page.goto('/trips/trash');
+  const trashItem = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: title }) });
+  await expect(trashItem.getByRole('button', { name: `${title} 복원` })).toBeEnabled();
+  const restored = page.waitForResponse(
+    (r) => r.request().method() === 'POST' && new URL(r.url()).pathname.endsWith(`/trips/${id}/restore`),
+  );
+  await trashItem.getByRole('button', { name: `${title} 복원` }).click();
+  const body = (await (await restored).json()) as { data: { status: string; trash_expires_at: string | null; can_restore?: boolean } };
+  expect(body.data).toMatchObject({ status: 'draft', trash_expires_at: null, can_restore: false });
+  await shot(page, 'TRIP-058', 'restored');
 });

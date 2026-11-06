@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from time import monotonic
@@ -37,6 +38,8 @@ from app.services.trip_weather_batch import (
     build_trip_weather_via_kor_travel_map,
     build_trip_weather_via_kor_travel_weather,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def weather_summary(cards: dict[str, dict[str, Any]]) -> str:
@@ -403,4 +406,14 @@ async def plan_due(
                 await db.commit()
             if created is not None:
                 PLANNING_FAILURES.labels(code=TelegramMessageTooLarge.code).inc()
+        except Exception as exc:
+            # 한 사용자의 예상 밖 오류가 user_id 뒤 순서의 모든 예약을 매분 멈추지 않게 한다.
+            # 이 사용자의 미커밋 변경은 세션 종료로 롤백된다. 예외 원문은 사용자 데이터를 담을 수
+            # 있으므로 고정 label과 예외 형식 이름만 남긴다.
+            failed += 1
+            PLANNING_FAILURES.labels(code="PLANNING_UNEXPECTED").inc()
+            logger.warning(
+                "telegram planning failed for one user",
+                extra={"error_type": type(exc).__name__},
+            )
     return {"users": len(user_ids), "enqueued": enqueued, "failed": failed}
