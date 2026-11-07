@@ -248,6 +248,37 @@ test.describe('NEAR trip map — four-place trip', () => {
     await expectLayerLineShape(page, 'highway_incident');
   });
 
+  test.describe('desktop', () => {
+    test.skip(({ isMobile }) => isMobile, 'desktop project only (1440x900)');
+
+    test('NEAR-042 the desktop trip map stays inside the window and every fitted pin is on screen (#704)', async ({ page }) => {
+      await openTrip(page, tripId);
+      await expect(tripMarkers(page)).toHaveCount(PLACES.length, { timeout: 30_000 });
+      await waitForMapIdle(page);
+      const viewport = page.viewportSize()!;
+      const map = (await page.getByTestId('trip-detail-map').boundingBox())!;
+      // 900 px 창에서 지도가 ~1590 px로 자라 핀이 fold 아래에 그려졌다 — 지도는 창 안, 문서는 스크롤하지 않는다.
+      expect(map.y).toBeGreaterThanOrEqual(0);
+      expect(map.y + map.height, 'map bottom is inside the window').toBeLessThanOrEqual(viewport.height + 1);
+      expect(map.height).toBeGreaterThan(viewport.height * 0.55);
+      const documentOverflow = await page.evaluate(() => document.scrollingElement!.scrollHeight - window.innerHeight);
+      expect(documentOverflow, 'the page itself does not scroll').toBeLessThanOrEqual(1);
+      const panel = (await page.getByTestId('trip-detail-panel').boundingBox())!;
+      expect(panel.y + panel.height, 'left panel is inside the window').toBeLessThanOrEqual(viewport.height + 1);
+      for (const marker of await tripMarkers(page).all()) {
+        const box = (await marker.boundingBox())!;
+        const label = await marker.getAttribute('aria-label');
+        const tipX = box.x + box.width / 2;
+        const tipY = box.y + box.height;
+        expect(tipX, `${label} pin is inside the map horizontally`).toBeGreaterThanOrEqual(map.x);
+        expect(tipX, `${label} pin is inside the map horizontally`).toBeLessThanOrEqual(map.x + map.width);
+        expect(box.y, `${label} pin head is inside the map`).toBeGreaterThanOrEqual(map.y);
+        expect(tipY, `${label} pin is above the fold`).toBeLessThanOrEqual(Math.min(map.y + map.height, viewport.height));
+      }
+      await shot(page, 'NEAR-042', 'desktop-map-in-window');
+    });
+  });
+
   test.describe('mobile', () => {
     test.skip(({ isMobile }) => !isMobile, 'mobile project only (390x844)');
 
