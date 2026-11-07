@@ -1656,7 +1656,13 @@ export function TripDetail({ tripId }: TripDetailProps) {
               </div>
             </div>
           )}
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          {/* 데스크톱은 이 영역의 containing block이 되어야 한다 — 아니면 목록 안 absolute(sr-only 등)
+              요소가 스크롤 상자의 잘라내기를 벗어나 창 높이로 고정한 문서를 다시 늘린다(#704). */}
+          <div
+            className={
+              mobileWebLayout ? 'min-h-0 flex-1 overflow-y-auto' : 'relative min-h-0 flex-1 overflow-y-auto'
+            }
+          >
             {activePanel === 'plan' && (
               <div
                 id="trip-panel-plan"
