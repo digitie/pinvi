@@ -1,3 +1,11 @@
+## 2026-11-07 — #702·#699·#700·#686 잔여·WX-004 묶음
+
+- #702: 운영 `app.api_call_log`(11-06) 실패는 stale keep-alive가 아니라 전부 전국 bbox(zoom 6~8) `in-bounds` 5초 `ReadTimeout`이었고 같은 요청을 3번 다시 보냈다. Map 직접 호출도 같은 질의가 유휴 1.3~4.0초(zoom 10은 0.04초) — Map 쪽 성능은 상류 보고. PinVi: 회로를 viewport·feature·transport로 나누고 weather는 자체 회로만, `ReadTimeout`·`ReadError` 재전송 중단, 멱등 GET의 `RemoteProtocolError`는 새 연결로 1회, keep-alive 3초, 실패·회로 열림 로그에 예외 클래스. 실제 소켓 테스트로 끊긴 keep-alive 재사용을 main에서 재현(red)했다.
+- #699: `reload()`가 저장 전 출발한 진행 중 재조회에 합류해 낡은 view로 끝났다(`createLatestReload`로 끝난 뒤 한 번 더). 편집기 닫기는 부모가 이 장소일 때만.
+- #700: 클릭한 마커의 inline z-index(1001+)가 형제 popup(z20)을 덮었다 — `.maplibregl-canvas-container { isolation: isolate }`.
+- #686: NEAR-024는 fitBounds 전 maplibre 크기 미동기(cannot fit으로 기본 시점) — `syncMapSize`. NEAR-006(휴게소 cluster 미펼침)·CORE-025(핀 선택 전 재조회 경합)는 helper 보정. WX-004는 test.fail(#1440) 제거, D-3, 표본 없음만 skip.
+- 적대 리뷰 2명(회복력·보안 / UI·정확성) 지적 반영: ReadError 재전송·4회 전송 가능성, 공개 marker 층 회로, WX-004 skip 범위, 제어 편집기 닫기, settle timeout 기록. 배포 없음.
+
 ## 2026-11-07 — 확정 takedown 증거 보존 기간(0107)
 
 - 소유자 결정: 확정 takedown 첨부는 180일(`PINVI_MODERATION_EVIDENCE_RETENTION_DAYS`) 증거 보존, 그동안 업로더·여행 용량 제외, 지나면 자동 삭제 뒤 휴지통 여행 정상 정리. 실패 테스트 먼저(6a915089).

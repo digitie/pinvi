@@ -934,7 +934,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
       { onConflict: (latest) => openPoiConflict(poi.poi_id, patch, latest) },
     )
       .then((ok) => {
-        // 편집기는 저장 뒤 재조회까지 끝난 다음 닫는다 — 닫힌 직후 목록·내보내기가 방금 저장한 값을 본다(#699).
+        // 편집기는 저장 뒤 재조회 시도까지 끝난 다음 닫는다 — 닫힌 직후 목록·내보내기가 방금 저장한 값을 본다(#699).
+        // 재조회가 실패하면 오류 배너가 뜨고 편집기는 닫힌다(저장 자체는 성공). 이 장소 편집기일 때만 닫는다.
         if (ok) setEditingPoiId((current) => (current === poi.poi_id ? null : current));
         return ok;
       })

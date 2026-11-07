@@ -767,6 +767,11 @@ export async function waitForFeatureMarkersSettled(page: Page, quietMs = 1_500, 
     }
     if (Date.now() - stableSince >= quietMs) return;
   }
+  // 조용히 넘어가지 않는다 — 계속 재조회하는 제품 결함이면 뒤의 detach·skip보다 이 기록이 먼저 보인다.
+  test.info().annotations.push({
+    type: 'warning',
+    description: `feature markers did not settle within ${maxMs}ms (keeps reloading or loading indicator stuck)`,
+  });
 }
 
 /**

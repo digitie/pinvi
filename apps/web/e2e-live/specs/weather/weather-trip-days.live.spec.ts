@@ -149,7 +149,13 @@ test.describe('weather · trip days', () => {
     const kind = await expectWeatherConsistent(section, res, day1.weather_cards, date);
     if (WEATHER_VIA_MAP) {
       // status(no_data 문구)는 위 일관성 검사가 '그 날짜 metric 0건 또는 no_data 해석'일 때만 허용한다.
-      if (kind === 'status') {
+      // 건너뛰는 것은 '표본 없음'뿐이다: no_data, 또는 found인데 그 날짜 metric 0건(위 검사가 단언).
+      // retired·suppressed·missing 같은 다른 status는 상류 공백이 아니라 아래 단언에서 실패한다.
+      const upstreamGap =
+        res?.state === 'no_data' ||
+        (res?.state === 'found' &&
+          metricsForDate(day1.weather_cards[cardKeyOf(res)]!, date).length === 0);
+      if (kind === 'status' && upstreamGap) {
         // 문구·상태 일관성은 단언했다. 요약 자체는 상류 데이터가 있어야 검증할 수 있다.
         annotate(`upstream gap: ${date} 상류 daily_summaries 표본 없음 (state=${res?.state ?? 'none'})`);
         test.skip(true, `upstream gap: ${date}에 Map weather 표본이 없다 — 상류 공백(제품 결함 아님)`);

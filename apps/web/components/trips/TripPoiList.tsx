@@ -217,7 +217,9 @@ export function TripPoiList({
                     const result = onEditPoi(poi, patch);
                     if (result && typeof (result as Promise<void | boolean>).then === 'function') {
                       void Promise.resolve(result).then((saved) => {
-                        if (saved !== false) setEditingPoiId(null);
+                        // 제어 모드에서는 부모가 저장·재조회 뒤 **그 장소의** 편집기만 닫는다(#699) — 그 사이
+                        // 다른 장소 편집기를 열었으면 여기서 닫으면 엉뚱한 편집기가 닫힌다.
+                        if (saved !== false && !controlled) setEditingPoiId(null);
                       });
                       return;
                     }
