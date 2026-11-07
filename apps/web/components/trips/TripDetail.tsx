@@ -42,6 +42,7 @@ import type {
   TripViewPoi,
 } from '@pinvi/schemas';
 import { apiClient, redirectToLogin } from '@/lib/api';
+import { createLatestReload } from '@/lib/latestReload';
 import { pickSearchBias, tripSearchBias } from '@/lib/searchBias';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { appendRank, paletteHex, reorderMoves, tripDaysToMapPoints } from '@pinvi/domain';
@@ -435,7 +436,6 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [busy, setBusy] = useState(false);
   const realtimeClientRef = useRef<TripRealtimeClient | null>(null);
   const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reloadInFlightRef = useRef<Promise<TripView | null> | null>(null);
   // Track the latest viewing day so a freshly (re)created realtime client can re-apply it
   // without adding selectedDayIndex to the client-creation effect deps (T-289).
   // 렌더 중 ref.current를 쓰지 않는다(react-hooks/refs) — 대신 effect에서 동기화한다. 이 ref는
@@ -456,27 +456,24 @@ export function TripDetail({ tripId }: TripDetailProps) {
     setPresence(new Map());
   }
 
-  const reload = useCallback(async (): Promise<TripView | null> => {
-    if (reloadInFlightRef.current) return reloadInFlightRef.current;
-
-    const request = (async () => {
-      try {
-        const res = await tripApi(apiClient).get(tripId);
-        setView(res);
-        setError(null);
-        return res;
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : '여행을 불러오지 못했습니다.');
-        return null;
-      }
-    })();
-
-    const tracked = request.finally(() => {
-      if (reloadInFlightRef.current === tracked) reloadInFlightRef.current = null;
-    });
-    reloadInFlightRef.current = tracked;
-    return tracked;
-  }, [tripId]);
+  // 저장 직후 `reload()`가 그보다 먼저 출발한 실시간 재조회에 합류하면 낡은 view로 끝난다(#699 — 내보내기
+  // 미리보기가 방금 저장한 메모를 빠뜨렸다). 진행 중이면 끝난 뒤 한 번 더 읽는다. 여행마다 새 loader라 다른
+  // 여행의 진행 중 조회에도 합류하지 않는다.
+  const reload = useMemo(
+    () =>
+      createLatestReload(async (): Promise<TripView | null> => {
+        try {
+          const res = await tripApi(apiClient).get(tripId);
+          setView(res);
+          setError(null);
+          return res;
+        } catch (err) {
+          setError(err instanceof ApiError ? err.message : '여행을 불러오지 못했습니다.');
+          return null;
+        }
+      }),
+    [tripId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -933,10 +930,15 @@ export function TripDetail({ tripId }: TripDetailProps) {
       async () => {
         await poiApi(apiClient).update(tripId, poi.poi_id, poi.version, patch);
         if (patch.day_index != null) handleSelectDay(patch.day_index);
-        setEditingPoiId(null);
       },
       { onConflict: (latest) => openPoiConflict(poi.poi_id, patch, latest) },
-    ).finally(() => setSavingPoiId(null));
+    )
+      .then((ok) => {
+        // 편집기는 저장 뒤 재조회까지 끝난 다음 닫는다 — 닫힌 직후 목록·내보내기가 방금 저장한 값을 본다(#699).
+        if (ok) setEditingPoiId((current) => (current === poi.poi_id ? null : current));
+        return ok;
+      })
+      .finally(() => setSavingPoiId(null));
   };
 
   const handleDelete = (poiId: string) => {

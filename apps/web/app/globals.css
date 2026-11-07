@@ -263,3 +263,11 @@ body {
 .pinvi-map-popup {
   z-index: 20 !important;
 }
+
+/* #700: vworld-map-web Marker는 클릭한 마커에 전역 카운터 z-index(1001부터 계속 증가)를 inline으로 준다.
+   마커는 canvas container 안, popup은 그 형제라 둘이 같은 쌓임 맥락에서 겨뤄 클릭했던 이웃 마커가 열린
+   popup의 '상세보기'를 덮었다. canvas container를 독립 쌓임 맥락으로 만들어 마커 z-index를 그 안에 가둔다 —
+   마커끼리 순서는 그대로이고, popup(z20)·앱 패널(z10)·dialog는 항상 모든 마커 위다. */
+.maplibregl-canvas-container {
+  isolation: isolate;
+}

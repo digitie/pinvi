@@ -744,6 +744,32 @@ async function featureLegendTitles(page: Page): Promise<Set<string>> {
 }
 
 /**
+ * 탐색 지도의 feature 마커가 자리 잡을 때까지 기다린다 — '장소를 불러오는 중…'이 없고, 렌더된 feature 마커 ID
+ * 집합이 `quietMs` 동안 그대로다. 키보드 확대·선택 이동 직후 in-bounds 재조회가 끝나기 전에 고른 핀은 새 응답에서
+ * 묶음에 들어가거나 빠져 DOM에서 떨어진다(#686 CORE-025 mobile: 'element was detached from the DOM').
+ */
+export async function waitForFeatureMarkersSettled(page: Page, quietMs = 1_500, maxMs = 20_000): Promise<void> {
+  const loading = page.getByTestId('feature-map-loading');
+  const snapshot = () =>
+    featureMarkerButtons(page).evaluateAll((els) =>
+      els.map((el) => el.getAttribute('data-interaction-id') ?? '').sort().join('|'),
+    );
+  const started = Date.now();
+  let last = await snapshot();
+  let stableSince = Date.now();
+  while (Date.now() - started < maxMs) {
+    await page.waitForTimeout(250);
+    const now = await snapshot();
+    if (now !== last || (await loading.count()) > 0) {
+      last = now;
+      stableSince = Date.now();
+      continue;
+    }
+    if (Date.now() - stableSince >= quietMs) return;
+  }
+}
+
+/**
  * Feature markers that a user can actually click right now: rendered inside the map canvas and the
  * topmost element at their centre (markers outside the viewport stay in the DOM, and the search card /
  * transport panel overlay part of the canvas). Clicking anything else lands on the map, and the

@@ -150,6 +150,11 @@ test.describe('NEAR trip map — four-place trip', () => {
 
   test('NEAR-024 nearby data is requested for the trip viewport, not the Seoul default', async ({ page }) => {
     await openTrip(page, tripId);
+    // #686: 맞춤은 지도 load 뒤에 적용된다. 그 전에 칩을 누르면 TripMapView 기본 시점(127.5,36.5 z7)의
+    // 요청을 잡는다(운영 22:41:30 bbox=124.80,33.00,130.20,40.05 z7). NEAR-023처럼 네 핀이 그려지고
+    // 지도가 멈춘 뒤 — 사용자가 여행 지도를 본 상태에서 — 켠다.
+    await expect(tripMarkers(page)).toHaveCount(PLACES.length, { timeout: 30_000 });
+    await waitForMapIdle(page);
     const map=await renderedMap(page);
     await waitForCamera(map);
     expect(expectedCoords).toHaveLength(4);

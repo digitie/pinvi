@@ -418,7 +418,7 @@
   cleanup: [없음]
   automation: scripted
   spec: specs/core/core-resilience.live.spec.ts#CORE-025
-  notes: '#674. 실제 B 본문 ID를 확인하고 데스크톱 팝업은 일반 클릭으로 닫는다. 네이티브 배경 닫기 뒤 같은 점·경로 재선택은 WSL 실제 UI에서 별도 검증한다.'
+  notes: '#674. 실제 B 본문 ID를 확인하고 데스크톱 팝업은 일반 클릭으로 닫는다. 네이티브 배경 닫기 뒤 같은 점·경로 재선택은 WSL 실제 UI에서 별도 검증한다. #686 — 확대·선택 이동 뒤 in-bounds 재조회가 끝나기 전에 고른 핀이 DOM에서 떨어졌다(mobile). 마커 집합이 멈춘 뒤 고르고, 모바일 A 선택 뒤 B가 빠졌으면 A가 아닌 핀을 다시 고른다.'
 
 - id: CORE-026
   title: 빠른 pan 중 in-bounds 요청 취소·대체 — 로딩 종료·오류 없음

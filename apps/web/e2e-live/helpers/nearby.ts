@@ -213,24 +213,21 @@ export async function searchAndFly(page: Page, query: string): Promise<void> {
   }
 }
 
-/**
- * Click an individually rendered transport marker of `layer` (cluster markers have other labels).
- * legend의 layer/feature ID에 해당하는 실제 마커를 정상 클릭하고 같은 ID의 상세 HTTP를 검증한다.
- * 동명 feature나 숨은 cluster를 대신 누르지 않는다. 반환값은 클릭한 이름이다.
- */
-export async function clickTransportMarker(page: Page, layer: Layer): Promise<string> {
+type Coord = { lon: number; lat: number };
+
+/** 지금 캔버스 안에서 최상단으로 보이는(=사용자가 누를 수 있는) `layer` 개별 마커의 ID·이름. */
+async function topmostTransportMarkers(page: Page, layer: Layer): Promise<Array<{ title: string; id: string }>> {
   const items = await legendMarkers(page, layer).evaluateAll((elements) =>
     elements.map((el) => ({ title: el.textContent?.trim() ?? '', id: el.getAttribute('data-feature-id') ?? '' })),
   );
-  expect(items.length, 'legend has requested transport markers').toBeGreaterThan(0);
   const canvasBox = await mapCanvas(page).boundingBox();
-  expect(canvasBox).not.toBeNull();
+  if (!canvasBox) return [];
+  const out: Array<{ title: string; id: string }> = [];
   for (const item of items) {
-    const identity = 'transport:' + layer + ':' + item.id;
-    const marker = page.locator('.maplibregl-marker[data-interaction-id=' + JSON.stringify(identity) + ']');
+    const marker = page.locator('.maplibregl-marker[data-interaction-id=' + JSON.stringify('transport:' + layer + ':' + item.id) + ']');
     if ((await marker.count()) !== 1) continue;
     const box = await marker.boundingBox();
-    if (!box || !canvasBox || box.x < canvasBox.x || box.y < canvasBox.y ||
+    if (!box || box.x < canvasBox.x || box.y < canvasBox.y ||
         box.x + box.width > canvasBox.x + canvasBox.width ||
         box.y + box.height > canvasBox.y + canvasBox.height) continue;
     const onTop = await marker.evaluate((el) => {
@@ -238,7 +235,73 @@ export async function clickTransportMarker(page: Page, layer: Layer): Promise<st
       const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return !!top && (top === el || el.contains(top));
     });
-    if (!onTop) continue;
+    if (onTop) out.push(item);
+  }
+  return out;
+}
+
+/**
+ * 개별 마커가 하나도 없으면(휴게소는 상·하행 쌍이 붙어 있어 zoom 14까지 ClusterLayer 묶음이다 — #686
+ * NEAR-006) 사용자가 하듯 `targets` 좌표에 가장 가까운 '묶음 펼치기'를 실제로 눌러 펼친다. 카메라가 멈추고
+ * 새 viewport의 markers 응답이 온 뒤 돌아온다. 펼칠 묶음이 없으면 false.
+ */
+async function expandClusterToward(page: Page, layer: Layer, targets: readonly Coord[]): Promise<boolean> {
+  const map = await renderedMap(page);
+  try {
+    const pick = await map.evaluate((m, coords) => {
+      const rect = m.getCanvas().getBoundingClientRect();
+      const projected = coords.map((c) => m.project([c.lon, c.lat])).map((p) => ({ x: rect.left + p.x, y: rect.top + p.y }));
+      let best: { index: number; distance: number } | null = null;
+      // vworld-map-web ClusterMarker: 마커 루트에 aria-label "N개 위치 묶음 펼치기"(클릭 = 펼침 zoom으로 flyTo).
+      const clusters = Array.from(document.querySelectorAll('.maplibregl-marker[aria-label*="묶음 펼치기"]'));
+      clusters.forEach((el, index) => {
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        if (cx < rect.left || cx > rect.right || cy < rect.top || cy > rect.bottom) return;
+        const top = document.elementFromPoint(cx, cy);
+        if (!top || !(top === el || el.contains(top))) return;
+        for (const p of projected) {
+          const distance = Math.hypot(p.x - cx, p.y - cy);
+          if (!best || distance < best.distance) best = { index, distance };
+        }
+      });
+      if (!best) return null;
+      clusters.forEach((el) => el.removeAttribute('data-e2e-expand'));
+      clusters[(best as { index: number }).index]!.setAttribute('data-e2e-expand', '1');
+      return true;
+    }, [...targets]);
+    if (!pick) return false;
+    const zoomBefore = await map.evaluate((m) => m.getZoom());
+    const next = nextMarkersResponse(page, (q) => q.layers.includes(layer) && q.zoom > Math.floor(zoomBefore), 45_000);
+    await page.locator('.maplibregl-marker[data-e2e-expand="1"]').click();
+    await waitForCamera(map);
+    await next;
+    return true;
+  } finally {
+    await map.dispose();
+  }
+}
+
+/**
+ * Click an individually rendered transport marker of `layer` (cluster markers have other labels).
+ * legend의 layer/feature ID에 해당하는 실제 마커를 정상 클릭하고 같은 ID의 상세 HTTP를 검증한다.
+ * 동명 feature나 숨은 cluster를 대신 누르지 않는다. 반환값은 클릭한 이름이다.
+ *
+ * `expandToward`를 주면, 보이는 개별 마커가 없을 때 그 좌표 쪽 묶음을 실제 클릭으로 펼쳐(최대 4번) 다시 찾는다.
+ */
+export async function clickTransportMarker(
+  page: Page,
+  layer: Layer,
+  expandToward: readonly Coord[] = [],
+): Promise<string> {
+  expect(await legendMarkers(page, layer).count(), 'legend has requested transport markers').toBeGreaterThan(0);
+  let candidates = await topmostTransportMarkers(page, layer);
+  for (let round = 0; round < 4 && candidates.length === 0 && expandToward.length > 0; round += 1) {
+    if (!(await expandClusterToward(page, layer, expandToward))) break;
+    candidates = await topmostTransportMarkers(page, layer);
+  }
+  for (const item of candidates) {
+    const marker = page.locator('.maplibregl-marker[data-interaction-id=' + JSON.stringify('transport:' + layer + ':' + item.id) + ']');
     // 동명 feature 대신 누른 transport ID의 실제 HTTP와 본문까지 연결한다.
     const response = page.waitForResponse((res) =>
       res.request().method() === 'GET' &&

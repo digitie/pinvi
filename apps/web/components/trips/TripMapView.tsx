@@ -56,6 +56,23 @@ import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
 
 // 전국이 보이는 기본 시점(POI 가 없을 때).
 const DEFAULT_CENTER: [number, number] = [127.5, 36.5];
+
+/**
+ * 맞춤 여백은 지금 DOM 상자로 계산하는데 maplibre transform은 컨테이너 크기를 ResizeObserver→rAF `resize()`로
+ * 늦게 따라간다. 데스크톱 여행 지도는 왼쪽 일정 패널 내용이 늘면서 컨테이너가 자라므로(운영 데스크톱 약 1590px),
+ * 옛 transform에 새 여백을 주면 fitBounds가 "cannot fit"으로 아무 일도 하지 않아 기본 시점(127.5,36.5 z7)에
+ * 남는다(#686 NEAR-024 — 교통 요청 bbox=124.80,33.00,130.20,40.05 z7). 맞추기 전에 크기를 맞춘다.
+ */
+function syncMapSize(map: MapLibreMap): void {
+  const container = map.getContainer();
+  const canvas = map.getCanvas();
+  if (
+    container.clientWidth !== canvas.clientWidth ||
+    container.clientHeight !== canvas.clientHeight
+  ) {
+    map.resize();
+  }
+}
 const DEFAULT_ZOOM = 7;
 const TRIP_MAP_MARKER_SIZE = 27;
 // PinMarker는 너비 size, 높이 size×1.5(40.5px) 물방울을 아래 꼭짓점(anchor bottom)에 건다. 선택된 핀은
@@ -305,6 +322,7 @@ export function TripMapView({
       userMovedRef.current = false;
       const bounds = pointsBounds(points);
       if (!bounds) return;
+      syncMapSize(map);
       // 위쪽 여백은 지도 위 장소 검색 줄 아래로 — 북쪽 핀이 그 밑에 숨지 않게. 여백은 핀
       // 앵커(아래 꼭짓점) 자리라 핀 머리 높이도 더한다. 기준 높이는 maplibre가 맞춤을 검사하는
       // 지도 컨테이너다.
