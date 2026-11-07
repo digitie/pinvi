@@ -112,7 +112,9 @@ class KorTravelMapTransportClient:
                 "kor-travel-map service token 미설정", code="UPSTREAM_AUTH"
             )
         try:
-            resp = await self._map._send("GET", path, params=params, retry=False)
+            resp = await self._map._send(
+                "GET", path, params=params, retry=False, circuit="transport"
+            )
         except KorTravelMapUnavailable as exc:
             raise KorTravelMapTransportUnavailable(str(exc)) from exc
         except httpx.HTTPError as exc:

@@ -34,14 +34,17 @@ class TransportCircuit:
         self._opened_at = None
         self._trial = False
 
-    def failure(self, token: tuple[bool, int]) -> None:
+    def failure(self, token: tuple[bool, int]) -> bool:
+        """실패를 센다. 이 실패로 회로가 열렸으면 True(호출자가 한 번만 경고를 남긴다)."""
         if token[1] != self._generation:
-            return
+            return False
         self._failures += 1
         if token[0] or self._failures >= 3:
             self._opened_at = self._clock()
             self._generation += 1
             self._trial = False
+            return True
+        return False
 
     def release(self, token: tuple[bool, int]) -> None:
         if token[0] and token[1] == self._generation:

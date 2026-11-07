@@ -280,6 +280,8 @@ class KorTravelMapWeatherClient:
                 retry=False,
                 request_timeout=self._timeout,
                 log_failure=False,
+                # weather는 이 모듈의 회로만 센다 — 짧은 timeout이 지도·검색 회로를 열지 않는다(#702).
+                circuit=None,
             )
         except KorTravelMapUnavailable as exc:
             if exc.code in {"BULKHEAD_FULL", "POOL_TIMEOUT", "CIRCUIT_OPEN"}:
