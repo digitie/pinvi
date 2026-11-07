@@ -1358,6 +1358,10 @@ const LONG_PANEL_POIS = Array.from({ length: 30 }, (_, index) => ({
   // 남북으로 넓게 — 맞춤이 지도 높이 전체를 쓰게 해 아래쪽 핀이 fold 근처에 오게 한다.
   feature: { coord: { lon: 126.5 + (index % 6) * 0.5, lat: 33.5 + index * 0.15 } },
 }));
+const TRANSPARENT_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
 const LONG_PANEL_VIEW = {
   ...TRIP_VIEW,
   days: [{ ...BASE_MARKER_DAY, pois: LONG_PANEL_POIS }],
@@ -1376,6 +1380,18 @@ for (const viewport of [
 
     test('지도는 창 안에 있고 왼쪽 패널만 따로 스크롤한다(#704)', async ({ page }) => {
       await mockTripDetailRoutes(page, LONG_PANEL_VIEW);
+      if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS === '1') {
+        // 실지도 검증 환경: 바탕지도 tile은 빈 PNG로 — 외부 망 없이 maplibre 마커 위치(맞춤)만 잰다.
+        await page.route(
+          (url) => url.protocol === 'https:',
+          async (route, request) => {
+            if (request.resourceType() !== 'image' && !/\.(png|jpe?g|webp)(\?|$)/i.test(request.url())) {
+              return route.fallback();
+            }
+            await route.fulfill({ contentType: 'image/png', body: TRANSPARENT_PNG });
+          },
+        );
+      }
 
       await page.goto(`/trips/${tripId}`);
 
