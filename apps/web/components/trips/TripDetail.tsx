@@ -1328,6 +1328,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
         mobileWebLayout
           ? 'relative flex h-[100svh] min-h-[100svh] flex-col overflow-hidden bg-canvas'
           : // lg에서는 창 높이에 고정된 AppShell의 남은 높이를 채운다(#704) — 지도 열이 패널 내용으로 자라지 않는다.
+            // min-h-[calc(100svh-4rem)]는 lg 미만(SSR 첫 페인트)에만 의미가 있다.
             '-mx-4 -my-6 flex min-h-[calc(100svh-4rem)] flex-col bg-surface-soft md:-mx-6 md:-my-8 lg:min-h-0 lg:flex-1'
       }
       data-testid="trip-detail-shell"

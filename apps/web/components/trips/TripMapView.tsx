@@ -248,9 +248,11 @@ export function TripMapView({
     }
   }
 
+  // flush = 여행 상세 지도 열. 데스크톱(lg)은 창 높이에 고정된 열을 그대로 채운다 — 고정 최소 높이가 남으면
+  // 짧은 창에서 지도가 열 밖으로 넘쳐 아래쪽 핀이 fold 아래에 그려진다(#704).
   const surfaceClassName =
     chrome === 'flush'
-      ? 'relative h-full min-h-[420px] overflow-hidden bg-canvas'
+      ? 'relative h-full min-h-[420px] overflow-hidden bg-canvas lg:min-h-0'
       : 'relative h-full min-h-[420px] overflow-hidden rounded-sm border border-hairline bg-canvas';
 
   const fetchFeaturesInBounds = useCallback(async (map: MapLibreMap) => {
@@ -734,7 +736,7 @@ export function TripMapView({
           }
           fallback={(info) => <MapFallback info={info} />}
           loadingSkeleton={<MapLoadingSkeleton />}
-          className="h-full min-h-[360px]"
+          className={chrome === 'flush' ? 'h-full min-h-[360px] lg:min-h-0' : 'h-full min-h-[360px]'}
           unsupportedTileFallback={{ label: 'VWorld tile' }}
         >
           <FeatureGeometryLayers state={geometry} />

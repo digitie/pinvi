@@ -1366,6 +1366,8 @@ const LONG_PANEL_VIEW = {
 for (const viewport of [
   { width: 1440, height: 900 },
   { width: 1280, height: 720 },
+  // 짧은 노트북 창 — 헤더·상단 패널을 빼면 지도 열이 지도 최소 높이(420px)보다 작아진다.
+  { width: 1280, height: 600 },
 ]) {
   test.describe(`데스크톱 여행 지도 높이 ${viewport.width}x${viewport.height}`, () => {
     test.use({ viewport });
@@ -1385,7 +1387,13 @@ for (const viewport of [
       expect(mapBox!.y).toBeGreaterThanOrEqual(0);
       expect(mapBox!.y + mapBox!.height).toBeLessThanOrEqual(viewport.height + 1);
       // 지도가 0으로 접히지 않는다 — 헤더·상단 패널을 뺀 높이를 거의 다 쓴다.
-      expect(mapBox!.height).toBeGreaterThan(viewport.height * 0.55);
+      expect(mapBox!.height).toBeGreaterThan(viewport.height * 0.5);
+      // 지도 표면(maplibre 컨테이너)도 열 안에 있다 — 고정 최소 높이로 열 밖에 넘치지 않는다.
+      const surface = page.getByTestId('trip-map-surface');
+      if ((await surface.count()) > 0) {
+        const surfaceBox = await surface.boundingBox();
+        expect(surfaceBox!.y + surfaceBox!.height).toBeLessThanOrEqual(mapBox!.y + mapBox!.height + 1);
+      }
 
       // 문서는 스크롤되지 않고, 길어진 패널 안쪽 영역이 스크롤된다.
       const scroll = await page.evaluate(() => {
@@ -1406,9 +1414,10 @@ for (const viewport of [
       expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(viewport.height + 1);
 
       if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1') return;
-      // 실지도: 맞춤 뒤 모든 핀 앵커가 보이는 지도 영역(= 창 안) 안에 있다.
-      const markers = page.locator('[data-testid="trip-map-marker-style"]');
-      await expect(markers).toHaveCount(LONG_PANEL_POIS.length, { timeout: 20_000 });
+      // 실지도: 맞춤 뒤 그려진 모든 핀(cluster 포함) 앵커가 보이는 지도 영역(= 창 안) 안에 있다.
+      // trip-map-marker-style은 숨은 범례라 위치가 없다 — 실제 maplibre 마커를 잰다.
+      const markers = page.locator('.maplibregl-marker');
+      await expect(markers.first()).toBeVisible({ timeout: 20_000 });
       await expect
         .poll(async () => {
           const boxes = await markers.evaluateAll((elements) =>
