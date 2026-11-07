@@ -200,9 +200,112 @@ async def test_stale_resend_is_once_and_counts_as_one_failure() -> None:
 
     client = _client(handler)
     transport = KorTravelMapTransportClient(client)
+    for calls in (1, 2):
+        with pytest.raises(KorTravelMapTransportUnavailable):
+            await transport.list_items("rest-areas")
+        assert sent == 2 * calls
+    # 논리 호출 하나가 실패 하나다 — 세 번째에서야 회로가 열린다.
     with pytest.raises(KorTravelMapTransportUnavailable):
         await transport.list_items("rest-areas")
+    assert sent == 6
+    with pytest.raises(KorTravelMapTransportUnavailable, match="회로 열림"):
+        await transport.list_items("rest-areas")
+    assert sent == 6
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [httpx.ReadError, httpx.WriteError, httpx.ReadTimeout, httpx.WriteTimeout],
+)
+async def test_errors_after_map_got_the_request_are_never_resent(
+    error: type[httpx.TransportError],
+) -> None:
+    """Map이 요청을 받은 뒤의 끊김·timeout은 무거운 질의 도중일 수 있다 — GET·POST batch 모두 한 번만."""
+    sent = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal sent
+        sent += 1
+        raise error("mid-query", request=request)
+
+    client = _client(handler)
+    with pytest.raises(KorTravelMapUnavailable):
+        await _in_bounds(client)
+    assert sent == 1
+    with pytest.raises(KorTravelMapUnavailable):
+        await client.get_features(["f_a"])
     assert sent == 2
+    await client.aclose()
+
+
+async def test_persistent_disconnect_on_retrying_get_is_bounded() -> None:
+    """free resend 1번 + 연결 실패 재시도는 attempt 상한 안 — 끊김만 반복되면 2번에서 멈춘다."""
+    sent = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal sent
+        sent += 1
+        raise httpx.RemoteProtocolError("disconnected", request=request)
+
+    client = _client(handler)
+    with pytest.raises(KorTravelMapUnavailable):
+        await client.get_feature("f_x")
+    assert sent == 2
+    await client.aclose()
+
+
+async def test_viewport_5xx_still_retries_within_attempts() -> None:
+    sent = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal sent
+        sent += 1
+        return httpx.Response(503, json={"code": "UPSTREAM"})
+
+    client = _client(handler)
+    with pytest.raises(KorTravelMapUnavailable) as info:
+        await _in_bounds(client)
+    assert sent == 3
+    assert info.value.error_class == "HTTP503"
+    await client.aclose()
+
+
+async def test_public_marker_layers_use_the_viewport_circuit() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/map-markers"):
+            raise httpx.ReadTimeout("slow nationwide markers", request=request)
+        return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
+
+    client = _client(handler)
+    for _ in range(3):
+        with pytest.raises(KorTravelMapUnavailable):
+            await client.public_festival_markers(
+                min_lon=124.8, min_lat=33.0, max_lon=130.2, max_lat=38.6
+            )
+    with pytest.raises(KorTravelMapUnavailable) as info:
+        await _in_bounds(client)
+    assert info.value.code == "CIRCUIT_OPEN"
+    assert (await client.search_features(q="축제"))["items"] == []
+    await client.aclose()
+
+
+async def test_circuit_open_is_logged_once_with_scope_and_class(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow", request=request)
+
+    client = _client(handler)
+    with caplog.at_level(logging.WARNING, logger="app.clients.kor_travel_map"):
+        for _ in range(5):
+            with pytest.raises(KorTravelMapUnavailable):
+                await _in_bounds(client)
+    opened = [r.getMessage() for r in caplog.records if "circuit_open" in r.getMessage()]
+    assert opened == [
+        "kor_travel_map.circuit_open scope=viewport path=/v1/features/in-bounds "
+        "error=ReadTimeout trial=False"
+    ]
     await client.aclose()
 
 
@@ -218,6 +321,9 @@ async def test_non_idempotent_request_is_not_resent_after_disconnect() -> None:
     with pytest.raises(KorTravelMapUnavailable):
         await client._send("POST", "/v1/service/weather/locations/batch", json={}, retry=False)
     assert sent == 1
+    with pytest.raises(KorTravelMapUnavailable):
+        await client.get_features(["f_a"])
+    assert sent == 2
     await client.aclose()
 
 

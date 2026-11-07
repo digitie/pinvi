@@ -49,19 +49,12 @@ KEEPALIVE_EXPIRY_SECONDS: float = 3.0
 #: batch까지 120초 503으로 만들었다). weather 표면은 자체 회로(``kor_travel_map_weather``)만 쓴다.
 CircuitScope = Literal["features", "viewport", "transport"]
 
-#: 새 연결로 다시 보내도 되는 연결 단계 오류 — 요청이 Map 처리에 닿지 않았거나(연결 실패) 재사용한
-#: 연결이 응답 없이 끊겼다. ``ReadTimeout``은 Map이 요청을 받아 아직 처리 중이라는 뜻이라 다시 보내면
-#: 같은 무거운 질의를 겹쳐 쌓을 뿐이다(#702 운영 기록: 같은 전국 bbox가 5초 timeout x3).
+#: 백오프로 다시 보내는 오류 — 연결 자체가 맺어지지 않아 요청이 Map 처리에 닿지 않았다. ``ReadTimeout``·
+#: ``ReadError``는 Map이 요청을 받아 처리 중이었거나 처리 도중 끊겼다는 뜻이라 다시 보내면 같은 무거운 질의를
+#: 겹쳐 쌓을 뿐이다(#702 운영 기록: 같은 전국 bbox가 5초 timeout x3).
 _RETRYABLE_TRANSPORT_ERRORS: tuple[type[httpx.TransportError], ...] = (
-    httpx.NetworkError,
+    httpx.ConnectError,
     httpx.ConnectTimeout,
-    httpx.RemoteProtocolError,
-)
-#: 재사용 연결이 응답 없이 끊긴 흔적. 멱등 GET은 ``retry=False`` 표면에서도 새 연결로 한 번 더 보낸다.
-_STALE_CONNECTION_ERRORS: tuple[type[httpx.TransportError], ...] = (
-    httpx.RemoteProtocolError,
-    httpx.ReadError,
-    httpx.WriteError,
 )
 _IDEMPOTENT_METHODS = frozenset({"GET", "HEAD"})
 
@@ -452,10 +445,11 @@ class KorTravelMapClient:
                         breaker.release(token)
                     elif breaker.failure(token):
                         logger.warning(
-                            "kor_travel_map.circuit_open scope=%s path=%s error=%s",
+                            "kor_travel_map.circuit_open scope=%s path=%s error=%s trial=%s",
                             circuit,
                             path,
                             exc.error_class,
+                            token[0],
                         )
                 raise
             except BaseException:
@@ -478,12 +472,13 @@ class KorTravelMapClient:
         request_timeout: httpx.Timeout | None = None,
         log_failure: bool = True,
     ) -> httpx.Response:
-        """연결 단계 오류·5xx는 지수 백오프로 재시도하고, ``ReadTimeout``은 다시 보내지 않는다(#702).
+        """연결 실패·5xx는 지수 백오프로 재시도하고, ``ReadTimeout``·``ReadError``는 다시 보내지 않는다(#702).
 
         ``retry=False``면 한 번만 보내고 5xx 응답도 그대로 돌려준다 — 호출자가 problem ``code``를 읽어
         판단한다(transport 상태 표면: 503 ``NOT_LOADED``는 결정적이고, 지도 요청은 다음 이동이 곧
         재시도다 — ADR-076 D2). 단 멱등 GET이 재사용 연결의 끊김(``RemoteProtocolError`` 등)으로 실패하면
-        어느 쪽이든 새 연결로 **한 번** 더 보낸다 — Map 장애가 아니라 pooled 연결의 수명 문제다.
+        어느 쪽이든 새 연결로 **한 번** 더 보낸다(시도 횟수에 넣지 않는다) — Map 장애가 아니라 pooled 연결의
+        수명 문제다.
 
         ``request_timeout``을 주면 그 호출만 client 기본 timeout 대신 쓴다(weather 상태 표면의 짧은 connect —
         ADR-077). ``log_failure=False``면 실패 경고를 호출자가 남긴다(같은 실패의 이중 로그 방지).
@@ -518,8 +513,9 @@ class KorTravelMapClient:
                     f"kor-travel-map 요청 실패({path}): {type(exc).__name__}",
                     error_class=type(exc).__name__,
                 )
-                if stale_retry and isinstance(exc, _STALE_CONNECTION_ERRORS):
-                    # 한 번만, backoff 없이, 시도 횟수를 쓰지 않고 새 연결로 다시 보낸다.
+                if stale_retry and isinstance(exc, httpx.RemoteProtocolError):
+                    # 재사용 연결이 응답 없이 끊겼다(keep-alive 경합). 한 번만, backoff 없이, 시도 횟수를
+                    # 쓰지 않고 새 연결로 다시 보낸다.
                     stale_retry = False
                     continue
                 if not isinstance(exc, _RETRYABLE_TRANSPORT_ERRORS):
@@ -904,6 +900,7 @@ class KorTravelMapClient:
                 "/v1/public/beaches/map-markers",
                 params=params,
                 allow_public_api_key=True,
+                circuit="viewport",
             )
         )
 
@@ -984,6 +981,7 @@ class KorTravelMapClient:
                 "/v1/public/festivals/map-markers",
                 params=params,
                 allow_public_api_key=True,
+                circuit="viewport",
             )
         )
 
