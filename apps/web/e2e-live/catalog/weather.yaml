@@ -74,16 +74,17 @@
     - env: PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED=true and daily_summaries dataset loaded (14일 보존)
   data_sources: [map:heritage, weather:map-rest]
   steps:
-    - 여행 생성 D-5~D-4, 1일차에 '도산서원' 추가 → 새로고침 → 1일차 탭
+    - 여행 생성 D-3~D-2, 1일차에 '도산서원' 추가 → 새로고침 → 1일차 탭
   expected:
     - PINVI_E2E_WEATHER_VIA_MAP=1 이면 summary에 '시간대별' 그룹(아침/점심/저녁 '최저~최고°C')
     - 아니면(직접 경로) no_data 문구 허용; 어느 경우든 unavailable 금지
+    - 고른 날짜에 상류 표본이 없으면(no_data 문구 + 그 날짜 metric 0건, 일관성은 단언) 실패가 아니라 'upstream gap'으로 skip
   cleanup:
     - 생성한 여행 삭제
   automation: scripted
   spec: specs/weather/weather-trip-days.live.spec.ts#WX-004
   notes: kor-travel-weather.md §9.2 — 지난 일자는 daily_summaries만, 직접 경로는 보존 2일이라 no_data.
-  # Map#1440 재오픈: #1446 배포 뒤에도 WX-004 운영 실패. 보관·적재·실행 경로 대조 전 test.fail 유지.
+  # Map#1440 원인은 2026-10-28~11-01 상류 weather 일회성 공백(D-5가 그 구간에 걸림) — 2026-11-07 test.fail 제거, D-3로 이동, 공백은 skip.
 
 - id: WX-005
   title: 같은 일자 서울역+성산일출봉 — 장소별 '장소 날씨' 카드가 서로 다르고 '날짜 날씨'는 첫 장소와 일치

@@ -106,7 +106,9 @@ test.describe('NEAR transport detail dialog', () => {
     const rest = (await markersBody(res)).layers.find((l) => l.layer === 'rest_area')!;
     test.skip(rest.status !== 'ok' || rest.items.length === 0, 'no rest areas in viewport');
     const detail = waitForRequest(page, new RegExp(`/transport/${LAYER_PATH.rest_area}/`));
-    const title = await clickTransportMarker(page, 'rest_area');
+    // zoom 9의 휴게소는 상·하행 쌍이라 대부분 '묶음'이다(#686) — 사용자처럼 휴게소 쪽 묶음을 펼친 뒤 누른다.
+    const coords = rest.items.flatMap((i) => (i.coord ? [i.coord] : []));
+    const title = await clickTransportMarker(page, 'rest_area', coords);
     const dres = await detail;
     expect(dres.ok()).toBe(true);
     const item = ((await dres.json()) as { data: { item: Record<string, unknown>; fuel_price_freshness: unknown } }).data;

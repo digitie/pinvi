@@ -11,6 +11,7 @@ import {
   ensureFeatureMarkers,
   loginAsUser,
   shot,
+  waitForFeatureMarkersSettled,
 } from '../../helpers/live';
 import { annotate, isMobileViewport, timed, waitForMapCanvas } from '../../helpers/core';
 
@@ -113,18 +114,21 @@ test.describe('CORE resilience', () => {
 
   test('CORE-025 선택 변경 시 이전 상세 요청을 버린다 — stale 카드 없음', async ({ page }) => {
     await openExploreMap(page);
+    await waitForFeatureMarkersSettled(page);
     let clickable = await clickableFeatureMarkers(page, 2);
     // overlays cover part of a phone screen — zoom in a little more until two pins are tappable
     for (let i = 0; i < 3 && clickable.length < 2; i += 1) {
       await page.locator('.maplibregl-canvas').first().focus();
       await page.keyboard.press('=');
-      await page.waitForTimeout(800);
+      // 확대 뒤 in-bounds 재조회가 끝나야 고른 핀이 DOM에 남는다(#686).
+      await waitForFeatureMarkersSettled(page);
       clickable = await clickableFeatureMarkers(page, 2);
     }
     test.skip(clickable.length < 2, '보이는 영역에 클릭 가능한 feature 핀이 2개 미만');
-    const a = clickable[0]!, b = clickable[1]!;
+    const a = clickable[0]!;
+    let b = clickable[1]!;
     const idA = (await a.getAttribute('data-interaction-id'))?.replace(/^feature:/, '');
-    const idB = (await b.getAttribute('data-interaction-id'))?.replace(/^feature:/, '');
+    let idB = (await b.getAttribute('data-interaction-id'))?.replace(/^feature:/, '');
     expect(idA).toBeTruthy();
     expect(idB).toBeTruthy();
     expect(idB).not.toBe(idA);
@@ -142,6 +146,24 @@ test.describe('CORE resilience', () => {
         return top === el || Boolean(top && el.contains(top));
       });
       if (!uncovered) await dismissFeaturePopup(page);
+    }
+    // 모바일 A 선택은 지도를 A로 옮기고 다시 조회한다 — 고른 B가 묶음/화면 밖으로 빠졌으면 A가 아닌 다른 핀을 다시 고른다.
+    if (isMobileViewport(page)) await waitForFeatureMarkersSettled(page);
+    const tappable = async () => {
+      const out: { pin: typeof b; id: string }[] = [];
+      for (const pin of await clickableFeatureMarkers(page, 10)) {
+        const id = (await pin.getAttribute('data-interaction-id'))?.replace(/^feature:/, '');
+        if (id && id !== idA) out.push({ pin, id });
+      }
+      return out;
+    };
+    if (isMobileViewport(page)) {
+      const others = await tappable();
+      if (!others.some((o) => o.id === idB)) {
+        test.skip(others.length === 0, 'A 선택 뒤 보이는 다른 feature 핀이 없다');
+        b = others[0]!.pin;
+        idB = others[0]!.id;
+      }
     }
     const response = page.waitForResponse(res => {
       const url = new URL(res.url());

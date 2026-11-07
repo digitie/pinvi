@@ -110,7 +110,7 @@
     - data: 서울 zoom 9 뷰포트 안 휴게소
   data_sources: [transport:rest-area]
   steps:
-    - /map zoom 9 → '휴게소' → 개별 마커 클릭
+    - /map zoom 9 → '휴게소' → 개별 마커가 없으면 휴게소 쪽 '묶음 펼치기'를 눌러 펼친 뒤 개별 마커 클릭
   expected:
     - GET /transport/rest-areas/{id} 200, 제목·부제 '휴게소'
     - 응답 route_name 있으면 본문에 표시
@@ -119,7 +119,7 @@
   cleanup: []
   automation: scripted
   spec: specs/nearby/transport-detail.live.spec.ts#NEAR-006
-  notes: EV 충전 정보는 휴게소 상세의 플래그로만 노출된다(NEAR-032 참조).
+  notes: EV 충전 정보는 휴게소 상세의 플래그로만 노출된다(NEAR-032 참조). #686 — zoom 9에서 휴게소는 상·하행 쌍이라 ClusterLayer(radius 40, maxZoom 14) 묶음뿐이어서 개별 마커를 못 찾았다(제품 정상, helper가 묶음을 펼친다).
 
 - id: NEAR-007
   title: 교통 돌발(zoom 7) — '이 지역 교통 돌발 N건' 헤더, 최대 5행, legend 수 = 응답 수
@@ -419,7 +419,7 @@
     - data: NEAR-022와 같은 여행
   data_sources: [transport:incident, transport:rest-area]
   steps:
-    - /trips/{id} → '교통 돌발' → '휴게소'
+    - /trips/{id} → 네 핀이 그려지고 지도가 멈출 때까지 대기 → '교통 돌발' → '휴게소'
   expected:
     - 요청 bbox와 네이티브 지도 bounds가 실제 생성한 4개 POI 좌표를 모두 포함하고, 서울시청(126.978,37.5665)은 포함하지 않음
     - 휴게소 ok면 'N곳' N>0(중앙고속도로)
@@ -427,7 +427,7 @@
     - afterAll 여행 삭제
   automation: scripted
   spec: specs/nearby/trip-map.live.spec.ts#NEAR-024
-  notes: '#674. 현재 검색 응답의 좌표 있는 정확 일치 Map 행을 선택한다. 고정 지역 사각형을 POI 좌표로 가정하지 않는다.'
+  notes: '#674. 현재 검색 응답의 좌표 있는 정확 일치 Map 행을 선택한다. 고정 지역 사각형을 POI 좌표로 가정하지 않는다. #686 — 데스크톱 지도 컨테이너가 일정 패널과 함께 자라는데 maplibre transform이 rAF resize 전이라 fitBounds가 cannot fit으로 무시돼 기본 시점(127.5,36.5 z7)에 남던 제품 결함을 고쳤다(맞춤 전 resize).'
 
 - id: NEAR-025
   title: POI 핀 선택 → flyTo → 켜 둔 레이어 재조회(같은 zoom, 북쪽으로 이동한 bbox)

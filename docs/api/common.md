@@ -368,6 +368,15 @@ transport는 기본 Map client 한도를 공유한다. 포화 시 기다리지 �
 결과는 새 회로 상태에 반영하지 않는다. 로컬 포화·연결 풀 대기는 원격 장애로 세지 않는다.
 별도 admin/curation/command client를 하나의 전역 Map cap으로 합친 것은 아니다.
 
+Map 회로는 표면별로 따로 센다(#702): viewport(`in-bounds`·`nearby`·공개 해수욕장/축제
+`map-markers`), 그 밖 feature(검색·상세·batch·공개 목록/상세), transport. weather 표면은 자기
+회로만 세고 Map 회로에는 닿지 않는다. 한 표면의 timeout이 다른 표면을 120초 끊지 않는다.
+재시도는 연결 실패(`ConnectError`·`ConnectTimeout`)와 5xx에만 하고 `ReadTimeout`·`ReadError`는
+다시 보내지 않는다 — Map이 처리 중인 무거운 질의를 겹쳐 쌓지 않는다. 멱등 GET이 재사용 연결의 응답 없는 끊김(`RemoteProtocolError`)으로 실패하면
+재시도 없는 표면에서도 새 연결로 한 번 더 보낸다. pooled 연결은 3초 뒤 버린다(Map uvicorn
+keep-alive 5초보다 짧게). 실패 경고(`kor_travel_map.unavailable`)는 method·path·예외 클래스·
+전송 횟수만 남긴다(query·header 제외).
+
 HTTP 오류 공개 계약은 그대로다. Map·geo의 포화/열린 회로는 공개503의
 `FEATURE_SERVICE_UNAVAILABLE`/`GEOCODING_SERVICE_UNAVAILABLE`로 투영하고 내부 code나
 예외 문자열을 응답하지 않는다. rate limit은 기존429·Retry-After·저장소503·fail-open

@@ -108,8 +108,11 @@ const POINTS = [point('north', 37.13), point('south', 36.55)];
 function fakeMap(northAnchor: { x: number; y: number }) {
   const container = document.createElement('div');
   container.setAttribute('data-testid', 'fit-container');
+  const canvas = document.createElement('canvas');
   return {
     getContainer: () => container,
+    getCanvas: () => canvas,
+    resize: vi.fn(),
     fitBounds: vi.fn(),
     flyTo: vi.fn(),
     project: vi.fn(([, lat]: [number, number]) => (lat > 37 ? northAnchor : { x: 72, y: 600 })),
@@ -282,4 +285,39 @@ it('외곽 스택이 고정돼도 실제 패널 크기를 관찰하며 늦게 �
     await Promise.resolve();
   });
   expect(resize.observe).toHaveBeenCalledWith(view.getByTestId('fit-panel'));
+});
+
+function setClientSize(element: Element, width: number, height: number) {
+  Object.defineProperty(element, 'clientWidth', { configurable: true, value: width });
+  Object.defineProperty(element, 'clientHeight', { configurable: true, value: height });
+}
+
+it('컨테이너가 자랐는데 maplibre가 아직 옛 크기면 맞추기 전에 resize한다(#686 NEAR-024)', () => {
+  // 운영 데스크톱: 지도 컨테이너는 1590px로 자랐는데 maplibre transform은 ResizeObserver→rAF resize 전이라
+  // 옛 높이다. 여백(DOM 상자 기준)이 옛 높이를 넘으면 fitBounds가 "cannot fit"으로 아무 일도 안 해 기본
+  // 시점(127.5,36.5 z7)에 남는다. 맞춤은 항상 지금 컨테이너 크기의 transform에 대해 계산해야 한다.
+  h.transportVisible = true;
+  const map = fakeMap({ x: 300, y: 207 });
+  setClientSize(map.getContainer(), 980, 1590);
+  setClientSize(map.getCanvas(), 980, 360);
+  h.map = map;
+  render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+
+  expect(map.resize).toHaveBeenCalled();
+  expect(map.fitBounds).toHaveBeenCalled();
+  expect(map.resize.mock.invocationCallOrder[0]!).toBeLessThan(
+    map.fitBounds.mock.invocationCallOrder[0]!,
+  );
+});
+
+it('크기가 같으면 맞춤 때 resize하지 않는다', () => {
+  h.transportVisible = true;
+  const map = fakeMap({ x: 300, y: 207 });
+  setClientSize(map.getContainer(), 980, 900);
+  setClientSize(map.getCanvas(), 980, 900);
+  h.map = map;
+  render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+
+  expect(map.fitBounds).toHaveBeenCalled();
+  expect(map.resize).not.toHaveBeenCalled();
 });

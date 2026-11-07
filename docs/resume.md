@@ -1,3 +1,8 @@
+## #702·#699·#700·#686·WX-004 묶음 (2026-11-07)
+
+PR claude/bundle-699-700-686-702: Map 회로 표면별 분리·ReadTimeout 재전송 중단, 내보내기 최신 view, popup 쌓임, 여행 지도 맞춤 resize, live helper 보정.
+다음: 소유자 배포 뒤 live e2e(CORE-010/012/023/024/025/031·SRCH-044·SHR-032·NEAR-006/024·WX-004). Map 전국 zoom 7 in-bounds 지연은 Map 쪽.
+
 ## 확정 takedown 증거 보존 (2026-11-07)
 
 PR claude/takedown-evidence-retention-20261107: 0107 `evidence_hold_started_at`, 180일 보존·용량 제외·만료 뒤 자동 삭제.

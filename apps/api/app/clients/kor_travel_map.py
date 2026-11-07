@@ -41,6 +41,23 @@ _SERVICE_TOKEN_HEADER = "X-Kor-Travel-Map-Service-Token"  # noqa: S105 - 헤더 
 _PUBLIC_API_KEY_HEADER = "X-Kor-Travel-Map-Api-Key"
 _POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807
 
+#: pooled 연결을 Map(uvicorn 기본 ``--timeout-keep-alive`` 5초)이 닫기 **전에** 버린다. httpx 기본값도
+#: 5초라 서버가 닫는 순간과 재사용이 겹치면 응답 없는 끊김(``RemoteProtocolError``)이 난다(#702).
+KEEPALIVE_EXPIRY_SECONDS: float = 3.0
+
+#: 회로 범위. 한 표면의 실패가 다른 표면을 끊지 않는다(#702 — 전국 viewport timeout이 검색·상세·trip
+#: batch까지 120초 503으로 만들었다). weather 표면은 자체 회로(``kor_travel_map_weather``)만 쓴다.
+CircuitScope = Literal["features", "viewport", "transport"]
+
+#: 백오프로 다시 보내는 오류 — 연결 자체가 맺어지지 않아 요청이 Map 처리에 닿지 않았다. ``ReadTimeout``·
+#: ``ReadError``는 Map이 요청을 받아 처리 중이었거나 처리 도중 끊겼다는 뜻이라 다시 보내면 같은 무거운 질의를
+#: 겹쳐 쌓을 뿐이다(#702 운영 기록: 같은 전국 bbox가 5초 timeout x3).
+_RETRYABLE_TRANSPORT_ERRORS: tuple[type[httpx.TransportError], ...] = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+)
+_IDEMPOTENT_METHODS = frozenset({"GET", "HEAD"})
+
 
 def _path_segment(value: str) -> str | None:
     """외부 id를 Map URL 경로 한 세그먼트로만 넣는다. 라우터가 %3F·%2F를 디코드해 넘기므로
@@ -69,12 +86,15 @@ class KorTravelMapUnavailable(KorTravelMapError):
         details: dict[str, Any] | None = None,
         retry_after_seconds: int | None = None,
         status_code: int = status.HTTP_503_SERVICE_UNAVAILABLE,
+        error_class: str | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.details = details
         self.retry_after_seconds = retry_after_seconds
         self.status_code = status_code
+        #: 마지막 실패의 종류(``ReadTimeout``·``ConnectError``·``HTTP503`` …) — 로그·진단용, 비밀 없음.
+        self.error_class = error_class
 
 
 class KorTravelMapFeatureNotFound(KorTravelMapError):
@@ -359,7 +379,11 @@ class KorTravelMapClient:
             raise ValueError("max_concurrent_requests는 양수여야 합니다.")
         # 논리 호출(재시도·backoff 포함)마다 worker 내 한 자리를 쓴다. 대기열은 만들지 않는다.
         self._slots = asyncio.Semaphore(max_concurrent_requests)
-        self._transport_circuit = TransportCircuit(clock=clock)
+        self._circuits: dict[CircuitScope, TransportCircuit] = {
+            "features": TransportCircuit(clock=clock),
+            "viewport": TransportCircuit(clock=clock),
+            "transport": TransportCircuit(clock=clock),
+        }
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -389,14 +413,17 @@ class KorTravelMapClient:
         retry: bool = True,
         request_timeout: httpx.Timeout | None = None,
         log_failure: bool = True,
+        circuit: CircuitScope | None = "features",
     ) -> httpx.Response:
+        """``circuit``은 이 호출이 세고 보는 회로 범위다. ``None``이면 호출자가 자기 회로를 소유한다."""
         if self._slots.locked():
             raise KorTravelMapUnavailable(
                 "kor-travel-map 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
             )
         # locked 검사와 acquire 사이에는 suspension이 없어 다른 task가 자리를 가로채지 않는다.
         async with self._slots:
-            token = self._transport_circuit.acquire()
+            breaker = self._circuits[circuit] if circuit is not None else None
+            token = breaker.acquire() if breaker is not None else (False, 0)
             if token is None:
                 raise KorTravelMapUnavailable(
                     "kor-travel-map 회로 열림 — 호출하지 않음", code="CIRCUIT_OPEN"
@@ -413,15 +440,24 @@ class KorTravelMapClient:
                     log_failure=log_failure,
                 )
             except KorTravelMapUnavailable as exc:
-                if exc.code == "POOL_TIMEOUT":
-                    self._transport_circuit.release(token)
-                else:
-                    self._transport_circuit.failure(token)
+                if breaker is not None:
+                    if exc.code == "POOL_TIMEOUT":
+                        breaker.release(token)
+                    elif breaker.failure(token):
+                        logger.warning(
+                            "kor_travel_map.circuit_open scope=%s path=%s error=%s trial=%s",
+                            circuit,
+                            path,
+                            exc.error_class,
+                            token[0],
+                        )
                 raise
             except BaseException:
-                self._transport_circuit.release(token)
+                if breaker is not None:
+                    breaker.release(token)
                 raise
-            self._transport_circuit.success(token)
+            if breaker is not None:
+                breaker.success(token)
             return response
 
     async def _send_with_retries(
@@ -436,18 +472,24 @@ class KorTravelMapClient:
         request_timeout: httpx.Timeout | None = None,
         log_failure: bool = True,
     ) -> httpx.Response:
-        """transient(타임아웃/연결/5xx) 시 지수 백오프 재시도.
+        """연결 실패·5xx는 지수 백오프로 재시도하고, ``ReadTimeout``·``ReadError``는 다시 보내지 않는다(#702).
 
         ``retry=False``면 한 번만 보내고 5xx 응답도 그대로 돌려준다 — 호출자가 problem ``code``를 읽어
         판단한다(transport 상태 표면: 503 ``NOT_LOADED``는 결정적이고, 지도 요청은 다음 이동이 곧
-        재시도다 — ADR-076 D2).
+        재시도다 — ADR-076 D2). 단 멱등 GET이 재사용 연결의 끊김(``RemoteProtocolError`` 등)으로 실패하면
+        어느 쪽이든 새 연결로 **한 번** 더 보낸다(시도 횟수에 넣지 않는다) — Map 장애가 아니라 pooled 연결의
+        수명 문제다.
 
         ``request_timeout``을 주면 그 호출만 client 기본 timeout 대신 쓴다(weather 상태 표면의 짧은 connect —
         ADR-077). ``log_failure=False``면 실패 경고를 호출자가 남긴다(같은 실패의 이중 로그 방지).
         """
         attempts = self._max_attempts if retry else 1
+        stale_retry = method.upper() in _IDEMPOTENT_METHODS
+        sent = 0
+        attempt = 0
         last: KorTravelMapUnavailable | None = None
-        for attempt in range(attempts):
+        while attempt < attempts:
+            sent += 1
             try:
                 resp = await self._http.request(
                     method,
@@ -462,20 +504,44 @@ class KorTravelMapClient:
             except httpx.PoolTimeout as exc:
                 # 로컬 연결 풀 대기는 원격 장애의 증거가 아니며 재시도하지 않는다.
                 raise KorTravelMapUnavailable(
-                    f"kor-travel-map 연결 풀 대기 초과({path})", code="POOL_TIMEOUT"
+                    f"kor-travel-map 연결 풀 대기 초과({path})",
+                    code="POOL_TIMEOUT",
+                    error_class="PoolTimeout",
                 ) from exc
             except (httpx.TimeoutException, httpx.TransportError) as exc:
-                last = KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path}): {exc!r}")
+                last = KorTravelMapUnavailable(
+                    f"kor-travel-map 요청 실패({path}): {type(exc).__name__}",
+                    error_class=type(exc).__name__,
+                )
+                if stale_retry and isinstance(exc, httpx.RemoteProtocolError):
+                    # 재사용 연결이 응답 없이 끊겼다(keep-alive 경합). 한 번만, backoff 없이, 시도 횟수를
+                    # 쓰지 않고 새 연결로 다시 보낸다.
+                    stale_retry = False
+                    continue
+                if not isinstance(exc, _RETRYABLE_TRANSPORT_ERRORS):
+                    break
             else:
                 if resp.status_code >= 500 and retry:
-                    last = KorTravelMapUnavailable(f"kor-travel-map {resp.status_code} ({path})")
+                    last = KorTravelMapUnavailable(
+                        f"kor-travel-map {resp.status_code} ({path})",
+                        error_class=f"HTTP{resp.status_code}",
+                    )
                 else:
                     return resp
-            if attempt + 1 < attempts:
-                await asyncio.sleep(self._backoff_base_seconds * (2**attempt))
+            attempt += 1
+            if attempt < attempts:
+                await asyncio.sleep(self._backoff_base_seconds * (2 ** (attempt - 1)))
+        failure = last or KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path})")
         if log_failure:
-            logger.warning("kor_travel_map.unavailable", extra={"path": path})
-        raise last or KorTravelMapUnavailable(f"kor-travel-map 요청 실패({path})")
+            # 예외 클래스·전송 횟수만 남긴다 — query·header·본문은 키·좌표를 담을 수 있다.
+            logger.warning(
+                "kor_travel_map.unavailable method=%s path=%s error=%s sent=%d",
+                method,
+                path,
+                failure.error_class,
+                sent,
+            )
+        raise failure
 
     @staticmethod
     def _retry_after(resp: httpx.Response) -> int | None:
@@ -585,6 +651,7 @@ class KorTravelMapClient:
                 "/v1/features/in-bounds",
                 params=params,
                 allow_public_api_key=True,
+                circuit="viewport",
             )
         )
         cluster = meta.get("cluster")
@@ -697,7 +764,13 @@ class KorTravelMapClient:
         if sort is not None:
             params["sort"] = sort
         data, meta = self._payload(
-            await self._send("GET", "/v1/features/nearby", params=params, allow_public_api_key=True)
+            await self._send(
+                "GET",
+                "/v1/features/nearby",
+                params=params,
+                allow_public_api_key=True,
+                circuit="viewport",
+            )
         )
         return self._thread_page(data, meta)
 
@@ -827,6 +900,7 @@ class KorTravelMapClient:
                 "/v1/public/beaches/map-markers",
                 params=params,
                 allow_public_api_key=True,
+                circuit="viewport",
             )
         )
 
@@ -907,6 +981,7 @@ class KorTravelMapClient:
                 "/v1/public/festivals/map-markers",
                 params=params,
                 allow_public_api_key=True,
+                circuit="viewport",
             )
         )
 
@@ -979,6 +1054,11 @@ def create_kor_travel_map_client(app_settings: Settings) -> KorTravelMapClient:
     http = ApiCallLoggingClient(
         base_url=app_settings.pinvi_kor_travel_map_api_base_url,
         timeout=app_settings.pinvi_kor_travel_map_timeout_seconds,
+        limits=httpx.Limits(
+            max_connections=100,
+            max_keepalive_connections=20,
+            keepalive_expiry=KEEPALIVE_EXPIRY_SECONDS,
+        ),
         event_hooks=api_call_event_hooks(
             db_session.async_session_factory, provider="kor_travel_map"
         ),
