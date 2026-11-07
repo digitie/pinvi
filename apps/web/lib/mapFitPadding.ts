@@ -112,6 +112,7 @@ export function fitPaddingForOverlay(
     const clearance = Math.round(
       overlay.bottom - surface.top + Math.max(0, markerHeight) + OVERLAY_GAP,
     );
+    // 60% 상한은 의도된 절충이다 — 낮은 지도에서는 핀 머리가 검색 줄에 조금 걸릴 수 있지만 맞춤 폭을 남긴다.
     topClearance = Math.min(clearance, Math.round(surface.height * MAX_TOP_SHARE));
     padding.top = Math.max(MAP_FIT_PADDING, topClearance);
   }
@@ -142,6 +143,10 @@ export function fitPaddingForOverlay(
     );
     if (span() < MIN_HARD_SPAN) {
       padding.bottom = Math.max(0, surface.height - padding.top - MIN_HARD_SPAN);
+    }
+    if (span() < MIN_HARD_SPAN) {
+      // 핀 높이보다도 낮은 지도 — 맞춤 폭을 남기는 것이 우선이다.
+      padding.top = Math.max(0, Math.min(padding.top, surface.height - MIN_HARD_SPAN));
     }
   }
   return padding;

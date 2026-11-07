@@ -1466,6 +1466,8 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
       // 넘칠 때만 초점을 받고, 상세 패널(aside)과 겹치는 landmark 이름을 하나 더 만들지 않는다.
       await expect(panelScroll).toHaveAttribute('tabindex', '0');
       await expect(panelScroll).not.toHaveAttribute('role', 'region');
+      await expect(panelScroll).toHaveAttribute('role', 'group');
+      await expect(panelScroll).toHaveAccessibleName('여행 상세 내용');
       await panelScroll.focus();
       // 초점 링은 안쪽(-2px)에 그린다 — 바깥 outline은 이웃 열·헤더·창 끝에 잘려 보이지 않았다.
       const ring = await panelScroll.evaluate((el) => {
@@ -1505,7 +1507,11 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
 
       if (minFitSpanPath) {
         // 전제: 검색 줄 clearance(핀 48+간격 24)와 기본 아래 여백 64를 빼면 MIN_FIT_SPAN(120)보다 좁다.
-        const anchor = (await page.locator('[data-map-fit-anchor]').first().boundingBox())!;
+        // 지도 위 장소 검색(일정 패널 안의 같은 검색 상자가 아니라).
+        const anchor = (await page
+          .getByTestId('trip-map-place-search')
+          .locator('[data-map-fit-anchor]')
+          .boundingBox())!;
         const surfaceTop = surfaceBox.y;
         const topClearance = Math.min(anchor.y + anchor.height - surfaceTop + 72, surfaceBox.height * 0.6);
         expect(surfaceBox.height - Math.max(64, topClearance) - 64).toBeLessThan(120);
@@ -1540,5 +1546,21 @@ test('데스크톱 패널이 넘치지 않으면 스크롤 영역은 초점을 �
   await mockTripDetailRoutes(page);
   await page.goto(`/trips/${tripId}`);
   await expect(page.getByTestId('trip-poi-list')).toContainText('해운대 해수욕장');
-  await expect(page.getByTestId('trip-detail-panel-scroll')).not.toHaveAttribute('tabindex', /.*/);
+  const panelScroll = page.getByTestId('trip-detail-panel-scroll');
+  // 전제: 이 화면은 넘치지 않는다. observer 첫 콜백이 지나도록 두 프레임 기다린다.
+  expect(await panelScroll.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  await expect(panelScroll).not.toHaveAttribute('tabindex', /.*/);
+  // 내용이 늘어 넘치면 초점을 받고, 다시 줄면 뗀다(동적 경로).
+  await panelScroll.evaluate((el) => {
+    const filler = document.createElement('div');
+    filler.id = 'e2e-filler';
+    filler.style.height = '3000px';
+    el.firstElementChild?.appendChild(filler);
+  });
+  await expect(panelScroll).toHaveAttribute('tabindex', '0');
+  await panelScroll.evaluate((el) => el.querySelector('#e2e-filler')?.remove());
+  await expect(panelScroll).not.toHaveAttribute('tabindex', /.*/);
 });

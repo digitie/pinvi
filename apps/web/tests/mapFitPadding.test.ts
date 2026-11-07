@@ -100,6 +100,10 @@ describe('fitPaddingForOverlay', () => {
         expect(padding.top).toBeGreaterThanOrEqual(PIN_HEIGHT);
         expect(span(height, padding)).toBeGreaterThan(0);
       }
+      // 핀 높이보다도 낮은 지도도 fitBounds 폭은 남긴다.
+      for (const height of [60, 40, 20]) {
+        expect(span(height, fitPaddingForOverlay(rect(0, height), null, PIN_HEIGHT))).toBeGreaterThan(0);
+      }
       const tiny = fitPaddingForOverlay(rect(0, 200), rect(0, 150), PIN_HEIGHT);
       expect(tiny.top).toBeGreaterThanOrEqual(PIN_HEIGHT);
       expect(span(200, tiny)).toBeGreaterThan(0);

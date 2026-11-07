@@ -419,15 +419,21 @@ export function TripDetail({ tripId }: TripDetailProps) {
   } | null>(null);
   const [visibleDayIndexes, setVisibleDayIndexes] = useState<Set<number>>(() => new Set());
   const [activePanel, setActivePanel] = useState<TripDetailPanelTab>('plan');
-  const panelScrollRef = useRef<HTMLDivElement>(null);
+  // callback ref(state) — 오류 화면에서 본 화면으로 바뀌어 스크롤 영역이 새로 생겨도 관찰을 다시 건다.
+  const [panelScrollElement, setPanelScrollElement] = useState<HTMLDivElement | null>(null);
   const [panelScrollOverflowing, setPanelScrollOverflowing] = useState(false);
-  const panelScrollFocusable = !mobileWebLayout && panelScrollOverflowing;
+  // 초점을 가진 채 내용이 줄어도 tabindex를 떼지 않는다(떼면 초점이 body로 떨어진다).
+  const panelScrollFocused =
+    panelScrollElement != null &&
+    typeof document !== 'undefined' &&
+    document.activeElement === panelScrollElement;
+  const panelScrollFocusable = !mobileWebLayout && (panelScrollOverflowing || panelScrollFocused);
   // 데스크톱 패널 스크롤 영역이 실제로 넘치는지 — 넘칠 때만 Tab 순서에 넣는다(#704 후속).
   // 내용(탭 전환·장소 추가)과 창 크기 모두 바뀌므로 상자와 직계 자식 크기, 하위 노드 변화를 본다.
   useEffect(() => {
     // 모바일이면 panelScrollFocusable이 false라 남은 측정값은 쓰이지 않는다. 측정은 observer 콜백에서만
     // 한다(observe 직후 첫 콜백이 온다) — effect 안 동기 setState를 피한다.
-    const element = panelScrollRef.current;
+    const element = panelScrollElement;
     if (mobileWebLayout || !element || typeof ResizeObserver === 'undefined') return;
     const measure = () => setPanelScrollOverflowing(element.scrollHeight > element.clientHeight + 1);
     const resize = new ResizeObserver(measure);
@@ -443,7 +449,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
       resize.disconnect();
       mutations.disconnect();
     };
-  }, [mobileWebLayout, loading, activePanel]);
+  }, [mobileWebLayout, panelScrollElement]);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [desktopPanelCollapsed, setDesktopPanelCollapsed] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -1684,16 +1690,18 @@ export function TripDetail({ tripId }: TripDetailProps) {
           {/* 데스크톱은 이 영역의 containing block이 되어야 한다 — 아니면 목록 안 absolute(sr-only 등)
               요소가 스크롤 상자의 잘라내기를 벗어나 창 높이로 고정한 문서를 다시 늘린다(#704). */}
           <div
-            ref={panelScrollRef}
+            ref={setPanelScrollElement}
             className={
               mobileWebLayout
                 ? 'min-h-0 flex-1 overflow-y-auto'
                 : // 초점 링은 안쪽에 — 바깥 outline은 이웃 지도 열·헤더·창 끝에 잘린다.
                   'relative min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus'
             }
-            // 데스크톱은 이 영역만 스크롤한다 — 넘칠 때만 키보드 스크롤용 초점을 받는다. 이름은 안의
-            // tabpanel이 갖는다(상세 패널 aside와 겹치는 landmark를 하나 더 만들지 않는다).
+            // 데스크톱은 이 영역만 스크롤한다 — 넘칠 때만 키보드 스크롤용 초점을 받는다. group은
+            // landmark가 아니라 상세 패널(aside)과 겹치는 landmark를 만들지 않으면서 초점 때 이름을 읽힌다.
             tabIndex={panelScrollFocusable ? 0 : undefined}
+            role={panelScrollFocusable ? 'group' : undefined}
+            aria-label={panelScrollFocusable ? '여행 상세 내용' : undefined}
             data-testid="trip-detail-panel-scroll"
           >
             {activePanel === 'plan' && (
