@@ -18,6 +18,10 @@ export const OVERLAY_GAP = 24;
 const MAX_TOP_SHARE = 0.6;
 /** 맞춤 여백을 뺀 뒤 핀을 펼칠 최소 세로 폭(px). */
 export const MIN_FIT_SPAN = 120;
+/** 낮은 지도에서 아래 여백을 줄일 하한(px). */
+export const MIN_EDGE_PADDING = 8;
+/** 어떤 경우에도 fitBounds에 남기는 세로 폭(px) — 0 이하면 maplibre가 맞춤을 거부한다. */
+const MIN_HARD_SPAN = 16;
 
 export interface VerticalRect {
   top: number;
@@ -103,11 +107,13 @@ export function fitPaddingForOverlay(
     left: MAP_FIT_PADDING,
   };
   if (!surface || surface.height <= 0) return padding;
+  let topClearance = 0;
   if (overlay && overlay.height > 0) {
     const clearance = Math.round(
       overlay.bottom - surface.top + Math.max(0, markerHeight) + OVERLAY_GAP,
     );
-    padding.top = Math.max(MAP_FIT_PADDING, Math.min(clearance, Math.round(surface.height * MAX_TOP_SHARE)));
+    topClearance = Math.min(clearance, Math.round(surface.height * MAX_TOP_SHARE));
+    padding.top = Math.max(MAP_FIT_PADDING, topClearance);
   }
   if (bottomOverlay && bottomOverlay.height > 0) {
     // 핀 꼬리를 칩 위에 두고, 상하 여백이 지도 높이를 소진하지 않게 제한한다.
@@ -115,15 +121,28 @@ export function fitPaddingForOverlay(
     const cap = Math.max(MAP_FIT_PADDING, surface.height - padding.top - 1);
     padding.bottom = Math.max(MAP_FIT_PADDING, Math.min(clearance, cap));
   }
-  if (surface.height - padding.top - padding.bottom < MIN_FIT_SPAN) {
-    // 오버레이를 피하는 여백이 지도 높이를 거의 다 먹으면(낮은 창·높은 상단 패널) 맞춤이 무너진다 —
-    // 위·아래는 기본 여백(지도가 아주 낮으면 그보다 작게)으로 돌아간다(#704 후속).
-    const fallback = Math.max(
-      0,
-      Math.min(MAP_FIT_PADDING, Math.floor((surface.height - MIN_FIT_SPAN) / 2)),
+  // 낮은 지도(낮은 창·높은 상단 패널): 여백이 맞춤 폭을 거의 다 먹으면 (1) 아래 여백부터 줄이고
+  // (2) 위 여백은 오버레이 clearance·핀 머리 높이까지만 줄인다 — 그 아래로는 맞춤 폭을 줄인다.
+  // (3) 그래도 fitBounds에 남길 폭이 없을 때만 위 여백을 핀 높이까지 깎는다(#704 후속).
+  const span = () => surface.height - padding.top - padding.bottom;
+  if (span() < MIN_FIT_SPAN) {
+    padding.bottom = Math.max(
+      Math.min(padding.bottom, MIN_EDGE_PADDING),
+      padding.bottom - (MIN_FIT_SPAN - span()),
     );
-    padding.top = fallback;
-    padding.bottom = fallback;
+  }
+  if (span() < MIN_FIT_SPAN) {
+    const floor = Math.min(padding.top, Math.max(Math.max(0, markerHeight) + OVERLAY_GAP, topClearance));
+    padding.top = Math.max(floor, padding.top - (MIN_FIT_SPAN - span()));
+  }
+  if (span() < MIN_HARD_SPAN) {
+    padding.top = Math.max(
+      Math.min(padding.top, Math.max(0, markerHeight)),
+      surface.height - padding.bottom - MIN_HARD_SPAN,
+    );
+    if (span() < MIN_HARD_SPAN) {
+      padding.bottom = Math.max(0, surface.height - padding.top - MIN_HARD_SPAN);
+    }
   }
   return padding;
 }
