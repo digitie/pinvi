@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.integration._disposable_pg import make_nondurable
+
 ROOT = Path(__file__).resolve().parents[4]
 HOTSWAP_SCRIPT = ROOT / "scripts/restore-hotswap.sh"
 M05_ACTIVATION_SCHEMA = ROOT / "apps/api/alembic/baselines/20260824_0101_m05_activation.sql"
@@ -753,11 +755,13 @@ def test_restore_hotswap_preflight_rejects_real_noncanonical_topologies_before_m
         pytest.skip("docker SDK 미설치 — M05 실제 권한 검증을 건너뜁니다.")
 
     suffix = uuid.uuid4().hex[:8]
-    container = PostgresContainer(
-        "postgres:18-alpine",
-        username="m05_root",
-        password=TEST_PASSWORD,
-        dbname="m05_root",
+    container = make_nondurable(
+        PostgresContainer(
+            "postgres:18-alpine",
+            username="m05_root",
+            password=TEST_PASSWORD,
+            dbname="m05_root",
+        )
     )
     container.start()
     try:
@@ -881,11 +885,13 @@ def test_restore_hotswap_rejects_real_append_only_trigger_drift_before_schema_sw
         pytest.skip("docker SDK 미설치 — M05 실제 trigger 의미 검증을 건너뜁니다.")
 
     suffix = uuid.uuid4().hex[:8]
-    container = PostgresContainer(
-        "postgres:18-alpine",
-        username="m05_root",
-        password=TEST_PASSWORD,
-        dbname="m05_root",
+    container = make_nondurable(
+        PostgresContainer(
+            "postgres:18-alpine",
+            username="m05_root",
+            password=TEST_PASSWORD,
+            dbname="m05_root",
+        )
     )
     container.start()
     try:
@@ -975,11 +981,13 @@ def test_restore_hotswap_rejects_missing_digest_acl_and_signal_admin_before_muta
         pytest.skip("docker SDK 미설치 — M05 실제 권한 검증을 건너뜁니다.")
 
     suffix = uuid.uuid4().hex[:8]
-    container = PostgresContainer(
-        "postgres:18-alpine",
-        username="m05_root",
-        password=TEST_PASSWORD,
-        dbname="m05_root",
+    container = make_nondurable(
+        PostgresContainer(
+            "postgres:18-alpine",
+            username="m05_root",
+            password=TEST_PASSWORD,
+            dbname="m05_root",
+        )
     )
     container.start()
     try:
@@ -1087,11 +1095,13 @@ def test_restore_hotswap_preserves_preexisting_candidate_before_write_fence(
         pytest.skip("docker SDK 미설치 — M05 candidate 보존 검증을 건너뜁니다.")
 
     suffix = uuid.uuid4().hex[:8]
-    container = PostgresContainer(
-        "postgres:18-alpine",
-        username="m05_root",
-        password=TEST_PASSWORD,
-        dbname="m05_root",
+    container = make_nondurable(
+        PostgresContainer(
+            "postgres:18-alpine",
+            username="m05_root",
+            password=TEST_PASSWORD,
+            dbname="m05_root",
+        )
     )
     container.start()
     try:
@@ -1215,11 +1225,13 @@ def test_restore_hotswap_preserves_candidate_fence_and_marker_after_actual_resto
         pytest.skip("docker SDK 미설치 — M05 실제 hotswap 검증을 건너뜁니다.")
 
     suffix = uuid.uuid4().hex[:8]
-    container = PostgresContainer(
-        "postgres:18-alpine",
-        username="m05_root",
-        password=TEST_PASSWORD,
-        dbname="m05_root",
+    container = make_nondurable(
+        PostgresContainer(
+            "postgres:18-alpine",
+            username="m05_root",
+            password=TEST_PASSWORD,
+            dbname="m05_root",
+        )
     )
     container.start()
     try:
@@ -1382,11 +1394,13 @@ def test_restore_hotswap_refences_after_post_release_forensic_persistence_failur
         pytest.skip("docker SDK 미설치 — M05 실제 hotswap 검증을 건너뜁니다.")
 
     suffix = uuid.uuid4().hex[:8]
-    container = PostgresContainer(
-        "postgres:18-alpine",
-        username="m05_root",
-        password=TEST_PASSWORD,
-        dbname="m05_root",
+    container = make_nondurable(
+        PostgresContainer(
+            "postgres:18-alpine",
+            username="m05_root",
+            password=TEST_PASSWORD,
+            dbname="m05_root",
+        )
     )
     container.start()
     try:
@@ -1567,11 +1581,13 @@ def test_restore_hotswap_real_canonical_topology_completes_and_releases_fence(
         pytest.skip("docker SDK 미설치 — M05 실제 hotswap 검증을 건너뜁니다.")
 
     suffix = uuid.uuid4().hex[:8]
-    container = PostgresContainer(
-        "postgres:18-alpine",
-        username="m05_root",
-        password=TEST_PASSWORD,
-        dbname="m05_root",
+    container = make_nondurable(
+        PostgresContainer(
+            "postgres:18-alpine",
+            username="m05_root",
+            password=TEST_PASSWORD,
+            dbname="m05_root",
+        )
     )
     container.start()
     try:
@@ -1940,11 +1956,13 @@ exit "${requested_status}"
 """,
         encoding="utf-8",
     )
-    container = PostgresContainer(
-        "postgres:18-alpine",
-        username="m05_root",
-        password=TEST_PASSWORD,
-        dbname="m05_root",
+    container = make_nondurable(
+        PostgresContainer(
+            "postgres:18-alpine",
+            username="m05_root",
+            password=TEST_PASSWORD,
+            dbname="m05_root",
+        )
     )
     container.start()
     process = None

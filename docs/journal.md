@@ -1,3 +1,7 @@
+## 2026-11-07 — 통합 테스트 PG 비내구·tmpfs(n150 sda I/O)
+
+- n150 디스크 flush 포화의 최상위 기록자가 test gate PG(fsync on)였다. 모든 testcontainers PostgresContainer를 `tests/integration/_disposable_pg.make_nondurable`로 감싸 fsync·synchronous_commit·full_page_writes off + 이미지 major에 맞는 데이터 VOLUME tmpfs(기본 2g, `PINVI_TEST_PG_TMPFS_SIZE`). unit 가드·서버 효과 검사.
+
 ## 2026-11-07 — #702·#699·#700·#686 잔여·WX-004 묶음
 
 - #702: 운영 `app.api_call_log`(11-06) 실패는 stale keep-alive가 아니라 전부 전국 bbox(zoom 6~8) `in-bounds` 5초 `ReadTimeout`이었고 같은 요청을 3번 다시 보냈다. Map 직접 호출도 같은 질의가 유휴 1.3~4.0초(zoom 10은 0.04초) — Map 쪽 성능은 상류 보고. PinVi: 회로를 viewport·feature·transport로 나누고 weather는 자체 회로만, `ReadTimeout`·`ReadError` 재전송 중단, 멱등 GET의 `RemoteProtocolError`는 새 연결로 1회, keep-alive 3초, 실패·회로 열림 로그에 예외 클래스. 실제 소켓 테스트로 끊긴 keep-alive 재사용을 main에서 재현(red)했다.
