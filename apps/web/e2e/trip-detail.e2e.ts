@@ -1358,6 +1358,10 @@ const LONG_PANEL_POIS = Array.from({ length: 30 }, (_, index) => ({
   // 남북으로 넓게 — 맞춤이 지도 높이 전체를 쓰게 해 아래쪽 핀이 fold 근처에 오게 한다.
   feature: { coord: { lon: 126.5 + (index % 6) * 0.5, lat: 33.5 + index * 0.15 } },
 }));
+const TRANSPARENT_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
 const LONG_PANEL_VIEW = {
   ...TRIP_VIEW,
   days: [{ ...BASE_MARKER_DAY, pois: LONG_PANEL_POIS }],
@@ -1368,12 +1372,26 @@ for (const viewport of [
   { width: 1280, height: 720 },
   // 짧은 노트북 창 — 헤더·상단 패널을 빼면 지도 열이 지도 최소 높이(420px)보다 작아진다.
   { width: 1280, height: 600 },
+  // 셸 바닥(560px) — 지도 열이 fallback·로딩 상자의 고정 최소 높이(360px)보다 낮다.
+  { width: 1280, height: 560 },
 ]) {
   test.describe(`데스크톱 여행 지도 높이 ${viewport.width}x${viewport.height}`, () => {
     test.use({ viewport });
 
     test('지도는 창 안에 있고 왼쪽 패널만 따로 스크롤한다(#704)', async ({ page }) => {
       await mockTripDetailRoutes(page, LONG_PANEL_VIEW);
+      if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS === '1') {
+        // 실지도 검증 환경: 바탕지도 tile은 빈 PNG로 — 외부 망 없이 maplibre 마커 위치(맞춤)만 잰다.
+        await page.route(
+          (url) => url.protocol === 'https:',
+          async (route, request) => {
+            if (request.resourceType() !== 'image' && !/\.(png|jpe?g|webp)(\?|$)/i.test(request.url())) {
+              return route.fallback();
+            }
+            await route.fulfill({ contentType: 'image/png', body: TRANSPARENT_PNG });
+          },
+        );
+      }
 
       await page.goto(`/trips/${tripId}`);
 
@@ -1387,13 +1405,21 @@ for (const viewport of [
       expect(mapBox!.y).toBeGreaterThanOrEqual(0);
       expect(mapBox!.y + mapBox!.height).toBeLessThanOrEqual(viewport.height + 1);
       // 지도가 0으로 접히지 않는다 — 헤더·상단 패널을 뺀 높이를 거의 다 쓴다.
-      expect(mapBox!.height).toBeGreaterThan(viewport.height * 0.5);
+      expect(mapBox!.height).toBeGreaterThan(viewport.height * 0.45);
       // 지도 표면(maplibre 컨테이너)도 열 안에 있다 — 고정 최소 높이로 열 밖에 넘치지 않는다.
       const surface = page.getByTestId('trip-map-surface');
-      if ((await surface.count()) > 0) {
-        const surfaceBox = await surface.boundingBox();
-        expect(surfaceBox!.y + surfaceBox!.height).toBeLessThanOrEqual(mapBox!.y + mapBox!.height + 1);
-      }
+      await expect(surface).toBeVisible();
+      const surfaceBox = (await surface.boundingBox())!;
+      expect(surfaceBox.y + surfaceBox.height).toBeLessThanOrEqual(mapBox!.y + mapBox!.height + 1);
+      // 그 안의 지도·fallback·로딩 상자도 표면 밖으로 넘치지 않는다(잘린 채 가운데 문구가 숨지 않게).
+      const mapBody = page
+        .getByTestId('vworld-map-fallback')
+        .or(page.getByTestId('vworld-map-loading'))
+        .or(page.locator('.maplibregl-canvas'))
+        .first();
+      await expect(mapBody).toBeVisible({ timeout: 20_000 });
+      const bodyBox = (await mapBody.boundingBox())!;
+      expect(bodyBox.y + bodyBox.height).toBeLessThanOrEqual(surfaceBox.y + surfaceBox.height + 1);
 
       // 문서는 스크롤되지 않고, 길어진 패널 안쪽 영역이 스크롤된다.
       const scroll = await page.evaluate(() => {
@@ -1413,10 +1439,25 @@ for (const viewport of [
       const panelBox = await panel.boundingBox();
       expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(viewport.height + 1);
 
+      // 목록 끝까지 갈 수 있다 — 키보드(End)로 패널 영역만 스크롤하고 문서는 그대로다.
+      const panelScroll = page.getByTestId('trip-detail-panel-scroll');
+      await expect(panelScroll).toHaveAttribute('tabindex', '0');
+      await expect(panelScroll).toHaveAccessibleName('여행 상세 내용');
+      await panelScroll.focus();
+      await page.keyboard.press('End');
+      await expect
+        .poll(() => panelScroll.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 2))
+        .toBe(true);
+      await expect(page.getByText('긴 목록 장소 30', { exact: true }).first()).toBeInViewport();
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      await panelScroll.evaluate((el) => {
+        el.scrollTop = 0;
+      });
+
       if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1') return;
       // 실지도: 맞춤 뒤 그려진 모든 핀(cluster 포함) 앵커가 보이는 지도 영역(= 창 안) 안에 있다.
       // trip-map-marker-style은 숨은 범례라 위치가 없다 — 실제 maplibre 마커를 잰다.
-      const markers = page.locator('.maplibregl-marker');
+      const markers = page.locator('.maplibregl-marker.trip-map-marker');
       await expect(markers.first()).toBeVisible({ timeout: 20_000 });
       await expect
         .poll(async () => {

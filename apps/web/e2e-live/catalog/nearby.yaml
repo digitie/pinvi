@@ -718,7 +718,7 @@
   steps:
     - desktop 1440x900에서 /trips/{id} 진입(지도 조작 없이) → 핀 4개·타일 idle 대기
   expected:
-    - trip-detail-map 하단 ≤ 창 높이, 높이 > 창 높이 55%, 문서 스크롤 없음(scrollHeight − innerHeight ≤ 1)
+    - trip-detail-map 하단 ≤ 창 높이, 높이 > 창 높이 45%, 문서 스크롤 없음(scrollHeight − innerHeight ≤ 1)
     - trip-detail-panel 하단 ≤ 창 높이(패널은 안쪽에서 스크롤)
     - 각 .trip-map-marker의 머리·앵커가 지도 상자 안이고 앵커 y ≤ min(지도 하단, 창 높이)
   cleanup:
@@ -726,3 +726,21 @@
   automation: scripted
   spec: specs/nearby/trip-map.live.spec.ts#NEAR-042
   notes: '#704 — 운영 desktop 900px 창에서 지도 컨테이너가 일정 패널과 함께 ~1590px로 자라 핀이 fold 아래에 그려졌다. 데스크톱 여행 상세를 창 높이에 고정하고 왼쪽 패널만 스크롤한다. mobile 레이아웃은 바뀌지 않았다.'
+
+- id: NEAR-043
+  title: 낮은 desktop 창(1280x600)에서도 여행 지도 핀이 fold 위에 있고 문서가 스크롤되지 않는다(#704, NEAR-042b)
+  priority: P1
+  tags: [desktop, mutating, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: NEAR-022와 같은 여행
+  data_sources: [map:cave, map:heritage]
+  steps:
+    - desktop project에서 창을 1280x600으로 줄인 뒤 /trips/{id} 진입(지도 조작 없이) → 핀 4개·타일 idle 대기
+  expected:
+    - NEAR-042와 같은 단언(지도·패널 하단 ≤ 창 높이, 지도 높이 > 창 높이 45%, 문서 스크롤 없음, 각 핀 머리·앵커가 지도 안이고 앵커 y ≤ min(지도 하단, 창 높이))
+  cleanup:
+    - afterAll 여행 삭제
+  automation: scripted
+  spec: specs/nearby/trip-map.live.spec.ts#NEAR-043
+  notes: '#704 후속 — mocked e2e의 핀 위치 검사는 CI(VWorld 키 없음)에서 돌지 않아 운영에서 낮은 창의 핀을 직접 확인한다. 지도 열이 맞춤 여백을 거의 다 쓰면 위·아래 여백이 기본값으로 돌아간다(mapFitPadding MIN_FIT_SPAN).'

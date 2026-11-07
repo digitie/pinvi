@@ -29,10 +29,15 @@ export type {
   WeatherCondition,
 } from 'vworld-map-web';
 
-export function MapLoadingSkeleton() {
+/** 높이가 정해진 부모(데스크톱 여행 지도 열 등)는 `minHeightClassName`으로 고정 최소 높이를 푼다(#704). */
+const DEFAULT_MAP_MIN_HEIGHT = 'min-h-[360px]';
+
+export function MapLoadingSkeleton({
+  minHeightClassName = DEFAULT_MAP_MIN_HEIGHT,
+}: { minHeightClassName?: string } = {}) {
   return (
     <div
-      className="flex h-full min-h-[360px] items-center justify-center bg-surface-soft text-sm text-muted"
+      className={`flex h-full ${minHeightClassName} items-center justify-center bg-surface-soft text-sm text-muted`}
       data-testid="vworld-map-loading"
     >
       지도 로딩 중
@@ -40,14 +45,20 @@ export function MapLoadingSkeleton() {
   );
 }
 
-export function MapFallback({ info }: { info: VWorldMapFallbackInfo }) {
+export function MapFallback({
+  info,
+  minHeightClassName = DEFAULT_MAP_MIN_HEIGHT,
+}: {
+  info: VWorldMapFallbackInfo;
+  minHeightClassName?: string;
+}) {
   const message =
     info.reason === 'missing-api-key'
       ? 'VWorld API 키가 설정되지 않았습니다.'
       : '지도 엔진을 초기화할 수 없습니다.';
   return (
     <div
-      className="flex h-full min-h-[360px] items-center justify-center bg-surface-soft px-6 text-center"
+      className={`flex h-full ${minHeightClassName} items-center justify-center bg-surface-soft px-6 text-center`}
       data-testid="vworld-map-fallback"
     >
       <div className="max-w-sm space-y-2">

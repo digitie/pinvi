@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAP_FIT_PADDING,
+  MIN_FIT_SPAN,
   OVERLAY_GAP,
   fitOverlayRect,
   fitPaddingForOverlay,
@@ -54,8 +55,23 @@ describe('fitPaddingForOverlay', () => {
   });
 
   it('오버레이가 지도보다 크면 위쪽 여백은 지도 높이의 60%로 묶는다(fitBounds가 실패하지 않게)', () => {
+    const padding = fitPaddingForOverlay(rect(0, 600), rect(0, 590), PIN_HEIGHT);
+    expect(padding.top).toBe(360);
+  });
+
+  it('여백이 지도 높이를 거의 다 먹으면 위·아래는 기본 여백으로 돌아간다(낮은 데스크톱 창, #704 후속)', () => {
+    // 데스크톱 바닥 아래: 지도 ~220px, 검색 스택이 위 ~100px을 덮는다.
     const padding = fitPaddingForOverlay(rect(0, 400), rect(0, 390), PIN_HEIGHT);
-    expect(padding.top).toBe(240);
+    expect(400 - padding.top - padding.bottom).toBeGreaterThanOrEqual(MIN_FIT_SPAN);
+    expect(padding.top).toBe(MAP_FIT_PADDING);
+    expect(padding.bottom).toBe(MAP_FIT_PADDING);
+    const low = fitPaddingForOverlay(rect(300, 220), rect(312, 90), PIN_HEIGHT, rect(470, 36));
+    expect(220 - low.top - low.bottom).toBeGreaterThanOrEqual(MIN_FIT_SPAN - 1);
+    expect(low.top).toBeGreaterThanOrEqual(0);
+    // 지도가 기본 여백보다도 낮으면 여백을 줄여 양수 폭을 남긴다.
+    const tiny = fitPaddingForOverlay(rect(0, 200), rect(0, 150), PIN_HEIGHT);
+    expect(tiny.top).toBe(40);
+    expect(200 - tiny.top - tiny.bottom).toBe(MIN_FIT_SPAN);
   });
 
   it('피할 영역은 검색 입력 줄 — 교통 패널·검색 결과 목록은 넣지 않는다(리뷰 #619)', () => {
