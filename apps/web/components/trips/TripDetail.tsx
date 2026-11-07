@@ -1310,8 +1310,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const detailGridClassName = mobileWebLayout
     ? 'relative flex min-h-0 flex-1 flex-col'
     : desktopPanelCollapsed
-      ? 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)]'
-      : 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[420px_minmax(0,1fr)] xl:grid-cols-[460px_minmax(0,1fr)]';
+      ? 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]'
+      : 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[420px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[460px_minmax(0,1fr)]';
   const detailPanelClassName = mobileWebLayout
     ? `${
         mobilePanelOpen ? 'flex' : 'hidden'
@@ -1327,7 +1327,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
       className={
         mobileWebLayout
           ? 'relative flex h-[100svh] min-h-[100svh] flex-col overflow-hidden bg-canvas'
-          : '-mx-4 -my-6 flex min-h-[calc(100svh-4rem)] flex-col bg-surface-soft md:-mx-6 md:-my-8'
+          : // lg에서는 창 높이에 고정된 AppShell의 남은 높이를 채운다(#704) — 지도 열이 패널 내용으로 자라지 않는다.
+            '-mx-4 -my-6 flex min-h-[calc(100svh-4rem)] flex-col bg-surface-soft md:-mx-6 md:-my-8 lg:min-h-0 lg:flex-1'
       }
       data-testid="trip-detail-shell"
     >

@@ -70,11 +70,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const moreRef = useRef<HTMLLIElement>(null);
   const moreSheetId = useId();
   const pathParts = pathname.split('/').filter(Boolean);
-  const mobileTripDetail =
-    mobileWebLayout &&
+  const tripDetailRoute =
     pathParts.length === 2 &&
     pathParts[0] === 'trips' &&
     pathParts[1] !== 'map-shell' && pathParts[1] !== 'trash';
+  const mobileTripDetail = mobileWebLayout && tripDetailRoute;
+  // 데스크톱 여행 상세는 창 높이에 고정한다 — 셸이 min-h-dvh로 자라면 왼쪽 패널 내용만큼 지도 열도
+  // 자라 900px 창에서 지도가 ~1590px가 되고 핀이 fold 아래에 그려졌다(#704). 패널은 안에서 스크롤한다.
+  // lg: 접두는 SSR 첫 페인트(mobileWebLayout=false)에서 좁은 화면의 페이지 스크롤을 막지 않게 한다.
+  const desktopTripDetail = !mobileWebLayout && tripDetailRoute;
   const secondaryActive = MOBILE_SECONDARY.some((item) => isActivePath(pathname, item.href));
 
   // 라우트가 바뀌면 시트를 닫는다 — 네이티브 <details>는 클라이언트 네비게이션 후에도 열린 채 남았다.
@@ -108,7 +112,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className="flex min-h-dvh flex-col bg-canvas"
+      className={
+        desktopTripDetail
+          ? 'flex min-h-dvh flex-col bg-canvas lg:h-dvh lg:min-h-0 lg:overflow-hidden'
+          : 'flex min-h-dvh flex-col bg-canvas'
+      }
       // 셸의 모바일/데스크톱 전환은 CSS(lg)가 1차, 이 속성이 넓은 layout viewport를 쓰는 폰을 보정한다.
       data-mobile-layout={mobileWebLayout ? 'on' : 'off'}
     >
