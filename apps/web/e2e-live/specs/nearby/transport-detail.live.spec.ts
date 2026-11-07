@@ -183,7 +183,7 @@ test.describe('NEAR transport detail dialog', () => {
     expect(airports.items.length, 'operating airports nationwide (15 in the krairport bundle)').toBeGreaterThanOrEqual(5);
     // country scale proves the count; the detail opens from an individually rendered pin (clustered at zoom 6)
     const detail = waitForRequest(page, new RegExp(`/transport/${LAYER_PATH.airport}/`));
-    const title = await openTransportNear(page, 'airport', '김포공항');
+    const title = await openTransportNear(page, 'airport', '김포국제공항');
     const item = ((await (await detail).json()) as { data: { item: { iata_code: string; name_english: string } } }).data.item;
     await expect(detailDialog(page)).toContainText(title);
     await expect(detailDialog(page)).toContainText('공항');
@@ -205,7 +205,7 @@ test.describe('NEAR transport detail dialog', () => {
     const airports = (await markersBody(res)).layers.find((l) => l.layer === 'airport')!;
     test.skip(airports.status !== 'ok' || airports.items.length === 0, 'no airports to open');
     // airports are clustered at country scale — open one from an individually rendered pin
-    await openTransportNear(page, 'airport', '김포공항');
+    await openTransportNear(page, 'airport', '김포국제공항');
     const dialog = detailDialog(page);
     await expect(dialog.getByRole('button', { name: '일정에 추가' })).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: '상세보기' })).toHaveCount(0);
@@ -224,12 +224,12 @@ test.describe('NEAR transport detail dialog', () => {
     const airports = (await markersBody(res)).layers.find((l) => l.layer === 'airport')!;
     test.skip(airports.status !== 'ok' || airports.items.length < 2, 'need two airports');
     // airports are clustered at country scale — open them one at a time near each airport
-    const first = await openTransportNear(page, 'airport', '김포공항');
+    const first = await openTransportNear(page, 'airport', '김포국제공항');
     await expect(detailDialog(page)).toContainText(first);
     await closeDetail(page);
     let second: string | null = null;
     try {
-      second = await openTransportNear(page, 'airport', '김해공항');
+      second = await openTransportNear(page, 'airport', '김해국제공항');
     } catch {
       second = null;
     }
