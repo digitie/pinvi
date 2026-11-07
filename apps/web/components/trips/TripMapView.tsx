@@ -250,6 +250,8 @@ export function TripMapView({
 
   // flush = 여행 상세 지도 열. 데스크톱(lg)은 창 높이에 고정된 열을 그대로 채운다 — 고정 최소 높이가 남으면
   // 짧은 창에서 지도가 열 밖으로 넘쳐 아래쪽 핀이 fold 아래에 그려진다(#704).
+  // 지도·fallback·로딩 상자 공통 최소 높이 — flush는 lg에서 열 높이를 그대로 따른다.
+  const mapMinHeightClassName = chrome === 'flush' ? 'min-h-[360px] lg:min-h-0' : 'min-h-[360px]';
   const surfaceClassName =
     chrome === 'flush'
       ? 'relative h-full min-h-[420px] overflow-hidden bg-canvas lg:min-h-0'
@@ -734,9 +736,9 @@ export function TripMapView({
                 }
               : undefined
           }
-          fallback={(info) => <MapFallback info={info} />}
-          loadingSkeleton={<MapLoadingSkeleton />}
-          className={chrome === 'flush' ? 'h-full min-h-[360px] lg:min-h-0' : 'h-full min-h-[360px]'}
+          fallback={(info) => <MapFallback info={info} minHeightClassName={mapMinHeightClassName} />}
+          loadingSkeleton={<MapLoadingSkeleton minHeightClassName={mapMinHeightClassName} />}
+          className={`h-full ${mapMinHeightClassName}`}
           unsupportedTileFallback={{ label: 'VWorld tile' }}
         >
           <FeatureGeometryLayers state={geometry} />

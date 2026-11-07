@@ -16,6 +16,8 @@ export const MAP_FIT_PADDING = 64;
 /** 피할 영역(검색 입력 줄·패널) 아래와 핀 머리 사이 간격 — 입력 줄을 감싼 카드의 안쪽 여백·테두리(≈9px)를 넘는다. */
 export const OVERLAY_GAP = 24;
 const MAX_TOP_SHARE = 0.6;
+/** 맞춤 여백을 뺀 뒤 핀을 펼칠 최소 세로 폭(px). */
+export const MIN_FIT_SPAN = 120;
 
 export interface VerticalRect {
   top: number;
@@ -112,6 +114,16 @@ export function fitPaddingForOverlay(
     const clearance = Math.round(surface.bottom - bottomOverlay.top + OVERLAY_GAP);
     const cap = Math.max(MAP_FIT_PADDING, surface.height - padding.top - 1);
     padding.bottom = Math.max(MAP_FIT_PADDING, Math.min(clearance, cap));
+  }
+  if (surface.height - padding.top - padding.bottom < MIN_FIT_SPAN) {
+    // 오버레이를 피하는 여백이 지도 높이를 거의 다 먹으면(낮은 창·높은 상단 패널) 맞춤이 무너진다 —
+    // 위·아래는 기본 여백(지도가 아주 낮으면 그보다 작게)으로 돌아간다(#704 후속).
+    const fallback = Math.max(
+      0,
+      Math.min(MAP_FIT_PADDING, Math.floor((surface.height - MIN_FIT_SPAN) / 2)),
+    );
+    padding.top = fallback;
+    padding.bottom = fallback;
   }
   return padding;
 }

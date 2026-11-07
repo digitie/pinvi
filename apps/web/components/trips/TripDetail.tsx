@@ -1660,8 +1660,15 @@ export function TripDetail({ tripId }: TripDetailProps) {
               요소가 스크롤 상자의 잘라내기를 벗어나 창 높이로 고정한 문서를 다시 늘린다(#704). */}
           <div
             className={
-              mobileWebLayout ? 'min-h-0 flex-1 overflow-y-auto' : 'relative min-h-0 flex-1 overflow-y-auto'
+              mobileWebLayout
+                ? 'min-h-0 flex-1 overflow-y-auto'
+                : 'focus-ring relative min-h-0 flex-1 overflow-y-auto'
             }
+            // 데스크톱은 이 영역만 스크롤한다 — 키보드로도 스크롤할 수 있게 초점을 받는다.
+            tabIndex={mobileWebLayout ? undefined : 0}
+            role={mobileWebLayout ? undefined : 'region'}
+            aria-label={mobileWebLayout ? undefined : '여행 상세 내용'}
+            data-testid="trip-detail-panel-scroll"
           >
             {activePanel === 'plan' && (
               <div
@@ -1953,7 +1960,8 @@ export function TripDetail({ tripId }: TripDetailProps) {
           className={
             mobileWebLayout
               ? 'relative min-h-0 flex-1 bg-canvas'
-              : 'relative min-h-[calc(100svh-10rem)] flex-1 bg-canvas lg:h-full lg:min-h-0'
+              : // lg 바닥 280px — 창이 셸 바닥(560px)보다 낮고 상단 패널이 높아도 맞춤할 높이를 남긴다.
+                'relative min-h-[calc(100svh-10rem)] flex-1 bg-canvas lg:h-full lg:min-h-[280px]'
           }
           aria-label="여행 지도"
           data-testid="trip-detail-map"
