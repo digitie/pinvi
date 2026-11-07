@@ -1346,3 +1346,93 @@ test.describe('모바일 지도 오버레이', () => {
     await expectSearchNotCoveredByTransport(page);
   });
 });
+
+// #704 — 데스크톱 여행 지도는 창 높이 안에 있어야 한다. 왼쪽 패널 내용이 길면 셸이 자라 900px 창에서
+// 지도가 ~1590px가 되고 핀이 fold 아래에 그려졌다. 패널은 안에서 따로 스크롤한다.
+const LONG_PANEL_POIS = Array.from({ length: 30 }, (_, index) => ({
+  ...BASE_MARKER_POI,
+  poi_id: `44444444-4444-4444-8444-${String(500000000000 + index)}`,
+  feature_id: `feat-long-${index}`,
+  sort_order: String(100 + index).padStart(4, '0'),
+  title: `긴 목록 장소 ${index + 1}`,
+  // 남북으로 넓게 — 맞춤이 지도 높이 전체를 쓰게 해 아래쪽 핀이 fold 근처에 오게 한다.
+  feature: { coord: { lon: 126.5 + (index % 6) * 0.5, lat: 33.5 + index * 0.15 } },
+}));
+const LONG_PANEL_VIEW = {
+  ...TRIP_VIEW,
+  days: [{ ...BASE_MARKER_DAY, pois: LONG_PANEL_POIS }],
+};
+
+for (const viewport of [
+  { width: 1440, height: 900 },
+  { width: 1280, height: 720 },
+  // 짧은 노트북 창 — 헤더·상단 패널을 빼면 지도 열이 지도 최소 높이(420px)보다 작아진다.
+  { width: 1280, height: 600 },
+]) {
+  test.describe(`데스크톱 여행 지도 높이 ${viewport.width}x${viewport.height}`, () => {
+    test.use({ viewport });
+
+    test('지도는 창 안에 있고 왼쪽 패널만 따로 스크롤한다(#704)', async ({ page }) => {
+      await mockTripDetailRoutes(page, LONG_PANEL_VIEW);
+
+      await page.goto(`/trips/${tripId}`);
+
+      const map = page.getByTestId('trip-detail-map');
+      const panel = page.getByTestId('trip-detail-panel');
+      await expect(map).toBeVisible();
+      await expect(page.getByTestId('trip-poi-list')).toContainText('긴 목록 장소 30');
+
+      const mapBox = await map.boundingBox();
+      expect(mapBox).not.toBeNull();
+      expect(mapBox!.y).toBeGreaterThanOrEqual(0);
+      expect(mapBox!.y + mapBox!.height).toBeLessThanOrEqual(viewport.height + 1);
+      // 지도가 0으로 접히지 않는다 — 헤더·상단 패널을 뺀 높이를 거의 다 쓴다.
+      expect(mapBox!.height).toBeGreaterThan(viewport.height * 0.5);
+      // 지도 표면(maplibre 컨테이너)도 열 안에 있다 — 고정 최소 높이로 열 밖에 넘치지 않는다.
+      const surface = page.getByTestId('trip-map-surface');
+      if ((await surface.count()) > 0) {
+        const surfaceBox = await surface.boundingBox();
+        expect(surfaceBox!.y + surfaceBox!.height).toBeLessThanOrEqual(mapBox!.y + mapBox!.height + 1);
+      }
+
+      // 문서는 스크롤되지 않고, 길어진 패널 안쪽 영역이 스크롤된다.
+      const scroll = await page.evaluate(() => {
+        const root = document.scrollingElement!;
+        const panelEl = document.querySelector('[data-testid="trip-detail-panel"]')!;
+        const scroller = [panelEl, ...panelEl.querySelectorAll('*')].find((element) => {
+          const style = getComputedStyle(element);
+          return /(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight;
+        });
+        return {
+          documentOverflow: root.scrollHeight - window.innerHeight,
+          panelScrolls: scroller != null,
+        };
+      });
+      expect(scroll.documentOverflow).toBeLessThanOrEqual(1);
+      expect(scroll.panelScrolls).toBe(true);
+      const panelBox = await panel.boundingBox();
+      expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(viewport.height + 1);
+
+      if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1') return;
+      // 실지도: 맞춤 뒤 그려진 모든 핀(cluster 포함) 앵커가 보이는 지도 영역(= 창 안) 안에 있다.
+      // trip-map-marker-style은 숨은 범례라 위치가 없다 — 실제 maplibre 마커를 잰다.
+      const markers = page.locator('.maplibregl-marker');
+      await expect(markers.first()).toBeVisible({ timeout: 20_000 });
+      await expect
+        .poll(async () => {
+          const boxes = await markers.evaluateAll((elements) =>
+            elements.map((element) => element.getBoundingClientRect().toJSON() as DOMRect),
+          );
+          const visibleBottom = Math.min(mapBox!.y + mapBox!.height, viewport.height);
+          return boxes.filter(
+            (box) =>
+              box.left + box.width / 2 < mapBox!.x ||
+              box.left + box.width / 2 > mapBox!.x + mapBox!.width ||
+              box.bottom < mapBox!.y ||
+              box.bottom > visibleBottom,
+          ).length;
+        }, { timeout: 15_000 })
+        .toBe(0);
+    });
+  });
+}
