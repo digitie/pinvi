@@ -29,6 +29,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from tests.integration._disposable_pg import make_nondurable
+
 API_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -70,11 +72,13 @@ def _database_url() -> Iterator[str]:
     _require_docker()
     from testcontainers.postgres import PostgresContainer
 
-    container = PostgresContainer(
-        "postgis/postgis:18-3.6-alpine",
-        username="pinvi",
-        password="pinvi_test",
-        dbname="pinvi_test",
+    container = make_nondurable(
+        PostgresContainer(
+            "postgis/postgis:18-3.6-alpine",
+            username="pinvi",
+            password="pinvi_test",
+            dbname="pinvi_test",
+        )
     )
     container.start()
     try:
@@ -111,11 +115,13 @@ def _legacy_pg16_database_url() -> Iterator[str]:
     _require_docker()
     from testcontainers.postgres import PostgresContainer
 
-    container = PostgresContainer(
-        "postgis/postgis:16-3.5-alpine",
-        username="pinvi",
-        password="pinvi_test",
-        dbname="pinvi_test",
+    container = make_nondurable(
+        PostgresContainer(
+            "postgis/postgis:16-3.5-alpine",
+            username="pinvi",
+            password="pinvi_test",
+            dbname="pinvi_test",
+        )
     )
     container.start()
     try:

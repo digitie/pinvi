@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.integration._disposable_pg import make_nondurable
+
 ROOT = Path(__file__).resolve().parents[4]
 TOPOLOGY_SQL = ROOT / "scripts/m05_hotswap_topology.sql"
 TEST_PASSWORD = "m05-recovery-proof-test-only"
@@ -149,11 +151,13 @@ def test_trusted_recovery_rejects_authority_surface_drift() -> None:
     secdef_owner = f"m05_secdef_{suffix}"
     secdef_mid = f"m05_secdef_mid_{suffix}"
     helper_schema = f"m05_helper_{suffix}"
-    container = PostgresContainer(
-        "postgres:18-alpine",
-        username="m05_root",
-        password=TEST_PASSWORD,
-        dbname="m05_root",
+    container = make_nondurable(
+        PostgresContainer(
+            "postgres:18-alpine",
+            username="m05_root",
+            password=TEST_PASSWORD,
+            dbname="m05_root",
+        )
     )
     container.start()
     try:
