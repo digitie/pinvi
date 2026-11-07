@@ -50,7 +50,7 @@ class _Modern(_Legacy):
 
 
 def test_command_turns_off_every_durability_knob() -> None:
-    for knob in ("fsync=off", "synchronous_commit=off", "full_page_writes=off"):
+    for knob in ("fsync=off", "synchronous_commit=off", "full_page_writes=off", "max_wal_size="):
         assert f"-c {knob}" in NONDURABLE_COMMAND
 
 
@@ -66,9 +66,12 @@ def test_data_root_follows_the_image_major(image: str, path: str) -> None:
     assert data_root(image) == path
 
 
-def test_unknown_major_fails_instead_of_guessing() -> None:
-    with pytest.raises(ValueError):
-        data_root("postgres:latest")
+@pytest.mark.parametrize(
+    "image", ["postgres:latest", "postgis/postgis@sha256:4a43e3c3", "postgres"]
+)
+def test_unknown_major_fails_instead_of_guessing(image: str) -> None:
+    with pytest.raises(ValueError, match="major"):
+        data_root(image)
 
 
 def test_legacy_shape_gets_command_and_tmpfs_kwarg_without_losing_others() -> None:
@@ -94,18 +97,23 @@ def test_tmpfs_size_absent_is_default_and_malformed_fails() -> None:
             resolve_tmpfs_size({TMPFS_SIZE_ENV: bad})
 
 
+def _name(node: ast.Call) -> str | None:
+    """``f(...)``와 ``module.f(...)`` 둘 다 ``f``로."""
+    return getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+
+
 def _unwrapped_constructions(path: Path) -> list[int]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     wrapped: set[int] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "make_nondurable":
+        if isinstance(node, ast.Call) and _name(node) == "make_nondurable":
             for arg in node.args:
                 wrapped.update(id(inner) for inner in ast.walk(arg))
     return [
         node.lineno
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
-        and getattr(node.func, "id", None) == "PostgresContainer"
+        and _name(node) == "PostgresContainer"
         and id(node) not in wrapped
     ]
 

@@ -22,11 +22,13 @@ from typing import Any, Final
 
 NONDURABLE_COMMAND: Final = (
     "postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off"
+    # WAL도 tmpfs(=메모리)에 산다 — 기본 1GB까지 쌓이지 않게 묶는다.
+    " -c max_wal_size=256MB"
 )
 TMPFS_SIZE_ENV: Final = "PINVI_TEST_PG_TMPFS_SIZE"
 DEFAULT_TMPFS_SIZE: Final = "2g"
 _SIZE: Final = re.compile(r"[1-9][0-9]*[kmg]")
-_MAJOR: Final = re.compile(r":(\d+)")
+_MAJOR: Final = re.compile(r":(\d+)(?:[-.]|$)")
 
 
 def resolve_tmpfs_size(environ: Mapping[str, str] | None = None) -> str:
@@ -44,7 +46,8 @@ def resolve_tmpfs_size(environ: Mapping[str, str] | None = None) -> str:
 def data_root(image: str) -> str:
     """이미지의 데이터 ``VOLUME`` 경로. 태그에서 major를 못 읽으면 실패한다(조용히 틀린 자리를 덮지 않는다)."""
 
-    match = _MAJOR.search(image.rsplit("/", 1)[-1])
+    # digest(``@sha256:…``)는 major가 아니다 — 떼고 tag에서만 읽는다.
+    match = _MAJOR.search(image.split("@", 1)[0].rsplit("/", 1)[-1])
     if match is None:
         raise ValueError(f"cannot read the PostgreSQL major from image {image!r}")
     return "/var/lib/postgresql" if int(match.group(1)) >= 18 else "/var/lib/postgresql/data"
