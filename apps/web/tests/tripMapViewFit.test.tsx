@@ -145,6 +145,33 @@ afterEach(() => {
 });
 
 describe('TripMapView 맞춤 배선', () => {
+  it('낮은 지도에서도 맞춤·재맞춤·한 핀 flyTo가 검색 줄 clearance를 지킨다(#704 후속)', () => {
+    RECTS['fit-container'] = box(0, 0, 390, 300);
+    try {
+      h.transportVisible = true;
+      const map = fakeMap({ x: 72, y: 207 });
+      h.map = map;
+      const view = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+      // 1차·패널 재맞춤 모두: 위 여백은 60% 상한(180) 그대로, 아래 여백이 먼저 줄어든다.
+      expect(map.fitBounds).toHaveBeenCalledTimes(2);
+      for (const call of map.fitBounds.mock.calls) {
+        expect(call[1].padding.top).toBe(180);
+        expect(call[1].padding.bottom).toBeLessThan(64);
+        expect(300 - call[1].padding.top - call[1].padding.bottom).toBeGreaterThan(0);
+      }
+      view.unmount();
+
+      const single = fakeMap({ x: 500, y: 150 });
+      h.map = single;
+      h.transportVisible = false;
+      render(<TripMapView points={[POINTS[0]!]} transportLayers overlayTopLeft={overlay} />);
+      // 한 핀: 위·아래 차이의 절반만큼 내린다 — 0이면 핀이 검색 줄 밑 가운데에 남는다.
+      expect(single.flyTo.mock.calls[0]?.[0].offset[1]).toBeGreaterThan(40);
+    } finally {
+      RECTS['fit-container'] = box(0, 0, 390, 700);
+    }
+  });
+
   it('교통 패널 밑에 북쪽 핀이 들면 패널 아래까지 한 번 더 맞춘다', () => {
     h.transportVisible = true;
     const map = fakeMap({ x: 72, y: 207 });

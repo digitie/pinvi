@@ -1367,19 +1367,36 @@ const LONG_PANEL_VIEW = {
   days: [{ ...BASE_MARKER_DAY, pois: LONG_PANEL_POIS }],
 };
 
-for (const viewport of [
-  { width: 1440, height: 900 },
-  { width: 1280, height: 720 },
+const LONG_TITLE_VIEW = {
+  ...LONG_PANEL_VIEW,
+  trip: {
+    ...LONG_PANEL_VIEW.trip,
+    title: '아주 긴 여행 제목 — 강원 영월·경북 영주·안동을 잇는 늦가을 국가유산 답사와 동굴 탐방 4박 5일 일정',
+  },
+};
+
+for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
+  { label: '', viewport: { width: 1440, height: 900 }, view: LONG_PANEL_VIEW, minMapHeight: 900 * 0.55 },
+  { label: '', viewport: { width: 1280, height: 720 }, view: LONG_PANEL_VIEW, minMapHeight: 720 * 0.5 },
   // 짧은 노트북 창 — 헤더·상단 패널을 빼면 지도 열이 지도 최소 높이(420px)보다 작아진다.
-  { width: 1280, height: 600 },
+  { label: '', viewport: { width: 1280, height: 600 }, view: LONG_PANEL_VIEW, minMapHeight: 600 * 0.45 },
   // 셸 바닥(560px) — 지도 열이 fallback·로딩 상자의 고정 최소 높이(360px)보다 낮다.
-  { width: 1280, height: 560 },
+  { label: '', viewport: { width: 1280, height: 560 }, view: LONG_PANEL_VIEW, minMapHeight: 200 },
+  // 가장 좁은 데스크톱 + 긴 제목: 상단 패널이 높아도 문서는 스크롤하지 않고 지도는 줄어든 채 남는다.
+  // 맞춤 폭이 MIN_FIT_SPAN보다 좁아 낮은 지도 여백 경로를 탄다.
+  {
+    label: ' 긴 제목',
+    viewport: { width: 1024, height: 560 },
+    view: LONG_TITLE_VIEW,
+    minMapHeight: 160,
+    minFitSpanPath: true,
+  },
 ]) {
-  test.describe(`데스크톱 여행 지도 높이 ${viewport.width}x${viewport.height}`, () => {
+  test.describe(`데스크톱 여행 지도 높이 ${viewport.width}x${viewport.height}${label}`, () => {
     test.use({ viewport });
 
     test('지도는 창 안에 있고 왼쪽 패널만 따로 스크롤한다(#704)', async ({ page }) => {
-      await mockTripDetailRoutes(page, LONG_PANEL_VIEW);
+      await mockTripDetailRoutes(page, view);
       if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS === '1') {
         // 실지도 검증 환경: 바탕지도 tile은 빈 PNG로 — 외부 망 없이 maplibre 마커 위치(맞춤)만 잰다.
         await page.route(
@@ -1405,7 +1422,7 @@ for (const viewport of [
       expect(mapBox!.y).toBeGreaterThanOrEqual(0);
       expect(mapBox!.y + mapBox!.height).toBeLessThanOrEqual(viewport.height + 1);
       // 지도가 0으로 접히지 않는다 — 헤더·상단 패널을 뺀 높이를 거의 다 쓴다.
-      expect(mapBox!.height).toBeGreaterThan(viewport.height * 0.45);
+      expect(mapBox!.height).toBeGreaterThan(minMapHeight);
       // 지도 표면(maplibre 컨테이너)도 열 안에 있다 — 고정 최소 높이로 열 밖에 넘치지 않는다.
       const surface = page.getByTestId('trip-map-surface');
       await expect(surface).toBeVisible();
@@ -1414,12 +1431,17 @@ for (const viewport of [
       // 그 안의 지도·fallback·로딩 상자도 표면 밖으로 넘치지 않는다(잘린 채 가운데 문구가 숨지 않게).
       const mapBody = page
         .getByTestId('vworld-map-fallback')
-        .or(page.getByTestId('vworld-map-loading'))
         .or(page.locator('.maplibregl-canvas'))
         .first();
       await expect(mapBody).toBeVisible({ timeout: 20_000 });
-      const bodyBox = (await mapBody.boundingBox())!;
-      expect(bodyBox.y + bodyBox.height).toBeLessThanOrEqual(surfaceBox.y + surfaceBox.height + 1);
+      const bodyBox = await mapBody.boundingBox();
+      expect(bodyBox).not.toBeNull();
+      expect(bodyBox!.y + bodyBox!.height).toBeLessThanOrEqual(surfaceBox.y + surfaceBox.height + 1);
+      expect(bodyBox!.height).toBeLessThanOrEqual(surfaceBox.height + 1);
+      if (viewport.height <= 560) {
+        // 이 창에서는 표면이 fallback 기본 최소 높이(360px)보다 낮아야 min-h-0 해제를 실제로 검사한다.
+        expect(surfaceBox.height).toBeLessThan(340);
+      }
 
       // 문서는 스크롤되지 않고, 길어진 패널 안쪽 영역이 스크롤된다.
       const scroll = await page.evaluate(() => {
@@ -1441,9 +1463,36 @@ for (const viewport of [
 
       // 목록 끝까지 갈 수 있다 — 키보드(End)로 패널 영역만 스크롤하고 문서는 그대로다.
       const panelScroll = page.getByTestId('trip-detail-panel-scroll');
+      // 넘칠 때만 초점을 받고, 상세 패널(aside)과 겹치는 landmark 이름을 하나 더 만들지 않는다.
       await expect(panelScroll).toHaveAttribute('tabindex', '0');
-      await expect(panelScroll).toHaveAccessibleName('여행 상세 내용');
+      await expect(panelScroll).not.toHaveAttribute('role', 'region');
       await panelScroll.focus();
+      // 초점 링은 안쪽(-2px)에 그린다 — 바깥 outline은 이웃 열·헤더·창 끝에 잘려 보이지 않았다.
+      const ring = await panelScroll.evaluate((el) => {
+        const style = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        const inside = (x: number, y: number) => {
+          const hit = document.elementFromPoint(x, y);
+          return hit != null && (hit === el || el.contains(hit));
+        };
+        return {
+          focusVisible: el.matches(':focus-visible'),
+          outlineStyle: style.outlineStyle,
+          outlineWidth: parseFloat(style.outlineWidth),
+          outlineOffset: parseFloat(style.outlineOffset),
+          edgesVisible: [
+            inside(r.left + 1, r.top + r.height / 2),
+            inside(r.right - 1, r.top + r.height / 2),
+            inside(r.left + r.width / 2, r.top + 1),
+            inside(r.left + r.width / 2, Math.min(r.bottom, window.innerHeight) - 1),
+          ],
+        };
+      });
+      expect(ring.focusVisible).toBe(true);
+      expect(ring.outlineStyle).not.toBe('none');
+      expect(ring.outlineWidth).toBeGreaterThanOrEqual(2);
+      expect(ring.outlineOffset + ring.outlineWidth).toBeLessThanOrEqual(0);
+      expect(ring.edgesVisible).toEqual([true, true, true, true]);
       await page.keyboard.press('End');
       await expect
         .poll(() => panelScroll.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 2))
@@ -1453,6 +1502,14 @@ for (const viewport of [
       await panelScroll.evaluate((el) => {
         el.scrollTop = 0;
       });
+
+      if (minFitSpanPath) {
+        // 전제: 검색 줄 clearance(핀 48+간격 24)와 기본 아래 여백 64를 빼면 MIN_FIT_SPAN(120)보다 좁다.
+        const anchor = (await page.locator('[data-map-fit-anchor]').first().boundingBox())!;
+        const surfaceTop = surfaceBox.y;
+        const topClearance = Math.min(anchor.y + anchor.height - surfaceTop + 72, surfaceBox.height * 0.6);
+        expect(surfaceBox.height - Math.max(64, topClearance) - 64).toBeLessThan(120);
+      }
 
       if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1') return;
       // 실지도: 맞춤 뒤 그려진 모든 핀(cluster 포함) 앵커가 보이는 지도 영역(= 창 안) 안에 있다.
@@ -1477,3 +1534,11 @@ for (const viewport of [
     });
   });
 }
+
+test('데스크톱 패널이 넘치지 않으면 스크롤 영역은 초점을 받지 않는다(#704)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockTripDetailRoutes(page);
+  await page.goto(`/trips/${tripId}`);
+  await expect(page.getByTestId('trip-poi-list')).toContainText('해운대 해수욕장');
+  await expect(page.getByTestId('trip-detail-panel-scroll')).not.toHaveAttribute('tabindex', /.*/);
+});

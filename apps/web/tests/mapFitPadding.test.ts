@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAP_FIT_PADDING,
+  MIN_EDGE_PADDING,
   MIN_FIT_SPAN,
   OVERLAY_GAP,
   fitOverlayRect,
@@ -59,19 +60,50 @@ describe('fitPaddingForOverlay', () => {
     expect(padding.top).toBe(360);
   });
 
-  it('여백이 지도 높이를 거의 다 먹으면 위·아래는 기본 여백으로 돌아간다(낮은 데스크톱 창, #704 후속)', () => {
-    // 데스크톱 바닥 아래: 지도 ~220px, 검색 스택이 위 ~100px을 덮는다.
-    const padding = fitPaddingForOverlay(rect(0, 400), rect(0, 390), PIN_HEIGHT);
-    expect(400 - padding.top - padding.bottom).toBeGreaterThanOrEqual(MIN_FIT_SPAN);
-    expect(padding.top).toBe(MAP_FIT_PADDING);
-    expect(padding.bottom).toBe(MAP_FIT_PADDING);
-    const low = fitPaddingForOverlay(rect(300, 220), rect(312, 90), PIN_HEIGHT, rect(470, 36));
-    expect(220 - low.top - low.bottom).toBeGreaterThanOrEqual(MIN_FIT_SPAN - 1);
-    expect(low.top).toBeGreaterThanOrEqual(0);
-    // 지도가 기본 여백보다도 낮으면 여백을 줄여 양수 폭을 남긴다.
-    const tiny = fitPaddingForOverlay(rect(0, 200), rect(0, 150), PIN_HEIGHT);
-    expect(tiny.top).toBe(40);
-    expect(200 - tiny.top - tiny.bottom).toBe(MIN_FIT_SPAN);
+  describe('낮은 지도 — 맞춤 폭이 MIN_FIT_SPAN보다 좁을 때(#704 후속)', () => {
+    const span = (height: number, p: { top: number; bottom: number }) => height - p.top - p.bottom;
+
+    it('아래 여백부터 줄이고, 위 여백은 오버레이 clearance를 지킨다', () => {
+      // 데스크톱 낮은 창: 지도 240px, 검색 입력 줄 88~132px. clearance 204 → 60% 상한 144.
+      const padding = fitPaddingForOverlay(rect(0, 240), rect(88, 44), PIN_HEIGHT);
+      expect(padding.top).toBe(144);
+      expect(padding.bottom).toBe(MIN_EDGE_PADDING);
+      expect(span(240, padding)).toBeGreaterThan(0);
+    });
+
+    it('오버레이가 없으면 아래만 줄여 MIN_FIT_SPAN을 맞추고 위는 기본 여백을 지킨다', () => {
+      const padding = fitPaddingForOverlay(rect(0, 200), null, PIN_HEIGHT);
+      expect(padding.top).toBe(MAP_FIT_PADDING);
+      expect(padding.bottom).toBe(200 - MIN_FIT_SPAN - MAP_FIT_PADDING);
+      expect(span(200, padding)).toBe(MIN_FIT_SPAN);
+    });
+
+    it('임계 근처에서 위 여백이 튀지 않는다(연속)', () => {
+      const tops = [250, 249, 248, 240, 230].map(
+        (height) => fitPaddingForOverlay(rect(0, height), rect(88, 44), PIN_HEIGHT).top,
+      );
+      for (let i = 1; i < tops.length; i += 1) {
+        expect(Math.abs(tops[i]! - tops[i - 1]!)).toBeLessThanOrEqual(12);
+      }
+    });
+
+    it('아래 칩 clearance보다 위 오버레이 clearance를 먼저 지킨다', () => {
+      const padding = fitPaddingForOverlay(rect(300, 220), rect(312, 90), PIN_HEIGHT, rect(470, 36));
+      // clearance 174 → 60% 상한 132. 아래 칩 clearance 74는 8까지 줄어든다.
+      expect(padding.top).toBe(132);
+      expect(padding.bottom).toBe(MIN_EDGE_PADDING);
+    });
+
+    it('아주 낮은 지도도 위 여백은 핀 머리 높이 이상, 맞춤 폭은 양수', () => {
+      for (const height of [120, 100, 80, 72]) {
+        const padding = fitPaddingForOverlay(rect(0, height), rect(0, 30), PIN_HEIGHT);
+        expect(padding.top).toBeGreaterThanOrEqual(PIN_HEIGHT);
+        expect(span(height, padding)).toBeGreaterThan(0);
+      }
+      const tiny = fitPaddingForOverlay(rect(0, 200), rect(0, 150), PIN_HEIGHT);
+      expect(tiny.top).toBeGreaterThanOrEqual(PIN_HEIGHT);
+      expect(span(200, tiny)).toBeGreaterThan(0);
+    });
   });
 
   it('피할 영역은 검색 입력 줄 — 교통 패널·검색 결과 목록은 넣지 않는다(리뷰 #619)', () => {

@@ -718,7 +718,7 @@
   steps:
     - desktop 1440x900에서 /trips/{id} 진입(지도 조작 없이) → 핀 4개·타일 idle 대기
   expected:
-    - trip-detail-map 하단 ≤ 창 높이, 높이 > 창 높이 45%, 문서 스크롤 없음(scrollHeight − innerHeight ≤ 1)
+    - trip-detail-map 하단 ≤ 창 높이, 높이 > 창 높이 55%, 문서 스크롤 없음(scrollHeight − innerHeight ≤ 1)
     - trip-detail-panel 하단 ≤ 창 높이(패널은 안쪽에서 스크롤)
     - 각 .trip-map-marker의 머리·앵커가 지도 상자 안이고 앵커 y ≤ min(지도 하단, 창 높이)
   cleanup:
