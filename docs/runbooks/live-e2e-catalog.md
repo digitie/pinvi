@@ -381,7 +381,7 @@ scripts/n150-live-catalog.sh --head --area trs --project desktop --grep @p1
 `POST /pois` + 여행 재조회 정도라 기본값에서 계정당 분당 요청이 인증 사용자 rate limit(§5, `helpers/live.ts`) 아래에
 머문다. 429 가 보이면(annotation `rate-limit`) 스로틀을 올린다 — 재시도로 가리지 않는다(`retries: 0`).
 
-**예상 소요**: SMOKE_RUNTIME_PLACEHOLDER
+**예상 소요**: 2026-11-08 smoke(TRS-CG-003·CJ-003·GS-005·JT-001, 장소 31개, 체크 7종 전부) 4건 통과에 4.9분(setup·teardown 포함), 시나리오당 46~109 s, 장소당 약 7~9 s. 이 비율로 desktop 190건(장소 1,330개)은 약 3~3.5시간, 배치당 45~55분, mobile 19건은 20~25분이다. 결과: `~/pinvi-live-catalog-results/20261108-073519`.
 
 ### 10.2 실패 읽기
 
