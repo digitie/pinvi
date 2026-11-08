@@ -145,7 +145,7 @@ export function nextMarkersResponse(
   );
 }
 
-/** Toggle a chip and return the markers response it triggers (the hook fetches immediately on toggle). */
+/** Toggle a chip and return the markers response it triggers (the hook fetches once the map settles after the toggle, debounced; pinvi 686). */
 export async function toggleExpectingRequest(
   page: Page,
   layer: Layer,
