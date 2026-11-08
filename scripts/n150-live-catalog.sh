@@ -17,6 +17,7 @@ Options:
   --area <area>      trip | search | nearby | weather | share | poi | notify | admin | core | trs
                      (repeatable; default: all areas). `trs` = the 190 data-driven trip scenarios
                      (specs/trip-scenarios); batch them with --grep TRS-CG / TRS-CJ / TRS-GS / TRS-JT.
+                     They are opt-in: a run without `--area trs` never includes them.
   --throttle-ms <n>  Pause between trip scenarios (PINVI_E2E_TRS_TRIP_THROTTLE_MS, default 2000).
   --grep <regex>     Playwright --grep (case id such as 'TRIP-00[1-3]' or a title fragment)
   --list             List the selected cases and exit (no browser, no env file needed)
@@ -42,6 +43,7 @@ orig_args=("$@")
 projects=()
 areas=()
 grep_expr=""
+throttle_ms=""
 list_only="0"
 use_head="0"
 extra=()
@@ -52,7 +54,7 @@ while [[ $# -gt 0 ]]; do
     --grep) grep_expr="$2"; shift 2 ;;
     --throttle-ms)
       [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo "error: --throttle-ms needs a non-negative integer" >&2; exit 2; }
-      export PINVI_E2E_TRS_TRIP_THROTTLE_MS="$2"; shift 2 ;;
+      throttle_ms="$2"; shift 2 ;;
     --list) list_only="1"; shift ;;
     --head) use_head="1"; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -184,6 +186,17 @@ for a in "${areas[@]}"; do
 done
 if [[ ${#extra[@]} -gt 0 ]]; then
   pw_args+=("${extra[@]}")
+fi
+
+# Trip scenarios are opt-in (playwright.live-catalog.config.ts): only `--area trs` selects them.
+for a in "${areas[@]}"; do
+  if [[ "$a" == "trs" ]]; then
+    export PINVI_E2E_TRS=1
+  fi
+done
+# The flag wins over an env-file value.
+if [[ -n "$throttle_ms" ]]; then
+  export PINVI_E2E_TRS_TRIP_THROTTLE_MS="$throttle_ms"
 fi
 
 if [[ "$list_only" == "1" ]]; then

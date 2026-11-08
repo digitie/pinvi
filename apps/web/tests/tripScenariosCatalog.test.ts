@@ -29,9 +29,8 @@ describe('trip scenario catalog (e2e-live/catalog/trip-scenarios)', () => {
     expect(mobile).toBeLessThanOrEqual(0.12);
   });
 
-  it('picks Map features (Kakao/Naver ≤ 1 per scenario and ≤ 10% of scenarios)', () => {
-    const withExternal = all.filter((s) => s.places.some((p) => p.source !== 'feature')).length;
-    expect(withExternal / all.length).toBeLessThanOrEqual(0.1);
+  it('picks Map features only (no Kakao/Naver — they create residual suggestions on prod)', () => {
+    expect(all.flatMap((s) => s.places).every((p) => p.source === 'feature')).toBe(true);
   });
 
   it('mixes at least three place families per scenario', () => {
@@ -73,6 +72,7 @@ describe('trip scenario loader errors', () => {
     failsWith(ok.map((l) => l.replace('style: city', 'style: space')), /^x\.yaml:3: TRS-XX-001: style 'space'/);
     failsWith(ok.map((l) => l.replace('day: 2, query', 'day: 3, query')), /x\.yaml:10: .*outside 1\.\.2/);
     failsWith(ok.map((l) => l.replace('source: feature}', 'source: google}')), /source 'google'/);
+    failsWith(ok.map((l) => l.replace('source: feature}', 'source: kakao}')), /source 'kakao'/);
     failsWith(ok.map((l) => l.replace('weather_day: 1', 'optimize_day: 1')), /needs ≥ 2 places/);
     failsWith([...ok, '  bogus: 1'], /unknown scenario key 'bogus'/);
     failsWith(ok.map((l) => l.replace('"테스트"', '테스트')), /double-quoted/);

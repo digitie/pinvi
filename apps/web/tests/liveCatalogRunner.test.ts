@@ -41,4 +41,7 @@ it.skipIf(process.platform !== 'linux')('trs area는 trip-scenarios spec으로, 
   const mobile = list(['--area', 'trs', '--project', 'mobile']);
   expect(mobile.status, mobile.stderr).toBe(0);
   expect(mobile.stdout).toMatch(/Total: 19 tests/);
-}, 25_000);
+  // opt-in: without --area trs the scenarios are never selected
+  const plain = list(['--grep', 'TRS-CG-001', '--project', 'desktop']);
+  expect(plain.stdout).not.toContain('TRS-CG-001');
+}, 30_000);

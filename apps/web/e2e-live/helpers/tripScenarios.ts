@@ -13,7 +13,7 @@
  *     priority: P2                         # P1 | P2 | P3
  *     tags: [heritage, food, mobile]       # `mobile` = also runs on the mobile project
  *     places:                              # 1..6 per day, every day of the trip has ≥ 1 place
- *       - {day: 1, query: "…", expect_name_contains: "…", family: heritage, source: feature}
+ *       - {day: 1, query: "…", expect_name_contains: "…", family: heritage, source: feature}  # feature only
  *     checks:                              # or `checks: []`
  *       - optimize_day: 1                  # day-number checks: optimize_day reorder_day weather_day delete_day
  *       - date_shift: 1                    # shift the trip by N days (≠ 0)
@@ -34,7 +34,8 @@ export const FAMILIES = [
   'lodging', 'food', 'cafe', 'heritage', 'museum', 'park', 'beach', 'trail', 'festival', 'market', 'camping',
   'spa', 'leisure', 'transport', 'parking', 'rest_area', 'shopping', 'culture', 'nature', 'religious',
 ] as const;
-export const SOURCES = ['feature', 'kakao', 'naver'] as const;
+/** Map features only — Kakao/Naver picks auto-create residual feature suggestions on prod. */
+export const SOURCES = ['feature'] as const;
 export const DAY_CHECKS = ['optimize_day', 'reorder_day', 'weather_day', 'delete_day'] as const;
 export const FLAG_CHECKS = ['share_readonly', 'copy_trip'] as const;
 
@@ -276,8 +277,6 @@ function buildScenario(d: Draft, file: string): TripScenario {
     if (n === 0) where(d.line)(`day ${day} has no places`);
     if (n > MAX_PLACES_PER_DAY) where(d.line)(`day ${day} has ${n} places (max ${MAX_PLACES_PER_DAY})`);
   }
-  const external = places.filter((p) => p.source !== 'feature').length;
-  if (external > 1) where(d.line)(`${external} kakao/naver picks (max 1 per scenario — they auto-create feature suggestions)`);
 
   const checks: ScenarioCheck[] = d.checks.map(({ value, line }) => {
     const fail = where(line);

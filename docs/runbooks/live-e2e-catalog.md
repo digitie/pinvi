@@ -356,7 +356,9 @@ reorder(드래그, mobile 은 건너뜀) → weather(일자 날씨 섹션 렌더
 다이얼로그로 ±N일, 새로고침 후 값 확인) → delete_day(확인 후 일자·마커 감소) 순으로 돈다.
 여행·복사본은 `afterEach`에서 지우고 global setup/teardown 이 `[e2e]` 여행을 한 번 더 쓸어낸다.
 
-desktop 은 190건 전부, mobile 은 `tags`에 `mobile`이 있는 19건만(설정의 `grepInvert`) 돈다.
+**옵트인**: TRS 는 `--area trs`(러너가 `PINVI_E2E_TRS=1` 설정)일 때만 선택된다 — §1 의 전체 실행
+명령은 TRS 를 포함하지 않는다. desktop 은 190건 전부, mobile 은 `tags`에 `mobile`이 있는 19건만
+(설정의 `grepInvert`) 돈다. 장소 source 는 `feature` 만 허용한다(loader 가 kakao/naver 를 거부).
 P1 은 20건(10.5%). 테스트 이름에 tag `@trs`·`@trs-<cg|cj|gs|jt>`·`@p1|@p2`·(`@mobile`)이 붙는다.
 
 ### 10.1 권장 실행 — 지역별 4배치
@@ -379,7 +381,9 @@ scripts/n150-live-catalog.sh --head --area trs --project desktop --grep @p1
 **스로틀**: 시나리오 사이 `PINVI_E2E_TRS_TRIP_THROTTLE_MS`(기본 2000 ms, `--throttle-ms <n>`로 변경),
 장소 추가 사이 `PINVI_E2E_TRS_PLACE_THROTTLE_MS`(기본 300 ms, env 파일 키). 장소 하나가 검색 1회 +
 `POST /pois` + 여행 재조회 정도라 기본값에서 계정당 분당 요청이 인증 사용자 rate limit(§5, `helpers/live.ts`) 아래에
-머문다. 429 가 보이면(annotation `rate-limit`) 스로틀을 올린다 — 재시도로 가리지 않는다(`retries: 0`).
+머문다. `createTrip`·`deleteTrip`·공유 링크·로그인만 429 를 기다렸다 재시도(annotation `rate-limit`)하고,
+검색·`POST /pois`·optimize·reorder·편집의 429 는 그 시나리오를 바로 실패시킨다(`retries: 0`) — 실패
+메시지에 HTTP 429 가 보이면 스로틀을 올린다. `--throttle-ms` 는 env 파일 값보다 우선한다.
 
 **예상 소요**: 2026-11-08 smoke(TRS-CG-003·CJ-003·GS-005·JT-001, 장소 31개, 체크 7종 전부) 4건 통과에 4.9분(setup·teardown 포함), 시나리오당 46~109 s, 장소당 약 7~9 s. 이 비율로 desktop 190건(장소 1,330개)은 약 3~3.5시간, 배치당 45~55분, mobile 19건은 20~25분이다. 결과: `~/pinvi-live-catalog-results/20261108-073519`.
 

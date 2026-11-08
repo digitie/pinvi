@@ -75,13 +75,15 @@ const CHECK_ORDER: ScenarioCheck['kind'][] = [
   'delete_day',
 ];
 
-/** Name-based pick: a Map feature row (badge '장소', not Kakao/Naver) whose name line contains `want`. */
+/**
+ * Name-based pick: a Map feature row (badge '장소' on its own line, never Kakao/Naver/주소/내 여행) whose
+ * name line contains `expect_name_contains`. The loader only accepts `source: feature`.
+ */
 function pickByName(place: ScenarioPlace): (rowText: string) => boolean {
   return (rowText) => {
-    const nameLine = rowText.split('\n')[0] ?? '';
-    if (!nameLine.includes(place.expect_name_contains)) return false;
-    if (place.source === 'feature') return pickFeature(rowText);
-    return rowText.includes(place.source === 'kakao' ? '카카오' : '네이버 검색');
+    const lines = rowText.split('\n').map((l) => l.trim());
+    if (!(lines[0] ?? '').includes(place.expect_name_contains)) return false;
+    return lines.includes('장소') && pickFeature(rowText);
   };
 }
 
@@ -266,7 +268,8 @@ async function checkDateShift(page: Page, s: TripScenario, shift: number, tripId
 async function checkDeleteDay(page: Page, s: TripScenario, day: number): Promise<number> {
   const onDay = s.places.filter((p) => p.day === day).length;
   await selectDay(page, `${day}일차`);
-  await dayDeleteButton(page, day).click();
+  // desktop header + mobile drawer may both render the control; click the visible one.
+  await dayDeleteButton(page, day).filter({ visible: true }).first().click();
   const confirm = page.getByTestId('day-delete-confirm');
   await expect(confirm).toBeVisible();
   await expect(confirm).toContainText(`POI ${onDay}곳`);
