@@ -206,9 +206,17 @@ export function useTransportLayers({ active }: { active: boolean }) {
       else next.add(layer);
       enabledRef.current = next;
       setEnabled(next);
+      // 바로 조회하지 않고 지도가 멈출 때까지 기다린다 — 칩을 켜면 교통 패널이 자라 여행 지도가 다시
+      // 맞춰지는데(#619), 켠 순간의 bounds로 조회하면 요청 bbox가 맞춘 뒤의 실제 지도와 어긋난다
+      // (#686 NEAR-024 mobile). 맞춤의 moveend가 같은 디바운스를 다시 미루고, 조회는 그때의 bounds를 읽는다.
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      const map = mapRef.current;
-      if (map) void fetchNow(map, next);
+      // 진행 중인 이전 조회는 바로 끊는다(꺼 둔 레이어의 늦은 응답이 남지 않게).
+      abortRef.current?.abort();
+      if (!mapRef.current) return;
+      debounceRef.current = setTimeout(() => {
+        const map = mapRef.current;
+        if (map) void fetchNow(map, enabledRef.current);
+      }, DEBOUNCE_MS);
     },
     [fetchNow],
   );

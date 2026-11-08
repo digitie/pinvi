@@ -249,7 +249,7 @@ test.describe('NEAR trip map — four-place trip', () => {
   });
 
   /** #704: 지도·패널이 창 안, 문서 스크롤 없음, 맞춤 뒤 모든 핀이 지도·창 안. */
-  async function expectDesktopMapInWindow(page: Page) {
+  async function expectDesktopMapInWindow(page: Page, minMapShare: number) {
     await openTrip(page, tripId);
     await expect(tripMarkers(page)).toHaveCount(PLACES.length, { timeout: 30_000 });
     await waitForMapIdle(page);
@@ -258,7 +258,7 @@ test.describe('NEAR trip map — four-place trip', () => {
     // 900 px 창에서 지도가 ~1590 px로 자라 핀이 fold 아래에 그려졌다 — 지도는 창 안, 문서는 스크롤하지 않는다.
     expect(map.y).toBeGreaterThanOrEqual(0);
     expect(map.y + map.height, 'map bottom is inside the window').toBeLessThanOrEqual(viewport.height + 1);
-    expect(map.height).toBeGreaterThan(viewport.height * 0.45);
+    expect(map.height).toBeGreaterThan(viewport.height * minMapShare);
     const documentOverflow = await page.evaluate(() => document.scrollingElement!.scrollHeight - window.innerHeight);
     expect(documentOverflow, 'the page itself does not scroll').toBeLessThanOrEqual(1);
     const panel = (await page.getByTestId('trip-detail-panel').boundingBox())!;
@@ -279,13 +279,13 @@ test.describe('NEAR trip map — four-place trip', () => {
     test.skip(({ isMobile }) => isMobile, 'desktop project only (1440x900)');
 
     test('NEAR-042 the desktop trip map stays inside the window and every fitted pin is on screen (#704)', async ({ page }) => {
-      await expectDesktopMapInWindow(page);
+      await expectDesktopMapInWindow(page, 0.55);
       await shot(page, 'NEAR-042', 'desktop-map-in-window');
     });
 
     test('NEAR-043 on a short 1280x600 desktop window the pins stay above the fold and the page does not scroll (#704)', async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 600 });
-      await expectDesktopMapInWindow(page);
+      await expectDesktopMapInWindow(page, 0.45);
       await shot(page, 'NEAR-043', 'short-desktop-map-in-window');
     });
   });
