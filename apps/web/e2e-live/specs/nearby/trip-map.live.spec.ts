@@ -28,6 +28,7 @@ import {
 } from '../../helpers/live';
 import {
   LAYER_LABEL,
+  MARKERS_RE,
   TransportRecorder,
   ZOOM_IN_TEXT,
   boxesOverlap,
@@ -158,8 +159,46 @@ test.describe('NEAR trip map — four-place trip', () => {
     const map=await renderedMap(page);
     await waitForCamera(map);
     expect(expectedCoords).toHaveLength(4);
-    const res = await toggleExpectingRequest(page, 'highway_incident');
+    // 결과가 오면 교통 패널이 자라(모바일은 사건 목록이 지도 가운데 열을 덮는다) #619 재맞춤이 지도를 옮기고,
+    // 그 moveend가 같은 레이어를 새 bbox로 다시 조회한다(운영 mobile 2026-11-08: 첫 요청 z8.196 bbox →
+    // 패널 214~615px로 성장 → 재맞춤 z8.118 → 두 번째 요청). 첫 응답이 아니라, 지도가 멈춘 뒤 마지막
+    // 요청이 실제 지도 viewport와 맞는지 본다 — 마지막 요청이 끝내 맞지 않으면 그것이 제품 결함이다.
+    const responses: Response[] = [];
+    const record = (r: Response) => {
+      if (MARKERS_RE.test(r.url()) && r.request().method() === 'GET' && r.ok() &&
+          markersQuery(r).layers.includes('highway_incident')) responses.push(r);
+    };
+    page.on('response', record);
+    let res: Response;
+    try {
+      res = await toggleExpectingRequest(page, 'highway_incident');
+      // 맞는 상태가 1.5초(디바운스 250ms·패널 성장·재맞춤보다 길게) 그대로일 때만 멈춘 것으로 본다.
+      const settled = async () => {
+        await waitForCamera(map);
+        const native = await map.evaluate((m) => {
+          const b = m.getBounds();
+          return m.isMoving() ? null : [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+        });
+        const last = responses.at(-1) ?? res;
+        const lastQuery = markersQuery(last);
+        const ok = native != null && viewportBboxMatches(lastQuery.bbox, native, lastQuery.zoom);
+        return { ok, key: `${responses.length}:${native?.join(',')}` };
+      };
+      const deadline = Date.now() + 20_000;
+      let stable = false;
+      while (!stable && Date.now() < deadline) {
+        const before = await settled();
+        await page.waitForTimeout(1_500);
+        const after = await settled();
+        stable = before.ok && after.ok && before.key === after.key;
+      }
+      expect(stable, 'after the map settles, the last markers request matches the native viewport').toBe(true);
+      res = responses.at(-1) ?? res;
+    } finally {
+      page.off('response', record);
+    }
     const q = markersQuery(res);
+    test.info().annotations.push({ type: 'markers-requests', description: String(responses.length) });
     for(const coord of expectedCoords){
       expect(q.bbox[0]).toBeLessThanOrEqual(coord.lon);
       expect(q.bbox[2]).toBeGreaterThanOrEqual(coord.lon);
