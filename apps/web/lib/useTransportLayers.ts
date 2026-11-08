@@ -206,9 +206,9 @@ export function useTransportLayers({ active }: { active: boolean }) {
       else next.add(layer);
       enabledRef.current = next;
       setEnabled(next);
-      // 바로 조회하지 않고 지도가 멈출 때까지 기다린다 — 칩을 켜면 교통 패널이 자라 여행 지도가 다시
-      // 맞춰지는데(#619), 켠 순간의 bounds로 조회하면 요청 bbox가 맞춘 뒤의 실제 지도와 어긋난다
-      // (#686 NEAR-024 mobile). 맞춤의 moveend가 같은 디바운스를 다시 미루고, 조회는 그때의 bounds를 읽는다.
+      // 바로 조회하지 않고 지도가 멈출 때까지 기다린다 — 조회는 그때의 bounds를 읽고, 그 사이 지도 이동의
+      // moveend는 같은 디바운스를 다시 미룬다. 결과가 와서 교통 패널이 자라면(#619 재맞춤) 지도가 옮겨지고
+      // moveend가 새 bounds로 한 번 더 조회한다(#686 운영 진단 2026-11-08).
       if (debounceRef.current) clearTimeout(debounceRef.current);
       // 진행 중인 이전 조회는 바로 끊는다(꺼 둔 레이어의 늦은 응답이 남지 않게).
       abortRef.current?.abort();

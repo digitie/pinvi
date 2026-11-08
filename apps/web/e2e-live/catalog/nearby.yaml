@@ -421,13 +421,13 @@
   steps:
     - /trips/{id} → 네 핀이 그려지고 지도가 멈출 때까지 대기 → '교통 돌발' → '휴게소'
   expected:
-    - 요청 bbox와 네이티브 지도 bounds가 실제 생성한 4개 POI 좌표를 모두 포함하고, 서울시청(126.978,37.5665)은 포함하지 않음
+    - 지도가 멈춘 뒤(맞는 상태 1.5초 유지) 마지막 '교통 돌발' 요청 bbox가 네이티브 지도 viewport와 같고(한국 clamp·저줌 양자화만 허용), 실제 생성한 4개 POI 좌표를 모두 포함하며 서울시청(126.978,37.5665)은 포함하지 않음
     - 휴게소 ok면 'N곳' N>0(중앙고속도로)
   cleanup:
     - afterAll 여행 삭제
   automation: scripted
   spec: specs/nearby/trip-map.live.spec.ts#NEAR-024
-  notes: '#674. 현재 검색 응답의 좌표 있는 정확 일치 Map 행을 선택한다. 고정 지역 사각형을 POI 좌표로 가정하지 않는다. #686 — 데스크톱 지도 컨테이너가 일정 패널과 함께 자라는데 maplibre transform이 rAF resize 전이라 fitBounds가 cannot fit으로 무시돼 기본 시점(127.5,36.5 z7)에 남던 제품 결함을 고쳤다(맞춤 전 resize).'
+  notes: '#674. 현재 검색 응답의 좌표 있는 정확 일치 Map 행을 선택한다. 고정 지역 사각형을 POI 좌표로 가정하지 않는다. #686 — 데스크톱 지도 컨테이너가 일정 패널과 함께 자라는데 maplibre transform이 rAF resize 전이라 fitBounds가 cannot fit으로 무시돼 기본 시점(127.5,36.5 z7)에 남던 제품 결함을 고쳤다(맞춤 전 resize). #686 mobile — 결과가 오면 교통 패널(사건 목록)이 자라 #619 재맞춤이 지도를 옮기고 같은 레이어를 새 bbox로 다시 조회한다(운영 2026-11-08 진단: z8.196 첫 요청 → 패널 214~615px → z8.118 두 번째 요청). 첫 응답이 아니라 멈춘 뒤 마지막 요청을 단언한다.'
 
 - id: NEAR-025
   title: POI 핀 선택 → flyTo → 켜 둔 레이어 재조회(같은 zoom, 북쪽으로 이동한 bbox)

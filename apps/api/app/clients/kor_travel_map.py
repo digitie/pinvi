@@ -16,6 +16,7 @@ in-process import(`from kor_travel_map.map import ...`)를 쓰지 않는다.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import math
@@ -47,7 +48,18 @@ KEEPALIVE_EXPIRY_SECONDS: float = 3.0
 
 #: 회로 범위. 한 표면의 실패가 다른 표면을 끊지 않는다(#702 — 전국 viewport timeout이 검색·상세·trip
 #: batch까지 120초 503으로 만들었다). weather 표면은 자체 회로(``kor_travel_map_weather``)만 쓴다.
-CircuitScope = Literal["features", "viewport", "transport"]
+#: ``festivals``: 공개 월별 축제 목록 — 첫 조회 월의 느린 응답이 검색·상세를 끊지 않게(#714).
+CircuitScope = Literal["features", "viewport", "transport", "festivals"]
+
+#: 공개 월별 축제 목록의 read 예산(초). Map이 처음 조회하는 월은 기본 5초를 넘었다(#714 운영 2026-11-08:
+#: 1·2월 5.9~6.2초 뒤 ReadTimeout, 직후 같은 월은 0.02~0.33초). 연결 예산은 기본값 그대로다.
+FESTIVALS_MONTHLY_READ_TIMEOUT_SECONDS: float = 15.0
+#: 성공한 월별 목록을 이 시간(초) 동안 재사용한다 — 공개 화면의 같은 질의가 Map을 다시 깨우지 않게.
+FESTIVALS_MONTHLY_CACHE_TTL_SECONDS: float = 300.0
+_FESTIVALS_MONTHLY_CACHE_MAX = 128
+#: 축제 월별 목록이 동시에 쓰는 Map 호출 자리 상한 — 공용 상한(16)의 일부만, 넘치면 바로 503(대기열 없음).
+#: 연·월 없이 부르면 Map이 이번 달을 고르므로 월이 바뀐 직후 최대 TTL만큼 지난달 목록이 나올 수 있다(허용).
+FESTIVALS_MAX_CONCURRENT_REQUESTS = 4
 
 #: 백오프로 다시 보내는 오류 — 연결 자체가 맺어지지 않아 요청이 Map 처리에 닿지 않았다. ``ReadTimeout``·
 #: ``ReadError``는 Map이 요청을 받아 처리 중이었거나 처리 도중 끊겼다는 뜻이라 다시 보내면 같은 무거운 질의를
@@ -352,6 +364,12 @@ def _decode_feature_batch_item(raw: object) -> FeatureBatchItem:
     return UnchangedFeatureBatchItem(feature_id=feature_id, row_revision=row_revision)
 
 
+def _current_task_cancelling() -> bool:
+    """지금 task 자체가 취소 요청을 받았는가(shield 안쪽 취소와 구분)."""
+    current = asyncio.current_task()
+    return current is not None and current.cancelling() > 0
+
+
 class KorTravelMapClient:
     """kor-travel-map user-facing OpenAPI(`openapi.user.json`) HTTP client."""
 
@@ -383,9 +401,23 @@ class KorTravelMapClient:
             "features": TransportCircuit(clock=clock),
             "viewport": TransportCircuit(clock=clock),
             "transport": TransportCircuit(clock=clock),
+            "festivals": TransportCircuit(clock=clock),
         }
+        self._clock = clock
+        self._festivals_monthly_cache: dict[
+            tuple[tuple[str, Any], ...], tuple[float, dict[str, Any]]
+        ] = {}
+        self._festivals_monthly_inflight: dict[
+            tuple[tuple[str, Any], ...], asyncio.Task[dict[str, Any]]
+        ] = {}
+        self._festivals_slots = asyncio.Semaphore(FESTIVALS_MAX_CONCURRENT_REQUESTS)
 
     async def aclose(self) -> None:
+        # 분리된 축제 조회 task가 닫힌 http client를 쓰지 않게 먼저 끝낸다.
+        tasks = list(self._festivals_monthly_inflight.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         await self._http.aclose()
 
     @property
@@ -941,12 +973,89 @@ class KorTravelMapClient:
         ):
             if value is not None:
                 params[key] = value
+        cache_key = tuple(sorted(params.items()))
+        cached = self._festivals_monthly_cache.get(cache_key)
+        if cached is not None and self._clock() - cached[0] < FESTIVALS_MONTHLY_CACHE_TTL_SECONDS:
+            return copy.deepcopy(cached[1])
+        # 같은 첫 조회 월에 동시에 몰린 요청은 Map에 한 번만 보낸다(single-flight). 조회는 분리된 task라
+        # 한 호출자가 취소돼도(연결 끊김·종료) 다른 호출자와 캐시 채우기는 계속된다.
+        task = self._festivals_monthly_inflight.get(cache_key)
+        if task is None:
+            # 서로 다른 첫 조회 월이 몰려도 공용 동시 호출 자리(검색·상세와 공유)를 다 쓰지 않게 따로 묶는다.
+            # locked 검사와 acquire 사이에는 suspension이 없다(semaphore fast path).
+            if self._festivals_slots.locked():
+                raise KorTravelMapUnavailable(
+                    "kor-travel-map 축제 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
+                )
+            await self._festivals_slots.acquire()
+            try:
+                task = asyncio.create_task(
+                    self._fetch_and_cache_festivals_monthly(cache_key, params)
+                )
+            except BaseException:
+                self._festivals_slots.release()
+                raise
+            self._festivals_monthly_inflight[cache_key] = task
+            # 정리는 done-callback에서 — 시작 전에 취소된 task는 coroutine의 finally가 돌지 않는다.
+            task.add_done_callback(lambda done: self._finish_festivals_monthly(cache_key, done))
+        try:
+            page = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # 이 호출자가 취소된 것이 아니라 공유 조회가 취소됐다(client 종료) — 503으로 바꾼다.
+            if task.cancelled() and not _current_task_cancelling():
+                raise KorTravelMapUnavailable(
+                    "kor-travel-map 축제 조회 취소됨(종료 중)", code="SHUTTING_DOWN"
+                ) from None
+            raise
+        except KorTravelMapUnavailable as exc:
+            # 기다린 호출자마다 새 예외 — 같은 예외 객체에 traceback이 쌓이지 않게.
+            raise KorTravelMapUnavailable(
+                str(exc),
+                code=exc.code,
+                details=exc.details,
+                retry_after_seconds=exc.retry_after_seconds,
+                status_code=exc.status_code,
+                error_class=exc.error_class,
+            ) from exc
+        return copy.deepcopy(page)
+
+    async def _fetch_and_cache_festivals_monthly(
+        self, cache_key: tuple[tuple[str, Any], ...], params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """single-flight 조회 본체 — 성공만 캐시한다. 반환값은 캐시 사본이다(호출자는 다시 복사한다)."""
+        page = await self._fetch_public_festivals_monthly(params)
+        cache = self._festivals_monthly_cache
+        cache.pop(cache_key, None)
+        cache[cache_key] = (self._clock(), copy.deepcopy(page))
+        while len(cache) > _FESTIVALS_MONTHLY_CACHE_MAX:
+            cache.pop(next(iter(cache)))
+        return cache[cache_key][1]
+
+    def _finish_festivals_monthly(
+        self, cache_key: tuple[tuple[str, Any], ...], task: asyncio.Task[dict[str, Any]]
+    ) -> None:
+        """조회 task가 어떻게 끝나든(시작 전 취소 포함) 자리를 한 번 놓고 in-flight에서 뺀다."""
+        self._festivals_slots.release()
+        if self._festivals_monthly_inflight.get(cache_key) is task:
+            del self._festivals_monthly_inflight[cache_key]
+        if not task.cancelled():
+            task.exception()
+
+    async def _fetch_public_festivals_monthly(self, params: dict[str, Any]) -> dict[str, Any]:
+        default = self._http.timeout
         data, meta = self._payload(
             await self._send(
                 "GET",
                 "/v1/public/festivals/monthly",
                 params=params,
                 allow_public_api_key=True,
+                circuit="festivals",
+                request_timeout=httpx.Timeout(
+                    connect=default.connect,
+                    read=FESTIVALS_MONTHLY_READ_TIMEOUT_SECONDS,
+                    write=default.write,
+                    pool=default.pool,
+                ),
             )
         )
         return self._thread_page(data, meta)
