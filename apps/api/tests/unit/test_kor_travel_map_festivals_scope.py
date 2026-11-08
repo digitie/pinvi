@@ -276,10 +276,13 @@ async def test_fetch_finishes_and_caches_even_if_every_caller_is_cancelled() -> 
     for call in calls:
         call.cancel()
     await asyncio.gather(*calls, return_exceptions=True)
+    fetches = list(client._festivals_monthly_inflight.values())
+    assert len(fetches) == 1
     release.set()
     async with asyncio.timeout(2):
-        while client._festivals_monthly_inflight:
-            await asyncio.sleep(0)
+        await asyncio.gather(*fetches)
+    await asyncio.sleep(0)  # done-callback(정리)이 한 tick 뒤에 돈다.
+    assert client._festivals_monthly_inflight == {}
     await client.public_festivals_monthly(year=2026, month=9)
     assert sent == 1
     await client.aclose()
