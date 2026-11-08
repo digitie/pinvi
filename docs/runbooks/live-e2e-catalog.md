@@ -393,6 +393,10 @@ scripts/n150-live-catalog.sh --head --area trs --project desktop --grep @p1
   2026-11-08 검증 때는 모든 장소가 상위 3위 안이었다. 장소를 바꿀 때는 같은 방식(테스트 계정
   `GET /search`, 읽기 전용)으로 다시 검증하고 YAML 을 고친다.
 - `map pins` 불일치 — 좌표 없는 feature 가 행으로는 추가됐거나 마커 렌더 회귀.
+- `POST /trips` 등 `waitForResponse: Timeout 30000ms` — 2026-11-08 n150 PSI io avg300 39% 때 한 번 나왔고 재실행은
+  통과했다. 배치는 `~/preflight.sh` PASS(PSI ≤ 20%)일 때 시작한다.
+- optimize: UI '순서 변경 N곳'은 정렬 키 재작성 수라 순서가 그대로여도 N>0 이다(`services/trip.py`
+  `optimize_trip_day`). 스펙은 미리보기 응답 `ordered_poi_ids` 순서와 적용 후(새로고침) 순서를 비교한다.
 - 데이터 공백(브랜드 호텔·역·터미널·좌표 없는 축제 등)은 시나리오에 넣지 않았다 —
   kor-travel-map 의 데이터 공백 이슈(label `e2e-catalog`)가 추적한다.
 
