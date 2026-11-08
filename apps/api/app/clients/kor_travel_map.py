@@ -16,6 +16,7 @@ in-process import(`from kor_travel_map.map import ...`)를 쓰지 않는다.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import math
@@ -47,7 +48,15 @@ KEEPALIVE_EXPIRY_SECONDS: float = 3.0
 
 #: 회로 범위. 한 표면의 실패가 다른 표면을 끊지 않는다(#702 — 전국 viewport timeout이 검색·상세·trip
 #: batch까지 120초 503으로 만들었다). weather 표면은 자체 회로(``kor_travel_map_weather``)만 쓴다.
-CircuitScope = Literal["features", "viewport", "transport"]
+#: ``festivals``: 공개 월별 축제 목록 — 첫 조회 월의 느린 응답이 검색·상세를 끊지 않게(#714).
+CircuitScope = Literal["features", "viewport", "transport", "festivals"]
+
+#: 공개 월별 축제 목록의 read 예산(초). Map이 처음 조회하는 월은 기본 5초를 넘었다(#714 운영 2026-11-08:
+#: 1·2월 5.9~6.2초 뒤 ReadTimeout, 직후 같은 월은 0.02~0.33초). 연결 예산은 기본값 그대로다.
+FESTIVALS_MONTHLY_READ_TIMEOUT_SECONDS: float = 15.0
+#: 성공한 월별 목록을 이 시간(초) 동안 재사용한다 — 공개 화면의 같은 질의가 Map을 다시 깨우지 않게.
+FESTIVALS_MONTHLY_CACHE_TTL_SECONDS: float = 300.0
+_FESTIVALS_MONTHLY_CACHE_MAX = 128
 
 #: 백오프로 다시 보내는 오류 — 연결 자체가 맺어지지 않아 요청이 Map 처리에 닿지 않았다. ``ReadTimeout``·
 #: ``ReadError``는 Map이 요청을 받아 처리 중이었거나 처리 도중 끊겼다는 뜻이라 다시 보내면 같은 무거운 질의를
@@ -383,7 +392,12 @@ class KorTravelMapClient:
             "features": TransportCircuit(clock=clock),
             "viewport": TransportCircuit(clock=clock),
             "transport": TransportCircuit(clock=clock),
+            "festivals": TransportCircuit(clock=clock),
         }
+        self._clock = clock
+        self._festivals_monthly_cache: dict[
+            tuple[tuple[str, Any], ...], tuple[float, dict[str, Any]]
+        ] = {}
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -941,15 +955,34 @@ class KorTravelMapClient:
         ):
             if value is not None:
                 params[key] = value
+        key = tuple(sorted(params.items()))
+        now = self._clock()
+        cached = self._festivals_monthly_cache.get(key)
+        if cached is not None and now - cached[0] < FESTIVALS_MONTHLY_CACHE_TTL_SECONDS:
+            return copy.deepcopy(cached[1])
+        default = self._http.timeout
         data, meta = self._payload(
             await self._send(
                 "GET",
                 "/v1/public/festivals/monthly",
                 params=params,
                 allow_public_api_key=True,
+                circuit="festivals",
+                request_timeout=httpx.Timeout(
+                    connect=default.connect,
+                    read=FESTIVALS_MONTHLY_READ_TIMEOUT_SECONDS,
+                    write=default.write,
+                    pool=default.pool,
+                ),
             )
         )
-        return self._thread_page(data, meta)
+        page = self._thread_page(data, meta)
+        cache = self._festivals_monthly_cache
+        cache.pop(key, None)
+        cache[key] = (now, copy.deepcopy(page))
+        while len(cache) > _FESTIVALS_MONTHLY_CACHE_MAX:
+            cache.pop(next(iter(cache)))
+        return page
 
     async def public_festival_markers(
         self,
