@@ -179,9 +179,13 @@ test.describe('NEAR trip map — four-place trip', () => {
           const b = m.getBounds();
           return m.isMoving() ? null : [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
         });
-        const last = responses.at(-1) ?? res;
-        const lastQuery = markersQuery(last);
-        const ok = native != null && viewportBboxMatches(lastQuery.bbox, native, lastQuery.zoom);
+        // 마지막 응답, 또는 (재맞춤이 앞 viewport로 돌아가 60초 캐시가 네트워크 없이 답한 경우) 앞서 받은
+        // 같은 viewport의 응답과 맞아야 한다.
+        const candidates = responses.length > 0 ? [...responses].reverse() : [res];
+        const ok = native != null && candidates.some((r) => {
+          const query = markersQuery(r);
+          return viewportBboxMatches(query.bbox, native, query.zoom);
+        });
         return { ok, key: `${responses.length}:${native?.join(',')}` };
       };
       const deadline = Date.now() + 20_000;
@@ -193,7 +197,16 @@ test.describe('NEAR trip map — four-place trip', () => {
         stable = before.ok && after.ok && before.key === after.key;
       }
       expect(stable, 'after the map settles, the last markers request matches the native viewport').toBe(true);
-      res = responses.at(-1) ?? res;
+      // 재맞춤·재조회가 끝없이 이어지지 않는다(토글 1회 + 결과로 인한 재맞춤 1~2회).
+      expect(responses.length).toBeLessThanOrEqual(3);
+      const native = await map.evaluate((m) => {
+        const b = m.getBounds();
+        return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+      });
+      res = [...responses].reverse().find((r) => {
+        const query = markersQuery(r);
+        return viewportBboxMatches(query.bbox, native, query.zoom);
+      }) ?? res;
     } finally {
       page.off('response', record);
     }
@@ -221,7 +234,14 @@ test.describe('NEAR trip map — four-place trip', () => {
     // 네 좌표가 포함돼도 지나치게 축소한 전국 보기는 실패한다. 고정 카탈로그 화면에서
     // 여행의 투영 범위가 한 축에서 지도 1/4 이상을 사용해야 한다.
     expect(Math.max(viewport.spanX / viewport.width, viewport.spanY / viewport.height)).toBeGreaterThan(0.25);
-    const panel = (await controls(page).boundingBox())!;
+    // 맞춤이 피하는 것은 교통 패널의 상시 부분이다 — 펼쳐지는 사건 목록([data-map-fit-transient])은 제품
+    // 설계상 맞춤 여백에서 뺀다(lib/mapFitPadding.ts fitPanelRect, #619 리뷰). 모바일에서 그 목록이 지도 가운데를
+    // 덮는 UX는 #712에서 다룬다.
+    const panelFull = (await controls(page).boundingBox())!;
+    const transient = controls(page).locator('[data-map-fit-transient]');
+    const transientTop = (await transient.count()) > 0 ? (await transient.first().boundingBox())?.y : undefined;
+    const panel = transientTop == null ? panelFull
+      : { ...panelFull, height: Math.max(0, Math.min(panelFull.height, transientTop - panelFull.y)) };
     const stats = (await page.getByTestId('trip-map-stats').boundingBox())!;
     for (const marker of await tripMarkers(page).all()) {
       const box = (await marker.boundingBox())!;
