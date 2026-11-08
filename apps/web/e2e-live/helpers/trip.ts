@@ -94,8 +94,21 @@ export function mapStats(page: Page): Locator {
 
 /** HTML5 drag of POI row `from` onto row `to` (TripPoiList.tsx `draggable` li + onDrop). */
 export async function dragPoi(page: Page, from: number, to: number): Promise<void> {
+  // HTML5 drag events go straight to the source/target rows. `locator.dragTo` presses the mouse on the
+  // source and then scrolls the target into view; in the scrollable plan panel (#705) the scroll moves a
+  // different row under the pointer before `dragstart`, so a long list dragged row 1 instead of the last
+  // one (TRS 2026-11-08: '공화춘↔짜장면박물관' swapped, reorder 200).
   const rows = poiRows(page);
-  await rows.nth(from).dragTo(rows.nth(to));
+  const source = rows.nth(from);
+  const target = rows.nth(to);
+  await source.scrollIntoViewIfNeeded();
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  await source.dispatchEvent('dragstart', { dataTransfer });
+  await target.scrollIntoViewIfNeeded();
+  await target.dispatchEvent('dragover', { dataTransfer });
+  await target.dispatchEvent('drop', { dataTransfer });
+  await source.dispatchEvent('dragend', { dataTransfer });
+  await dataTransfer.dispose();
 }
 
 /** Opens the inline PoiEditor for row `index` and sets the 메모 field. */
