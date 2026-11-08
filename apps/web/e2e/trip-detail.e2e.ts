@@ -1440,7 +1440,7 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
       expect(bodyBox!.height).toBeLessThanOrEqual(surfaceBox.height + 1);
       if (viewport.height <= 560) {
         // 이 창에서는 표면이 fallback 기본 최소 높이(360px)보다 낮아야 min-h-0 해제를 실제로 검사한다.
-        expect(surfaceBox.height).toBeLessThan(340);
+        expect(surfaceBox.height).toBeLessThan(360);
       }
 
       // 문서는 스크롤되지 않고, 길어진 패널 안쪽 영역이 스크롤된다.

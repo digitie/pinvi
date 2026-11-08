@@ -15,6 +15,7 @@ import { expect, type Locator, type Page, type Response } from '@playwright/test
 import { runSearch, searchRows } from './search';
 import { renderedMap, waitForCamera } from './geometry';
 import { coordinateFixtureIndex } from './searchFixture';
+import { dismissFeaturePopup } from './live';
 
 export const LAYERS = ['fuel_station', 'rest_area', 'highway_incident', 'airport'] as const;
 export type Layer = (typeof LAYERS)[number];
@@ -326,6 +327,9 @@ export async function clickTransportMarker(
  */
 export async function openTransportNear(page: Page, layer: Layer, query: string): Promise<string> {
   await searchAndFly(page, query);
+  // #709: 검색 결과(같은 이름의 Map 장소)를 고르면 그 장소가 선택돼 popup과 함께 맨 위(z-index 1001+)에
+  // 남고, 같은 자리의 transport 마커를 덮는다(김포국제공항). 사용자가 하듯 popup을 닫아 선택을 푼다.
+  await dismissFeaturePopup(page);
   const pending = nextMarkersResponse(page, (q) => q.layers.includes(layer) && q.zoom <= 13, 45_000);
   await zoomBy(page, -3);
   await pending;
