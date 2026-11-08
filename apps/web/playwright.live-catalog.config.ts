@@ -11,7 +11,8 @@ import path from 'node:path';
  *
  * Projects:
  *  - `desktop`  Chromium 1440x900
- *  - `mobile`   Chromium 390x844, `isMobile` + `hasTouch` (the mobile web layout is viewport-driven)
+ *  - `mobile`   Chromium 390x844, `isMobile` + `hasTouch` (the mobile web layout is viewport-driven);
+ *               trip scenarios (`@trs`) only when also tagged `@mobile`
  *  - `session`  TRIP-046 only (`@slow`, ~13 min). Opt in with `PINVI_E2E_SESSION=1`; the n150
  *               runner never selects it unless asked (`--project session`).
  *
@@ -64,7 +65,8 @@ export default defineConfig({
     },
     {
       name: 'mobile',
-      grepInvert: /@slow/,
+      // Trip scenarios (TRS-*) run on mobile only when tagged @mobile (~10%, catalog `tags: [… mobile]`).
+      grepInvert: [/@slow/, /@trs(?!.*@mobile)/],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 390, height: 844 },

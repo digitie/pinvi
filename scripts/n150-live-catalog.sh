@@ -14,8 +14,10 @@ dated directory and a pass/fail/skip table per area is printed at the end.
 Options:
   --project <name>   desktop | mobile | session (repeatable; default: desktop mobile).
                      `session` enables the ~13-min TRIP-046 (@slow) project.
-  --area <area>      trip | search | nearby | weather | share | poi | notify | admin | core
-                     (repeatable; default: all areas)
+  --area <area>      trip | search | nearby | weather | share | poi | notify | admin | core | trs
+                     (repeatable; default: all areas). `trs` = the 190 data-driven trip scenarios
+                     (specs/trip-scenarios); batch them with --grep TRS-CG / TRS-CJ / TRS-GS / TRS-JT.
+  --throttle-ms <n>  Pause between trip scenarios (PINVI_E2E_TRS_TRIP_THROTTLE_MS, default 2000).
   --grep <regex>     Playwright --grep (case id such as 'TRIP-00[1-3]' or a title fragment)
   --list             List the selected cases and exit (no browser, no env file needed)
   --head             Use the current checkout HEAD as PINVI_LIVE_EXPECTED_REVISION
@@ -48,6 +50,9 @@ while [[ $# -gt 0 ]]; do
     --project) projects+=("$2"); shift 2 ;;
     --area) areas+=("$2"); shift 2 ;;
     --grep) grep_expr="$2"; shift 2 ;;
+    --throttle-ms)
+      [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo "error: --throttle-ms needs a non-negative integer" >&2; exit 2; }
+      export PINVI_E2E_TRS_TRIP_THROTTLE_MS="$2"; shift 2 ;;
     --list) list_only="1"; shift ;;
     --head) use_head="1"; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -66,7 +71,7 @@ for p in "${projects[@]}"; do
 done
 for a in "${areas[@]}"; do
   case "$a" in
-    trip|search|nearby|weather|share|poi|notify|admin|core) ;;
+    trip|search|nearby|weather|share|poi|notify|admin|core|trs) ;;
     *) echo "error: unknown area '$a'" >&2; exit 2 ;;
   esac
 done
@@ -100,7 +105,7 @@ if [[ "$list_only" != "1" ]]; then
   if [[ ! -r "$env_file" ]]; then
     if [[ "$EUID" -ne 0 ]]; then
       echo "env file $env_file is not readable — re-running with sudo (SUDO_USER keeps the result dir)" >&2
-      exec sudo --preserve-env=PINVI_E2E_ENV_FILE,PINVI_E2E_RESULTS_ROOT,PINVI_LIVE_EXPECTED_REVISION,PINVI_PLAYWRIGHT_RUNNER_IMAGE,PINVI_PLAYWRIGHT_RUNNER_REPO_ROOT,HOME "$0" "${orig_args[@]}"
+      exec sudo --preserve-env=PINVI_E2E_ENV_FILE,PINVI_E2E_TRS_TRIP_THROTTLE_MS,PINVI_E2E_TRS_PLACE_THROTTLE_MS,PINVI_E2E_RESULTS_ROOT,PINVI_LIVE_EXPECTED_REVISION,PINVI_PLAYWRIGHT_RUNNER_IMAGE,PINVI_PLAYWRIGHT_RUNNER_REPO_ROOT,HOME "$0" "${orig_args[@]}"
     fi
     echo "error: env file $env_file is missing or unreadable" >&2
     exit 1
@@ -171,7 +176,11 @@ if [[ -n "$grep_expr" ]]; then
   pw_args+=(--grep "$grep_expr")
 fi
 for a in "${areas[@]}"; do
-  pw_args+=("e2e-live/specs/$a/")
+  if [[ "$a" == "trs" ]]; then
+    pw_args+=("e2e-live/specs/trip-scenarios/")
+  else
+    pw_args+=("e2e-live/specs/$a/")
+  fi
 done
 if [[ ${#extra[@]} -gt 0 ]]; then
   pw_args+=("${extra[@]}")

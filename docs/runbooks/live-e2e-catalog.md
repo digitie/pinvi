@@ -2,13 +2,14 @@
 
 운영 PinVi 웹을 실제 브라우저로 두드리는 **라이브 UI 케이스 카탈로그**다. 9개 영역
 (trip·search·nearby·weather·share·poi·notify·admin·core) 354건 중 306건이 스크립트, 25건이
-수동, 23건이 blocked(아래 §7, 2026-11-06 — 정확한 수치는 생성 INDEX.md 가 정본). 기존 `playwright.live-mutating.config.ts`(M04/M05 attested
+수동, 23건이 blocked(아래 §7, 2026-11-06 — 정확한 수치는 생성 INDEX.md 가 정본). 여기에 데이터
+기반 여행 시나리오 영역 `trs` 190건(§10)이 더해진다. 기존 `playwright.live-mutating.config.ts`(M04/M05 attested
 suite)·`playwright.admin-live.config.ts`(admin read-only matrix)와 분리된 세 번째 live 설정이며,
 **어디에서도 `page.route` 로 mock 하지 않고 base URL 에 localhost fallback 이 없다(#618)**.
 
 | 항목 | 위치 |
 | --- | --- |
-| 케이스 카탈로그(정본) | `apps/web/e2e-live/catalog/<area>.yaml` — 스키마는 각 파일 상단 주석 |
+| 케이스 카탈로그(정본) | `apps/web/e2e-live/catalog/<area>.yaml` — 스키마는 각 파일 상단 주석. 여행 시나리오는 `catalog/trip-scenarios/*.yaml`(§10) |
 | 생성 인덱스 | `apps/web/e2e-live/catalog/INDEX.md` (`node apps/web/e2e-live/catalog/build-index.mjs`, `--check` 로 drift 검사) |
 | 스펙 | `apps/web/e2e-live/specs/<area>/*.live.spec.ts` (스펙 제목에 케이스 id) |
 | 공용 helper | `apps/web/e2e-live/helpers/live.ts` (계약 §5) + 영역 모듈 `helpers/<area>.ts`, `helpers/sun.ts`(NOAA 일출·일몰) |
@@ -333,6 +334,63 @@ env 1(SHR-027), 데이터/타이밍 2(SRCH-048 이벤트 없음, POI-032 마커 
   접두만 수동 정리. 접두 없는 데이터는 건드리지 않는다.
 - 러너가 `live UI checkout must be clean` 으로 거부 — 결과 디렉터리가 체크아웃 밖인지, 생성물이
   남지 않았는지 확인한다(`PINVI_E2E_RESULTS_ROOT`).
+
+## 10. 데이터 기반 여행 시나리오 (TRS, 190건)
+
+| 항목 | 위치 |
+| --- | --- |
+| 시나리오(정본) | `apps/web/e2e-live/catalog/trip-scenarios/{capital-gangwon,chungcheong-jeolla,gyeongsang,jeju-themes}.yaml` — TRS-CG 50·CJ 45·GS 50·JT 45 |
+| loader·스키마 | `apps/web/e2e-live/helpers/tripScenarios.ts` (YAML 고정 부분집합, 위반은 `파일:줄: 이유`로 거부) |
+| 스펙 | `apps/web/e2e-live/specs/trip-scenarios/scenarios.live.spec.ts` — 시나리오당 테스트 1건 |
+| CI 검사 | `tests/tripScenariosCatalog.test.ts`(스키마·190건·P1/mobile ≈10%·외부 pick ≤10%), INDEX `trs` 행 |
+
+시나리오 하나 = `[e2e] <id> <제목> <runTag>` 여행 하나. 날짜는 `start_offset_days`(KST 오늘 기준)와
+`days`에서 정한다. 장소는 일자별로 계획 패널 검색에 `query`를 넣고 **이름 줄에
+`expect_name_contains`를 담은 Map feature 행(배지 '장소')만** 고른다 — 카카오·네이버 행은 고르지
+않으므로(전 190건 `source: feature`) 잔여 feature 제안이 생기지 않는다. 단언은 이름 기준이다:
+일자별 행 수·순서·이름, 헤더 `N일 · M개 장소`, 지도 trip 마커 수 = 장소 수, 마커마다 category/kind
+존재. **분류 이름은 단언하지 않고 annotation(`categories`)으로만 남긴다** — 운영 Map 분류 일부가
+틀렸다(kor-travel-map#1438). `checks`는 optimize(미리보기 → 순서가 바뀌면 적용·persist 확인) →
+reorder(드래그, mobile 은 건너뜀) → weather(일자 날씨 섹션 렌더·상태 문구) → share(보기 전용 링크를
+로그아웃 새 컨텍스트로 열어 읽기 전용 확인) → copy(`<제목> copy` 확인 후 즉시 삭제) → date_shift(편집
+다이얼로그로 ±N일, 새로고침 후 값 확인) → delete_day(확인 후 일자·마커 감소) 순으로 돈다.
+여행·복사본은 `afterEach`에서 지우고 global setup/teardown 이 `[e2e]` 여행을 한 번 더 쓸어낸다.
+
+desktop 은 190건 전부, mobile 은 `tags`에 `mobile`이 있는 19건만(설정의 `grepInvert`) 돈다.
+P1 은 20건(10.5%). 테스트 이름에 tag `@trs`·`@trs-<cg|cj|gs|jt>`·`@p1|@p2`·(`@mobile`)이 붙는다.
+
+### 10.1 권장 실행 — 지역별 4배치
+
+한 번에 190건을 돌리지 않는다. 배치 사이에 결과를 보고 다음 배치를 시작한다(같은 n150 의 다른 live
+suite·Map 적재와 겹치지 않게 `~/preflight.sh`, I/O 가드 통과 후).
+
+```bash
+cd ~/pinvi && ~/preflight.sh
+scripts/n150-live-catalog.sh --head --area trs --project desktop --grep TRS-CG   # 50건
+scripts/n150-live-catalog.sh --head --area trs --project desktop --grep TRS-CJ   # 45건
+scripts/n150-live-catalog.sh --head --area trs --project desktop --grep TRS-GS   # 50건
+scripts/n150-live-catalog.sh --head --area trs --project desktop --grep TRS-JT   # 45건
+scripts/n150-live-catalog.sh --head --area trs --project mobile                  # @mobile 19건
+# 하나만 / P1만
+scripts/n150-live-catalog.sh --head --area trs --project desktop --grep 'TRS-GS-001'
+scripts/n150-live-catalog.sh --head --area trs --project desktop --grep @p1
+```
+
+**스로틀**: 시나리오 사이 `PINVI_E2E_TRS_TRIP_THROTTLE_MS`(기본 2000 ms, `--throttle-ms <n>`로 변경),
+장소 추가 사이 `PINVI_E2E_TRS_PLACE_THROTTLE_MS`(기본 300 ms, env 파일 키). 장소 하나가 검색 1회 +
+`POST /pois` + 여행 재조회 정도라 기본값에서 계정당 분당 요청이 인증 사용자 rate limit(§5, `helpers/live.ts`) 아래에
+머문다. 429 가 보이면(annotation `rate-limit`) 스로틀을 올린다 — 재시도로 가리지 않는다(`retries: 0`).
+
+**예상 소요**: SMOKE_RUNTIME_PLACEHOLDER
+
+### 10.2 실패 읽기
+
+- `TRS-… day N '<query>' → no feature row named '<expect>'` — 운영 Map 검색 순위·데이터 drift.
+  2026-11-08 검증 때는 모든 장소가 상위 3위 안이었다. 장소를 바꿀 때는 같은 방식(테스트 계정
+  `GET /search`, 읽기 전용)으로 다시 검증하고 YAML 을 고친다.
+- `map pins` 불일치 — 좌표 없는 feature 가 행으로는 추가됐거나 마커 렌더 회귀.
+- 데이터 공백(브랜드 호텔·역·터미널·좌표 없는 축제 등)은 시나리오에 넣지 않았다 —
+  kor-travel-map 의 데이터 공백 이슈(label `e2e-catalog`)가 추적한다.
 
 ## 경로·영역 fixture (#635)
 

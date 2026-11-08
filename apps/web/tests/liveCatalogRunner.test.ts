@@ -32,3 +32,13 @@ it.skipIf(process.platform !== 'linux')('반복 project와 area도 둘 다 유�
   expect(result.stdout).toContain('trip-map.live.spec.ts');
   expect(result.stdout).not.toContain('weather-trip-days.live.spec.ts');
 }, 25_000);
+
+it.skipIf(process.platform !== 'linux')('trs area는 trip-scenarios spec으로, mobile은 @mobile 시나리오만 고른다', () => {
+  const desktop = list(['--area', 'trs', '--project', 'desktop', '--grep', 'TRS-CG']);
+  expect(desktop.status, desktop.stderr).toBe(0);
+  expect(desktop.stdout).toContain('scenarios.live.spec.ts');
+  expect(desktop.stdout).toMatch(/Total: 50 tests/);
+  const mobile = list(['--area', 'trs', '--project', 'mobile']);
+  expect(mobile.status, mobile.stderr).toBe(0);
+  expect(mobile.stdout).toMatch(/Total: 19 tests/);
+}, 25_000);
