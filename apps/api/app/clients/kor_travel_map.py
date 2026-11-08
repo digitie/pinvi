@@ -997,9 +997,7 @@ class KorTravelMapClient:
                 raise
             self._festivals_monthly_inflight[cache_key] = task
             # 정리는 done-callback에서 — 시작 전에 취소된 task는 coroutine의 finally가 돌지 않는다.
-            task.add_done_callback(
-                lambda done: self._finish_festivals_monthly(cache_key, done)
-            )
+            task.add_done_callback(lambda done: self._finish_festivals_monthly(cache_key, done))
         try:
             page = await asyncio.shield(task)
         except asyncio.CancelledError:
