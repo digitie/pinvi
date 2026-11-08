@@ -210,10 +210,12 @@ export function useTransportLayers({ active }: { active: boolean }) {
       // 맞춰지는데(#619), 켠 순간의 bounds로 조회하면 요청 bbox가 맞춘 뒤의 실제 지도와 어긋난다
       // (#686 NEAR-024 mobile). 맞춤의 moveend가 같은 디바운스를 다시 미루고, 조회는 그때의 bounds를 읽는다.
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      const map = mapRef.current;
-      if (!map) return;
+      // 진행 중인 이전 조회는 바로 끊는다(꺼 둔 레이어의 늦은 응답이 남지 않게).
+      abortRef.current?.abort();
+      if (!mapRef.current) return;
       debounceRef.current = setTimeout(() => {
-        void fetchNow(map, enabledRef.current);
+        const map = mapRef.current;
+        if (map) void fetchNow(map, enabledRef.current);
       }, DEBOUNCE_MS);
     },
     [fetchNow],

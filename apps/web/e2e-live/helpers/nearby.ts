@@ -327,8 +327,8 @@ export async function clickTransportMarker(
  */
 export async function openTransportNear(page: Page, layer: Layer, query: string): Promise<string> {
   await searchAndFly(page, query);
-  // #709: 검색 결과(같은 이름의 Map 장소)를 고르면 그 장소가 선택돼 popup과 함께 맨 위(z-index 1001+)에
-  // 남고, 같은 자리의 transport 마커를 덮는다(김포국제공항). 사용자가 하듯 popup을 닫아 선택을 푼다.
+  // #709: 검색 결과(같은 이름의 Map 장소)를 고르면 그 장소의 선택 popup이 같은 자리에 열려(canvas 쌓임
+  // 맥락 위) transport 마커를 덮는다(김포국제공항). 사용자가 하듯 popup을 닫는다.
   await dismissFeaturePopup(page);
   const pending = nextMarkersResponse(page, (q) => q.layers.includes(layer) && q.zoom <= 13, 45_000);
   await zoomBy(page, -3);

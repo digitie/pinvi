@@ -423,10 +423,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
   const [panelScrollElement, setPanelScrollElement] = useState<HTMLDivElement | null>(null);
   const [panelScrollOverflowing, setPanelScrollOverflowing] = useState(false);
   // 초점을 가진 채 내용이 줄어도 tabindex를 떼지 않는다(떼면 초점이 body로 떨어진다).
-  const panelScrollFocused =
-    panelScrollElement != null &&
-    typeof document !== 'undefined' &&
-    document.activeElement === panelScrollElement;
+  const [panelScrollFocused, setPanelScrollFocused] = useState(false);
   const panelScrollFocusable = !mobileWebLayout && (panelScrollOverflowing || panelScrollFocused);
   // 데스크톱 패널 스크롤 영역이 실제로 넘치는지 — 넘칠 때만 Tab 순서에 넣는다(#704 후속).
   // 내용(탭 전환·장소 추가)과 창 크기 모두 바뀌므로 상자와 직계 자식 크기, 하위 노드 변화를 본다.
@@ -1700,6 +1697,12 @@ export function TripDetail({ tripId }: TripDetailProps) {
             // 데스크톱은 이 영역만 스크롤한다 — 넘칠 때만 키보드 스크롤용 초점을 받는다. group은
             // landmark가 아니라 상세 패널(aside)과 겹치는 landmark를 만들지 않으면서 초점 때 이름을 읽힌다.
             tabIndex={panelScrollFocusable ? 0 : undefined}
+            onFocus={(event) => {
+              if (event.target === event.currentTarget) setPanelScrollFocused(true);
+            }}
+            onBlur={(event) => {
+              if (event.target === event.currentTarget) setPanelScrollFocused(false);
+            }}
             role={panelScrollFocusable ? 'group' : undefined}
             aria-label={panelScrollFocusable ? '여행 상세 내용' : undefined}
             data-testid="trip-detail-panel-scroll"

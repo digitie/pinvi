@@ -123,7 +123,7 @@ export function fitPaddingForOverlay(
     padding.bottom = Math.max(MAP_FIT_PADDING, Math.min(clearance, cap));
   }
   // 낮은 지도(낮은 창·높은 상단 패널): 여백이 맞춤 폭을 거의 다 먹으면 (1) 아래 여백부터 줄이고
-  // (2) 위 여백은 오버레이 clearance·핀 머리 높이까지만 줄인다 — 그 아래로는 맞춤 폭을 줄인다.
+  // (2) 위 여백은 clearance(핀 머리+간격 포함)를 넘는 기본 여백 몫만 줄인다 — 그 아래로는 맞춤 폭을 줄인다.
   // (3) 그래도 fitBounds에 남길 폭이 없을 때만 위 여백을 핀 높이까지 깎는다(#704 후속).
   const span = () => surface.height - padding.top - padding.bottom;
   if (span() < MIN_FIT_SPAN) {
