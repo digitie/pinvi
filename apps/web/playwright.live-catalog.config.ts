@@ -11,7 +11,8 @@ import path from 'node:path';
  *
  * Projects:
  *  - `desktop`  Chromium 1440x900
- *  - `mobile`   Chromium 390x844, `isMobile` + `hasTouch` (the mobile web layout is viewport-driven)
+ *  - `mobile`   Chromium 390x844, `isMobile` + `hasTouch` (the mobile web layout is viewport-driven);
+ *               trip scenarios (`@trs`) only when also tagged `@mobile`
  *  - `session`  TRIP-046 only (`@slow`, ~13 min). Opt in with `PINVI_E2E_SESSION=1`; the n150
  *               runner never selects it unless asked (`--project session`).
  *
@@ -23,6 +24,14 @@ import path from 'node:path';
  */
 const outputRoot = process.env.PINVI_E2E_OUTPUT_DIR ?? path.resolve(__dirname, 'test-results', 'live-catalog');
 const includeSession = process.env.PINVI_E2E_SESSION === '1';
+/**
+ * Trip scenarios (`@trs`, 190 prod trips, ~3.5 h) are opt-in: only when PINVI_E2E_TRS=1, which the n150
+ * runner sets for `--area trs`. A plain full-catalog run never includes them (runbook §10).
+ */
+const includeTrs = process.env.PINVI_E2E_TRS === '1';
+const desktopInvert = includeTrs ? [/@slow/] : [/@slow/, /@trs/];
+// mobile runs only the scenarios also tagged @mobile (~10%).
+const mobileInvert = includeTrs ? [/@slow/, /@trs(?!.*@mobile)/] : [/@slow/, /@trs/];
 
 export default defineConfig({
   testDir: './e2e-live/specs',
@@ -56,7 +65,7 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
-      grepInvert: /@slow/,
+      grepInvert: desktopInvert,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1440, height: 900 },
@@ -64,7 +73,7 @@ export default defineConfig({
     },
     {
       name: 'mobile',
-      grepInvert: /@slow/,
+      grepInvert: mobileInvert,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 390, height: 844 },

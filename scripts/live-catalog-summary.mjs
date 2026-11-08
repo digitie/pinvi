@@ -13,14 +13,16 @@ if (!file) {
 }
 const report = JSON.parse(readFileSync(file, 'utf8'));
 
-const AREAS = ['trip', 'search', 'nearby', 'weather', 'share', 'poi', 'notify', 'admin', 'core'];
+const AREAS = ['trip', 'search', 'nearby', 'weather', 'share', 'poi', 'notify', 'admin', 'core', 'trs'];
+/** Spec directory -> catalog area when they differ (data-driven trip scenarios live in specs/trip-scenarios). */
+const AREA_DIRS = { 'trip-scenarios': 'trs' };
 const rows = new Map();
 const failed = [];
 
 function areaOf(fileName) {
   // JSON `file` is relative to the config testDir (e2e-live/specs): '<area>/<file>.live.spec.ts'.
-  const m = /(?:^|[\\/])(trip|search|nearby|weather|share|poi|notify|admin|core)[\\/][^\\/]+$/.exec(fileName ?? '');
-  return m ? m[1] : 'other';
+  const m = /(?:^|[\\/])(trip-scenarios|trip|search|nearby|weather|share|poi|notify|admin|core)[\\/][^\\/]+$/.exec(fileName ?? '');
+  return m ? (AREA_DIRS[m[1]] ?? m[1]) : 'other';
 }
 
 function bucket(area, project) {

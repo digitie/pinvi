@@ -1,0 +1,998 @@
+# Trip scenarios — 서울·인천·경기·강원 (TRS-CG). Data-driven: specs/trip-scenarios/scenarios.live.spec.ts
+# Schema + loader: e2e-live/helpers/tripScenarios.ts (strict subset of YAML; the loader rejects anything else).
+# Every place was validated read-only against prod PinVi GET /search (test user) on 2026-11-08:
+# the first Map feature row (badge 장소) whose name contains expect_name_contains was within the top 3.
+# Tag `mobile` = also runs under the mobile project. Titles get "[e2e] <id>" at runtime.
+
+- id: TRS-CG-001
+  title: "서울 궁궐 1박2일 — 경복궁·북촌·한옥스테이"
+  style: heritage
+  days: 2
+  start_offset_days: 3
+  priority: P1
+  tags: [heritage, culture, food, lodging, market, mobile]
+  places:
+    - {day: 1, query: "경복궁", expect_name_contains: "경복궁", family: heritage, source: feature}
+    - {day: 1, query: "북촌한옥마을", expect_name_contains: "북촌한옥마을", family: culture, source: feature}
+    - {day: 1, query: "토속촌 삼계탕", expect_name_contains: "토속촌 삼계탕", family: food, source: feature}
+    - {day: 1, query: "락고재", expect_name_contains: "락고재 서울", family: lodging, source: feature}
+    - {day: 2, query: "창덕궁", expect_name_contains: "창덕궁", family: heritage, source: feature}
+    - {day: 2, query: "창경궁", expect_name_contains: "창경궁", family: heritage, source: feature}
+    - {day: 2, query: "종묘", expect_name_contains: "종묘", family: heritage, source: feature}
+    - {day: 2, query: "광장시장", expect_name_contains: "광장시장", family: market, source: feature}
+  checks:
+    - optimize_day: 1
+    - weather_day: 1
+    - share_readonly
+  notes: "한옥스테이(락고재) 숙박 + 궁궐 동선"
+
+- id: TRS-CG-002
+  title: "명동·남산 도심 당일 — 만두·곰탕·DDP"
+  style: city
+  days: 1
+  start_offset_days: 0
+  priority: P2
+  tags: [food, culture, park]
+  places:
+    - {day: 1, query: "명동교자", expect_name_contains: "명동교자 본점", family: food, source: feature}
+    - {day: 1, query: "남산서울타워", expect_name_contains: "남산서울타워", family: culture, source: feature}
+    - {day: 1, query: "하동관", expect_name_contains: "하동관 명동본점", family: food, source: feature}
+    - {day: 1, query: "동대문디자인플라자", expect_name_contains: "동대문디자인플라자", family: culture, source: feature}
+    - {day: 1, query: "청계천", expect_name_contains: "청계천", family: park, source: feature}
+  checks:
+    - optimize_day: 1
+    - reorder_day: 1
+  notes: "오늘 출발(offset 0) 당일치기"
+
+- id: TRS-CG-003
+  title: "서울 박물관·미술관 2박3일"
+  style: culture
+  days: 3
+  start_offset_days: 12
+  priority: P2
+  tags: [museum, lodging, food, heritage, culture, market, transport]
+  places:
+    - {day: 1, query: "국립중앙박물관", expect_name_contains: "국립중앙박물관", family: museum, source: feature}
+    - {day: 1, query: "롯데호텔 서울", expect_name_contains: "롯데호텔 서울", family: lodging, source: feature}
+    - {day: 1, query: "우래옥", expect_name_contains: "우래옥", family: food, source: feature}
+    - {day: 2, query: "국립현대미술관 서울", expect_name_contains: "국립현대미술관 서울", family: museum, source: feature}
+    - {day: 2, query: "덕수궁", expect_name_contains: "덕수궁", family: heritage, source: feature}
+    - {day: 2, query: "북촌한옥마을", expect_name_contains: "북촌한옥마을", family: culture, source: feature}
+    - {day: 2, query: "롯데호텔 서울", expect_name_contains: "롯데호텔 서울", family: lodging, source: feature}
+    - {day: 3, query: "동대문디자인플라자", expect_name_contains: "동대문디자인플라자", family: culture, source: feature}
+    - {day: 3, query: "광장시장", expect_name_contains: "광장시장", family: market, source: feature}
+    - {day: 3, query: "서울역", expect_name_contains: "서울역", family: transport, source: feature}
+  checks:
+    - copy_trip
+    - delete_day: 3
+  notes: "호텔 2일 연속(같은 장소 두 번)"
+
+- id: TRS-CG-004
+  title: "성수·서울숲 카페 투어 당일"
+  style: food
+  days: 1
+  start_offset_days: 5
+  priority: P2
+  tags: [park, cafe, food]
+  places:
+    - {day: 1, query: "서울숲", expect_name_contains: "서울숲", family: park, source: feature}
+    - {day: 1, query: "어니언 성수", expect_name_contains: "어니언 성수", family: cafe, source: feature}
+    - {day: 1, query: "성수동", expect_name_contains: "성수동카페거리", family: cafe, source: feature}
+    - {day: 1, query: "진옥화할매원조닭한마리", expect_name_contains: "진옥화할매원조닭한마리", family: food, source: feature}
+  checks:
+    - optimize_day: 1
+  notes: ""
+
+- id: TRS-CG-005
+  title: "강남 호캉스 1박2일 — 봉은사·코엑스"
+  style: wellness
+  days: 2
+  start_offset_days: 8
+  priority: P2
+  tags: [religious, shopping, lodging, park, leisure, spa, food]
+  places:
+    - {day: 1, query: "봉은사", expect_name_contains: "봉은사", family: religious, source: feature}
+    - {day: 1, query: "코엑스몰", expect_name_contains: "스타필드 코엑스몰", family: shopping, source: feature}
+    - {day: 1, query: "신라스테이", expect_name_contains: "신라스테이 삼성", family: lodging, source: feature}
+    - {day: 2, query: "올림픽공원", expect_name_contains: "올림픽공원", family: park, source: feature}
+    - {day: 2, query: "롯데월드", expect_name_contains: "롯데월드", family: leisure, source: feature}
+    - {day: 2, query: "워터킹덤", expect_name_contains: "워터킹덤워터파크앤스파", family: spa, source: feature}
+    - {day: 2, query: "명동교자", expect_name_contains: "명동교자 본점", family: food, source: feature}
+  checks:
+    - weather_day: 2
+    - reorder_day: 2
+  notes: ""
+
+- id: TRS-CG-006
+  title: "한강 난지캠핑장 1박2일"
+  style: camping
+  days: 2
+  start_offset_days: 15
+  priority: P2
+  tags: [park, camping, food]
+  places:
+    - {day: 1, query: "하늘공원", expect_name_contains: "하늘공원", family: park, source: feature}
+    - {day: 1, query: "서울식물원", expect_name_contains: "서울식물원", family: park, source: feature}
+    - {day: 1, query: "난지캠핑장", expect_name_contains: "난지캠핑장", family: camping, source: feature}
+    - {day: 2, query: "여의도한강공원", expect_name_contains: "여의도한강공원", family: park, source: feature}
+    - {day: 2, query: "우래옥", expect_name_contains: "우래옥", family: food, source: feature}
+  checks:
+    - date_shift: 2
+    - weather_day: 1
+  notes: "도심 캠핑"
+
+- id: TRS-CG-007
+  title: "서울 산행 당일 — 북한산·인왕산"
+  style: mountain
+  days: 1
+  start_offset_days: 1
+  priority: P2
+  tags: [trail, food, heritage]
+  places:
+    - {day: 1, query: "북한산 둘레길", expect_name_contains: "북한산_백운대", family: trail, source: feature}
+    - {day: 1, query: "인왕산", expect_name_contains: "인왕산", family: trail, source: feature}
+    - {day: 1, query: "토속촌 삼계탕", expect_name_contains: "토속촌 삼계탕", family: food, source: feature}
+    - {day: 1, query: "경복궁", expect_name_contains: "경복궁", family: heritage, source: feature}
+  checks:
+    - optimize_day: 1
+    - weather_day: 1
+  notes: "등산로(트레킹) 피처"
+
+- id: TRS-CG-008
+  title: "서울 가족 1박2일 — 롯데월드·서울대공원"
+  style: family
+  days: 2
+  start_offset_days: 20
+  priority: P2
+  tags: [leisure, park, food, lodging, trail]
+  places:
+    - {day: 1, query: "롯데월드", expect_name_contains: "롯데월드", family: leisure, source: feature}
+    - {day: 1, query: "올림픽공원", expect_name_contains: "올림픽공원", family: park, source: feature}
+    - {day: 1, query: "진옥화할매원조닭한마리", expect_name_contains: "진옥화할매원조닭한마리", family: food, source: feature}
+    - {day: 1, query: "그랜드 하얏트 서울", expect_name_contains: "그랜드하얏트 서울", family: lodging, source: feature}
+    - {day: 2, query: "서울대공원", expect_name_contains: "서울대공원", family: leisure, source: feature}
+    - {day: 2, query: "관악산", expect_name_contains: "관악산", family: trail, source: feature}
+    - {day: 2, query: "순희네빈대떡", expect_name_contains: "순희네", family: food, source: feature}
+  checks:
+    - optimize_day: 1
+    - share_readonly
+  notes: ""
+
+- id: TRS-CG-009
+  title: "안양천 빛축제 당일"
+  style: festival
+  days: 1
+  start_offset_days: 25
+  priority: P2
+  tags: [festival, park, food]
+  places:
+    - {day: 1, query: "안양천 빛축제", expect_name_contains: "안양천 빛축제", family: festival, source: feature}
+    - {day: 1, query: "서울식물원", expect_name_contains: "서울식물원", family: park, source: feature}
+    - {day: 1, query: "여의도한강공원", expect_name_contains: "여의도한강공원", family: park, source: feature}
+    - {day: 1, query: "순희네빈대떡", expect_name_contains: "순희네", family: food, source: feature}
+  checks:
+    - weather_day: 1
+  notes: "축제 기간 여행 — 이벤트 피처 기간은 Map event 데이터 기준(기간 내 단언 금지)"
+
+- id: TRS-CG-010
+  title: "서울 그랜드 4박5일 — 김포 도착부터 서울역까지"
+  style: mixed
+  days: 5
+  start_offset_days: 30
+  priority: P2
+  tags: [transport, lodging, culture, heritage, food, religious, museum, park, leisure, shopping, market]
+  places:
+    - {day: 1, query: "김포국제공항", expect_name_contains: "김포국제공항", family: transport, source: feature}
+    - {day: 1, query: "그랜드 하얏트 서울", expect_name_contains: "그랜드하얏트 서울", family: lodging, source: feature}
+    - {day: 1, query: "남산서울타워", expect_name_contains: "남산서울타워", family: culture, source: feature}
+    - {day: 2, query: "경복궁", expect_name_contains: "경복궁", family: heritage, source: feature}
+    - {day: 2, query: "북촌한옥마을", expect_name_contains: "북촌한옥마을", family: culture, source: feature}
+    - {day: 2, query: "토속촌 삼계탕", expect_name_contains: "토속촌 삼계탕", family: food, source: feature}
+    - {day: 2, query: "조계사", expect_name_contains: "조계사", family: religious, source: feature}
+    - {day: 3, query: "국립중앙박물관", expect_name_contains: "국립중앙박물관", family: museum, source: feature}
+    - {day: 3, query: "여의도한강공원", expect_name_contains: "여의도한강공원", family: park, source: feature}
+    - {day: 3, query: "그랜드 하얏트 서울", expect_name_contains: "그랜드하얏트 서울", family: lodging, source: feature}
+    - {day: 4, query: "롯데월드", expect_name_contains: "롯데월드", family: leisure, source: feature}
+    - {day: 4, query: "봉은사", expect_name_contains: "봉은사", family: religious, source: feature}
+    - {day: 4, query: "코엑스몰", expect_name_contains: "스타필드 코엑스몰", family: shopping, source: feature}
+    - {day: 4, query: "그랜드 하얏트 서울", expect_name_contains: "그랜드하얏트 서울", family: lodging, source: feature}
+    - {day: 5, query: "광장시장", expect_name_contains: "광장시장", family: market, source: feature}
+    - {day: 5, query: "서울역", expect_name_contains: "서울역", family: transport, source: feature}
+  checks:
+    - optimize_day: 2
+    - reorder_day: 4
+    - share_readonly
+    - copy_trip
+  notes: "같은 숙소 3회 등장(day1·3·4)"
+
+- id: TRS-CG-011
+  title: "인천 차이나타운 당일 — 짜장면·월미도"
+  style: food
+  days: 1
+  start_offset_days: 2
+  priority: P2
+  tags: [culture, food, museum, cafe, leisure, mobile]
+  places:
+    - {day: 1, query: "인천 차이나타운", expect_name_contains: "인천 차이나타운", family: culture, source: feature}
+    - {day: 1, query: "공화춘", expect_name_contains: "공화춘", family: food, source: feature}
+    - {day: 1, query: "인천 짜장면", expect_name_contains: "짜장면박물관", family: museum, source: feature}
+    - {day: 1, query: "C27 인천차이나타운점", expect_name_contains: "C27 인천차이나타운점", family: cafe, source: feature}
+    - {day: 1, query: "월미도", expect_name_contains: "월미도", family: leisure, source: feature}
+  checks:
+    - optimize_day: 1
+    - reorder_day: 1
+  notes: ""
+
+- id: TRS-CG-012
+  title: "강화도 역사 1박2일 — 고려궁지·광성보·전등사"
+  style: heritage
+  days: 2
+  start_offset_days: 6
+  priority: P1
+  tags: [heritage, parking, lodging, religious, beach, trail]
+  places:
+    - {day: 1, query: "고려궁지", expect_name_contains: "고려궁지", family: heritage, source: feature}
+    - {day: 1, query: "광성보", expect_name_contains: "강화 광성보", family: heritage, source: feature}
+    - {day: 1, query: "초지진", expect_name_contains: "강화 초지진", family: heritage, source: feature}
+    - {day: 1, query: "초지진", expect_name_contains: "초지진주차장", family: parking, source: feature}
+    - {day: 1, query: "강화 펜션", expect_name_contains: "강화 팽나무 펜션", family: lodging, source: feature}
+    - {day: 2, query: "전등사", expect_name_contains: "전등사", family: religious, source: feature}
+    - {day: 2, query: "동막해변", expect_name_contains: "동막해변", family: beach, source: feature}
+    - {day: 2, query: "마니산", expect_name_contains: "마니산", family: trail, source: feature}
+  checks:
+    - optimize_day: 1
+    - weather_day: 2
+    - share_readonly
+  notes: "주차장 피처 포함"
+
+- id: TRS-CG-013
+  title: "석모도 1박2일 — 보문사·수목원·휴양림"
+  style: island
+  days: 2
+  start_offset_days: 10
+  priority: P2
+  tags: [religious, park, parking, lodging, camping, culture, market]
+  places:
+    - {day: 1, query: "보문사", expect_name_contains: "보문사", family: religious, source: feature}
+    - {day: 1, query: "석모도수목원", expect_name_contains: "석모도수목원", family: park, source: feature}
+    - {day: 1, query: "석모도수목원", expect_name_contains: "석모도 수목원 주차장", family: parking, source: feature}
+    - {day: 1, query: "석모도 자연휴양림", expect_name_contains: "석모도 자연휴양림", family: lodging, source: feature}
+    - {day: 2, query: "노을캠핑장", expect_name_contains: "노을캠핑장", family: camping, source: feature}
+    - {day: 2, query: "교동도", expect_name_contains: "교동도망향대", family: culture, source: feature}
+    - {day: 2, query: "대룡시장", expect_name_contains: "대룡시장", family: market, source: feature}
+  checks:
+    - optimize_day: 1
+    - delete_day: 2
+  notes: "연륙교로 연결된 섬"
+
+- id: TRS-CG-014
+  title: "교동도 당일 드라이브 — 평화전망대·대룡시장"
+  style: drive
+  days: 1
+  start_offset_days: 4
+  priority: P2
+  tags: [parking, culture, market, trail]
+  places:
+    - {day: 1, query: "강화 평화전망대", expect_name_contains: "강화평화전망대주차장", family: parking, source: feature}
+    - {day: 1, query: "교동도", expect_name_contains: "교동도망향대", family: culture, source: feature}
+    - {day: 1, query: "대룡시장", expect_name_contains: "대룡시장", family: market, source: feature}
+    - {day: 1, query: "화개산", expect_name_contains: "화개산", family: trail, source: feature}
+  checks:
+    - optimize_day: 1
+  notes: ""
+
+- id: TRS-CG-015
+  title: "영종도 바다 1박2일 — 을왕리·무의도"
+  style: sea
+  days: 2
+  start_offset_days: 7
+  priority: P2
+  tags: [transport, beach, lodging, nature, food]
+  places:
+    - {day: 1, query: "인천국제공항", expect_name_contains: "인천국제공항", family: transport, source: feature}
+    - {day: 1, query: "을왕리해수욕장", expect_name_contains: "을왕리해수욕장", family: beach, source: feature}
+    - {day: 1, query: "을왕리 펜션", expect_name_contains: "을왕리 에버뷰 펜션", family: lodging, source: feature}
+    - {day: 2, query: "마시안해변", expect_name_contains: "마시안해변", family: beach, source: feature}
+    - {day: 2, query: "무의도", expect_name_contains: "무의도", family: nature, source: feature}
+    - {day: 2, query: "소무의도", expect_name_contains: "소무의도", family: nature, source: feature}
+    - {day: 2, query: "공화춘", expect_name_contains: "공화춘", family: food, source: feature}
+  checks:
+    - weather_day: 1
+    - date_shift: 1
+  notes: ""
+
+- id: TRS-CG-016
+  title: "영종 빛축제 + 파라다이스시티 1박2일"
+  style: festival
+  days: 2
+  start_offset_days: 18
+  priority: P2
+  tags: [transport, lodging, festival, culture, food, cafe]
+  places:
+    - {day: 1, query: "인천국제공항", expect_name_contains: "인천국제공항", family: transport, source: feature}
+    - {day: 1, query: "파라다이스시티", expect_name_contains: "파라다이스시티", family: lodging, source: feature}
+    - {day: 1, query: "영종국제도시 빛축제", expect_name_contains: "영종국제도시 빛축제", family: festival, source: feature}
+    - {day: 2, query: "인천 차이나타운", expect_name_contains: "인천 차이나타운", family: culture, source: feature}
+    - {day: 2, query: "공화춘", expect_name_contains: "공화춘", family: food, source: feature}
+    - {day: 2, query: "C27 인천차이나타운점", expect_name_contains: "C27 인천차이나타운점", family: cafe, source: feature}
+  checks:
+    - share_readonly
+  notes: "축제 기간 여행"
+
+- id: TRS-CG-017
+  title: "무의도 휴양림 1박2일"
+  style: island
+  days: 2
+  start_offset_days: 22
+  priority: P2
+  tags: [nature, lodging, beach, food]
+  places:
+    - {day: 1, query: "무의도", expect_name_contains: "무의도", family: nature, source: feature}
+    - {day: 1, query: "소무의도", expect_name_contains: "소무의도", family: nature, source: feature}
+    - {day: 1, query: "무의도자연휴양림", expect_name_contains: "무의도자연휴양림", family: lodging, source: feature}
+    - {day: 2, query: "마시안해변", expect_name_contains: "마시안해변", family: beach, source: feature}
+    - {day: 2, query: "을왕리해수욕장", expect_name_contains: "을왕리해수욕장", family: beach, source: feature}
+    - {day: 2, query: "신승반점", expect_name_contains: "신승반점", family: food, source: feature}
+  checks:
+    - reorder_day: 2
+    - weather_day: 2
+  notes: ""
+
+- id: TRS-CG-018
+  title: "옹진 덕적도 2박3일 — 선착장·섬 펜션"
+  style: island
+  days: 3
+  start_offset_days: 26
+  priority: P2
+  tags: [transport, lodging, trail, food]
+  places:
+    - {day: 1, query: "삼목선착장", expect_name_contains: "삼목선착장", family: transport, source: feature}
+    - {day: 1, query: "덕적도", expect_name_contains: "덕적도 섬사랑 펜션", family: lodging, source: feature}
+    - {day: 2, query: "덕적도", expect_name_contains: "덕적도 섬사랑 펜션", family: lodging, source: feature}
+    - {day: 3, query: "대이작도", expect_name_contains: "대이작도", family: trail, source: feature}
+    - {day: 3, query: "삼목선착장", expect_name_contains: "삼목선착장", family: transport, source: feature}
+    - {day: 3, query: "공화춘", expect_name_contains: "공화춘", family: food, source: feature}
+  checks:
+    - weather_day: 2
+    - copy_trip
+  notes: "섬+여객터미널 edge; day2는 숙소만 있는 날. Map에 인천항 연안여객터미널 피처가 없어(검색 시 지역 내 결과 없음) 삼목선착장을 페리 터미널로 사용, 같은 터미널 두 번 등장"
+
+- id: TRS-CG-019
+  title: "송도·소래 1박2일 — 센트럴파크·스파"
+  style: city
+  days: 2
+  start_offset_days: 9
+  priority: P2
+  tags: [park, lodging, market, spa, food, mobile]
+  places:
+    - {day: 1, query: "송도 센트럴파크", expect_name_contains: "송도센트럴파크", family: park, source: feature}
+    - {day: 1, query: "송도센트럴파크호텔", expect_name_contains: "송도센트럴파크호텔", family: lodging, source: feature}
+    - {day: 2, query: "소래포구", expect_name_contains: "소래포구", family: market, source: feature}
+    - {day: 2, query: "스파렉스", expect_name_contains: "청라스파렉스", family: spa, source: feature}
+    - {day: 2, query: "신승반점", expect_name_contains: "신승반점", family: food, source: feature}
+  checks:
+    - optimize_day: 2
+  notes: ""
+
+- id: TRS-CG-020
+  title: "수원화성 당일 — 행궁·왕갈비"
+  style: heritage
+  days: 1
+  start_offset_days: 0
+  priority: P1
+  tags: [heritage, food, culture]
+  places:
+    - {day: 1, query: "수원화성", expect_name_contains: "수원화성", family: heritage, source: feature}
+    - {day: 1, query: "화성행궁", expect_name_contains: "화성행궁", family: heritage, source: feature}
+    - {day: 1, query: "본수원갈비", expect_name_contains: "본수원갈비", family: food, source: feature}
+    - {day: 1, query: "한국민속촌", expect_name_contains: "한국민속촌", family: culture, source: feature}
+  checks:
+    - optimize_day: 1
+    - share_readonly
+  notes: ""
+
+- id: TRS-CG-021
+  title: "용인·이천 가족 1박2일 — 에버랜드·온천 카라반"
+  style: family
+  days: 2
+  start_offset_days: 11
+  priority: P2
+  tags: [leisure, food, camping, spa, culture]
+  places:
+    - {day: 1, query: "에버랜드", expect_name_contains: "에버랜드", family: leisure, source: feature}
+    - {day: 1, query: "가보정", expect_name_contains: "가보정", family: food, source: feature}
+    - {day: 1, query: "테르메덴", expect_name_contains: "테르메덴 카라반", family: camping, source: feature}
+    - {day: 2, query: "테르메덴", expect_name_contains: "이천 테르메덴", family: spa, source: feature}
+    - {day: 2, query: "한국민속촌", expect_name_contains: "한국민속촌", family: culture, source: feature}
+  checks:
+    - optimize_day: 1
+    - date_shift: 3
+  notes: ""
+
+- id: TRS-CG-022
+  title: "가평 글램핑 1박2일 — 남이섬·쁘띠프랑스"
+  style: family
+  days: 2
+  start_offset_days: 14
+  priority: P2
+  tags: [rest_area, culture, nature, lodging, park, food]
+  places:
+    - {day: 1, query: "가평휴게소", expect_name_contains: "가평휴게소", family: rest_area, source: feature}
+    - {day: 1, query: "쁘띠프랑스", expect_name_contains: "쁘띠프랑스", family: culture, source: feature}
+    - {day: 1, query: "남이섬", expect_name_contains: "남이섬", family: nature, source: feature}
+    - {day: 1, query: "가평 글램핑", expect_name_contains: "가평별빛누리글램핑", family: lodging, source: feature}
+    - {day: 2, query: "아침고요수목원", expect_name_contains: "아침고요수목원", family: park, source: feature}
+    - {day: 2, query: "명동 닭갈비 골목", expect_name_contains: "명동 닭갈비 골목", family: food, source: feature}
+  checks:
+    - optimize_day: 1
+    - weather_day: 1
+  notes: "휴게소 피처 포함"
+
+- id: TRS-CG-023
+  title: "자라섬 캠핑 2박3일"
+  style: camping
+  days: 3
+  start_offset_days: 28
+  priority: P2
+  tags: [rest_area, camping, nature, culture, park, trail, food]
+  places:
+    - {day: 1, query: "가평휴게소", expect_name_contains: "가평휴게소", family: rest_area, source: feature}
+    - {day: 1, query: "자라섬캠핑장", expect_name_contains: "자라섬캠핑장", family: camping, source: feature}
+    - {day: 2, query: "남이섬", expect_name_contains: "남이섬", family: nature, source: feature}
+    - {day: 2, query: "쁘띠프랑스", expect_name_contains: "쁘띠프랑스", family: culture, source: feature}
+    - {day: 2, query: "자라섬캠핑장", expect_name_contains: "자라섬캠핑장", family: camping, source: feature}
+    - {day: 3, query: "아침고요수목원", expect_name_contains: "아침고요수목원", family: park, source: feature}
+    - {day: 3, query: "운악산", expect_name_contains: "운악산", family: trail, source: feature}
+    - {day: 3, query: "샘밭막국수", expect_name_contains: "샘밭막국수", family: food, source: feature}
+  checks:
+    - weather_day: 2
+    - delete_day: 3
+  notes: "캠핑장 2박(같은 장소 두 번)"
+
+- id: TRS-CG-024
+  title: "양평 두물머리 1박2일 — 휴양림"
+  style: nature
+  days: 2
+  start_offset_days: 5
+  priority: P2
+  tags: [nature, park, lodging, religious, trail, food]
+  places:
+    - {day: 1, query: "두물머리", expect_name_contains: "두물머리", family: nature, source: feature}
+    - {day: 1, query: "세미원", expect_name_contains: "세미원", family: park, source: feature}
+    - {day: 1, query: "중미산자연휴양림", expect_name_contains: "중미산자연휴양림", family: lodging, source: feature}
+    - {day: 2, query: "용문사", expect_name_contains: "용문사", family: religious, source: feature}
+    - {day: 2, query: "용문산", expect_name_contains: "용문산", family: trail, source: feature}
+    - {day: 2, query: "가보정", expect_name_contains: "가보정", family: food, source: feature}
+  checks:
+    - reorder_day: 1
+  notes: ""
+
+- id: TRS-CG-025
+  title: "파주 DMZ·헤이리 당일"
+  style: culture
+  days: 1
+  start_offset_days: 3
+  priority: P2
+  tags: [culture, cafe, shopping]
+  places:
+    - {day: 1, query: "임진각", expect_name_contains: "임진각", family: culture, source: feature}
+    - {day: 1, query: "오두산 통일전망대", expect_name_contains: "오두산통일전망대", family: culture, source: feature}
+    - {day: 1, query: "헤이리 예술마을", expect_name_contains: "헤이리예술마을", family: culture, source: feature}
+    - {day: 1, query: "더티트렁크", expect_name_contains: "더티 트렁크", family: cafe, source: feature}
+    - {day: 1, query: "롯데프리미엄아울렛 파주", expect_name_contains: "롯데프리미엄아울렛 파주점", family: shopping, source: feature}
+  checks:
+    - optimize_day: 1
+    - reorder_day: 1
+  notes: ""
+
+- id: TRS-CG-026
+  title: "광명동굴 빛축제 당일"
+  style: festival
+  days: 1
+  start_offset_days: 17
+  priority: P2
+  tags: [nature, festival, food]
+  places:
+    - {day: 1, query: "광명동굴", expect_name_contains: "광명동굴", family: nature, source: feature}
+    - {day: 1, query: "광명동굴빛축제", expect_name_contains: "광명동굴빛축제", family: festival, source: feature}
+    - {day: 1, query: "하동관", expect_name_contains: "하동관 명동본점", family: food, source: feature}
+  checks:
+    - weather_day: 1
+  notes: "축제 기간 여행"
+
+- id: TRS-CG-027
+  title: "포천 산정호수 1박2일 — 수목원·휴양림"
+  style: nature
+  days: 2
+  start_offset_days: 21
+  priority: P2
+  tags: [park, lodging, nature, trail, food, mobile]
+  places:
+    - {day: 1, query: "국립수목원", expect_name_contains: "국립수목원", family: park, source: feature}
+    - {day: 1, query: "허브아일랜드", expect_name_contains: "허브아일랜드", family: park, source: feature}
+    - {day: 1, query: "축령산자연휴양림", expect_name_contains: "축령산자연휴양림", family: lodging, source: feature}
+    - {day: 2, query: "산정호수", expect_name_contains: "산정호수", family: nature, source: feature}
+    - {day: 2, query: "명성산", expect_name_contains: "명성산", family: trail, source: feature}
+    - {day: 2, query: "가보정", expect_name_contains: "가보정", family: food, source: feature}
+  checks:
+    - optimize_day: 2
+  notes: ""
+
+- id: TRS-CG-028
+  title: "이천·여주 온천 1박2일"
+  style: wellness
+  days: 2
+  start_offset_days: 13
+  priority: P2
+  tags: [religious, spa, camping, park, heritage, food]
+  places:
+    - {day: 1, query: "신륵사", expect_name_contains: "신륵사관광지", family: religious, source: feature}
+    - {day: 1, query: "테르메덴", expect_name_contains: "이천 테르메덴", family: spa, source: feature}
+    - {day: 1, query: "테르메덴", expect_name_contains: "테르메덴 카라반", family: camping, source: feature}
+    - {day: 2, query: "화담숲", expect_name_contains: "곤지암화담숲", family: park, source: feature}
+    - {day: 2, query: "남한산성", expect_name_contains: "남한산성", family: heritage, source: feature}
+    - {day: 2, query: "본수원갈비", expect_name_contains: "본수원갈비", family: food, source: feature}
+  checks:
+    - weather_day: 1
+    - share_readonly
+  notes: ""
+
+- id: TRS-CG-029
+  title: "남한산성·화담숲·하남 당일"
+  style: nature
+  days: 1
+  start_offset_days: 35
+  priority: P2
+  tags: [heritage, park, shopping, food]
+  places:
+    - {day: 1, query: "남한산성", expect_name_contains: "남한산성", family: heritage, source: feature}
+    - {day: 1, query: "화담숲", expect_name_contains: "곤지암화담숲", family: park, source: feature}
+    - {day: 1, query: "스타필드 하남", expect_name_contains: "스타필드 하남", family: shopping, source: feature}
+    - {day: 1, query: "가보정", expect_name_contains: "가보정", family: food, source: feature}
+  checks:
+    - optimize_day: 1
+  notes: ""
+
+- id: TRS-CG-030
+  title: "의왕 겨울축제 + 서울대공원 당일"
+  style: festival
+  days: 1
+  start_offset_days: 38
+  priority: P2
+  tags: [festival, leisure, trail, food]
+  places:
+    - {day: 1, query: "의왕왕송호수 겨울축제", expect_name_contains: "의왕왕송호수 겨울축제", family: festival, source: feature}
+    - {day: 1, query: "서울대공원", expect_name_contains: "서울대공원", family: leisure, source: feature}
+    - {day: 1, query: "청계산", expect_name_contains: "청계산", family: trail, source: feature}
+    - {day: 1, query: "가보정", expect_name_contains: "가보정", family: food, source: feature}
+  checks:
+    - weather_day: 1
+  notes: "날짜미정 축제 이벤트 피처"
+
+- id: TRS-CG-031
+  title: "수도권 순환 드라이브 3박4일"
+  style: drive
+  days: 4
+  start_offset_days: 16
+  priority: P2
+  tags: [transport, culture, cafe, rest_area, nature, lodging, religious, spa, heritage, food]
+  places:
+    - {day: 1, query: "김포국제공항", expect_name_contains: "김포국제공항", family: transport, source: feature}
+    - {day: 1, query: "임진각", expect_name_contains: "임진각", family: culture, source: feature}
+    - {day: 1, query: "헤이리 예술마을", expect_name_contains: "헤이리예술마을", family: culture, source: feature}
+    - {day: 1, query: "더티트렁크", expect_name_contains: "더티 트렁크", family: cafe, source: feature}
+    - {day: 2, query: "가평휴게소", expect_name_contains: "가평휴게소", family: rest_area, source: feature}
+    - {day: 2, query: "남이섬", expect_name_contains: "남이섬", family: nature, source: feature}
+    - {day: 2, query: "가평 글램핑", expect_name_contains: "가평별빛누리글램핑", family: lodging, source: feature}
+    - {day: 3, query: "두물머리", expect_name_contains: "두물머리", family: nature, source: feature}
+    - {day: 3, query: "용문사", expect_name_contains: "용문사", family: religious, source: feature}
+    - {day: 3, query: "중미산자연휴양림", expect_name_contains: "중미산자연휴양림", family: lodging, source: feature}
+    - {day: 4, query: "테르메덴", expect_name_contains: "이천 테르메덴", family: spa, source: feature}
+    - {day: 4, query: "수원화성", expect_name_contains: "수원화성", family: heritage, source: feature}
+    - {day: 4, query: "본수원갈비", expect_name_contains: "본수원갈비", family: food, source: feature}
+  checks:
+    - optimize_day: 4
+    - reorder_day: 3
+    - copy_trip
+  notes: "숙소가 매일 바뀌는 이동형"
+
+- id: TRS-CG-032
+  title: "강릉 바다 1박2일 — 호텔·순두부·카페"
+  style: sea
+  days: 2
+  start_offset_days: 3
+  priority: P1
+  tags: [transport, food, beach, lodging, parking, cafe]
+  places:
+    - {day: 1, query: "강릉역", expect_name_contains: "강릉역", family: transport, source: feature}
+    - {day: 1, query: "초당순두부", expect_name_contains: "옛날초당순두부", family: food, source: feature}
+    - {day: 1, query: "경포해변", expect_name_contains: "경포해변", family: beach, source: feature}
+    - {day: 1, query: "씨마크 호텔", expect_name_contains: "씨마크 호텔", family: lodging, source: feature}
+    - {day: 2, query: "안목해변", expect_name_contains: "안목해변", family: beach, source: feature}
+    - {day: 2, query: "안목 커피거리", expect_name_contains: "안목 커피거리 공영주차장", family: parking, source: feature}
+    - {day: 2, query: "테라로사", expect_name_contains: "테라로사 커피공장 강릉본점", family: cafe, source: feature}
+    - {day: 2, query: "강릉커피콩빵", expect_name_contains: "강릉커피콩빵 강릉당본점", family: food, source: feature}
+  checks:
+    - optimize_day: 2
+    - weather_day: 1
+    - share_readonly
+  notes: ""
+
+- id: TRS-CG-033
+  title: "강릉 커피 투어 당일"
+  style: food
+  days: 1
+  start_offset_days: 1
+  priority: P2
+  tags: [cafe, beach, food]
+  places:
+    - {day: 1, query: "테라로사", expect_name_contains: "테라로사 커피공장 강릉본점", family: cafe, source: feature}
+    - {day: 1, query: "보헤미안 박이추", expect_name_contains: "보헤미안박이추커피", family: cafe, source: feature}
+    - {day: 1, query: "툇마루", expect_name_contains: "카페 툇마루", family: cafe, source: feature}
+    - {day: 1, query: "안목해변", expect_name_contains: "안목해변", family: beach, source: feature}
+    - {day: 1, query: "강릉커피콩빵", expect_name_contains: "강릉커피콩빵 강릉당본점", family: food, source: feature}
+  checks:
+    - optimize_day: 1
+    - reorder_day: 1
+  notes: "카페 위주"
+
+- id: TRS-CG-034
+  title: "강릉 문화유산 1박2일 — 오죽헌·선교장"
+  style: heritage
+  days: 2
+  start_offset_days: 19
+  priority: P2
+  tags: [heritage, museum, lodging, food]
+  places:
+    - {day: 1, query: "오죽헌", expect_name_contains: "오죽헌", family: heritage, source: feature}
+    - {day: 1, query: "선교장", expect_name_contains: "선교장", family: heritage, source: feature}
+    - {day: 1, query: "허균허난설헌", expect_name_contains: "허균허난설헌기념관", family: museum, source: feature}
+    - {day: 1, query: "경포대", expect_name_contains: "경포대", family: heritage, source: feature}
+    - {day: 1, query: "세인트존스 호텔", expect_name_contains: "세인트존스 경포 호텔", family: lodging, source: feature}
+    - {day: 2, query: "참소리 축음기 에디슨박물관", expect_name_contains: "참소리축음기박물관", family: museum, source: feature}
+    - {day: 2, query: "강릉 아르떼뮤지엄", expect_name_contains: "아르떼뮤지엄", family: museum, source: feature}
+    - {day: 2, query: "초당순두부", expect_name_contains: "옛날초당순두부", family: food, source: feature}
+  checks:
+    - optimize_day: 1
+    - date_shift: 2
+  notes: ""
+
+- id: TRS-CG-035
+  title: "정동진 해돋이 1박2일 — 같은 바다 두 번"
+  style: drive
+  days: 2
+  start_offset_days: 27
+  priority: P2
+  tags: [transport, museum, beach, food, lodging, nature, market, parking]
+  places:
+    - {day: 1, query: "강릉역", expect_name_contains: "강릉역", family: transport, source: feature}
+    - {day: 1, query: "하슬라아트월드", expect_name_contains: "하슬라아트월드", family: museum, source: feature}
+    - {day: 1, query: "정동진", expect_name_contains: "정동진", family: beach, source: feature}
+    - {day: 1, query: "썬크루즈", expect_name_contains: "썬크루즈제과점", family: food, source: feature}
+    - {day: 1, query: "세인트존스 호텔", expect_name_contains: "세인트존스 경포 호텔", family: lodging, source: feature}
+    - {day: 2, query: "정동진", expect_name_contains: "정동진", family: beach, source: feature}
+    - {day: 2, query: "헌화로", expect_name_contains: "헌화로드라이브코스", family: nature, source: feature}
+    - {day: 2, query: "주문진 수산시장", expect_name_contains: "주문진수산시장", family: market, source: feature}
+    - {day: 2, query: "주문진항", expect_name_contains: "주문진항 관광지 공영주차장", family: parking, source: feature}
+  checks:
+    - weather_day: 2
+    - optimize_day: 2
+  notes: "같은 장소(정동진) day1·day2 두 번"
+
+- id: TRS-CG-036
+  title: "설악산 등산 2박3일 — 대청봉·울산바위"
+  style: mountain
+  days: 3
+  start_offset_days: 10
+  priority: P1
+  tags: [religious, leisure, heritage, lodging, trail, nature, food, spa]
+  places:
+    - {day: 1, query: "신흥사", expect_name_contains: "신흥사", family: religious, source: feature}
+    - {day: 1, query: "설악케이블카", expect_name_contains: "설악 케이블카", family: leisure, source: feature}
+    - {day: 1, query: "권금성", expect_name_contains: "권금성", family: heritage, source: feature}
+    - {day: 1, query: "한화리조트 설악", expect_name_contains: "한화리조트 설악 쏘라노", family: lodging, source: feature}
+    - {day: 2, query: "대청봉", expect_name_contains: "설악산_대청봉", family: trail, source: feature}
+    - {day: 2, query: "비룡폭포", expect_name_contains: "비룡폭포코스", family: trail, source: feature}
+    - {day: 2, query: "토왕성폭포", expect_name_contains: "설악산 토왕성폭포", family: nature, source: feature}
+    - {day: 2, query: "한화리조트 설악", expect_name_contains: "한화리조트 설악 쏘라노", family: lodging, source: feature}
+    - {day: 3, query: "울산바위", expect_name_contains: "울산바위", family: nature, source: feature}
+    - {day: 3, query: "만석닭강정", expect_name_contains: "만석닭강정 중앙시장점", family: food, source: feature}
+    - {day: 3, query: "척산온천", expect_name_contains: "척산온천", family: spa, source: feature}
+  checks:
+    - weather_day: 2
+    - optimize_day: 1
+    - share_readonly
+  notes: "설악산 등산로 피처"
+
+- id: TRS-CG-037
+  title: "속초 먹방 1박2일 — 닭강정·물회·칠성조선소"
+  style: food
+  days: 2
+  start_offset_days: 4
+  priority: P2
+  tags: [culture, food, cafe, lodging, nature, parking]
+  places:
+    - {day: 1, query: "아바이마을", expect_name_contains: "속초 아바이마을", family: culture, source: feature}
+    - {day: 1, query: "만석닭강정", expect_name_contains: "만석닭강정 중앙시장점", family: food, source: feature}
+    - {day: 1, query: "칠성조선소", expect_name_contains: "칠성조선소", family: cafe, source: feature}
+    - {day: 1, query: "롯데리조트 속초", expect_name_contains: "롯데리조트 속초", family: lodging, source: feature}
+    - {day: 2, query: "영금정", expect_name_contains: "영금정", family: nature, source: feature}
+    - {day: 2, query: "영금정", expect_name_contains: "영금정 공영주차장", family: parking, source: feature}
+    - {day: 2, query: "동명항", expect_name_contains: "동명항 생선숯불구이", family: food, source: feature}
+    - {day: 2, query: "봉브레드", expect_name_contains: "봉브레드", family: food, source: feature}
+    - {day: 2, query: "봉포머구리집", expect_name_contains: "봉포머구리집", family: food, source: feature}
+  checks:
+    - optimize_day: 2
+    - reorder_day: 2
+  notes: ""
+
+- id: TRS-CG-038
+  title: "양양 서핑 1박2일 — 서피비치·죽도"
+  style: sea
+  days: 2
+  start_offset_days: 6
+  priority: P2
+  tags: [beach, cafe, parking, lodging, heritage, religious]
+  places:
+    - {day: 1, query: "서피비치", expect_name_contains: "서피비치", family: beach, source: feature}
+    - {day: 1, query: "양양 서프 카페", expect_name_contains: "서프쉑 카페", family: cafe, source: feature}
+    - {day: 1, query: "죽도해변", expect_name_contains: "죽도해변 주차장", family: parking, source: feature}
+    - {day: 1, query: "쏠비치 양양", expect_name_contains: "쏠비치 양양", family: lodging, source: feature}
+    - {day: 2, query: "하조대", expect_name_contains: "하조대", family: heritage, source: feature}
+    - {day: 2, query: "낙산사", expect_name_contains: "낙산사", family: religious, source: feature}
+    - {day: 2, query: "바다정원 속초", expect_name_contains: "바다정원", family: cafe, source: feature}
+  checks:
+    - weather_day: 1
+    - optimize_day: 2
+  notes: ""
+
+- id: TRS-CG-039
+  title: "설악동 야영장 2박3일 캠핑"
+  style: camping
+  days: 3
+  start_offset_days: 31
+  priority: P2
+  tags: [camping, nature, trail, beach, food, religious, spa, mobile]
+  places:
+    - {day: 1, query: "설악동 야영장", expect_name_contains: "설악동야영장", family: camping, source: feature}
+    - {day: 1, query: "설악산 소공원", expect_name_contains: "설악산 국립공원", family: nature, source: feature}
+    - {day: 2, query: "비룡폭포", expect_name_contains: "비룡폭포코스", family: trail, source: feature}
+    - {day: 2, query: "속초해수욕장", expect_name_contains: "속초해수욕장", family: beach, source: feature}
+    - {day: 2, query: "만석닭강정", expect_name_contains: "만석닭강정 중앙시장점", family: food, source: feature}
+    - {day: 2, query: "설악동 야영장", expect_name_contains: "설악동야영장", family: camping, source: feature}
+    - {day: 3, query: "낙산사", expect_name_contains: "낙산사", family: religious, source: feature}
+    - {day: 3, query: "설악워터피아", expect_name_contains: "설악워터피아", family: spa, source: feature}
+  checks:
+    - weather_day: 1
+    - delete_day: 3
+  notes: "야영장 2박(같은 장소 두 번)"
+
+- id: TRS-CG-040
+  title: "평창 리조트 2박3일 — 용평·알펜시아"
+  style: family
+  days: 3
+  start_offset_days: 34
+  priority: P2
+  tags: [lodging, leisure, food, nature, religious]
+  places:
+    - {day: 1, query: "용평리조트", expect_name_contains: "용평리조트", family: lodging, source: feature}
+    - {day: 1, query: "발왕산 케이블카", expect_name_contains: "발왕산 관광케이블카", family: leisure, source: feature}
+    - {day: 1, query: "황태회관", expect_name_contains: "황태회관", family: food, source: feature}
+    - {day: 2, query: "알펜시아", expect_name_contains: "알펜시아", family: leisure, source: feature}
+    - {day: 2, query: "인터컨티넨탈 알펜시아", expect_name_contains: "인터컨티넨탈 알펜시아 평창 리조트", family: lodging, source: feature}
+    - {day: 3, query: "대관령 양떼목장", expect_name_contains: "대관령양떼목장", family: nature, source: feature}
+    - {day: 3, query: "월정사", expect_name_contains: "월정사", family: religious, source: feature}
+  checks:
+    - weather_day: 1
+    - copy_trip
+  notes: "스키 리조트 시즌 초입"
+
+- id: TRS-CG-041
+  title: "평창 송어축제 1박2일 — 봉평·휘닉스"
+  style: festival
+  days: 2
+  start_offset_days: 40
+  priority: P2
+  tags: [festival, food, museum, lodging, nature]
+  places:
+    - {day: 1, query: "평창 송어축제", expect_name_contains: "평창 송어축제", family: festival, source: feature}
+    - {day: 1, query: "메밀꽃필무렵", expect_name_contains: "메밀꽃필무렵", family: food, source: feature}
+    - {day: 1, query: "이효석문학관", expect_name_contains: "이효석문학관", family: museum, source: feature}
+    - {day: 1, query: "휘닉스 평창", expect_name_contains: "휘닉스평창", family: lodging, source: feature}
+    - {day: 2, query: "삼양목장", expect_name_contains: "대관령 삼양목장", family: nature, source: feature}
+    - {day: 2, query: "하늘목장", expect_name_contains: "대관령 하늘목장", family: nature, source: feature}
+    - {day: 2, query: "황태회관", expect_name_contains: "황태회관", family: food, source: feature}
+  checks:
+    - weather_day: 1
+    - optimize_day: 1
+  notes: "축제 기간 여행(최대 offset 40)"
+
+- id: TRS-CG-042
+  title: "정선 3박4일 — 레일바이크·가리왕산·하이원"
+  style: mixed
+  days: 4
+  start_offset_days: 20
+  priority: P2
+  tags: [market, leisure, nature, lodging, culture, museum]
+  places:
+    - {day: 1, query: "정선 아리랑시장", expect_name_contains: "정선아리랑시장", family: market, source: feature}
+    - {day: 1, query: "정선 레일바이크", expect_name_contains: "정선레일바이크", family: leisure, source: feature}
+    - {day: 1, query: "병방치 스카이워크", expect_name_contains: "정선 병방치 스카이워크", family: nature, source: feature}
+    - {day: 1, query: "가리왕산자연휴양림", expect_name_contains: "가리왕산자연휴양림", family: lodging, source: feature}
+    - {day: 2, query: "가리왕산 케이블카", expect_name_contains: "가리왕산 케이블카", family: leisure, source: feature}
+    - {day: 2, query: "아라리촌", expect_name_contains: "정선아라리촌", family: culture, source: feature}
+    - {day: 2, query: "가리왕산자연휴양림", expect_name_contains: "가리왕산자연휴양림", family: lodging, source: feature}
+    - {day: 3, query: "하이원리조트", expect_name_contains: "하이원리조트", family: leisure, source: feature}
+    - {day: 3, query: "강원랜드 호텔", expect_name_contains: "강원랜드", family: leisure, source: feature}
+    - {day: 3, query: "삼탄아트마인", expect_name_contains: "삼탄아트마인", family: museum, source: feature}
+    - {day: 4, query: "화암동굴", expect_name_contains: "화암동굴", family: nature, source: feature}
+  checks:
+    - optimize_day: 1
+    - weather_day: 3
+    - delete_day: 4
+    - share_readonly
+  notes: "휴양림 2박(같은 장소 두 번), day4 1곳"
+
+- id: TRS-CG-043
+  title: "춘천 닭갈비 1박2일 — 레고랜드"
+  style: food
+  days: 2
+  start_offset_days: 2
+  priority: P2
+  tags: [transport, food, leisure, lodging, cafe]
+  places:
+    - {day: 1, query: "춘천역", expect_name_contains: "춘천역", family: transport, source: feature}
+    - {day: 1, query: "명동 닭갈비 골목", expect_name_contains: "명동 닭갈비 골목", family: food, source: feature}
+    - {day: 1, query: "소양강 스카이워크", expect_name_contains: "소양강스카이워크", family: leisure, source: feature}
+    - {day: 1, query: "레고랜드", expect_name_contains: "레고랜드코리아리조트", family: lodging, source: feature}
+    - {day: 2, query: "레고랜드", expect_name_contains: "레고랜드코리아", family: leisure, source: feature}
+    - {day: 2, query: "카페 감자밭", expect_name_contains: "카페감자밭 본점", family: cafe, source: feature}
+    - {day: 2, query: "샘밭막국수", expect_name_contains: "샘밭막국수", family: food, source: feature}
+  checks:
+    - optimize_day: 1
+    - date_shift: 1
+  notes: ""
+
+- id: TRS-CG-044
+  title: "춘천 호수 당일 — 의암호·김유정·강촌"
+  style: city
+  days: 1
+  start_offset_days: 9
+  priority: P2
+  tags: [leisure, culture, food, cafe]
+  places:
+    - {day: 1, query: "의암호 스카이워크", expect_name_contains: "의암호스카이워크", family: leisure, source: feature}
+    - {day: 1, query: "김유정문학촌", expect_name_contains: "김유정문학촌", family: culture, source: feature}
+    - {day: 1, query: "강촌레일파크", expect_name_contains: "강촌레일파크", family: leisure, source: feature}
+    - {day: 1, query: "우미닭갈비", expect_name_contains: "우미닭갈비 본점", family: food, source: feature}
+    - {day: 1, query: "카페 감자밭", expect_name_contains: "카페감자밭 본점", family: cafe, source: feature}
+  checks:
+    - optimize_day: 1
+  notes: ""
+
+- id: TRS-CG-045
+  title: "홍천 캠핑 & 비발디 2박3일"
+  style: camping
+  days: 3
+  start_offset_days: 23
+  priority: P2
+  tags: [food, camping, spa, lodging]
+  places:
+    - {day: 1, query: "샘밭막국수", expect_name_contains: "샘밭막국수", family: food, source: feature}
+    - {day: 1, query: "홍천 캠핑장", expect_name_contains: "안단테 홍천캠핑장", family: camping, source: feature}
+    - {day: 2, query: "오션월드", expect_name_contains: "오션월드", family: spa, source: feature}
+    - {day: 2, query: "소노벨 비발디파크", expect_name_contains: "소노벨 비발디파크", family: lodging, source: feature}
+    - {day: 3, query: "소노벨 비발디파크", expect_name_contains: "소노벨 비발디파크", family: lodging, source: feature}
+  checks:
+    - weather_day: 1
+    - reorder_day: 2
+  notes: "day3는 숙소만 있는 날(체크아웃)"
+
+- id: TRS-CG-046
+  title: "인제·고성·철원 북단 3박4일 — 극단 거리 하루"
+  style: drive
+  days: 4
+  start_offset_days: 37
+  priority: P2
+  tags: [lodging, leisure, food, beach, park, nature]
+  places:
+    - {day: 1, query: "방태산자연휴양림", expect_name_contains: "방태산자연휴양림", family: lodging, source: feature}
+    - {day: 1, query: "내린천 휴게소", expect_name_contains: "내린천래프팅", family: leisure, source: feature}
+    - {day: 2, query: "용대자연휴양림", expect_name_contains: "용대자연휴양림", family: lodging, source: feature}
+    - {day: 2, query: "황태회관", expect_name_contains: "황태회관", family: food, source: feature}
+    - {day: 3, query: "화진포", expect_name_contains: "화진포", family: beach, source: feature}
+    - {day: 3, query: "대진항", expect_name_contains: "대진항해상공원", family: park, source: feature}
+    - {day: 3, query: "고석정", expect_name_contains: "고석정", family: nature, source: feature}
+    - {day: 4, query: "홍천 펜션", expect_name_contains: "홍천강이야기 펜션", family: lodging, source: feature}
+  checks:
+    - optimize_day: 3
+    - weather_day: 3
+  notes: "day3 화진포(고성)↔고석정(철원) ~130km 원거리 최적화 edge; day4 숙소만"
+
+- id: TRS-CG-047
+  title: "원주 소금산·뮤지엄산 당일"
+  style: culture
+  days: 1
+  start_offset_days: 29
+  priority: P2
+  tags: [leisure, museum, nature, food]
+  places:
+    - {day: 1, query: "소금산 출렁다리", expect_name_contains: "소금산 출렁다리", family: leisure, source: feature}
+    - {day: 1, query: "뮤지엄 산", expect_name_contains: "뮤지엄 산", family: museum, source: feature}
+    - {day: 1, query: "치악산", expect_name_contains: "치악산 국립공원", family: nature, source: feature}
+    - {day: 1, query: "우미닭갈비", expect_name_contains: "우미닭갈비 본점", family: food, source: feature}
+  checks:
+    - optimize_day: 1
+  notes: "춘천 닭갈비로 귀가 동선(원거리)"
+
+- id: TRS-CG-048
+  title: "화천 산천어축제 1박2일"
+  style: festival
+  days: 2
+  start_offset_days: 39
+  priority: P2
+  tags: [festival, food, lodging, leisure, cafe]
+  places:
+    - {day: 1, query: "얼음나라 화천 산천어축제", expect_name_contains: "2026 얼음나라 화천 산천어축제", family: festival, source: feature}
+    - {day: 1, query: "명동 닭갈비 골목", expect_name_contains: "명동 닭갈비 골목", family: food, source: feature}
+    - {day: 1, query: "레고랜드", expect_name_contains: "레고랜드코리아리조트", family: lodging, source: feature}
+    - {day: 2, query: "의암호 스카이워크", expect_name_contains: "의암호스카이워크", family: leisure, source: feature}
+    - {day: 2, query: "카페 감자밭", expect_name_contains: "카페감자밭 본점", family: cafe, source: feature}
+  checks:
+    - weather_day: 1
+    - share_readonly
+  notes: "1월 축제 이벤트 피처 — 기간 밖 날짜로 담기(기간 단언 금지)"
+
+- id: TRS-CG-049
+  title: "서울→강릉 횡단 6박7일"
+  style: mixed
+  days: 7
+  start_offset_days: 14
+  priority: P2
+  tags: [transport, lodging, market, heritage, food, rest_area, nature, leisure, cafe]
+  places:
+    - {day: 1, query: "김포국제공항", expect_name_contains: "김포국제공항", family: transport, source: feature}
+    - {day: 1, query: "롯데호텔 서울", expect_name_contains: "롯데호텔 서울", family: lodging, source: feature}
+    - {day: 1, query: "광장시장", expect_name_contains: "광장시장", family: market, source: feature}
+    - {day: 2, query: "경복궁", expect_name_contains: "경복궁", family: heritage, source: feature}
+    - {day: 2, query: "토속촌 삼계탕", expect_name_contains: "토속촌 삼계탕", family: food, source: feature}
+    - {day: 2, query: "롯데호텔 서울", expect_name_contains: "롯데호텔 서울", family: lodging, source: feature}
+    - {day: 3, query: "가평휴게소", expect_name_contains: "가평휴게소", family: rest_area, source: feature}
+    - {day: 3, query: "남이섬", expect_name_contains: "남이섬", family: nature, source: feature}
+    - {day: 3, query: "명동 닭갈비 골목", expect_name_contains: "명동 닭갈비 골목", family: food, source: feature}
+    - {day: 3, query: "레고랜드", expect_name_contains: "레고랜드코리아리조트", family: lodging, source: feature}
+    - {day: 4, query: "레고랜드", expect_name_contains: "레고랜드코리아", family: leisure, source: feature}
+    - {day: 4, query: "소양강 스카이워크", expect_name_contains: "소양강스카이워크", family: leisure, source: feature}
+    - {day: 4, query: "소노벨 비발디파크", expect_name_contains: "소노벨 비발디파크", family: lodging, source: feature}
+    - {day: 5, query: "대관령 양떼목장", expect_name_contains: "대관령양떼목장", family: nature, source: feature}
+    - {day: 5, query: "황태회관", expect_name_contains: "황태회관", family: food, source: feature}
+    - {day: 5, query: "용평리조트", expect_name_contains: "용평리조트", family: lodging, source: feature}
+    - {day: 6, query: "오죽헌", expect_name_contains: "오죽헌", family: heritage, source: feature}
+    - {day: 6, query: "초당순두부", expect_name_contains: "옛날초당순두부", family: food, source: feature}
+    - {day: 6, query: "씨마크 호텔", expect_name_contains: "씨마크 호텔", family: lodging, source: feature}
+    - {day: 7, query: "테라로사", expect_name_contains: "테라로사 커피공장 강릉본점", family: cafe, source: feature}
+    - {day: 7, query: "강릉역", expect_name_contains: "강릉역", family: transport, source: feature}
+  checks:
+    - optimize_day: 3
+    - weather_day: 6
+    - reorder_day: 2
+    - delete_day: 7
+    - copy_trip
+    - share_readonly
+  notes: "최대 일수(7일) 장거리 이동"
+
+- id: TRS-CG-050
+  title: "인천공항→속초 하루 극단 거리"
+  style: drive
+  days: 1
+  start_offset_days: 0
+  priority: P2
+  tags: [transport, food, beach]
+  places:
+    - {day: 1, query: "인천국제공항", expect_name_contains: "인천국제공항", family: transport, source: feature}
+    - {day: 1, query: "서울역", expect_name_contains: "서울역", family: transport, source: feature}
+    - {day: 1, query: "만석닭강정", expect_name_contains: "만석닭강정 중앙시장점", family: food, source: feature}
+    - {day: 1, query: "속초해수욕장", expect_name_contains: "속초해수욕장", family: beach, source: feature}
+  checks:
+    - optimize_day: 1
+  notes: "한 날에 수도권↔동해안(~200km) 원거리 최적화 edge"
