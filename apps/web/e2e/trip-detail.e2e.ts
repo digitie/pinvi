@@ -1367,6 +1367,20 @@ const LONG_PANEL_VIEW = {
   days: [{ ...BASE_MARKER_DAY, pois: LONG_PANEL_POIS }],
 };
 
+/** 실지도 검증 환경: 바탕지도 tile은 빈 PNG로 — 외부 망 없이 maplibre 마커 위치(맞춤)만 잰다. */
+async function stubTilesInCanvasMode(page: Page) {
+  if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1') return;
+  await page.route(
+    (url) => url.protocol === 'https:',
+    async (route, request) => {
+      if (request.resourceType() !== 'image' && !/\.(png|jpe?g|webp)(\?|$)/i.test(request.url())) {
+        return route.fallback();
+      }
+      await route.fulfill({ contentType: 'image/png', body: TRANSPARENT_PNG });
+    },
+  );
+}
+
 const LONG_TITLE_VIEW = {
   ...LONG_PANEL_VIEW,
   trip: {
@@ -1397,18 +1411,7 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
 
     test('지도는 창 안에 있고 왼쪽 패널만 따로 스크롤한다(#704)', async ({ page }) => {
       await mockTripDetailRoutes(page, view);
-      if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS === '1') {
-        // 실지도 검증 환경: 바탕지도 tile은 빈 PNG로 — 외부 망 없이 maplibre 마커 위치(맞춤)만 잰다.
-        await page.route(
-          (url) => url.protocol === 'https:',
-          async (route, request) => {
-            if (request.resourceType() !== 'image' && !/\.(png|jpe?g|webp)(\?|$)/i.test(request.url())) {
-              return route.fallback();
-            }
-            await route.fulfill({ contentType: 'image/png', body: TRANSPARENT_PNG });
-          },
-        );
-      }
+      await stubTilesInCanvasMode(page);
 
       await page.goto(`/trips/${tripId}`);
 
@@ -1544,6 +1547,7 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
 test('데스크톱 패널이 넘치지 않으면 스크롤 영역은 초점을 받지 않는다(#704)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockTripDetailRoutes(page);
+  await stubTilesInCanvasMode(page);
   await page.goto(`/trips/${tripId}`);
   await expect(page.getByTestId('trip-poi-list')).toContainText('해운대 해수욕장');
   const panelScroll = page.getByTestId('trip-detail-panel-scroll');
