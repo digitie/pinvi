@@ -215,10 +215,61 @@ async def test_cold_months_cannot_take_the_shared_slots_from_search() -> None:
     ]
     await asyncio.sleep(0)
     # 축제 자리가 다 찼다 — 다음 축제 월은 바로 거부되고, 검색은 그대로 Map에 닿는다.
-    with pytest.raises(KorTravelMapUnavailable) as info:
-        await client.public_festivals_monthly(year=2026, month=12)
-    assert info.value.code == "BULKHEAD_FULL"
-    assert (await client.search_features(q="안동하회마을"))["items"] == []
+    async with asyncio.timeout(2):
+        with pytest.raises(KorTravelMapUnavailable) as info:
+            await client.public_festivals_monthly(year=2026, month=12)
+        assert info.value.code == "BULKHEAD_FULL"
+        assert (await client.search_features(q="안동하회마을"))["items"] == []
     release.set()
     await asyncio.gather(*slow)
+    await client.aclose()
+
+
+async def test_cancelled_caller_does_not_cancel_the_shared_fetch_or_other_callers() -> None:
+    sent = 0
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal sent
+        sent += 1
+        await release.wait()
+        return httpx.Response(200, json=_MONTHLY)
+
+    client = _async_client(handler)
+    leader = asyncio.create_task(client.public_festivals_monthly(year=2026, month=7))
+    await asyncio.sleep(0)
+    waiters = [
+        asyncio.create_task(client.public_festivals_monthly(year=2026, month=7)) for _ in range(2)
+    ]
+    await asyncio.sleep(0)
+    # 처음 부른 요청(연결 끊김 등)과 기다리던 요청 하나가 취소돼도 나머지는 결과를 받는다.
+    leader.cancel()
+    waiters[0].cancel()
+    release.set()
+    results = await asyncio.gather(leader, *waiters, return_exceptions=True)
+    assert isinstance(results[0], asyncio.CancelledError)
+    assert isinstance(results[1], asyncio.CancelledError)
+    assert isinstance(results[2], dict) and results[2]["items"] == []
+    # 공유 조회는 끝까지 가서 캐시를 채웠다 — 다시 불러도 Map에 가지 않는다.
+    await client.public_festivals_monthly(year=2026, month=7)
+    assert sent == 1
+    await client.aclose()
+
+
+async def test_waiters_get_their_own_exception_objects() -> None:
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        await release.wait()
+        raise httpx.ReadTimeout("cold month", request=request)
+
+    client = _async_client(handler)
+    calls = [
+        asyncio.create_task(client.public_festivals_monthly(year=2026, month=8)) for _ in range(3)
+    ]
+    await asyncio.sleep(0)
+    release.set()
+    results = await asyncio.gather(*calls, return_exceptions=True)
+    assert all(isinstance(r, KorTravelMapUnavailable) for r in results)
+    assert len({id(r) for r in results}) == 3
     await client.aclose()

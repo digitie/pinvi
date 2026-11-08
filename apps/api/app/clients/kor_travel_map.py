@@ -364,6 +364,12 @@ def _decode_feature_batch_item(raw: object) -> FeatureBatchItem:
     return UnchangedFeatureBatchItem(feature_id=feature_id, row_revision=row_revision)
 
 
+def _retrieve_task_exception(task: asyncio.Task[Any]) -> None:
+    """기다린 호출자가 모두 취소돼도 "exception was never retrieved" 경고를 남기지 않는다."""
+    if not task.cancelled():
+        task.exception()
+
+
 class KorTravelMapClient:
     """kor-travel-map user-facing OpenAPI(`openapi.user.json`) HTTP client."""
 
@@ -402,7 +408,7 @@ class KorTravelMapClient:
             tuple[tuple[str, Any], ...], tuple[float, dict[str, Any]]
         ] = {}
         self._festivals_monthly_inflight: dict[
-            tuple[tuple[str, Any], ...], asyncio.Future[dict[str, Any]]
+            tuple[tuple[str, Any], ...], asyncio.Task[dict[str, Any]]
         ] = {}
         self._festivals_slots = asyncio.Semaphore(FESTIVALS_MAX_CONCURRENT_REQUESTS)
 
@@ -966,35 +972,49 @@ class KorTravelMapClient:
         cached = self._festivals_monthly_cache.get(cache_key)
         if cached is not None and self._clock() - cached[0] < FESTIVALS_MONTHLY_CACHE_TTL_SECONDS:
             return copy.deepcopy(cached[1])
-        # 같은 첫 조회 월에 동시에 몰린 요청은 Map에 한 번만 보낸다(single-flight).
-        inflight = self._festivals_monthly_inflight.get(cache_key)
-        if inflight is not None:
-            return copy.deepcopy(await asyncio.shield(inflight))
-        # 서로 다른 첫 조회 월이 몰려도 공용 동시 호출 자리(검색·상세와 공유)를 다 쓰지 않게 따로 묶는다.
-        if self._festivals_slots.locked():
-            raise KorTravelMapUnavailable(
-                "kor-travel-map 축제 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
-            )
-        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
-        self._festivals_monthly_inflight[cache_key] = future
+        # 같은 첫 조회 월에 동시에 몰린 요청은 Map에 한 번만 보낸다(single-flight). 조회는 분리된 task라
+        # 한 호출자가 취소돼도(연결 끊김·종료) 다른 호출자와 캐시 채우기는 계속된다.
+        task = self._festivals_monthly_inflight.get(cache_key)
+        if task is None:
+            # 서로 다른 첫 조회 월이 몰려도 공용 동시 호출 자리(검색·상세와 공유)를 다 쓰지 않게 따로 묶는다.
+            # locked 검사와 acquire 사이에는 suspension이 없다(semaphore fast path).
+            if self._festivals_slots.locked():
+                raise KorTravelMapUnavailable(
+                    "kor-travel-map 축제 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
+                )
+            await self._festivals_slots.acquire()
+            task = asyncio.create_task(self._fetch_and_cache_festivals_monthly(cache_key, params))
+            self._festivals_monthly_inflight[cache_key] = task
+            task.add_done_callback(_retrieve_task_exception)
         try:
-            async with self._festivals_slots:
-                page = await self._fetch_public_festivals_monthly(params)
-        except BaseException as exc:
-            if not future.done():
-                future.set_exception(exc)
-            # 기다린 요청이 없을 때 "never retrieved" 경고가 나지 않게 한 번 읽는다.
-            future.exception()
-            raise
+            page = await asyncio.shield(task)
+        except KorTravelMapUnavailable as exc:
+            # 기다린 호출자마다 새 예외 — 같은 예외 객체에 traceback이 쌓이지 않게.
+            raise KorTravelMapUnavailable(
+                str(exc),
+                code=exc.code,
+                details=exc.details,
+                retry_after_seconds=exc.retry_after_seconds,
+                status_code=exc.status_code,
+                error_class=exc.error_class,
+            ) from exc
+        return copy.deepcopy(page)
+
+    async def _fetch_and_cache_festivals_monthly(
+        self, cache_key: tuple[tuple[str, Any], ...], params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """single-flight 조회 본체 — 자리(이미 잡음)를 놓고, 성공만 캐시한다. 반환값은 캐시 사본이다."""
+        try:
+            page = await self._fetch_public_festivals_monthly(params)
+            cache = self._festivals_monthly_cache
+            cache.pop(cache_key, None)
+            cache[cache_key] = (self._clock(), copy.deepcopy(page))
+            while len(cache) > _FESTIVALS_MONTHLY_CACHE_MAX:
+                cache.pop(next(iter(cache)))
+            return cache[cache_key][1]
         finally:
+            self._festivals_slots.release()
             self._festivals_monthly_inflight.pop(cache_key, None)
-        cache = self._festivals_monthly_cache
-        cache.pop(cache_key, None)
-        cache[cache_key] = (self._clock(), copy.deepcopy(page))
-        while len(cache) > _FESTIVALS_MONTHLY_CACHE_MAX:
-            cache.pop(next(iter(cache)))
-        future.set_result(page)
-        return page
 
     async def _fetch_public_festivals_monthly(self, params: dict[str, Any]) -> dict[str, Any]:
         default = self._http.timeout
