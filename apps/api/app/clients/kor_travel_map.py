@@ -57,6 +57,9 @@ FESTIVALS_MONTHLY_READ_TIMEOUT_SECONDS: float = 15.0
 #: 성공한 월별 목록을 이 시간(초) 동안 재사용한다 — 공개 화면의 같은 질의가 Map을 다시 깨우지 않게.
 FESTIVALS_MONTHLY_CACHE_TTL_SECONDS: float = 300.0
 _FESTIVALS_MONTHLY_CACHE_MAX = 128
+#: 축제 월별 목록이 동시에 쓰는 Map 호출 자리 상한 — 공용 상한(16)의 일부만, 넘치면 바로 503(대기열 없음).
+#: 연·월 없이 부르면 Map이 이번 달을 고르므로 월이 바뀐 직후 최대 TTL만큼 지난달 목록이 나올 수 있다(허용).
+FESTIVALS_MAX_CONCURRENT_REQUESTS = 4
 
 #: 백오프로 다시 보내는 오류 — 연결 자체가 맺어지지 않아 요청이 Map 처리에 닿지 않았다. ``ReadTimeout``·
 #: ``ReadError``는 Map이 요청을 받아 처리 중이었거나 처리 도중 끊겼다는 뜻이라 다시 보내면 같은 무거운 질의를
@@ -398,6 +401,10 @@ class KorTravelMapClient:
         self._festivals_monthly_cache: dict[
             tuple[tuple[str, Any], ...], tuple[float, dict[str, Any]]
         ] = {}
+        self._festivals_monthly_inflight: dict[
+            tuple[tuple[str, Any], ...], asyncio.Future[dict[str, Any]]
+        ] = {}
+        self._festivals_slots = asyncio.Semaphore(FESTIVALS_MAX_CONCURRENT_REQUESTS)
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -955,11 +962,41 @@ class KorTravelMapClient:
         ):
             if value is not None:
                 params[key] = value
-        key = tuple(sorted(params.items()))
-        now = self._clock()
-        cached = self._festivals_monthly_cache.get(key)
-        if cached is not None and now - cached[0] < FESTIVALS_MONTHLY_CACHE_TTL_SECONDS:
+        cache_key = tuple(sorted(params.items()))
+        cached = self._festivals_monthly_cache.get(cache_key)
+        if cached is not None and self._clock() - cached[0] < FESTIVALS_MONTHLY_CACHE_TTL_SECONDS:
             return copy.deepcopy(cached[1])
+        # 같은 첫 조회 월에 동시에 몰린 요청은 Map에 한 번만 보낸다(single-flight).
+        inflight = self._festivals_monthly_inflight.get(cache_key)
+        if inflight is not None:
+            return copy.deepcopy(await asyncio.shield(inflight))
+        # 서로 다른 첫 조회 월이 몰려도 공용 동시 호출 자리(검색·상세와 공유)를 다 쓰지 않게 따로 묶는다.
+        if self._festivals_slots.locked():
+            raise KorTravelMapUnavailable(
+                "kor-travel-map 축제 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
+            )
+        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+        self._festivals_monthly_inflight[cache_key] = future
+        try:
+            async with self._festivals_slots:
+                page = await self._fetch_public_festivals_monthly(params)
+        except BaseException as exc:
+            if not future.done():
+                future.set_exception(exc)
+            # 기다린 요청이 없을 때 "never retrieved" 경고가 나지 않게 한 번 읽는다.
+            future.exception()
+            raise
+        finally:
+            self._festivals_monthly_inflight.pop(cache_key, None)
+        cache = self._festivals_monthly_cache
+        cache.pop(cache_key, None)
+        cache[cache_key] = (self._clock(), copy.deepcopy(page))
+        while len(cache) > _FESTIVALS_MONTHLY_CACHE_MAX:
+            cache.pop(next(iter(cache)))
+        future.set_result(page)
+        return page
+
+    async def _fetch_public_festivals_monthly(self, params: dict[str, Any]) -> dict[str, Any]:
         default = self._http.timeout
         data, meta = self._payload(
             await self._send(
@@ -976,13 +1013,7 @@ class KorTravelMapClient:
                 ),
             )
         )
-        page = self._thread_page(data, meta)
-        cache = self._festivals_monthly_cache
-        cache.pop(key, None)
-        cache[key] = (now, copy.deepcopy(page))
-        while len(cache) > _FESTIVALS_MONTHLY_CACHE_MAX:
-            cache.pop(next(iter(cache)))
-        return page
+        return self._thread_page(data, meta)
 
     async def public_festival_markers(
         self,

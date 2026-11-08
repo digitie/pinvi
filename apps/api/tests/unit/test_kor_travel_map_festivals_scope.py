@@ -7,19 +7,24 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+from collections.abc import Awaitable, Callable
 
 import httpx
 import pytest
 
 from app.clients.kor_travel_map import (
+    FESTIVALS_MAX_CONCURRENT_REQUESTS,
     FESTIVALS_MONTHLY_READ_TIMEOUT_SECONDS,
     KorTravelMapClient,
     KorTravelMapUnavailable,
 )
 
 Handler = Callable[[httpx.Request], httpx.Response]
-_MONTHLY = {"data": {"months": [], "items": []}, "meta": {"page": {"next_cursor": None, "total": 0}}}
+_MONTHLY = {
+    "data": {"months": [], "items": []},
+    "meta": {"page": {"next_cursor": None, "total": 0}},
+}
 
 
 class _Clock:
@@ -63,7 +68,9 @@ async def test_festival_timeouts_do_not_cut_search_detail_or_viewport() -> None:
     # 축제 회로만 열렸다 — 검색·상세·viewport는 그대로 Map에 닿는다.
     assert (await client.search_features(q="안동하회마을"))["items"] == []
     assert await client.get_feature("f_x") == {"feature_id": "f_x"}
-    await client.features_in_bounds(min_lon=128.0, min_lat=36.0, max_lon=129.0, max_lat=37.0, zoom=9)
+    await client.features_in_bounds(
+        min_lon=128.0, min_lat=36.0, max_lon=129.0, max_lat=37.0, zoom=9
+    )
     await client.aclose()
 
 
@@ -133,4 +140,85 @@ async def test_cached_month_is_a_copy_callers_cannot_mutate() -> None:
     first["items"].clear()
     again = await client.public_festivals_monthly(year=2026, month=5)
     assert again["items"] == [{"feature_id": "f_a"}]
+    await client.aclose()
+
+
+AsyncHandler = Callable[[httpx.Request], Awaitable[httpx.Response]]
+
+
+def _async_client(handler: AsyncHandler) -> KorTravelMapClient:
+    http = httpx.AsyncClient(
+        base_url="http://map.test", transport=httpx.MockTransport(handler), timeout=5.0
+    )
+    return KorTravelMapClient(
+        http, max_attempts=3, backoff_base_seconds=0.0, service_token="svc-token-secret"
+    )
+
+
+async def test_concurrent_requests_for_one_cold_month_reach_map_once() -> None:
+    sent = 0
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal sent
+        sent += 1
+        await release.wait()
+        return httpx.Response(200, json=_MONTHLY)
+
+    client = _async_client(handler)
+    calls = [
+        asyncio.create_task(client.public_festivals_monthly(year=2026, month=1)) for _ in range(6)
+    ]
+    await asyncio.sleep(0)
+    release.set()
+    pages = await asyncio.gather(*calls)
+    assert sent == 1
+    assert all(page == pages[0] for page in pages)
+    await client.aclose()
+
+
+async def test_single_flight_failure_reaches_every_waiter_and_is_not_cached() -> None:
+    sent = 0
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal sent
+        sent += 1
+        await release.wait()
+        raise httpx.ReadTimeout("cold month", request=request)
+
+    client = _async_client(handler)
+    calls = [
+        asyncio.create_task(client.public_festivals_monthly(year=2026, month=2)) for _ in range(3)
+    ]
+    await asyncio.sleep(0)
+    release.set()
+    results = await asyncio.gather(*calls, return_exceptions=True)
+    assert sent == 1
+    assert all(isinstance(r, KorTravelMapUnavailable) for r in results)
+    await client.aclose()
+
+
+async def test_cold_months_cannot_take_the_shared_slots_from_search() -> None:
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/public/festivals/monthly":
+            await release.wait()
+            return httpx.Response(200, json=_MONTHLY)
+        return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
+
+    client = _async_client(handler)
+    slow = [
+        asyncio.create_task(client.public_festivals_monthly(year=2026, month=month))
+        for month in range(1, FESTIVALS_MAX_CONCURRENT_REQUESTS + 1)
+    ]
+    await asyncio.sleep(0)
+    # 축제 자리가 다 찼다 — 다음 축제 월은 바로 거부되고, 검색은 그대로 Map에 닿는다.
+    with pytest.raises(KorTravelMapUnavailable) as info:
+        await client.public_festivals_monthly(year=2026, month=12)
+    assert info.value.code == "BULKHEAD_FULL"
+    assert (await client.search_features(q="안동하회마을"))["items"] == []
+    release.set()
+    await asyncio.gather(*slow)
     await client.aclose()
