@@ -253,13 +253,65 @@ async def test_cancelled_caller_does_not_cancel_the_shared_fetch_or_other_caller
     # 공유 조회는 끝까지 가서 캐시를 채웠다 — 다시 불러도 Map에 가지 않는다.
     await client.public_festivals_monthly(year=2026, month=7)
     assert sent == 1
+    assert client._festivals_monthly_inflight == {}
+    assert not client._festivals_slots.locked()
     await client.aclose()
+
+
+async def test_fetch_finishes_and_caches_even_if_every_caller_is_cancelled() -> None:
+    sent = 0
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal sent
+        sent += 1
+        await release.wait()
+        return httpx.Response(200, json=_MONTHLY)
+
+    client = _async_client(handler)
+    calls = [
+        asyncio.create_task(client.public_festivals_monthly(year=2026, month=9)) for _ in range(2)
+    ]
+    await asyncio.sleep(0)
+    for call in calls:
+        call.cancel()
+    await asyncio.gather(*calls, return_exceptions=True)
+    release.set()
+    async with asyncio.timeout(2):
+        while client._festivals_monthly_inflight:
+            await asyncio.sleep(0)
+    await client.public_festivals_monthly(year=2026, month=9)
+    assert sent == 1
+    await client.aclose()
+
+
+async def test_aclose_cancels_inflight_fetch_and_frees_its_slot() -> None:
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        await release.wait()
+        return httpx.Response(200, json=_MONTHLY)
+
+    client = _async_client(handler)
+    call = asyncio.create_task(client.public_festivals_monthly(year=2026, month=10))
+    await asyncio.sleep(0)
+    async with asyncio.timeout(2):
+        await client.aclose()
+        with pytest.raises(KorTravelMapUnavailable) as info:
+            await call
+    assert info.value.code == "SHUTTING_DOWN"
+    assert client._festivals_monthly_inflight == {}
+    assert not client._festivals_slots.locked()
 
 
 async def test_waiters_get_their_own_exception_objects() -> None:
     release = asyncio.Event()
 
+    sent = 0
+
     async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal sent
+        sent += 1
         await release.wait()
         raise httpx.ReadTimeout("cold month", request=request)
 
@@ -272,4 +324,5 @@ async def test_waiters_get_their_own_exception_objects() -> None:
     results = await asyncio.gather(*calls, return_exceptions=True)
     assert all(isinstance(r, KorTravelMapUnavailable) for r in results)
     assert len({id(r) for r in results}) == 3
+    assert sent == 1
     await client.aclose()

@@ -364,10 +364,10 @@ def _decode_feature_batch_item(raw: object) -> FeatureBatchItem:
     return UnchangedFeatureBatchItem(feature_id=feature_id, row_revision=row_revision)
 
 
-def _retrieve_task_exception(task: asyncio.Task[Any]) -> None:
-    """기다린 호출자가 모두 취소돼도 "exception was never retrieved" 경고를 남기지 않는다."""
-    if not task.cancelled():
-        task.exception()
+def _current_task_cancelling() -> bool:
+    """지금 task 자체가 취소 요청을 받았는가(shield 안쪽 취소와 구분)."""
+    current = asyncio.current_task()
+    return current is not None and current.cancelling() > 0
 
 
 class KorTravelMapClient:
@@ -413,6 +413,11 @@ class KorTravelMapClient:
         self._festivals_slots = asyncio.Semaphore(FESTIVALS_MAX_CONCURRENT_REQUESTS)
 
     async def aclose(self) -> None:
+        # 분리된 축제 조회 task가 닫힌 http client를 쓰지 않게 먼저 끝낸다.
+        tasks = list(self._festivals_monthly_inflight.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         await self._http.aclose()
 
     @property
@@ -983,11 +988,27 @@ class KorTravelMapClient:
                     "kor-travel-map 축제 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
                 )
             await self._festivals_slots.acquire()
-            task = asyncio.create_task(self._fetch_and_cache_festivals_monthly(cache_key, params))
+            try:
+                task = asyncio.create_task(
+                    self._fetch_and_cache_festivals_monthly(cache_key, params)
+                )
+            except BaseException:
+                self._festivals_slots.release()
+                raise
             self._festivals_monthly_inflight[cache_key] = task
-            task.add_done_callback(_retrieve_task_exception)
+            # 정리는 done-callback에서 — 시작 전에 취소된 task는 coroutine의 finally가 돌지 않는다.
+            task.add_done_callback(
+                lambda done: self._finish_festivals_monthly(cache_key, done)
+            )
         try:
             page = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # 이 호출자가 취소된 것이 아니라 공유 조회가 취소됐다(client 종료) — 503으로 바꾼다.
+            if task.cancelled() and not _current_task_cancelling():
+                raise KorTravelMapUnavailable(
+                    "kor-travel-map 축제 조회 취소됨(종료 중)", code="SHUTTING_DOWN"
+                ) from None
+            raise
         except KorTravelMapUnavailable as exc:
             # 기다린 호출자마다 새 예외 — 같은 예외 객체에 traceback이 쌓이지 않게.
             raise KorTravelMapUnavailable(
@@ -1003,18 +1024,24 @@ class KorTravelMapClient:
     async def _fetch_and_cache_festivals_monthly(
         self, cache_key: tuple[tuple[str, Any], ...], params: dict[str, Any]
     ) -> dict[str, Any]:
-        """single-flight 조회 본체 — 자리(이미 잡음)를 놓고, 성공만 캐시한다. 반환값은 캐시 사본이다."""
-        try:
-            page = await self._fetch_public_festivals_monthly(params)
-            cache = self._festivals_monthly_cache
-            cache.pop(cache_key, None)
-            cache[cache_key] = (self._clock(), copy.deepcopy(page))
-            while len(cache) > _FESTIVALS_MONTHLY_CACHE_MAX:
-                cache.pop(next(iter(cache)))
-            return cache[cache_key][1]
-        finally:
-            self._festivals_slots.release()
-            self._festivals_monthly_inflight.pop(cache_key, None)
+        """single-flight 조회 본체 — 성공만 캐시한다. 반환값은 캐시 사본이다(호출자는 다시 복사한다)."""
+        page = await self._fetch_public_festivals_monthly(params)
+        cache = self._festivals_monthly_cache
+        cache.pop(cache_key, None)
+        cache[cache_key] = (self._clock(), copy.deepcopy(page))
+        while len(cache) > _FESTIVALS_MONTHLY_CACHE_MAX:
+            cache.pop(next(iter(cache)))
+        return cache[cache_key][1]
+
+    def _finish_festivals_monthly(
+        self, cache_key: tuple[tuple[str, Any], ...], task: asyncio.Task[dict[str, Any]]
+    ) -> None:
+        """조회 task가 어떻게 끝나든(시작 전 취소 포함) 자리를 한 번 놓고 in-flight에서 뺀다."""
+        self._festivals_slots.release()
+        if self._festivals_monthly_inflight.get(cache_key) is task:
+            del self._festivals_monthly_inflight[cache_key]
+        if not task.cancelled():
+            task.exception()
 
     async def _fetch_public_festivals_monthly(self, params: dict[str, Any]) -> dict[str, Any]:
         default = self._http.timeout
