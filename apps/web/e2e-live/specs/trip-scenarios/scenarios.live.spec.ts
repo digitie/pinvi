@@ -18,6 +18,7 @@
  */
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import {
+  apiBaseURL,
   createShareLink,
   createTrip,
   deleteTrip,
@@ -31,16 +32,15 @@ import {
   runTag,
   searchAndAddPlace,
   shot,
-  tripIdFromUrl,
   waitForMapIdle,
   waitForRequest,
+  withRateLimitRetry,
 } from '../../helpers/live';
 import {
   copyTripViaUi,
   dayDeleteButton,
   dayTab,
   dragPoi,
-  gotoTrip,
   koDate,
   mapMarkers,
   openTripEdit,
@@ -114,6 +114,12 @@ test.afterEach(async ({ page }) => {
   }
 });
 
+/** `gotoTrip` with the 45 s shell wait `openPanel` uses — prod detail loads can exceed the 15 s default. */
+async function openTrip(page: Page, tripId: string): Promise<void> {
+  await page.goto(`/trips/${tripId}`);
+  await expect(page.getByTestId('trip-detail-shell')).toBeVisible({ timeout: 45_000 });
+}
+
 /* ------------------------------------------------------------------ steps */
 
 async function addPlaces(page: Page, s: TripScenario): Promise<Map<number, string[]>> {
@@ -165,7 +171,24 @@ async function expectMap(page: Page, s: TripScenario, expectedPins: number): Pro
   note('categories', styles.map((m) => `${m.title}=${m.category || m.kind}`).join(' | '));
 }
 
-async function checkOptimize(page: Page, s: TripScenario, day: number): Promise<void> {
+/** Titles of a day's POIs keyed by poi_id, from `GET /trips/{id}` (the view the detail page loads). */
+async function dayPoiTitlesById(page: Page, tripId: string, day: number): Promise<Map<string, string>> {
+  const api = await apiBaseURL(page);
+  const res = await withRateLimitRetry(`GET /trips/${tripId}`, () => page.context().request.get(`${api}/trips/${tripId}`));
+  expect(res.ok(), `GET /trips/${tripId}`).toBeTruthy();
+  const body = (await res.json()) as {
+    data?: { days?: Array<{ day_index?: number; pois?: Array<{ poi_id?: string; title?: string | null }> }> };
+  };
+  const dayView = (body.data?.days ?? []).find((d) => d.day_index === day);
+  return new Map((dayView?.pois ?? []).map((poi) => [poi.poi_id ?? '', (poi.title ?? '').trim()]));
+}
+
+/**
+ * Optimize preview, then apply. The preview's `ordered_poi_ids` is the expected order: the UI's
+ * '순서 변경 N곳' counts sort-key rewrites (services/trip.py re-ranks every POI), so N > 0 does not
+ * mean the order changes. After apply the persisted order (reload) must equal the preview's.
+ */
+async function checkOptimize(page: Page, s: TripScenario, day: number, tripId: string): Promise<void> {
   await selectDay(page, `${day}일차`);
   const before = await poiTitles(page);
   const optimize = page.getByTestId('trip-day-optimize');
@@ -178,7 +201,12 @@ async function checkOptimize(page: Page, s: TripScenario, day: number): Promise<
   await expect(optimize).toContainText(DISTANCE);
   await expect(optimize).toContainText(/순서 변경 \d+곳/);
   const moves = Number(/순서 변경 (\d+)곳/.exec(await optimize.innerText())?.[1] ?? '0');
-  note('optimize', `day ${day}: ${moves} move(s)`);
+  const ordered = ((await res.json()) as { data?: { ordered_poi_ids?: string[] } }).data?.ordered_poi_ids ?? [];
+  const titles = await dayPoiTitlesById(page, tripId, day);
+  const expected = ordered.map((id) => titles.get(id) ?? `?${id}`);
+  expect(expected.length, `${s.id} optimize day ${day}: preview covers every POI`).toBe(before.length);
+  const reorders = expected.some((t, i) => t !== before[i]);
+  note('optimize', `day ${day}: '순서 변경 ${moves}곳', order ${reorders ? 'changes' : 'unchanged'}`);
   if (moves === 0) {
     await optimize.getByRole('button', { name: '닫기', exact: true }).click();
     expect(await poiTitles(page)).toEqual(before);
@@ -189,23 +217,10 @@ async function checkOptimize(page: Page, s: TripScenario, day: number): Promise<
   const applied = await apply;
   expect(applied.ok(), `${s.id} optimize apply day ${day}`).toBeTruthy();
   expect((applied.request().postDataJSON() as { persist: boolean }).persist).toBe(true);
-  const live = await expect
-    .poll(async () => poiTitles(page), { timeout: 10_000 })
-    .not.toEqual(before)
-    .then(() => true)
-    .catch(() => false);
-  if (!live) {
-    // The persisted order is the contract; a list that only updates after a reload is recorded, not hidden.
-    note('warning', `optimize day ${day}: list kept the old order until reload (${testInfoProject()})`);
-    await gotoTrip(page, tripIdFromUrl(page));
-    await selectDay(page, `${day}일차`);
-  }
-  await expect.poll(async () => poiTitles(page)).not.toEqual(before);
-  expect([...(await poiTitles(page))].sort()).toEqual([...before].sort());
-}
-
-function testInfoProject(): string {
-  return test.info().project.name;
+  await expect.poll(async () => poiTitles(page), { message: `${s.id} optimize day ${day}: live list` }).toEqual(expected);
+  await openTrip(page, tripId);
+  await selectDay(page, `${day}일차`);
+  expect(await poiTitles(page), `${s.id} optimize day ${day}: persisted order`).toEqual(expected);
 }
 
 async function checkReorder(page: Page, s: TripScenario, day: number, testInfo: TestInfo): Promise<void> {
@@ -263,7 +278,7 @@ async function checkCopy(page: Page, s: TripScenario, title: string, tripId: str
   await expect(page.getByTestId('trip-top-panel')).toContainText(summaryPattern(s.days, s.places.length));
   await deleteTrip(page, copyId);
   created.splice(created.indexOf(copyId), 1);
-  await gotoTrip(page, tripId);
+  await openTrip(page, tripId);
 }
 
 async function checkDateShift(page: Page, s: TripScenario, shift: number, tripId: string): Promise<void> {
@@ -272,7 +287,7 @@ async function checkDateShift(page: Page, s: TripScenario, shift: number, tripId
   await page.locator('#trip-edit-start').fill(start);
   await page.locator('#trip-edit-end').fill(end);
   await saveTripEdit(page);
-  await gotoTrip(page, tripId);
+  await openTrip(page, tripId);
   await openTripEdit(page);
   await expect(page.locator('#trip-edit-start')).toHaveValue(start);
   await expect(page.locator('#trip-edit-end')).toHaveValue(end);
@@ -310,7 +325,7 @@ for (const s of SCENARIOS) {
     const { start, end } = scenarioDates(s);
     const { id } = await createTrip(page, { title, start, end });
     created.push(id);
-    await gotoTrip(page, id);
+    await openTrip(page, id);
 
     const perDay = await addPlaces(page, s);
     await expectDays(page, s, perDay);
@@ -322,7 +337,7 @@ for (const s of SCENARIOS) {
       await test.step(`check ${JSON.stringify(check)}`, async () => {
         switch (check.kind) {
           case 'optimize_day':
-            return checkOptimize(page, s, check.day);
+            return checkOptimize(page, s, check.day, id);
           case 'reorder_day':
             return checkReorder(page, s, check.day, testInfo);
           case 'weather_day':
