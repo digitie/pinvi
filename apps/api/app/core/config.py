@@ -820,11 +820,12 @@ class Settings(BaseSettings):
     )  # /v1/features/batch cap
     # Map 표면별 worker 내 동시 호출 상한(#621). 꽉 차면 기다리지 않고 `BULKHEAD_FULL`(공개 503)이다.
     # 회로 범위(#702)와 같은 단위라 느린 viewport·transport·weather가 상세·검색·trip view의 자리를
-    # 가져가지 못한다. 축제 월별 조회는 별도 상수(4)를 그대로 쓴다.
-    pinvi_kor_travel_map_features_max_concurrency: int = Field(default=12, ge=1, le=64)
-    pinvi_kor_travel_map_viewport_max_concurrency: int = Field(default=8, ge=1, le=64)
-    pinvi_kor_travel_map_transport_max_concurrency: int = Field(default=4, ge=1, le=64)
-    pinvi_kor_travel_map_weather_max_concurrency: int = Field(default=4, ge=1, le=64)
+    # 가져가지 못한다. 축제 월별 조회는 별도 상수(4)를 그대로 쓴다. 기본 합계 10+4+2+2(+축제 4)=22로
+    # 예전 공용 16과 비슷하게 둔다 — worker당 Map 부하가 크게 늘지 않게.
+    pinvi_kor_travel_map_features_max_concurrency: int = Field(default=10, ge=1, le=64)
+    pinvi_kor_travel_map_viewport_max_concurrency: int = Field(default=4, ge=1, le=64)
+    pinvi_kor_travel_map_transport_max_concurrency: int = Field(default=2, ge=1, le=64)
+    pinvi_kor_travel_map_weather_max_concurrency: int = Field(default=2, ge=1, le=64)
     # ADR-076 — 지도 transport 레이어(주유소·휴게소·고속도로 돌발·공항)를 Map
     # `/v1/service/transport/*`(service token 필요)로 읽는다. off(기본)면 `/transport/status`가
     # `enabled=false`를 주고 Map을 부르지 않는다 — 클라이언트는 레이어 컨트롤을 숨긴다.
@@ -980,9 +981,9 @@ class Settings(BaseSettings):
     pinvi_moderation_evidence_retention_days: int = Field(default=180, ge=1, le=3650)
     pinvi_telegram_api_base: str = "https://api.telegram.org"
     pinvi_telegram_timeout_seconds: float = 5.0
-    # worker 내 Telegram Bot API 동시 호출 상한(#621). target 등록·검증은 쓰기 트랜잭션 안에서
-    # Telegram을 부르므로, 이 값이 Telegram 정지 때 붙잡히는 DB 연결 수의 상한이다. 꽉 차면 기다리지
-    # 않고 기존 `network_error`(재시도 가능)다.
+    # 요청 경로(target 등록·검증) Telegram 호출의 worker 내 동시 상한(#621). 그 경로는 쓰기 트랜잭션
+    # 안에서 Telegram을 부르므로, 이 값이 Telegram 정지 때 붙잡히는 DB 연결 수의 상한이다. 꽉 차면
+    # 기다리지 않고 기존 `network_error`(503)다. 알림 drain worker에는 걸지 않는다(재시도 횟수 보호).
     pinvi_telegram_max_concurrency: int = Field(default=4, ge=1, le=64)
     pinvi_telegram_bot_token_default: str = ""  # 시스템/Admin 봇
     pinvi_telegram_admin_chat_id: str = ""

@@ -180,9 +180,8 @@ async def unified_search(
     if near_me:
         # 사용자 좌표를 제3자(Kakao)에 제공하는 경로다 — 동의를 먼저 확인한다(T-327).
         # dependency로 걸지 않는 이유: 좌표 없는 키워드 검색까지 막히기 때문이다.
+        # 동의 조회의 읽기 트랜잭션은 assert_location_consent가 Map·geo 호출 전에 닫는다(#621).
         await assert_location_consent(db, user_id=user_id)
-        # 동의 조회의 읽기 트랜잭션을 Map·geo 호출 전에 닫는다 — 풀 커넥션을 쥐고 기다리지 않게(#621).
-        await db_session.release_read_connection(db)
         # 출처를 여기서 함께 선언한다. 좌표만 세팅하면 이 행이 `coord_source=NULL`로 남는데, NULL의
         # 계약상 의미는 "이 컬럼이 없던 시기의 행"이라 **제3자 제공이 실제로 일어난 가장 민감한
         # 행**이 레거시와 구분되지 않는다(T-329 리뷰 지적).

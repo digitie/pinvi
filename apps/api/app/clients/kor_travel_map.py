@@ -402,16 +402,18 @@ class KorTravelMapClient:
             raise ValueError("max_concurrent_requests는 양수여야 합니다.")
         # 논리 호출(재시도·backoff 포함)마다 자기 표면의 worker 내 한 자리를 쓴다. 대기열은 만들지 않는다.
         # 표면을 하나로 묶으면 느린 viewport·weather가 상세·trip view의 자리까지 가져간다(#621).
+        # 축제는 공유 조회 task 수를 `_festivals_slots`(4)가 바깥에서 묶고 task마다 `_send`가 한 번이라,
+        # 안쪽 자리를 같은 값으로 두면 안쪽은 결코 거부하지 않는다(덮어쓰기 대상도 아니다).
         limits: dict[BulkheadScope, int] = {
             "features": max_concurrent_requests,
             "viewport": max_concurrent_requests,
             "transport": max_concurrent_requests,
-            "festivals": min(max_concurrent_requests, FESTIVALS_MAX_CONCURRENT_REQUESTS),
+            "festivals": FESTIVALS_MAX_CONCURRENT_REQUESTS,
             "weather": max_concurrent_requests,
         }
         for scope, limit in (surface_concurrency or {}).items():
-            if scope not in limits:
-                raise ValueError(f"알 수 없는 bulkhead 범위: {scope}")
+            if scope not in limits or scope == "festivals":
+                raise ValueError(f"덮어쓸 수 없는 bulkhead 범위: {scope}")
             if limit < 1:
                 raise ValueError("surface_concurrency는 양수여야 합니다.")
             limits[scope] = limit

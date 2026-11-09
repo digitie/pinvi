@@ -18,7 +18,6 @@ from typing import Any, ClassVar
 import httpx
 
 from app.clients._resilience import BULKHEAD_REJECTIONS
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +100,9 @@ def _classify(response: httpx.Response, *, token: str | None = None) -> Telegram
 class TelegramClient:
     """Telegram Bot API 전송 전용 client (httpx.AsyncClient 주입)."""
 
-    #: worker(프로세스) 전체의 Telegram 동시 호출 수(#621). client는 요청·전송마다 새로 만들므로
-    #: 상한은 인스턴스가 아니라 클래스에 둔다. 단일 이벤트 루프 안에서 await 없이 세고 되돌린다.
+    #: 상한을 건 client(요청 경로)의 worker(프로세스) 전체 Telegram 동시 호출 수(#621). client는 요청마다
+    #: 새로 만들므로 수는 인스턴스가 아니라 클래스에 둔다. 이벤트 루프에 묶이지 않는 정수이고 await 없이
+    #: 세고 되돌린다 — 한 프로세스에 루프 하나(uvicorn worker)라는 전제다. 스레드 안전하지 않다.
     _in_flight: ClassVar[int] = 0
 
     def __init__(
@@ -112,16 +112,16 @@ class TelegramClient:
         timeout_seconds: float = 5.0,
         max_concurrent_requests: int | None = None,
     ) -> None:
+        """``max_concurrent_requests``가 None이면 상한이 없다.
+
+        알림 drain worker는 상한을 걸지 않는다 — 로컬 거부가 `network_error`로 재시도 횟수를 태우고
+        target을 실패로 표시하면 안 된다. 그쪽은 lease 뒤 잠금 없이 보내고 worker가 순차라 자체로 묶인다.
+        """
         self._http = http
         self._timeout = timeout_seconds
-        limit = (
-            settings.pinvi_telegram_max_concurrency
-            if max_concurrent_requests is None
-            else max_concurrent_requests
-        )
-        if limit < 1:
+        if max_concurrent_requests is not None and max_concurrent_requests < 1:
             raise ValueError("max_concurrent_requests는 양수여야 합니다.")
-        self._max_concurrent = limit
+        self._max_concurrent = max_concurrent_requests
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -130,12 +130,20 @@ class TelegramClient:
         self, method: str, telegram_method: str, token: str, **kwargs: Any
     ) -> dict[str, Any]:
         path = f"/bot{token}/{telegram_method}"
+        if self._max_concurrent is None:
+            return await self._send(method, path, token, **kwargs)
         # 꽉 차면 기다리지 않는다. target 등록·검증은 쓰기 트랜잭션 안에서 부르므로, Telegram 정지가
         # 이 상한보다 많은 DB 연결을 붙잡지 못하게 한다. 공개 분류는 기존 재시도 가능 `network_error`다.
         if TelegramClient._in_flight >= self._max_concurrent:
-            BULKHEAD_REJECTIONS.labels(provider="telegram", scope="all").inc()
+            BULKHEAD_REJECTIONS.labels(provider="telegram", scope="interactive").inc()
             raise TelegramError("telegram 동시 호출 상한 — 호출하지 않음", code="network_error")
         TelegramClient._in_flight += 1
+        try:
+            return await self._send(method, path, token, **kwargs)
+        finally:
+            TelegramClient._in_flight -= 1
+
+    async def _send(self, method: str, path: str, token: str, **kwargs: Any) -> dict[str, Any]:
         try:
             async with asyncio.timeout(self._timeout):
                 response = await self._http.request(method, path, timeout=self._timeout, **kwargs)
@@ -143,8 +151,6 @@ class TelegramClient:
             raise TelegramError("telegram timeout", code="network_error") from exc
         except httpx.TransportError as exc:
             raise TelegramError("telegram connection error", code="network_error") from exc
-        finally:
-            TelegramClient._in_flight -= 1
 
         if response.status_code != 200:
             raise _classify(response, token=token)

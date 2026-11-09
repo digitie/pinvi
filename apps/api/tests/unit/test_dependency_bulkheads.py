@@ -8,12 +8,25 @@ Telegram은 상한이 없어 정지 때 쓰기 트랜잭션을 쥔 요청이 tim
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
 import pytest
 
 from app.clients.kor_travel_map import KorTravelMapClient, KorTravelMapUnavailable
+
+
+@pytest.fixture(autouse=True)
+def _telegram_in_flight_starts_and_ends_at_zero() -> Iterator[None]:
+    # 클래스 수준 계수는 프로세스 전체 상태다 — 실패한 테스트가 남긴 값이 다음 테스트를 오염시키지 않게.
+    from app.clients.telegram import TelegramClient
+
+    TelegramClient._in_flight = 0
+    yield
+    leaked = TelegramClient._in_flight
+    TelegramClient._in_flight = 0
+    assert leaked == 0
 
 _SLOW_PATHS = {
     "viewport": "/v1/features/in-bounds",
@@ -65,9 +78,7 @@ async def test_slow_surface_cannot_take_feature_slots(slow_surface: str) -> None
             if started == 2:
                 all_started.set()
             await release.wait()
-            return httpx.Response(
-                200, json={"data": {"items": [], "clusters": []}, "meta": {}}
-            )
+            return httpx.Response(200, json={"data": {"items": [], "clusters": []}, "meta": {}})
         return httpx.Response(200, json={"data": {"feature_id": "f_x"}, "meta": {}})
 
     client = _map(handler, max_concurrent_requests=2)
@@ -130,6 +141,9 @@ def test_surface_concurrency_rejects_unknown_scope_and_non_positive_limit() -> N
         KorTravelMapClient(http, surface_concurrency={"nope": 1})  # type: ignore[dict-item]
     with pytest.raises(ValueError):
         KorTravelMapClient(http, surface_concurrency={"viewport": 0})
+    # 축제 자리는 바깥 공유 조회 상한(4)과 같아야 안쪽이 공유 task 안에서 거부하지 않는다.
+    with pytest.raises(ValueError):
+        KorTravelMapClient(http, surface_concurrency={"festivals": 2})
 
 
 async def test_factories_take_caps_from_settings() -> None:
@@ -165,61 +179,75 @@ async def test_factories_take_caps_from_settings() -> None:
         await weather.aclose()
 
 
-def test_default_caps_are_bounded() -> None:
+def test_default_caps_keep_map_total_near_the_old_shared_sixteen() -> None:
     from app.core.config import Settings
+    from app.clients.kor_travel_map import FESTIVALS_MAX_CONCURRENT_REQUESTS
 
     defaults = Settings()
     assert defaults.pinvi_database_max_overflow == 5
     assert defaults.pinvi_database_pool_timeout_seconds <= 5
-    # Map 표면 합계가 예전 공용 자리(16)를 크게 넘지 않게 — weather·transport는 작은 몫이다.
-    assert defaults.pinvi_kor_travel_map_features_max_concurrency == 12
-    assert defaults.pinvi_kor_travel_map_viewport_max_concurrency == 8
-    assert defaults.pinvi_kor_travel_map_transport_max_concurrency == 4
-    assert defaults.pinvi_kor_travel_map_weather_max_concurrency == 4
-    assert defaults.pinvi_kor_travel_geo_max_concurrency == 8
-    assert defaults.pinvi_kor_travel_weather_max_concurrency == 8
-    assert defaults.pinvi_telegram_max_concurrency == 4
+    map_total = (
+        defaults.pinvi_kor_travel_map_features_max_concurrency
+        + defaults.pinvi_kor_travel_map_viewport_max_concurrency
+        + defaults.pinvi_kor_travel_map_transport_max_concurrency
+        + defaults.pinvi_kor_travel_map_weather_max_concurrency
+        + FESTIVALS_MAX_CONCURRENT_REQUESTS
+    )
+    # 표면을 나눠도 worker당 Map 동시 부하가 예전 공용 16의 1.5배를 넘지 않는다.
+    assert map_total <= 24
+    # 상세·trip view(features)가 가장 큰 몫이다.
+    assert defaults.pinvi_kor_travel_map_features_max_concurrency == max(
+        defaults.pinvi_kor_travel_map_features_max_concurrency,
+        defaults.pinvi_kor_travel_map_viewport_max_concurrency,
+        defaults.pinvi_kor_travel_map_transport_max_concurrency,
+        defaults.pinvi_kor_travel_map_weather_max_concurrency,
+    )
 
 
-async def test_telegram_cap_is_process_wide_fails_fast_and_returns_capacity() -> None:
+def _telegram_handler(counter: dict[str, int], release: asyncio.Event) -> Any:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        counter["sent"] += 1
+        await release.wait()
+        return httpx.Response(200, json={"ok": True, "result": {"id": 1, "type": "private"}})
+
+    return handler
+
+
+_BOT = "123:" + "a" * 30
+
+
+async def test_interactive_telegram_cap_is_process_wide_fails_fast_and_returns_capacity() -> None:
     from app.clients.telegram import TelegramClient, TelegramError
 
     release = asyncio.Event()
-    sent = 0
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal sent
-        sent += 1
-        await release.wait()
-        return httpx.Response(200, json={"ok": True, "result": {"id": 1, "type": "private"}})
+    counter = {"sent": 0}
 
     def make() -> TelegramClient:
         # 운영처럼 요청마다 새 client — 상한은 인스턴스가 아니라 worker 전체에 걸린다.
         http = httpx.AsyncClient(
-            base_url="https://telegram.test", transport=httpx.MockTransport(handler)
+            base_url="https://telegram.test",
+            transport=httpx.MockTransport(_telegram_handler(counter, release)),
         )
         return TelegramClient(http, timeout_seconds=2.0, max_concurrent_requests=2)
 
     clients = [make() for _ in range(4)]
-    held = [
-        asyncio.create_task(clients[i].verify_target("123:" + "a" * 30, "-100")) for i in range(2)
-    ]
+    held = [asyncio.create_task(clients[i].verify_target(_BOT, "-100")) for i in range(2)]
     try:
         await asyncio.sleep(0.01)
-        assert sent == 2
-        before = _sample("telegram", "all")
+        assert counter["sent"] == 2
+        before = _sample("telegram", "interactive")
         with pytest.raises(TelegramError) as info:
-            await asyncio.wait_for(clients[2].verify_target("123:" + "a" * 30, "-100"), 0.5)
+            await asyncio.wait_for(clients[2].verify_target(_BOT, "-100"), 0.5)
         assert info.value.code == "network_error"
-        assert sent == 2
-        assert _sample("telegram", "all") == before + 1
+        assert counter["sent"] == 2
+        assert _sample("telegram", "interactive") == before + 1
         # 취소된 호출도 자리를 돌려준다.
         held[0].cancel()
         await asyncio.gather(held[0], return_exceptions=True)
         release.set()
         await held[1]
-        await clients[3].verify_target("123:" + "a" * 30, "-100")
-        assert sent == 3
+        await clients[3].verify_target(_BOT, "-100")
+        assert counter["sent"] == 3
         assert TelegramClient._in_flight == 0
     finally:
         release.set()
@@ -228,3 +256,56 @@ async def test_telegram_cap_is_process_wide_fails_fast_and_returns_capacity() ->
         await asyncio.gather(*held, return_exceptions=True)
         for item in clients:
             await item.aclose()
+
+
+async def test_delivery_worker_telegram_client_is_never_rejected_locally(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """알림 drain은 상한 밖이다 — 로컬 거부가 재시도 횟수를 태우고 target을 실패로 표시하면 안 된다."""
+    from app.clients.telegram import TelegramClient
+    from app.services import telegram_notify
+
+    release = asyncio.Event()
+    counter = {"sent": 0}
+    interactive = TelegramClient(
+        httpx.AsyncClient(
+            base_url="https://telegram.test",
+            transport=httpx.MockTransport(_telegram_handler(counter, release)),
+        ),
+        max_concurrent_requests=1,
+    )
+    worker = telegram_notify._make_client()
+    assert worker._max_concurrent is None
+    await worker.aclose()
+    worker = TelegramClient(
+        httpx.AsyncClient(
+            base_url="https://telegram.test",
+            transport=httpx.MockTransport(_telegram_handler(counter, release)),
+        )
+    )
+    held = asyncio.create_task(interactive.verify_target(_BOT, "-100"))
+    try:
+        await asyncio.sleep(0.01)
+        # 요청 경로 자리가 다 찼어도 worker 전송은 Telegram에 닿는다.
+        sending = asyncio.create_task(worker.send_to_target(_BOT, "-100", "hi", parse_mode=None))
+        await asyncio.sleep(0.01)
+        assert counter["sent"] == 2
+        release.set()
+        await asyncio.wait_for(asyncio.gather(held, sending), 1)
+    finally:
+        release.set()
+        held.cancel()
+        await asyncio.gather(held, return_exceptions=True)
+        await interactive.aclose()
+        await worker.aclose()
+
+
+async def test_telegram_targets_router_client_takes_cap_from_settings(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from app.api.v1 import telegram_targets
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "pinvi_telegram_max_concurrency", 3)
+    generator = telegram_targets.get_telegram_client()
+    client = await generator.__anext__()
+    try:
+        assert client._max_concurrent == 3
+    finally:
+        await generator.aclose()

@@ -37,7 +37,12 @@ async def get_telegram_client() -> AsyncIterator[TelegramClient]:
         base_url=settings.pinvi_telegram_api_base,
         event_hooks=api_call_event_hooks(db_session.async_session_factory, provider="telegram"),
     )
-    client = TelegramClient(http, timeout_seconds=settings.pinvi_telegram_timeout_seconds)
+    # 요청 경로(등록·검증)는 쓰기 트랜잭션 안에서 Telegram을 부른다 — worker 전체 상한으로 묶는다(#621).
+    client = TelegramClient(
+        http,
+        timeout_seconds=settings.pinvi_telegram_timeout_seconds,
+        max_concurrent_requests=settings.pinvi_telegram_max_concurrency,
+    )
     try:
         yield client
     finally:

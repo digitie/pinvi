@@ -16,7 +16,12 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.core.db_pool import ObservedAsyncQueuePool
 
@@ -74,9 +79,7 @@ async def _assert_pool_free_and_unrelated_endpoint_fast(
     # 모든 요청이 느린 의존 안에서 기다리는 중이다 — 어느 것도 풀 커넥션을 쥐지 않는다.
     assert engine.pool.checkedout() == 0
     # DB만 쓰는 상관없는 엔드포인트는 풀 대기 없이 바로 응답한다.
-    unrelated = await asyncio.wait_for(
-        client.get("/users/me/telegram-targets", cookies=cookies), 3
-    )
+    unrelated = await asyncio.wait_for(client.get("/users/me/telegram-targets", cookies=cookies), 3)
     assert unrelated.status_code == 200, unrelated.text
 
 
@@ -117,6 +120,47 @@ async def test_slow_geo_with_device_consent_does_not_hold_pool_connections(
         gate.release.set()
         await asyncio.gather(*held, return_exceptions=True)
         app.dependency_overrides.pop(get_kor_travel_geo_client, None)
+
+
+async def test_slow_map_nearby_does_not_hold_consent_dependency_connection(
+    pooled_app, client, verified_user, auth_cookies, grant_location_consent
+) -> None:
+    """`/features/nearby`는 동의를 dependency로 검사한 뒤 Map을 부른다(리뷰 P1)."""
+    from app.clients.kor_travel_map import get_kor_travel_map_client
+    from app.main import app
+    from app.services.category_labels import reset_category_label_cache
+
+    reset_category_label_cache()
+    user_id, _ = verified_user
+    await grant_location_consent(user_id)
+    gate = _Gate(_HELD_REQUESTS)
+
+    class _SlowMap:
+        async def features_nearby(self, **_kwargs: Any) -> dict[str, Any]:
+            await gate.hold()
+            return {"items": []}
+
+        async def categories(self, *, include_counts: bool = False) -> dict[str, Any]:
+            return {"items": []}
+
+    app.dependency_overrides[get_kor_travel_map_client] = _SlowMap
+    cookies = auth_cookies(user_id)
+    held = [
+        asyncio.create_task(
+            client.get("/features/nearby?lon=129.1&lat=35.1&radius_m=500", cookies=cookies)
+        )
+        for _ in range(_HELD_REQUESTS)
+    ]
+    try:
+        await _assert_pool_free_and_unrelated_endpoint_fast(client, pooled_app, cookies, gate)
+        gate.release.set()
+        responses = await asyncio.wait_for(asyncio.gather(*held), 5)
+        assert [r.status_code for r in responses] == [200] * _HELD_REQUESTS
+    finally:
+        gate.release.set()
+        await asyncio.gather(*held, return_exceptions=True)
+        app.dependency_overrides.pop(get_kor_travel_map_client, None)
+        reset_category_label_cache()
 
 
 @pytest.mark.parametrize("slow", ["map", "kakao"])
@@ -164,9 +208,7 @@ async def test_slow_search_dependency_does_not_hold_pool_connections(
     cookies = auth_cookies(user_id)
     # lat/lon = "내 주변 검색": 위치 동의를 조회한 뒤 Map·geo, 내 POI 조회 뒤 Kakao를 부른다.
     held = [
-        asyncio.create_task(
-            client.get("/search?q=광안리&lat=35.15&lon=129.12", cookies=cookies)
-        )
+        asyncio.create_task(client.get("/search?q=광안리&lat=35.15&lon=129.12", cookies=cookies))
         for _ in range(_HELD_REQUESTS)
     ]
     try:
