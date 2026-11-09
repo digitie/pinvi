@@ -55,6 +55,7 @@ import {
   WeatherMarker,
 } from '@/components/map/vworldPrimitives';
 import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
+import { markerZIndex } from '@/lib/markerStacking';
 import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { useFeatureDetailCard } from '@/lib/useFeatureDetailCard';
@@ -907,6 +908,7 @@ export function FeatureMapView({
                       color={mapPoint.color}
                       title={mapPoint.title}
                       selected={isSelected}
+                      zIndex={markerZIndex('feature', isSelected)}
                       ariaLabel={mapPoint.title}
                       interactionId={mapPoint.kind === 'feature' ? 'feature:' + mapPoint.featureId : undefined}
                       onClick={() => handlePointClick(mapPoint)}
