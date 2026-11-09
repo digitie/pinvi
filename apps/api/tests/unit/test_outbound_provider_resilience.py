@@ -299,7 +299,8 @@ async def test_map_weather_bulkhead_rejections_do_not_open_its_remote_circuit() 
         http, service_token="fixture", max_attempts=1, max_concurrent_requests=1
     )
     weather = KorTravelMapWeatherClient(client)
-    held = asyncio.create_task(client.healthz())
+    # weather는 자기 bulkhead만 쓴다(#621) — 자리를 채우는 것도 weather 호출이어야 한다.
+    held = asyncio.create_task(weather.nearest(lon=126.9, lat=37.5))
     try:
         await asyncio.wait_for(started.wait(), 1)
         for _ in range(3):
