@@ -1598,6 +1598,7 @@ test.describe('모바일 여행 지도 교통 결과(#712)', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           data: {
+            bbox: { lng_min: 126.0, lat_min: 33.5, lng_max: 129.5, lat_max: 38.5 },
             zoom: 8,
             layers: [{ layer: 'highway_incident', status: 'ok', truncated: false, items }],
           },
