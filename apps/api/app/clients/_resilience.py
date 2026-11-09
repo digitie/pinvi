@@ -4,6 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from prometheus_client import Counter
+
+#: 동시 호출 상한(bulkhead)이 꽉 차 외부 호출 없이 바로 거부한 횟수(#621). 호출하지 않았으므로
+#: ``api_call_log``에는 행이 없다 — 거부는 이 counter로만 보인다.
+BULKHEAD_REJECTIONS = Counter(
+    "pinvi_api_outbound_bulkhead_rejections_total",
+    "Outbound calls rejected locally because the per-dependency concurrency cap was full.",
+    ("provider", "scope"),
+)
+
 
 class TransportCircuit:
     """세대가 바뀌기 전 출발한 결과는 버리고 half-open 시험은 하나만 허용한다."""

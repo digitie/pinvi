@@ -30,7 +30,7 @@ from urllib.parse import quote
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 
-from app.clients._resilience import TransportCircuit
+from app.clients._resilience import BULKHEAD_REJECTIONS, TransportCircuit
 from app.core.config import Settings, settings
 from app.db import session as db_session
 from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
@@ -50,6 +50,9 @@ KEEPALIVE_EXPIRY_SECONDS: float = 3.0
 #: batch까지 120초 503으로 만들었다). weather 표면은 자체 회로(``kor_travel_map_weather``)만 쓴다.
 #: ``festivals``: 공개 월별 축제 목록 — 첫 조회 월의 느린 응답이 검색·상세를 끊지 않게(#714).
 CircuitScope = Literal["features", "viewport", "transport", "festivals"]
+#: 동시 호출 상한(bulkhead) 범위(#621). 회로 범위와 같고, 자체 회로를 가진 weather 표면만 더한다.
+#: 한 표면이 느려져 자리를 다 써도 다른 표면은 자기 자리로 Map에 닿는다.
+BulkheadScope = Literal["features", "viewport", "transport", "festivals", "weather"]
 
 #: 공개 월별 축제 목록의 read 예산(초). Map이 처음 조회하는 월은 기본 5초를 넘었다(#714 운영 2026-11-08:
 #: 1·2월 5.9~6.2초 뒤 ReadTimeout, 직후 같은 월은 0.02~0.33초). 연결 예산은 기본값 그대로다.
@@ -57,7 +60,7 @@ FESTIVALS_MONTHLY_READ_TIMEOUT_SECONDS: float = 15.0
 #: 성공한 월별 목록을 이 시간(초) 동안 재사용한다 — 공개 화면의 같은 질의가 Map을 다시 깨우지 않게.
 FESTIVALS_MONTHLY_CACHE_TTL_SECONDS: float = 300.0
 _FESTIVALS_MONTHLY_CACHE_MAX = 128
-#: 축제 월별 목록이 동시에 쓰는 Map 호출 자리 상한 — 공용 상한(16)의 일부만, 넘치면 바로 503(대기열 없음).
+#: 축제 월별 목록이 동시에 쓰는 Map 호출 자리 상한 — 자기 bulkhead만 쓰고, 넘치면 바로 503(대기열 없음).
 #: 연·월 없이 부르면 Map이 이번 달을 고르므로 월이 바뀐 직후 최대 TTL만큼 지난달 목록이 나올 수 있다(허용).
 FESTIVALS_MAX_CONCURRENT_REQUESTS = 4
 
@@ -383,8 +386,10 @@ class KorTravelMapClient:
         batch_chunk_size: int = 200,
         backoff_base_seconds: float = 0.2,
         max_concurrent_requests: int = 16,
+        surface_concurrency: Mapping[BulkheadScope, int] | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        """``max_concurrent_requests``는 표면별 기본 상한, ``surface_concurrency``는 표면별 덮어쓰기다."""
         self._http = http
         self._service_token = service_token.strip()
         self._public_api_key = public_api_key.strip()
@@ -395,8 +400,27 @@ class KorTravelMapClient:
         self._backoff_base_seconds = backoff_base_seconds
         if max_concurrent_requests < 1:
             raise ValueError("max_concurrent_requests는 양수여야 합니다.")
-        # 논리 호출(재시도·backoff 포함)마다 worker 내 한 자리를 쓴다. 대기열은 만들지 않는다.
-        self._slots = asyncio.Semaphore(max_concurrent_requests)
+        # 논리 호출(재시도·backoff 포함)마다 자기 표면의 worker 내 한 자리를 쓴다. 대기열은 만들지 않는다.
+        # 표면을 하나로 묶으면 느린 viewport·weather가 상세·trip view의 자리까지 가져간다(#621).
+        # 축제는 공유 조회 task 수를 `_festivals_slots`(4)가 바깥에서 묶고 task마다 `_send`가 한 번이라,
+        # 안쪽 자리를 같은 값으로 두면 안쪽은 결코 거부하지 않는다(덮어쓰기 대상도 아니다).
+        limits: dict[BulkheadScope, int] = {
+            "features": max_concurrent_requests,
+            "viewport": max_concurrent_requests,
+            "transport": max_concurrent_requests,
+            "festivals": FESTIVALS_MAX_CONCURRENT_REQUESTS,
+            "weather": max_concurrent_requests,
+        }
+        for scope, limit in (surface_concurrency or {}).items():
+            if scope not in limits or scope == "festivals":
+                raise ValueError(f"덮어쓸 수 없는 bulkhead 범위: {scope}")
+            if limit < 1:
+                raise ValueError("surface_concurrency는 양수여야 합니다.")
+            limits[scope] = limit
+        self._bulkhead_limits = limits
+        self._bulkheads: dict[BulkheadScope, asyncio.Semaphore] = {
+            scope: asyncio.Semaphore(limit) for scope, limit in limits.items()
+        }
         self._circuits: dict[CircuitScope, TransportCircuit] = {
             "features": TransportCircuit(clock=clock),
             "viewport": TransportCircuit(clock=clock),
@@ -446,14 +470,24 @@ class KorTravelMapClient:
         request_timeout: httpx.Timeout | None = None,
         log_failure: bool = True,
         circuit: CircuitScope | None = "features",
+        bulkhead: BulkheadScope | None = None,
     ) -> httpx.Response:
-        """``circuit``은 이 호출이 세고 보는 회로 범위다. ``None``이면 호출자가 자기 회로를 소유한다."""
-        if self._slots.locked():
+        """``circuit``은 이 호출이 세고 보는 회로 범위다. ``None``이면 호출자가 자기 회로를 소유한다.
+
+        ``bulkhead``는 이 호출이 쓰는 동시 호출 자리 범위다. 생략하면 회로 범위와 같다(회로가 없으면
+        ``features``). 자체 회로를 가진 호출자(weather)는 자기 범위를 명시한다.
+        """
+        scope: BulkheadScope = (
+            bulkhead if bulkhead is not None else (circuit if circuit is not None else "features")
+        )
+        slots = self._bulkheads[scope]
+        if slots.locked():
+            BULKHEAD_REJECTIONS.labels(provider="kor_travel_map", scope=scope).inc()
             raise KorTravelMapUnavailable(
                 "kor-travel-map 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
             )
         # locked 검사와 acquire 사이에는 suspension이 없어 다른 task가 자리를 가로채지 않는다.
-        async with self._slots:
+        async with slots:
             breaker = self._circuits[circuit] if circuit is not None else None
             token = breaker.acquire() if breaker is not None else (False, 0)
             if token is None:
@@ -981,9 +1015,10 @@ class KorTravelMapClient:
         # 한 호출자가 취소돼도(연결 끊김·종료) 다른 호출자와 캐시 채우기는 계속된다.
         task = self._festivals_monthly_inflight.get(cache_key)
         if task is None:
-            # 서로 다른 첫 조회 월이 몰려도 공용 동시 호출 자리(검색·상세와 공유)를 다 쓰지 않게 따로 묶는다.
-            # locked 검사와 acquire 사이에는 suspension이 없다(semaphore fast path).
+            # 서로 다른 첫 조회 월이 몰려도 공유 조회 task 수를 축제 자리 수로 묶는다(task는 요청과 분리돼
+            # 살아남으므로 바깥에서 센다). locked 검사와 acquire 사이에는 suspension이 없다(semaphore fast path).
             if self._festivals_slots.locked():
+                BULKHEAD_REJECTIONS.labels(provider="kor_travel_map", scope="festivals").inc()
                 raise KorTravelMapUnavailable(
                     "kor-travel-map 축제 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
                 )
@@ -1180,6 +1215,12 @@ def create_kor_travel_map_client(app_settings: Settings) -> KorTravelMapClient:
         ),
         max_attempts=app_settings.pinvi_kor_travel_map_max_attempts,
         batch_chunk_size=app_settings.pinvi_kor_travel_map_batch_chunk_size,
+        surface_concurrency={
+            "features": app_settings.pinvi_kor_travel_map_features_max_concurrency,
+            "viewport": app_settings.pinvi_kor_travel_map_viewport_max_concurrency,
+            "transport": app_settings.pinvi_kor_travel_map_transport_max_concurrency,
+            "weather": app_settings.pinvi_kor_travel_map_weather_max_concurrency,
+        },
     )
 
 

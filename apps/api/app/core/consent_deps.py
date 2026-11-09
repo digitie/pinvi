@@ -35,6 +35,7 @@ from collections.abc import Awaitable, Callable
 from fastapi import HTTPException, status
 
 from app.core.deps import CurrentUserId, DbSession
+from app.db import session as db_session
 from app.services.consent import has_valid_consents
 
 LOCATION_CONSENT_TYPES: tuple[str, ...] = ("lbs_tos", "location_collection")
@@ -54,6 +55,9 @@ async def assert_location_consent(db: DbSession, *, user_id: uuid.UUID) -> None:
     ok = await has_valid_consents(db, user_id=user_id, consent_types=LOCATION_CONSENT_TYPES)
     if not ok:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_FORBIDDEN_DETAIL)
+    # 동의 조회가 연 읽기 트랜잭션을 닫는다 — 이 검사 뒤에는 거의 늘 좌표로 외부 호출(Map nearby·geo·
+    # Kakao)이 오고, 그 동안 풀 커넥션을 쥐지 않게 한다(#621). 쓰기가 걸려 있으면 아무것도 하지 않는다.
+    await db_session.release_read_connection(db)
 
 
 def require_location_consent() -> Callable[[CurrentUserId, DbSession], Awaitable[None]]:

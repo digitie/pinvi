@@ -20,7 +20,7 @@ from typing import Annotated, Any
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 
-from app.clients._resilience import TransportCircuit
+from app.clients._resilience import BULKHEAD_REJECTIONS, TransportCircuit
 from app.core.config import Settings, settings
 from app.db import session as db_session
 from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
@@ -82,6 +82,7 @@ class KorTravelGeoClient:
         attempt_timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         if self._slots.locked():
+            BULKHEAD_REJECTIONS.labels(provider="kor_travel_geo", scope="all").inc()
             raise KorTravelGeoUnavailable(
                 "kor-travel-geo 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
             )
@@ -255,6 +256,7 @@ class KorTravelGeoClient:
     async def healthz(self) -> dict[str, Any]:
         # 진단 GET도 같은 provider 상한을 쓴다. 본 요청의 회로 판정은 변경하지 않는다.
         if self._slots.locked():
+            BULKHEAD_REJECTIONS.labels(provider="kor_travel_geo", scope="all").inc()
             raise KorTravelGeoUnavailable(
                 "kor-travel-geo 동시 호출 상한 — 호출하지 않음", code="BULKHEAD_FULL"
             )
@@ -296,6 +298,7 @@ def create_kor_travel_geo_client(app_settings: Settings) -> KorTravelGeoClient:
             else ""
         ),
         max_attempts=app_settings.pinvi_kor_travel_geo_max_attempts,
+        max_concurrent_requests=app_settings.pinvi_kor_travel_geo_max_concurrency,
     )
 
 

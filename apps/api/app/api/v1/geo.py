@@ -82,6 +82,7 @@ async def _gate_and_declare(
     사용자의 실제 위치가 통과한다. 이 갈림을 계약으로 만든 것이 `coord_source`다.
     """
     if coord_source in CONSENT_REQUIRED_COORD_SOURCES:
+        # 동의 조회의 읽기 트랜잭션은 assert_location_consent가 닫는다(#621).
         await assert_location_consent(db, user_id=uuid.UUID(user_id))
     declare_location_audit(
         request, lat=_audit_decimal(lat), lng=_audit_decimal(lon), source=coord_source

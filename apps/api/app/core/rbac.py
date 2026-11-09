@@ -14,6 +14,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 
 from app.core.deps import CurrentUserId, DbSession
+from app.db import session as db_session
 from app.models.user import User
 
 Role = Literal["user", "admin", "operator", "cpo"]
@@ -36,6 +37,9 @@ def require_role(*allowed: Role) -> Callable[[CurrentUserId, DbSession], Awaitab
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
             )
+        # 역할 조회가 연 읽기 트랜잭션을 닫는다 — 관리자 proxy(Map admin·Dagster 등)가 외부 호출 동안
+        # 풀 커넥션을 쥐지 않게(#621, `get_current_user_id`와 같은 규칙). 다음 쿼리는 새 트랜잭션이다.
+        await db_session.release_read_connection(db)
         return user
 
     return dependency

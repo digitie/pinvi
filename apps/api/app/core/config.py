@@ -685,7 +685,9 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://pinvi:pinvi_dev_password@localhost:5432/pinvi"
     )
     pinvi_database_pool_size: int = Field(default=10, ge=1, le=100)
-    pinvi_database_max_overflow: int = Field(default=0, ge=0, le=100)
+    # 정상 peak 7, Map 정지 때 10/0이 한 번 고갈됐다(#621) — 순간 burst만 5개까지 더 연다.
+    # 공용 PG `max_connections=100`을 다른 tenant와 나눠 쓰므로 크게 잡지 않는다.
+    pinvi_database_max_overflow: int = Field(default=5, ge=0, le=100)
     pinvi_database_pool_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
 
     # JWT / 세션
@@ -816,6 +818,14 @@ class Settings(BaseSettings):
         ge=1,
         le=200,
     )  # /v1/features/batch cap
+    # Map 표면별 worker 내 동시 호출 상한(#621). 꽉 차면 기다리지 않고 `BULKHEAD_FULL`(공개 503)이다.
+    # 회로 범위(#702)와 같은 단위라 느린 viewport·transport·weather가 상세·검색·trip view의 자리를
+    # 가져가지 못한다. 축제 월별 조회는 별도 상수(4)를 그대로 쓴다. 기본 합계 10+4+2+2(+축제 4)=22로
+    # 예전 공용 16과 비슷하게 둔다 — worker당 Map 부하가 크게 늘지 않게.
+    pinvi_kor_travel_map_features_max_concurrency: int = Field(default=10, ge=1, le=64)
+    pinvi_kor_travel_map_viewport_max_concurrency: int = Field(default=4, ge=1, le=64)
+    pinvi_kor_travel_map_transport_max_concurrency: int = Field(default=2, ge=1, le=64)
+    pinvi_kor_travel_map_weather_max_concurrency: int = Field(default=2, ge=1, le=64)
     # ADR-076 — 지도 transport 레이어(주유소·휴게소·고속도로 돌발·공항)를 Map
     # `/v1/service/transport/*`(service token 필요)로 읽는다. off(기본)면 `/transport/status`가
     # `enabled=false`를 주고 Map을 부르지 않는다 — 클라이언트는 레이어 컨트롤을 숨긴다.
@@ -918,6 +928,8 @@ class Settings(BaseSettings):
     pinvi_kor_travel_geo_base_url: str = "http://localhost:12501"
     pinvi_kor_travel_geo_timeout_seconds: float = 5.0
     pinvi_kor_travel_geo_max_attempts: int = 3
+    # worker 내 geo 동시 호출 상한(#621). 꽉 차면 기다리지 않고 `BULKHEAD_FULL`(공개 503)이다.
+    pinvi_kor_travel_geo_max_concurrency: int = Field(default=8, ge=1, le=64)
     # kor-travel-geo가 발급한 공개 API key(v2 `key`, ADR-075 — ADR-048 대체). geo는 `ops.public_api_keys`에
     # 등록된 활성 key만 받는다. VWorld key로 fallback하지 않는다 — 그 값은 모바일·브라우저에 노출되므로
     # geo 자격증명이 되면 안 된다. 미설정이면 geo 호출은 KorTravelGeoUnavailable(503 degrade)이다.
@@ -937,6 +949,8 @@ class Settings(BaseSettings):
     # 호출당 ≤ max_attempts x 이 값 + backoff(기본 3 x 2 + 0.6 = 6.6 s). read는 위 timeout 그대로.
     pinvi_kor_travel_weather_connect_timeout_seconds: float = Field(default=2.0, gt=0)
     pinvi_kor_travel_weather_max_attempts: int = 3
+    # worker 내 직접 weather 동시 호출 상한(#621). 꽉 차면 기다리지 않고 unavailable이다.
+    pinvi_kor_travel_weather_max_concurrency: int = Field(default=8, ge=1, le=64)
     # 직접 경로의 사용자 카드와 관리자 진단 예산을 분리한다(#621).
     pinvi_kor_travel_weather_request_budget_seconds: float = Field(default=4.0, gt=0, le=60)
     pinvi_kor_travel_weather_admin_request_budget_seconds: float = Field(default=10.0, gt=0, le=60)
@@ -967,6 +981,10 @@ class Settings(BaseSettings):
     pinvi_moderation_evidence_retention_days: int = Field(default=180, ge=1, le=3650)
     pinvi_telegram_api_base: str = "https://api.telegram.org"
     pinvi_telegram_timeout_seconds: float = 5.0
+    # 요청 경로(target 등록·검증) Telegram 호출의 worker 내 동시 상한(#621). 그 경로는 쓰기 트랜잭션
+    # 안에서 Telegram을 부르므로, 이 값이 Telegram 정지 때 붙잡히는 DB 연결 수의 상한이다. 꽉 차면
+    # 기다리지 않고 기존 `network_error`(503)다. 알림 drain worker에는 걸지 않는다(재시도 횟수 보호).
+    pinvi_telegram_max_concurrency: int = Field(default=4, ge=1, le=64)
     pinvi_telegram_bot_token_default: str = ""  # 시스템/Admin 봇
     pinvi_telegram_admin_chat_id: str = ""
     # outbox drain worker (§8)
