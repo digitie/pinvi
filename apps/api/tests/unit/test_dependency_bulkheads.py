@@ -180,8 +180,8 @@ async def test_factories_take_caps_from_settings() -> None:
 
 
 def test_default_caps_keep_map_total_near_the_old_shared_sixteen() -> None:
-    from app.core.config import Settings
     from app.clients.kor_travel_map import FESTIVALS_MAX_CONCURRENT_REQUESTS
+    from app.core.config import Settings
 
     defaults = Settings()
     assert defaults.pinvi_database_max_overflow == 5
@@ -208,7 +208,9 @@ def _telegram_handler(counter: dict[str, int], release: asyncio.Event) -> Any:
     async def handler(request: httpx.Request) -> httpx.Response:
         counter["sent"] += 1
         await release.wait()
-        return httpx.Response(200, json={"ok": True, "result": {"id": 1, "type": "private"}})
+        # getChat(type)과 sendMessage(message_id) 양쪽 검증을 통과하는 응답.
+        result = {"id": 1, "type": "private", "message_id": counter["sent"]}
+        return httpx.Response(200, json={"ok": True, "result": result})
 
     return handler
 
