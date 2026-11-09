@@ -17,7 +17,10 @@ const INCIDENT_LIST_MAX = 5;
 function layerLine(
   layer: TransportLayer,
   minZoom: number,
-  state: Pick<TransportLayersState, 'zoom' | 'results' | 'receivedAt' | 'nowMs' | 'status'>,
+  state: Pick<
+    TransportLayersState,
+    'zoom' | 'results' | 'receivedAt' | 'nowMs' | 'status' | 'hasMap'
+  >,
 ): string | null {
   const status = state.status?.layers.find((s) => s.layer === layer);
   if (status && !status.available) return '일시적으로 불러올 수 없음';
@@ -25,7 +28,7 @@ function layerLine(
   const result = state.results.find((r) => r.layer === layer);
   // 결과 전에도 줄을 차지한다 — 결과가 와서 줄이 새로 생기면 패널 상시 부분이 자라 여행 지도가 다시
   // 맞춰지고 같은 레이어를 다시 조회한다(#712).
-  if (!result) return LOADING_TEXT;
+  if (!result) return state.hasMap ? LOADING_TEXT : null;
   if (result.status !== 'ok') return '일시적으로 불러올 수 없음';
   const parts: string[] = [`${result.items.length}곳`];
   if (result.truncated) parts.push('일부만 표시 — 확대하세요');
@@ -101,9 +104,9 @@ export function TransportLayerControls({
           return line ? (
             <li
               key={meta.layer}
-              // 한 줄 고정 — 결과 문구 길이로 줄 수가 바뀌면 상시 높이가 바뀌어 다시 맞춘다(#712).
-              className="truncate text-muted"
-              title={`${meta.label} ${line}`}
+              // 두 줄 높이 고정 — 결과 문구 길이로 줄 수가 바뀌면 상시 높이가 바뀌어 다시 맞춘다(#712).
+              // 한 줄로 자르면 모바일 폭에서 '오래된 정보'·'일부만 표시'가 잘린다.
+              className="line-clamp-2 min-h-[2lh] text-muted"
               data-testid={`transport-layer-state-${meta.layer}`}
               data-status={result?.status ?? (line === LOADING_TEXT ? 'loading' : '')}
               data-reason={result?.reason ?? ''}

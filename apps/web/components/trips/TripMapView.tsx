@@ -766,7 +766,7 @@ export function TripMapView({
                       : marker.point.title
                   }
                   selected={marker.point.poiId === selectedPoiId}
-                  zIndex={markerZIndex('tripPoi', marker.point.poiId === selectedPoiId)}
+                  zIndex={markerZIndex(marker.point.poiId === selectedPoiId)}
                   highlighted={marker.point.featureResolutionState === 'missing'}
                   ariaLabel={marker.point.title}
                   interactionId={'poi:' + marker.point.poiId}
@@ -800,7 +800,6 @@ export function TripMapView({
                     showInnerCircle={false}
                     className="trip-map-feature-marker"
                     zIndex={markerZIndex(
-                      'feature',
                       selectedFeature?.feature_id === marker.feature.feature_id,
                     )}
                     title={marker.feature.name}

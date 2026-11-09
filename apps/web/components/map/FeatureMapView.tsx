@@ -908,7 +908,7 @@ export function FeatureMapView({
                       color={mapPoint.color}
                       title={mapPoint.title}
                       selected={isSelected}
-                      zIndex={markerZIndex('feature', isSelected)}
+                      zIndex={markerZIndex(isSelected)}
                       ariaLabel={mapPoint.title}
                       interactionId={mapPoint.kind === 'feature' ? 'feature:' + mapPoint.featureId : undefined}
                       onClick={() => handlePointClick(mapPoint)}
@@ -932,6 +932,7 @@ export function FeatureMapView({
                       condition={weatherPoint.condition}
                       title={weatherPoint.title}
                       selected={isSelected}
+                      zIndex={markerZIndex(isSelected)}
                       ariaLabel={weatherPoint.title}
                       simplifyAtZoom={isSelected ? 5 : 20}
                       onClick={() => {
