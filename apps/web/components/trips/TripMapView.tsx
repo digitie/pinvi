@@ -53,6 +53,7 @@ import { useTransportLayers } from '@/lib/useTransportLayers';
 import { TransportLayerControls } from '@/components/map/TransportLayerControls';
 import { TransportMarkerLegend, TransportMarkers } from '@/components/map/TransportMarkers';
 import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
+import { markerZIndex } from '@/lib/markerStacking';
 
 // 전국이 보이는 기본 시점(POI 가 없을 때).
 const DEFAULT_CENTER: [number, number] = [127.5, 36.5];
@@ -765,6 +766,7 @@ export function TripMapView({
                       : marker.point.title
                   }
                   selected={marker.point.poiId === selectedPoiId}
+                  zIndex={markerZIndex(marker.point.poiId === selectedPoiId)}
                   highlighted={marker.point.featureResolutionState === 'missing'}
                   ariaLabel={marker.point.title}
                   interactionId={'poi:' + marker.point.poiId}
@@ -797,6 +799,9 @@ export function TripMapView({
                     size={FEATURE_MARKER_SIZE}
                     showInnerCircle={false}
                     className="trip-map-feature-marker"
+                    zIndex={markerZIndex(
+                      selectedFeature?.feature_id === marker.feature.feature_id,
+                    )}
                     title={marker.feature.name}
                     ariaLabel={marker.feature.name}
                     onClick={() => {

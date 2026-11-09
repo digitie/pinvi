@@ -23,6 +23,7 @@ import type { MapLibreMap } from '@/components/map/vworldPrimitives';
 function fakeMap(initial: [number, number, number, number]) {
   let box = initial;
   const map = {
+    isMoving: () => false,
     getZoom: () => 9,
     getBounds: () => ({
       getWest: () => box[0],

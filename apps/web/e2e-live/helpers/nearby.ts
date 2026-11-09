@@ -50,6 +50,7 @@ export const FEATURES_IN_BOUNDS_RE = /\/features\/in-bounds\?/;
 export const FRESHNESS_RE = /(방금 갱신|\d+(분|시간|일) 전 갱신)/;
 export const UNAVAILABLE_TEXT = '일시적으로 불러올 수 없음';
 export const ZOOM_IN_TEXT = '확대하면 보여요';
+export const LOADING_TEXT = '불러오는 중';
 export const TRUNCATED_TEXT = '일부만 표시 — 확대하세요';
 export const STALE_TEXT = '오래된 정보';
 
@@ -350,6 +351,8 @@ export function boxesOverlap(a: Box, b: Box): boolean {
 export async function expectLayerLineShape(page: Page, layer: Layer): Promise<void> {
   const line = stateLine(page, layer);
   await expect(line).toBeVisible();
+  // 켠 직후에는 "불러오는 중"이 줄을 미리 차지한다(#712) — 결과 문구로 바뀔 때까지 기다린다.
+  await expect(line).not.toContainText(LOADING_TEXT, { timeout: 30_000 });
   const text = (await line.textContent()) ?? '';
   const ok = /\d+곳/.test(text) || text.includes(UNAVAILABLE_TEXT) || text.includes(ZOOM_IN_TEXT);
   expect(ok, `state line for ${layer} has a known shape: "${text}"`).toBe(true);

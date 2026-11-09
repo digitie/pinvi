@@ -31,6 +31,7 @@ function makeState(over: Partial<TransportLayersState>): TransportLayersState {
     visible: true,
     status: { enabled: true, layers: [] },
     enabled: new Set<TransportLayer>(),
+    hasMap: true,
     zoom: 12,
     results: [],
     receivedAt: 1_000,
@@ -61,6 +62,41 @@ describe('TransportLayerControls', () => {
     expect(fuel).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(fuel);
     expect(state.toggle).toHaveBeenCalledWith('fuel_station');
+  });
+
+  it('켠 레이어는 결과 전에도 "불러오는 중" 한 줄을 미리 차지한다(#712)', () => {
+    // 결과가 와서 줄이 새로 생기면 패널 상시 부분이 자라 여행 지도가 다시 맞춰지고 같은 레이어를 다시
+    // 조회한다(운영 mobile 2026-11-08). 켠 순간 줄을 차지해 두면 결과가 와도 상시 높이가 그대로다.
+    render(
+      <TransportLayerControls
+        state={makeState({
+          zoom: 9,
+          enabled: new Set<TransportLayer>(['highway_incident']),
+          results: [],
+        })}
+        onOpenDetail={vi.fn()}
+      />,
+    );
+    const line = screen.getByTestId('transport-layer-state-highway_incident');
+    expect(line).toHaveTextContent('불러오는 중');
+    expect(line).toHaveAttribute('data-status', 'loading');
+    // 두 줄 높이 고정 — 결과 문구 길이로 줄 수가 바뀌지 않게, 그러나 경고 문구는 자르지 않게.
+    expect(line.className).toContain('line-clamp-2');
+    expect(line.className).toContain('min-h-[2lh]');
+  });
+
+  it('지도가 없으면(fallback) "불러오는 중"을 띄우지 않는다', () => {
+    render(
+      <TransportLayerControls
+        state={makeState({
+          hasMap: false,
+          enabled: new Set<TransportLayer>(['highway_incident']),
+          results: [],
+        })}
+        onOpenDetail={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('transport-layer-state-highway_incident')).toBeNull();
   });
 
   it('줌 안내·강등·신선도·잘림을 레이어별로 보인다', () => {

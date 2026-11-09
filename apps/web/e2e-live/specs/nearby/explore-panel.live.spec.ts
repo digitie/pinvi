@@ -9,6 +9,7 @@
 import { expect, test } from '@playwright/test';
 import { loginAsUser, shot, waitForRequest } from '../../helpers/live';
 import {
+  LOADING_TEXT,
   DEFAULT_EXPLORE_ZOOM,
   FEATURES_IN_BOUNDS_RE,
   FRESHNESS_RE,
@@ -211,6 +212,7 @@ test.describe('NEAR explore map panel', () => {
       await expect(line).toContainText(UNAVAILABLE_TEXT);
       return;
     }
+    await expect(line).not.toContainText(LOADING_TEXT);
     if (fuel.truncated) {
       await expect(line).toContainText(TRUNCATED_TEXT);
       expect(fuel.items.length).toBeLessThanOrEqual(200);
@@ -237,6 +239,7 @@ test.describe('NEAR explore map panel', () => {
       await expect(line).toBeVisible();
       const result = results.get(layer);
       if (!result || result.status !== 'ok') continue;
+      await expect(line).not.toContainText(LOADING_TEXT);
       await expect(line).toContainText(FRESHNESS_RE);
       if (result.freshness?.stale) await expect(line).toContainText(STALE_TEXT);
       else await expect(line).not.toContainText(STALE_TEXT);

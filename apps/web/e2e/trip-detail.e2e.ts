@@ -1568,3 +1568,68 @@ test('데스크톱 패널이 넘치지 않으면 스크롤 영역은 초점을 �
   await panelScroll.evaluate((el) => el.querySelector('#e2e-filler')?.remove());
   await expect(panelScroll).not.toHaveAttribute('tabindex', /.*/);
 });
+
+test.describe('모바일 여행 지도 교통 결과(#712)', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test('교통 결과가 와도 지도를 다시 맞추지 않고 같은 레이어를 다시 조회하지 않는다', async ({ page }) => {
+    test.skip(process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1', 'VWorld canvas 검증 환경에서 실행');
+    // 교통 돌발은 zoom 7 이상에서만 조회한다 — 맞춤 zoom이 그 위가 되게 영남 네 곳으로 좁힌다.
+    const nearbyPois = [
+      { lon: 128.6, lat: 35.87 },
+      { lon: 128.73, lat: 36.57 },
+      { lon: 129.21, lat: 35.84 },
+      { lon: 129.16, lat: 35.16 },
+    ].map((coord, index) => ({ ...LONG_PANEL_POIS[index]!, feature: { coord } }));
+    await mockTripDetailRoutes(page, {
+      ...TRIP_VIEW,
+      days: [{ ...BASE_MARKER_DAY, pois: nearbyPois }],
+    });
+    await mockTransportEnabled(page);
+    await stubTilesInCanvasMode(page);
+    const markersRequests: string[] = [];
+    await page.route(/.*\/transport\/markers-in-bounds(\?.*)?$/, async (route, request) => {
+      if (!isFetch(request.resourceType())) return route.fallback();
+      markersRequests.push(request.url());
+      // 실제처럼 결과가 조금 늦게 온다 — 그 사이 지도가 멈춘 상태여야 한다.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const items = Array.from({ length: 5 }, (_, index) => ({
+        layer: 'highway_incident',
+        feature_id: `inc-${index}`,
+        category: '99000000',
+        marker_icon: 'roadblock',
+        marker_color: 'P-13',
+        coord: { lon: 127.0 + index * 0.1, lat: 35.5 + index * 0.1 },
+        title: `교통 돌발 ${index + 1}`,
+        process_status: '처리중',
+        occurred_at: '2026-11-08T09:00:00+09:00',
+      }));
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            bbox: { lng_min: 126.0, lat_min: 33.5, lng_max: 129.5, lat_max: 38.5 },
+            zoom: 8,
+            layers: [{ layer: 'highway_incident', status: 'ok', truncated: false, items }],
+          },
+        }),
+      });
+    });
+
+    await page.goto(`/trips/${tripId}`);
+    await expect(page.locator('.maplibregl-canvas').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('transport-layer-controls')).toBeVisible();
+    await page.waitForTimeout(1_000);
+    markersRequests.length = 0;
+
+    await page.getByTestId('transport-layer-toggle-highway_incident').click();
+    // 전제: 맞춘 zoom에서 교통 돌발을 조회할 수 있다(아니면 '확대하면 보여요'로 이 검사가 무의미해진다).
+    await expect(page.getByTestId('transport-layer-state-highway_incident')).not.toContainText(
+      '확대하면 보여요',
+    );
+    await expect(page.getByTestId('transport-incident-list')).toBeVisible({ timeout: 10_000 });
+    // 결과가 온 뒤 디바운스(250ms)·재맞춤이 끝날 시간을 넉넉히 준다.
+    await page.waitForTimeout(1_500);
+    expect(markersRequests).toHaveLength(1);
+  });
+});

@@ -89,6 +89,8 @@ export function useTransportLayers({ active }: { active: boolean }) {
   const [zoom, setZoom] = useState<number | null>(null);
   const [fetched, setFetched] = useState<Fetched | null>(null);
   const [detail, setDetail] = useState<TransportDetailTarget | null>(null);
+  // 지도가 한 번이라도 viewport를 알렸는가 — 없으면(VWorld fallback) 조회가 없어 "불러오는 중"을 띄우지 않는다.
+  const [hasMap, setHasMap] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -147,15 +149,29 @@ export function useTransportLayers({ active }: { active: boolean }) {
         );
         if (requestId !== latestRef.current) return;
         const receivedAt = Date.now();
+        // 요청한 레이어가 응답에 없으면 "불러오는 중"에 머물지 않게 불러올 수 없음으로 채운다.
+        const returned = new Set(data.layers.map((result) => result.layer));
+        const results: TransportLayerResult[] = [
+          ...data.layers,
+          ...layers
+            .filter((layer) => !returned.has(layer))
+            .map((layer) => ({
+              layer,
+              status: 'unavailable' as const,
+              reason: 'UPSTREAM_UNAVAILABLE' as const,
+              truncated: false,
+              items: [],
+            })),
+        ];
         const cache = cacheRef.current;
         cache.delete(key);
-        cache.set(key, { results: data.layers, receivedAt, cachedAt: receivedAt });
+        cache.set(key, { results, receivedAt, cachedAt: receivedAt });
         while (cache.size > CACHE_MAX) {
           const first = cache.keys().next().value;
           if (first == null) break;
           cache.delete(first);
         }
-        setFetched({ results: data.layers, receivedAt });
+        setFetched({ results, receivedAt });
         setNowMs(receivedAt);
       } catch (err) {
         if (isAbortError(err) || requestId !== latestRef.current) return;
@@ -190,9 +206,12 @@ export function useTransportLayers({ active }: { active: boolean }) {
   const onViewportChange = useCallback(
     (map: MapLibreMap) => {
       mapRef.current = map;
+      setHasMap(true);
       if (!visibleRef.current) return;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
+        // 아직 움직이는 중(애니메이션 맞춤)이면 건너뛴다 — 끝나는 moveend가 다시 부른다.
+        if (map.isMoving()) return;
         void fetchNow(map, enabledRef.current);
       }, DEBOUNCE_MS);
     },
@@ -215,7 +234,8 @@ export function useTransportLayers({ active }: { active: boolean }) {
       if (!mapRef.current) return;
       debounceRef.current = setTimeout(() => {
         const map = mapRef.current;
-        if (map) void fetchNow(map, enabledRef.current);
+        // 켠 직후 재맞춤이 애니메이션 중이면(한 핀 flyTo) 그 moveend가 조회한다.
+        if (map && !map.isMoving()) void fetchNow(map, enabledRef.current);
       }, DEBOUNCE_MS);
     },
     [fetchNow],
@@ -247,6 +267,7 @@ export function useTransportLayers({ active }: { active: boolean }) {
     visible,
     status,
     enabled,
+    hasMap,
     zoom,
     results,
     receivedAt: fetched?.receivedAt ?? null,

@@ -1,6 +1,7 @@
 'use client';
 
 import { ClusterLayer, MakiMarker } from '@/components/map/vworldPrimitives';
+import { markerZIndex } from '@/lib/markerStacking';
 import type { TransportDetailTarget, TransportMapPoint } from '@/lib/useTransportLayers';
 
 export interface TransportMarkersProps {
@@ -29,6 +30,7 @@ export function TransportMarkers({ points, selectedId, onSelect }: TransportMark
             color={p.color}
             title={p.title}
             selected={p.id === selectedId}
+            zIndex={markerZIndex(p.id === selectedId)}
             ariaLabel={p.title}
             interactionId={p.id}
             onClick={() => onSelect({ layer: p.layer, featureId: p.featureId, title: p.title })}
