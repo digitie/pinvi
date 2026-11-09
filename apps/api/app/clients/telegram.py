@@ -13,9 +13,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
+
+from app.clients._resilience import BULKHEAD_REJECTIONS
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -98,9 +101,27 @@ def _classify(response: httpx.Response, *, token: str | None = None) -> Telegram
 class TelegramClient:
     """Telegram Bot API 전송 전용 client (httpx.AsyncClient 주입)."""
 
-    def __init__(self, http: httpx.AsyncClient, *, timeout_seconds: float = 5.0) -> None:
+    #: worker(프로세스) 전체의 Telegram 동시 호출 수(#621). client는 요청·전송마다 새로 만들므로
+    #: 상한은 인스턴스가 아니라 클래스에 둔다. 단일 이벤트 루프 안에서 await 없이 세고 되돌린다.
+    _in_flight: ClassVar[int] = 0
+
+    def __init__(
+        self,
+        http: httpx.AsyncClient,
+        *,
+        timeout_seconds: float = 5.0,
+        max_concurrent_requests: int | None = None,
+    ) -> None:
         self._http = http
         self._timeout = timeout_seconds
+        limit = (
+            settings.pinvi_telegram_max_concurrency
+            if max_concurrent_requests is None
+            else max_concurrent_requests
+        )
+        if limit < 1:
+            raise ValueError("max_concurrent_requests는 양수여야 합니다.")
+        self._max_concurrent = limit
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -109,6 +130,12 @@ class TelegramClient:
         self, method: str, telegram_method: str, token: str, **kwargs: Any
     ) -> dict[str, Any]:
         path = f"/bot{token}/{telegram_method}"
+        # 꽉 차면 기다리지 않는다. target 등록·검증은 쓰기 트랜잭션 안에서 부르므로, Telegram 정지가
+        # 이 상한보다 많은 DB 연결을 붙잡지 못하게 한다. 공개 분류는 기존 재시도 가능 `network_error`다.
+        if TelegramClient._in_flight >= self._max_concurrent:
+            BULKHEAD_REJECTIONS.labels(provider="telegram", scope="all").inc()
+            raise TelegramError("telegram 동시 호출 상한 — 호출하지 않음", code="network_error")
+        TelegramClient._in_flight += 1
         try:
             async with asyncio.timeout(self._timeout):
                 response = await self._http.request(method, path, timeout=self._timeout, **kwargs)
@@ -116,6 +143,8 @@ class TelegramClient:
             raise TelegramError("telegram timeout", code="network_error") from exc
         except httpx.TransportError as exc:
             raise TelegramError("telegram connection error", code="network_error") from exc
+        finally:
+            TelegramClient._in_flight -= 1
 
         if response.status_code != 200:
             raise _classify(response, token=token)

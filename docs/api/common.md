@@ -361,9 +361,18 @@ Map outer envelope는 필수 `data`/`meta`와 기존 타입·상태 의미를 �
 무시한다. 무시한 키는 위치·키 집합별 한 번 경고한다. 서명·인과 증명·immutable receipt의
 exact 검사는 별도 보안 경계이므로 그대로 유지한다.
 
-사용자 Map·geo·weather client는 worker별 독립 동시 호출 한도16을 가진다. Map weather와
-transport는 기본 Map client 한도를 공유한다. 포화 시 기다리지 않고 기존 unavailable로
-강등한다. timeout 등 전송 장애가 3회 연속 발생하면 회로를120초 열고 시험 호출 하나만
+사용자 Map·geo·weather·Telegram client는 worker별 동시 호출 상한(bulkhead)을 가진다. Map은
+회로와 같은 표면 단위로 자리를 나눈다(#621): features(검색·상세·batch·공개 목록/상세)
+`PINVI_KOR_TRAVEL_MAP_FEATURES_MAX_CONCURRENCY` 기본12, viewport `..._VIEWPORT_...` 기본8,
+transport `..._TRANSPORT_...` 기본4, Map weather `..._WEATHER_...` 기본4, 축제 월별 4(상수).
+느린 viewport·transport·weather가 상세·trip view의 자리를 가져가지 못한다. geo는
+`PINVI_KOR_TRAVEL_GEO_MAX_CONCURRENCY` 기본8, 직접 weather는
+`PINVI_KOR_TRAVEL_WEATHER_MAX_CONCURRENCY` 기본8, Telegram은 worker 전체(client는 요청마다
+새로 만든다) `PINVI_TELEGRAM_MAX_CONCURRENCY` 기본4다. Telegram target 등록·검증은 쓰기
+트랜잭션 안에서 부르므로 이 값이 Telegram 정지 때 붙잡히는 DB 연결 수의 상한이다. 포화 시
+기다리지 않고 기존 unavailable(Telegram은 재시도 가능 `network_error`)로 강등하며 거부는
+`pinvi_outbound_bulkhead_rejections_total{provider,scope}`로 센다(호출하지 않았으므로
+`api_call_log` 행은 없다). timeout 등 전송 장애가 3회 연속 발생하면 회로를120초 열고 시험 호출 하나만
 허용한다. 직접 weather의 endpoint/host·짧은 deadline 판단은 유지하며 이전 세대의 늦은
 결과는 새 회로 상태에 반영하지 않는다. 로컬 포화·연결 풀 대기는 원격 장애로 세지 않는다.
 별도 admin/curation/command client를 하나의 전역 Map cap으로 합친 것은 아니다.
@@ -403,8 +412,12 @@ Telegram의 전체 deadline이 전송을 먼저 취소하면 실제 전송 예�
 별도 ETL 패키지는 API ORM에 의존하지 않으며 기존 resource timeout·Dagster retry/metadata를
 유지한다.
 
-DB 기본값은 `PINVI_DATABASE_POOL_SIZE=10`, `PINVI_DATABASE_MAX_OVERFLOW=0`,
-`PINVI_DATABASE_POOL_TIMEOUT_SECONDS=5`이다. 대기 metric
+DB 기본값은 `PINVI_DATABASE_POOL_SIZE=10`, `PINVI_DATABASE_MAX_OVERFLOW=5`(#621: 정상 peak 7,
+Map 정지 때 10/0이 한 번 고갈 — burst 여유만 둔다. 공용 PG `max_connections=100`을 나눠 쓴다),
+`PINVI_DATABASE_POOL_TIMEOUT_SECONDS=5`이다. 외부 호출 전에는 읽기 트랜잭션을 닫는다:
+인증(`get_current_user_id`)·역할(`require_role`)·위치 동의 조회 뒤와 통합 검색의 내 POI 조회 뒤에
+`release_read_connection`을 부른다. 느린 Map·geo·Kakao가 요청 수만큼 풀을 묶지 못한다
+(`tests/integration/test_dependency_pool_isolation.py`). 대기 metric
 `pinvi_api_db_pool_wait_seconds{outcome=acquired|timeout|cancelled|error}`는 실제 queue
 acquisition을 측정하고 새 연결 생성 시간도 포함한다. SQL 실행·pre-ping 시간은 포함하지
 않는다. worker가 늘면 이 한도가 worker 수만큼 곱해진다. 운영 설정 전달·부하 검증과
@@ -426,5 +439,10 @@ edge HTTP/2·worker 증설은 별도 운영 담당 범위다.
 유지한다. deadline 회로의 의미 있는 원격 예산은 실제 connect/header 전송 시작부터 계산해
 로컬 연결 풀 대기를 원격 장애 시간으로 세지 않는다.
 
-#621의 운영 flag 적용·edge HTTP/2·실제 운영 latency/부하 및 worker 증설은 Claude Code
+edge 점검(2026-11-09, 저장소 밖 HAProxy는 바꾸지 않음): 브라우저 구간은 웹·API 호스트 모두 TLS
+ALPN `h2`로 HTTP/2를 협상한다(`curl --http2`·`openssl s_client -alpn h2`). 그래서 origin당 연결
+6개(HTTP/1.1) 앞단 큐잉은 지금 edge의 원인이 아니며, 느린 요청은 한 연결 안에서 다중화된다.
+edge→PinVi backend 구간의 연결 상한·timeout은 HAProxy 설정이라 소유자 확인 범위다.
+
+#621의 운영 flag 적용·실제 운영 latency/부하 및 worker 증설은 Claude Code
 소유다. WSL 소유 fixture 검증은 운영 검증을 대신하지 않으며 #621은 자동 종료하지 않는다.

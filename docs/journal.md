@@ -1,3 +1,10 @@
+## 2026-11-09 — #621 잔여: 표면별 bulkhead·외부 호출 전 트랜잭션 해제·pool overflow
+
+- #695가 outbox·rate limit·풀 metric을 이미 넣었다. main을 다시 대조하니 남은 구멍은 셋이었다. (1) Map client는 회로만 표면별(#702)이고 동시 호출 자리는 하나(16)라 느린 viewport·weather가 상세·trip view 자리까지 썼다. (2) 위치 동의(`/geo/reverse`·`/regions/*` device, 통합 검색 near-me)·내 POI 조회·`require_role` 뒤 읽기 트랜잭션을 연 채 geo·Map·Kakao·Map admin을 불러 요청 수만큼 풀을 묶었다. (3) Telegram은 상한이 없었다.
+- 수정: Map bulkhead를 features 12·viewport 8·transport 4·weather 4(축제 4 그대로)로 나누고 settings로 뺐다. geo·직접 weather 8, Telegram worker 전체 4(재시도 가능 `network_error`). 거부 counter `pinvi_outbound_bulkhead_rejections_total`. 위 지점에 `release_read_connection`. `PINVI_DATABASE_MAX_OVERFLOW` 기본 0→5.
+- 실패 먼저: 실제 queue pool(2/0) 통합 테스트에서 느린 geo·Map·Kakao 요청 6건이 기다리는 동안 풀 checkout 0·DB 전용 엔드포인트 즉시 200, unit에서 느린 표면이 features 자리를 못 가져감·Telegram 상한.
+- edge: 웹·API 호스트 모두 ALPN h2(HTTP/2) — 6연결 큐잉은 원인 아님. HAProxy backend 상한·timeout은 소유자 확인. 배포 없음.
+
 ## 2026-11-07 — 통합 테스트 PG 비내구·tmpfs(n150 sda I/O)
 
 - n150 디스크 flush 포화의 최상위 기록자가 test gate PG(fsync on)였다. 모든 testcontainers PostgresContainer를 `tests/integration/_disposable_pg.make_nondurable`로 감싸 fsync·synchronous_commit·full_page_writes off + 이미지 major에 맞는 데이터 VOLUME tmpfs(기본 2g, `PINVI_TEST_PG_TMPFS_SIZE`). unit 가드·서버 효과 검사.

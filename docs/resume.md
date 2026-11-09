@@ -1,3 +1,8 @@
+## #621 잔여 복원력 (2026-11-09)
+
+PR claude/621-dependency-resilience: Map 표면별 bulkhead·geo/weather/Telegram 상한 settings화, 외부 호출 전 읽기 트랜잭션 해제(위치 동의·내 POI·require_role), pool overflow 기본 5, edge HTTP/2 확인(h2).
+다음: 운영 배포 뒤 `pinvi_api_db_pool_wait_seconds`·`pinvi_outbound_bulkhead_rejections_total` 관찰, worker 증설 판단.
+
 ## #702·#699·#700·#686·WX-004 묶음 (2026-11-07)
 
 PR claude/bundle-699-700-686-702: Map 회로 표면별 분리·ReadTimeout 재전송 중단, 내보내기 최신 view, popup 쌓임, 여행 지도 맞춤 resize, live helper 보정.

@@ -27,6 +27,7 @@ from app.core.bbox import parse_bbox_numbers
 from app.core.config import settings
 from app.core.consent_deps import assert_location_consent
 from app.core.deps import CurrentUserId, DbSession
+from app.db import session as db_session
 from app.middleware.location_audit import declare_location_audit
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
@@ -180,6 +181,8 @@ async def unified_search(
         # 사용자 좌표를 제3자(Kakao)에 제공하는 경로다 — 동의를 먼저 확인한다(T-327).
         # dependency로 걸지 않는 이유: 좌표 없는 키워드 검색까지 막히기 때문이다.
         await assert_location_consent(db, user_id=user_id)
+        # 동의 조회의 읽기 트랜잭션을 Map·geo 호출 전에 닫는다 — 풀 커넥션을 쥐고 기다리지 않게(#621).
+        await db_session.release_read_connection(db)
         # 출처를 여기서 함께 선언한다. 좌표만 세팅하면 이 행이 `coord_source=NULL`로 남는데, NULL의
         # 계약상 의미는 "이 컬럼이 없던 시기의 행"이라 **제3자 제공이 실제로 일어난 가장 민감한
         # 행**이 레거시와 구분되지 않는다(T-329 리뷰 지적).
@@ -240,6 +243,8 @@ async def unified_search(
 
     my_pois = [my_poi_to_result(poi) for poi in await _search_my_pois(db, user_id=user_id, q=q)]
     results.extend(my_pois)
+    # 내 POI 조회의 읽기 트랜잭션을 Kakao·Naver 호출 전에 닫는다(#621).
+    await db_session.release_read_connection(db)
 
     # ── internal-first short-circuit: 내부 **장소** 결과 ≥ K면 provider 미호출(§10) ──
     # 주소 후보는 세지 않는다 — "하회…길"처럼 도로명만 여러 개 맞는 검색어가 장소 0건인데도

@@ -282,6 +282,8 @@ class KorTravelMapWeatherClient:
                 log_failure=False,
                 # weather는 이 모듈의 회로만 센다 — 짧은 timeout이 지도·검색 회로를 열지 않는다(#702).
                 circuit=None,
+                # 동시 호출 자리도 weather 몫만 쓴다 — 느린 weather가 상세·trip view 자리를 가져가지 않는다(#621).
+                bulkhead="weather",
             )
         except KorTravelMapUnavailable as exc:
             if exc.code in {"BULKHEAD_FULL", "POOL_TIMEOUT", "CIRCUIT_OPEN"}:

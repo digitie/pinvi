@@ -39,6 +39,7 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from pydantic import ValidationError
 
+from app.clients._resilience import BULKHEAD_REJECTIONS
 from app.clients.weather_alert_events import RegionalAlertEvents
 from app.core.config import Settings, settings
 from app.db import session as db_session
@@ -766,6 +767,7 @@ class KorTravelWeatherClient:
         read_timeout_seconds: float | None = None,
     ) -> httpx.Response:
         if self._slots.locked():
+            BULKHEAD_REJECTIONS.labels(provider="kor_travel_weather", scope="all").inc()
             raise KorTravelWeatherUnavailable("kor-travel-weather 동시 호출 상한 — 호출하지 않음")
         # 포화는 원격 실패가 아니다. 회로 시험 자리도 잡기 전에 즉시 거부한다.
         async with self._slots:
@@ -1247,7 +1249,9 @@ def create_kor_travel_weather_client(app_settings: Settings) -> KorTravelWeather
         ),
     )
     return KorTravelWeatherClient(
-        http, max_attempts=app_settings.pinvi_kor_travel_weather_max_attempts
+        http,
+        max_attempts=app_settings.pinvi_kor_travel_weather_max_attempts,
+        max_concurrent_requests=app_settings.pinvi_kor_travel_weather_max_concurrency,
     )
 
 
