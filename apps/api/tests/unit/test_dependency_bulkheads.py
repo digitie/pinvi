@@ -28,6 +28,7 @@ def _telegram_in_flight_starts_and_ends_at_zero() -> Iterator[None]:
     TelegramClient._in_flight = 0
     assert leaked == 0
 
+
 _SLOW_PATHS = {
     "viewport": "/v1/features/in-bounds",
     "transport": "/v1/service/transport/",
