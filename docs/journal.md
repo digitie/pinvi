@@ -1,3 +1,8 @@
+## 2026-11-10 — Map ADR-121 user·admin 스펙 재vendor(d8253e85)
+
+- Map #1480(ADR-121 장소 속성)이 user·admin 스펙에 `attribute` query(feature 목록·검색·in-bounds·nearby)·`attribute_codes`·상세 `attributes`·`/v1/place-attributes`·`/v1/admin/theme-attach-decisions`를 더했다. service 스펙은 바이트 그대로다.
+- user·admin 스냅샷을 Map `d8253e85` 원본으로 교체하고 핀(user `_UPSTREAM_COMMIT`/`_SNAPSHOT_SHA256`, admin `_kor_travel_map_snapshot_pin.py`+이중 핀)과 M05 pair 계약(`generate_m05_pair_contract.py --write`)을 갱신했다. `_CLIENT_QUERY_PARAMETERS`에 `attribute`를 더했다(client는 아직 보내지 않는다). 런타임 코드 변경 없음 — 상세 ETag가 속성이 있으면 `"<rev>-<sha16>"`가 되지만 PinVi는 상세 ETag를 쓰지 않는다.
+
 ## 2026-11-09 — #621 잔여: 표면별 bulkhead·외부 호출 전 트랜잭션 해제·pool overflow
 
 - #695가 outbox·rate limit·풀 metric을 이미 넣었다. main을 다시 대조하니 남은 구멍은 셋이었다. (1) Map client는 회로만 표면별(#702)이고 동시 호출 자리는 하나(16)라 느린 viewport·weather가 상세·trip view 자리까지 썼다. (2) 위치 동의(`/geo/reverse`·`/regions/*` device, 통합 검색 near-me)·내 POI 조회·`require_role` 뒤 읽기 트랜잭션을 연 채 geo·Map·Kakao·Map admin을 불러 요청 수만큼 풀을 묶었다. (3) Telegram은 상한이 없었다.

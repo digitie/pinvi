@@ -50,8 +50,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "11b811d91eadf177d2a52319945e6c283b62dbe6"
-_SNAPSHOT_SHA256 = "3a847c8a53f36044080839855d634fbfa2c5b18fa769bcf95bcbbaa614f72da4"
+_UPSTREAM_COMMIT = "d8253e85cbb81582b90fab657009e0ee47b52cc8"
+_SNAPSHOT_SHA256 = "84a539c2637037c08d5b0f85f23d6e2cea327588d240c7070f0f12069c137a22"
 
 # service profile 스냅샷 — byte-핀·재추출 절차는 cache-target 계약 테스트
 # (`test_kor_travel_map_cache_target_contract.py`)가 소유하고 본 파일은 읽기만 한다.
@@ -101,7 +101,8 @@ _CLIENT_PATHS = [
 # `test_client_never_sends_a_query_the_snapshot_does_not_declare`가 따로 본다.
 _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
     # client는 `include_geometry`/`provider`를 보내지 않는다(geometry는 상세에서, provider
-    # 필터는 admin 표면에서 다룬다) — 나머지는 그대로 사용.
+    # 필터는 admin 표면에서 다룬다) — 나머지는 그대로 사용. `attribute`(Map ADR-121 장소 속성
+    # 필터)도 아직 보내지 않는다.
     "/v1/features/in-bounds": {
         "min_lon",
         "min_lat",
@@ -110,12 +111,13 @@ _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
         "kind",
         "category",
         "provider",
+        "attribute",
         "zoom",
         "cluster_unit",
         "max_items",
         "include_geometry",
     },
-    # client는 `provider`를 보내지 않는다.
+    # client는 `provider`·`attribute`를 보내지 않는다.
     "/v1/features/nearby": {
         "lon",
         "lat",
@@ -123,10 +125,12 @@ _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
         "kind",
         "category",
         "provider",
+        "attribute",
         "page_size",
         "cursor",
         "sort",
     },
+    # client는 `attribute`(Map ADR-121)를 보내지 않는다.
     "/v1/features/search": {
         "q",
         "min_lon",
@@ -135,6 +139,7 @@ _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
         "max_lat",
         "kind",
         "category",
+        "attribute",
         "page_size",
         "cursor",
         "include_total",
