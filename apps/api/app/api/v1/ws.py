@@ -149,9 +149,11 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
             trip_id=trip_id,
             user_id=user_id,
         )
-    except WebSocketDisconnect as exc:
+    except (WebSocketDisconnect, WebSocketDisconnected) as exc:
+        # 처리 중 응답 send가 끊긴 전송에서 실패하면 starlette가 소켓을 DISCONNECTED로 만들고
+        # 다음 receive_json()은 WebSocketDisconnect가 아니라 WebSocketDisconnected를 올린다(#719).
         _record_close(
-            code=exc.code,
+            code=exc.code if isinstance(exc, WebSocketDisconnect) else 1006,
             reason="client_disconnect",
             trip_id=trip_id,
             user_id=user_id,

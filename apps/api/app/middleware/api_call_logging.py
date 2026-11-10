@@ -15,6 +15,7 @@ import httpx
 import structlog
 from prometheus_client import Counter, Gauge
 from sqlalchemy import insert
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 
 from app.core.redaction import sanitize_url
 from app.core.time import kst_now
@@ -45,6 +46,13 @@ class _CommitStarted(Exception):
     def __init__(self, cause: BaseException) -> None:
         super().__init__(type(cause).__name__)
         self.cause = cause
+
+
+def _transient(exc: BaseException) -> bool:
+    """다시 보내면 성공할 수 있는 실패만 재시도한다. 데이터·제약 오류는 같은 결과로 또 실패한다."""
+    if isinstance(exc, TimeoutError | OSError | OperationalError | InterfaceError):
+        return True
+    return isinstance(exc, DBAPIError) and bool(exc.connection_invalidated)
 
 
 class ApiCallLogOutbox:
@@ -142,7 +150,8 @@ class ApiCallLogOutbox:
                     raise
                 except Exception as exc:
                     ambiguous = isinstance(exc, _CommitStarted)
-                    if attempts == 1 and not ambiguous:
+                    # 종료 중이면 재시도가 shutdown_timeout을 넘겨 남은 큐까지 버리게 한다.
+                    if attempts == 1 and not ambiguous and not self._closed and _transient(exc):
                         LOG_FLUSH_RETRIES.inc()
                         try:
                             await asyncio.sleep(self._retry_backoff)
@@ -168,15 +177,20 @@ class ApiCallLogOutbox:
 
     async def _persist(self, batch: list[dict[str, Any]]) -> None:
         committing = False
+        committed = False
         try:
             async with asyncio.timeout(self._flush_timeout):
                 async with self._session_factory() as session:
                     await session.execute(insert(ApiCallLog), batch)
                     committing = True
                     await session.commit()
+                    committed = True
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            if committed:
+                # commit은 끝났고 session 정리(__aexit__)만 실패했다 — 행은 저장됐다.
+                return
             if committing:
                 raise _CommitStarted(exc) from exc
             raise
