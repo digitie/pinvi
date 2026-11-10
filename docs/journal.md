@@ -1,3 +1,9 @@
+## 2026-11-11 — #719 WS 중복 close·#721 call-log flush 재시도·context 분리
+
+- #719: rate limit(4429) grace 중 클라이언트가 먼저 끊으면 그 사이 broadcast 전송이 `ClientDisconnected`(OSError)로 실패해 starlette가 소켓을 `DISCONNECTED`로 만들고, grace 끝의 `websocket.close()`가 `WebSocketDisconnected`("Cannot call "send" once a close message has been sent.")를 올렸다. `_close_websocket`을 멱등으로(application/client state가 `DISCONNECTED`면 생략, 전송 실패는 `WebSocketDisconnect`·`WebSocketDisconnected`만 잡는다), reject·4408 사유 payload도 끊긴 소켓엔 보내지 않는다. close metric은 서버 결정으로 한 번만 센다.
+- #721: flush가 2s timeout 한 번에 batch 전체를 버렸다. commit 전 실패는 backoff(0.5s) 뒤 1회 재시도(`pinvi_api_call_log_flush_retries_total`), commit 도중 실패는 서버가 이미 commit했을 수 있어 중복을 피하려고 재시도하지 않는다. 메모리는 capacity + batch_size 그대로다. 실패 로그에 `attempts`·`during_commit`·`elapsed_ms`. worker task를 빈 `contextvars.Context()`로 만들어 처음 submit한 요청의 path(`/admin/etl/summary`)·request_id를 물려받지 않게 했다.
+- 실패 먼저: 실제 starlette `WebSocket` 위에서 prod 순서(RATE_LIMITED → 이탈 → broadcast 실패 → grace 끝 close)를 재현, outbox는 timeout 재시도·이중 실패 로그·commit timeout 비재시도·빈 context. OpenAPI 변경 없음. 배포 없음(6번째 회전에 탄다).
+
 ## 2026-11-10 — Map ADR-121 user·admin 스펙 재vendor(d8253e85)
 
 - Map #1480(ADR-121 장소 속성)이 user·admin 스펙에 `attribute` query(feature 목록·검색·in-bounds·nearby)·`attribute_codes`·상세 `attributes`·`/v1/place-attributes`·`/v1/admin/theme-attach-decisions`를 더했다. service 스펙은 바이트 그대로다.
