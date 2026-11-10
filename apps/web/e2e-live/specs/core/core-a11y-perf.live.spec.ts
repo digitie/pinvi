@@ -2,8 +2,9 @@
  * CORE — accessibility smoke + perf smoke.
  * Verified against origin/main b1cef056: app/layout.tsx (lang=ko), app/(auth)/layout.tsx (main#main,
  * PublicChrome header/footer), components/app/AppShell.tsx (nav aria-labels), app/globals.css (.focus-ring).
- * axe: @axe-core/playwright is NOT in apps/web devDependencies — the case degrades to skip with a message.
+ * axe: @axe-core/playwright is an apps/web devDependency (installed by the runner's npm ci).
  */
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { createTrip, deleteTrip, e2ePrefix, loginAsUser, searchAndAddPlace, shot } from '../../helpers/live';
 import { annotate, isMobileViewport, PLACES, timed, tripPins, waitForMapCanvas } from '../../helpers/core';
@@ -69,16 +70,7 @@ test.describe('CORE a11y', () => {
     await shot(page, 'CORE-028', 'focus');
   });
 
-  test('CORE-029 axe-core critical=0 on /login, /trips, /map (패키지 없으면 skip)', async ({ page }, testInfo) => {
-    let AxeBuilder: (new (opts: { page: Page }) => { analyze: () => Promise<{ violations: Array<{ impact?: string | null; id: string; nodes: unknown[] }> }> }) | null = null;
-    // Resolved at runtime only: the package is not a devDependency (runbook §8), so the import
-    // specifier is kept out of TypeScript's module resolution.
-    const axeModule = '@axe-core/playwright';
-    try {
-      AxeBuilder = (await import(axeModule)).default as unknown as typeof AxeBuilder;
-    } catch {
-      test.skip(true, '@axe-core/playwright가 설치되어 있지 않다(apps/web devDependencies에 없음) — manual: Chrome Lighthouse/axe 확장으로 3페이지 critical=0 확인');
-    }
+  test('CORE-029 axe-core critical=0 on /login, /trips, /map', async ({ page }, testInfo) => {
     const pages: Array<[string, () => Promise<void>]> = [
       ['/login', async () => { await page.goto('/login'); await expect(page.getByTestId('login-submit')).toBeEnabled(); }],
       ['/trips', async () => { await loginAsUser(page); await expect(page.getByRole('heading', { name: '여행', exact: true })).toBeVisible(); }],
@@ -86,11 +78,15 @@ test.describe('CORE a11y', () => {
     ];
     for (const [path, open] of pages) {
       await open();
-      const result = await new AxeBuilder!({ page }).analyze();
+      const result = await new AxeBuilder({ page }).analyze();
       const critical = result.violations.filter((v) => v.impact === 'critical');
       const serious = result.violations.filter((v) => v.impact === 'serious');
       annotate(testInfo, 'axe', `${path}: critical=${critical.length} serious=${serious.length} (${serious.map((v) => v.id).join(',')})`);
-      expect(critical.map((v) => `${v.id}×${v.nodes.length}`), `${path} critical violations`).toEqual([]);
+      for (const v of critical) {
+        annotate(testInfo, 'axe-critical', `${path} ${v.id}: ${v.nodes.slice(0, 5).map((n) => n.target.join(' ')).join(' | ')}`);
+      }
+      // soft: scan every page so one run reports all three; any critical still fails the test.
+      expect.soft(critical.map((v) => `${v.id}×${v.nodes.length}`), `${path} critical violations`).toEqual([]);
     }
   });
 });

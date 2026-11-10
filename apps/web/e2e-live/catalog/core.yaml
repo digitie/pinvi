@@ -473,7 +473,7 @@
   priority: P2
   tags: [desktop, mobile, a11y]
   preconditions:
-    - env: '@axe-core/playwright 설치(현재 apps/web devDependencies에 없음)'
+    - env: '@axe-core/playwright(apps/web devDependency, 러너 npm ci가 설치)'
   data_sources: []
   steps:
     - 각 페이지 로드 후 AxeBuilder.analyze
@@ -482,7 +482,7 @@
   cleanup: [없음]
   automation: scripted
   spec: specs/core/core-a11y-perf.live.spec.ts#CORE-029
-  notes: 패키지 없으면 skip 메시지 — 수동 대체는 Chrome axe 확장.
+  notes: critical은 실패, serious는 annotation으로만 기록.
 
 - id: CORE-030
   title: perf 스모크 — 여행 목록 TTI, 여행 상세(첫 핀), 탐색 지도(첫 마커) 기록

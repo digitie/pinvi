@@ -161,7 +161,7 @@ SPEC 계약 그대로: `baseURL`, `e2ePrefix`, `loginAsUser`, `loginAsAdmin`, `c
 | `waitForMapIdle` | VWorld 타일 요청(`vworld.kr/req/wmts`) 이 3 s 없으면 idle, 최대 45 s. transport/날씨 폴링은 세지 않는다 |
 | `waitForRequest` | 응답 URL 의 path+query 를 패턴에 맞추고 Playwright `Response` 를 돌려준다(요청 body 도 읽을 수 있다) |
 | `page.context()['_options']` | 제거 — `baseURL` export 사용 |
-| `@axe-core/playwright` | 설치하지 않았다(아래 §8). CORE-029 는 동적 import 실패 시 skip |
+| `@axe-core/playwright` | apps/web devDependency(4.14.0). CORE-029 는 정적 import 로 실행한다(skip 경로 없음) |
 
 ### 5.1 prod 실측으로 확정한 동작 (2026-11-03 첫 prod run)
 
@@ -318,9 +318,10 @@ skip 62건: 직렬 describe 의 선행 실패에 따른 연쇄 skip 27(선행 �
 (WX-011/012, 수정), feature 로드 대기 부족 1(POI-016, 수정), axe 미설치 1(CORE-029), 미가입 sink 메일
 env 1(SHR-027), 데이터/타이밍 2(SRCH-048 이벤트 없음, POI-032 마커 위치).
 
-`@axe-core/playwright` 는 devDependency 로 추가하지 않았다 — lockfile 을 n150 에서 npm 12.0.1 로
-갱신해 무결성 검사(`scripts/check-lockfile-integrity.mjs`)까지 깨끗할 때만 넣기로 했고, 이번
-통합에서는 그 사이클을 돌리지 않았다. CORE-029 는 모듈이 없으면 메시지와 함께 skip 한다.
+`@axe-core/playwright` 는 2026-11-10 apps/web devDependency(4.14.0)로 추가했다 — lockfile 은 n150 에서
+npm 12.0.1 전체 `npm install` 로 갱신해 무결성 검사(`scripts/check-lockfile-integrity.mjs`)를 통과시켰다.
+러너(`scripts/n150-playwright-runner.sh`)가 컨테이너 안에서 `npm ci` 를 하므로 별도 설치는 없다.
+위 skip 집계의 'CORE-029(axe 미설치)' 는 그 이전 run 기록이다.
 
 ## 9. 실패 처리
 

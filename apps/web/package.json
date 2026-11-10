@@ -54,6 +54,7 @@
     "@kor-travel/tokens": "file:vendor/kor-travel-tokens-0.1.0.tgz"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "4.3.3",
     "@testing-library/jest-dom": "7.0.1",
