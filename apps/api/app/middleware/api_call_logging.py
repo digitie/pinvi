@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import sys
 import time
 import uuid
@@ -14,6 +15,7 @@ import httpx
 import structlog
 from prometheus_client import Counter, Gauge
 from sqlalchemy import insert
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 
 from app.core.redaction import sanitize_url
 from app.core.time import kst_now
@@ -32,10 +34,34 @@ LOG_QUEUED = Gauge(
     "External HTTP observation rows awaiting flush.",
     multiprocess_mode="livesum",
 )
+LOG_FLUSH_RETRIES = Counter(
+    "pinvi_api_call_log_flush_retries_total",
+    "External HTTP observation batches retried after a failed flush attempt.",
+)
+
+
+class _CommitStarted(Exception):
+    """commit 이후 실패는 결과가 모호하다(서버가 이미 commit했을 수 있다) — 재시도하지 않는다."""
+
+    def __init__(self, cause: BaseException) -> None:
+        super().__init__(type(cause).__name__)
+        self.cause = cause
+
+
+def _transient(exc: BaseException) -> bool:
+    """다시 보내면 성공할 수 있는 실패만 재시도한다. 데이터·제약 오류는 같은 결과로 또 실패한다."""
+    if isinstance(exc, TimeoutError | OSError | OperationalError | InterfaceError):
+        return True
+    return isinstance(exc, DBAPIError) and bool(exc.connection_invalidated)
 
 
 class ApiCallLogOutbox:
-    """프로세스의 session factory 하나당 큐 하나, worker 하나. 큐 포화/DB 실패는 버린다."""
+    """프로세스의 session factory 하나당 큐 하나, worker 하나. 큐 포화/DB 실패는 버린다.
+
+    flush 실패는 batch를 바로 버리지 않고 backoff 뒤 한 번 재시도한다(#721). 재시도 동안
+    in-flight batch는 최대 batch_size개이고 새 행은 capacity 안에서만 쌓이므로 메모리는
+    capacity + batch_size로 묶인다. commit 도중 실패는 중복 적재를 피하려고 재시도하지 않는다.
+    """
 
     def __init__(
         self,
@@ -46,11 +72,12 @@ class ApiCallLogOutbox:
         flush_interval: float = 0.25,
         flush_timeout: float = 2.0,
         shutdown_timeout: float = 3.0,
+        retry_backoff: float = 0.5,
     ) -> None:
         if (
             capacity < 1
             or batch_size < 1
-            or min(flush_interval, flush_timeout, shutdown_timeout) <= 0
+            or min(flush_interval, flush_timeout, shutdown_timeout, retry_backoff) <= 0
         ):
             raise ValueError("logging queue limits must be positive")
         self._session_factory = session_factory
@@ -59,6 +86,7 @@ class ApiCallLogOutbox:
         self._flush_interval = flush_interval
         self._flush_timeout = flush_timeout
         self._shutdown_timeout = shutdown_timeout
+        self._retry_backoff = retry_backoff
         self._queue: deque[dict[str, Any]] = deque()
         self._wake = asyncio.Event()
         self._flush_lock = asyncio.Lock()
@@ -86,7 +114,11 @@ class ApiCallLogOutbox:
         self._queue.append(row)
         LOG_QUEUED.inc()
         if self._task is None:
-            self._task = asyncio.create_task(self._run(), name="pinvi-api-call-log")
+            # 빈 Context로 만든다: 처음 submit한 요청의 structlog contextvars(path/request_id)를
+            # worker가 물려받아 이후 모든 flush 로그에 그 요청을 찍지 않게 한다(#721).
+            self._task = asyncio.create_task(
+                self._run(), name="pinvi-api-call-log", context=contextvars.Context()
+            )
         if len(self._queue) >= self._batch_size:
             self._wake.set()
 
@@ -107,25 +139,61 @@ class ApiCallLogOutbox:
             if not batch:
                 return
             LOG_QUEUED.dec(len(batch))
-            try:
-                async with asyncio.timeout(self._flush_timeout):
-                    async with self._session_factory() as session:
-                        await session.execute(insert(ApiCallLog), batch)
-                        await session.commit()
-            except asyncio.CancelledError:
-                self._drop(len(batch), "cancelled")
-                raise
-            except Exception as exc:
-                self._drop(len(batch), "persist_failed")
-                # DB exception의 SQL parameters/DSN은 로그에 복사하지 않는다.
-                log.warning(
-                    "api_call_log.persist_failed",
-                    error_class=type(exc).__name__,
-                    dropped=len(batch),
-                )
-            else:
-                self.persisted += len(batch)
-                LOG_ROWS.labels(outcome="persisted").inc(len(batch))
+            started = time.perf_counter()
+            attempts = 0
+            while True:
+                attempts += 1
+                try:
+                    await self._persist(batch)
+                except asyncio.CancelledError:
+                    self._drop(len(batch), "cancelled")
+                    raise
+                except Exception as exc:
+                    ambiguous = isinstance(exc, _CommitStarted)
+                    # 종료 중이면 재시도가 shutdown_timeout을 넘겨 남은 큐까지 버리게 한다.
+                    if attempts == 1 and not ambiguous and not self._closed and _transient(exc):
+                        LOG_FLUSH_RETRIES.inc()
+                        try:
+                            await asyncio.sleep(self._retry_backoff)
+                        except asyncio.CancelledError:
+                            self._drop(len(batch), "cancelled")
+                            raise
+                        continue
+                    cause = exc.cause if isinstance(exc, _CommitStarted) else exc
+                    self._drop(len(batch), "persist_failed")
+                    # DB exception의 SQL parameters/DSN은 로그에 복사하지 않는다.
+                    log.warning(
+                        "api_call_log.persist_failed",
+                        error_class=type(cause).__name__,
+                        dropped=len(batch),
+                        attempts=attempts,
+                        during_commit=ambiguous,
+                        elapsed_ms=int((time.perf_counter() - started) * 1000),
+                    )
+                else:
+                    self.persisted += len(batch)
+                    LOG_ROWS.labels(outcome="persisted").inc(len(batch))
+                return
+
+    async def _persist(self, batch: list[dict[str, Any]]) -> None:
+        committing = False
+        committed = False
+        try:
+            async with asyncio.timeout(self._flush_timeout):
+                async with self._session_factory() as session:
+                    await session.execute(insert(ApiCallLog), batch)
+                    committing = True
+                    await session.commit()
+                    committed = True
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if committed:
+                # commit은 끝났고 session 정리(__aexit__)만 실패했다 — 행은 저장됐다.
+                return
+            if committing:
+                raise _CommitStarted(exc) from exc
+            raise
 
     async def flush(self) -> None:
         while self._queue:

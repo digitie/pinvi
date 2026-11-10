@@ -11,6 +11,7 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketDisconnected, WebSocketState
 
 import app.db.session as db_session
 from app.core.config import settings
@@ -96,7 +97,10 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
     except RealtimeConnectionLimitError as exc:
         # C7(#820): accept(위)와 close 사이 settle로 4408 close code가 edge를 건너게 한다.
         await _settle_before_reject_close()
-        await websocket.send_json({"code": _CLOSE_CONNECTION_LIMIT, "reason": exc.reason})
+        await _send_reject_payload(
+            websocket,
+            {"code": _CLOSE_CONNECTION_LIMIT, "reason": exc.reason},
+        )
         await _close_websocket(
             websocket,
             code=_CLOSE_CONNECTION_LIMIT,
@@ -145,9 +149,11 @@ async def trip_channel(websocket: WebSocket, trip_id: uuid.UUID) -> None:
             trip_id=trip_id,
             user_id=user_id,
         )
-    except WebSocketDisconnect as exc:
+    except (WebSocketDisconnect, WebSocketDisconnected) as exc:
+        # 처리 중 응답 send가 끊긴 전송에서 실패하면 starlette가 소켓을 DISCONNECTED로 만들고
+        # 다음 receive_json()은 WebSocketDisconnect가 아니라 WebSocketDisconnected를 올린다(#719).
         _record_close(
-            code=exc.code,
+            code=exc.code if isinstance(exc, WebSocketDisconnect) else 1006,
             reason="client_disconnect",
             trip_id=trip_id,
             user_id=user_id,
@@ -315,7 +321,7 @@ async def _reject(
     # C7(#809/#820): 101 handshake를 flush한 뒤 close해야 close code가 리버스 프록시 edge를
     # 건너 살아남는다(미적용 시 브라우저가 4401/4403 대신 1006 관측 → 클라이언트 오분류).
     await _settle_before_reject_close()
-    await websocket.send_json({"code": code, "reason": reason})
+    await _send_reject_payload(websocket, {"code": code, "reason": reason})
     await _close_websocket(
         websocket,
         code=code,
@@ -323,6 +329,26 @@ async def _reject(
         trip_id=trip_id,
         user_id=user_id,
     )
+
+
+def _socket_closed(websocket: WebSocket) -> bool:
+    """이미 닫힌 소켓인가. 앞선 send의 전송 실패(OSError)나 close 송신은 application_state를,
+    수신한 disconnect는 client_state를 DISCONNECTED로 만든다(#719)."""
+    return (
+        websocket.application_state == WebSocketState.DISCONNECTED
+        or websocket.client_state == WebSocketState.DISCONNECTED
+    )
+
+
+async def _send_reject_payload(websocket: WebSocket, payload: dict[str, Any]) -> None:
+    """close 직전 사유 payload. settle 중 클라이언트가 먼저 끊었으면 보내지 않는다(#719)."""
+    if _socket_closed(websocket):
+        return
+    try:
+        await websocket.send_json(payload)
+    except (WebSocketDisconnect, WebSocketDisconnected):
+        # 전송 실패는 starlette가 application_state=DISCONNECTED로 바꾸므로 뒤의 close는 생략된다.
+        return
 
 
 async def _close_websocket(
@@ -333,8 +359,20 @@ async def _close_websocket(
     trip_id: uuid.UUID | None,
     user_id: uuid.UUID | None,
 ) -> None:
+    """서버의 close 결정을 한 번 기록하고 소켓을 닫는다. 멱등이다(#719).
+
+    rate limit grace 중 클라이언트가 먼저 끊으면 그 사이 broadcast 전송이 실패해 소켓이 이미
+    DISCONNECTED가 된다. 그 위에 close를 다시 보내면 starlette가 `WebSocketDisconnected`
+    ("Cannot call "send" once a close message has been sent.")를 올려 ASGI 예외가 된다.
+    """
     _record_close(code=code, reason=reason, trip_id=trip_id, user_id=user_id)
-    await websocket.close(code=code, reason=reason)
+    if _socket_closed(websocket):
+        return
+    try:
+        await websocket.close(code=code, reason=reason)
+    except (WebSocketDisconnect, WebSocketDisconnected):
+        # close 송신 중 전송이 끊겼다(uvicorn ClientDisconnected → 1006). 이미 닫힌 것이다.
+        return
 
 
 def _record_close(

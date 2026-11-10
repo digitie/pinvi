@@ -177,6 +177,164 @@ async def test_database_hang_does_not_block_shutdown_or_leave_worker() -> None:
     assert outbox._task.done()
 
 
+class FlakyFactory:
+    """attempt마다 지정한 단계(enter/commit)에서 멈추거나 실패하는 세션 팩토리."""
+
+    def __init__(self, plan: list[str | None]) -> None:
+        # plan[i]: i번째 attempt의 실패 지점. None=성공, "hang_enter"/"hang_commit"/"fail_enter".
+        self.plan = plan
+        self.attempts = 0
+        self.rows: list[dict] = []
+        self.contexts: list[dict] = []
+        self._current: str | None = None
+
+    def __call__(self):
+        return self
+
+    async def __aenter__(self):
+        import structlog
+
+        self.contexts.append(dict(structlog.contextvars.get_contextvars()))
+        step = self.plan[self.attempts] if self.attempts < len(self.plan) else None
+        self.attempts += 1
+        self._current = step
+        if step == "hang_enter":
+            await asyncio.Event().wait()
+        if step == "fail_enter":
+            raise ConnectionError("dsn=postgresql://user:secret@db")
+        return self
+
+    async def __aexit__(self, *_args):
+        return None
+
+    async def execute(self, _statement, rows):
+        self._pending = list(rows)
+
+    async def commit(self):
+        if self._current == "hang_commit":
+            await asyncio.Event().wait()
+        self.rows.extend(self._pending)
+
+
+def _retry_count() -> float:
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value("pinvi_api_call_log_flush_retries_total") or 0.0
+
+
+async def test_flush_timeout_is_retried_once_instead_of_dropping_batch() -> None:
+    """#721: 2s timeout 한 번에 batch 전체를 버리지 않는다(backoff 뒤 1회 재시도)."""
+    factory = FlakyFactory(["hang_enter", None])
+    outbox = ApiCallLogOutbox(factory, flush_interval=60, flush_timeout=0.05, retry_backoff=0.01)
+    retries_before = _retry_count()
+    for i in range(3):
+        outbox.submit({"provider": "fixture", "endpoint": f"/{i}"})
+    await outbox.flush()
+    await outbox.close()
+    assert factory.attempts == 2
+    assert outbox.persisted == 3
+    assert outbox.dropped == 0
+    assert len(factory.rows) == 3
+    assert _retry_count() == retries_before + 1
+
+
+async def test_second_failure_drops_batch_and_logs_size_and_elapsed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.middleware.api_call_logging as module
+
+    logs: list[dict] = []
+
+    class RecordingLog:
+        def warning(self, event: str, **fields: object) -> None:
+            logs.append({"event": event, **fields})
+
+    monkeypatch.setattr(module, "log", RecordingLog())
+    factory = FlakyFactory(["fail_enter", "hang_enter"])
+    outbox = ApiCallLogOutbox(factory, flush_interval=60, flush_timeout=0.05, retry_backoff=0.01)
+    outbox.submit({"provider": "fixture"})
+    outbox.submit({"provider": "fixture"})
+    await outbox.flush()
+    await outbox.close()
+    assert factory.attempts == 2
+    assert outbox.dropped == 2
+    assert outbox.persisted == 0
+    failed = [entry for entry in logs if entry["event"] == "api_call_log.persist_failed"]
+    assert len(failed) == 1
+    assert failed[0]["error_class"] == "TimeoutError"
+    assert failed[0]["dropped"] == 2
+    assert failed[0]["attempts"] == 2
+    assert failed[0]["during_commit"] is False
+    assert failed[0]["elapsed_ms"] >= 40  # Windows timer tick은 ~15ms 일찍 깰 수 있다
+    assert "secret" not in repr(logs)
+
+
+async def test_commit_timeout_is_not_retried_to_avoid_duplicate_rows() -> None:
+    """commit 도중 timeout은 서버가 이미 commit했을 수 있어 재시도하면 중복 적재다."""
+    factory = FlakyFactory(["hang_commit", None])
+    outbox = ApiCallLogOutbox(factory, flush_interval=60, flush_timeout=0.05, retry_backoff=0.01)
+    outbox.submit({"provider": "fixture"})
+    await outbox.close()
+    assert factory.attempts == 1
+    assert outbox.dropped == 1
+    assert factory.rows == []
+
+
+async def test_non_transient_failure_is_not_retried() -> None:
+    """데이터·제약 오류는 다시 보내도 같은 결과다 — 재시도로 0.5s를 태우지 않는다."""
+    factory = RecordingFactory()
+    factory.release.set()
+    factory.fail = True  # RuntimeError
+    outbox = ApiCallLogOutbox(factory, flush_interval=60, retry_backoff=0.01)
+    retries_before = _retry_count()
+    outbox.submit({"provider": "fixture"})
+    await outbox.flush()
+    await outbox.close()
+    assert outbox.dropped == 1
+    assert _retry_count() == retries_before
+
+
+async def test_retry_is_skipped_while_shutting_down() -> None:
+    """종료 drain에서 재시도하면 shutdown_timeout을 넘겨 남은 큐까지 버린다."""
+    factory = FlakyFactory(["fail_enter", None])
+    outbox = ApiCallLogOutbox(factory, flush_interval=60, retry_backoff=0.01)
+    outbox.submit({"provider": "fixture"})
+    await outbox.close()
+    assert factory.attempts == 1
+    assert outbox.dropped == 1
+
+
+async def test_cleanup_failure_after_commit_counts_rows_as_persisted() -> None:
+    class ExitFails(FlakyFactory):
+        async def __aexit__(self, *_args):
+            raise ConnectionError("close after commit")
+
+    factory = ExitFails([None])
+    outbox = ApiCallLogOutbox(factory, flush_interval=60, retry_backoff=0.01)
+    outbox.submit({"provider": "fixture"})
+    await outbox.flush()
+    await outbox.close()
+    assert factory.attempts == 1
+    assert outbox.persisted == 1
+    assert outbox.dropped == 0
+
+
+async def test_flusher_does_not_inherit_request_log_context() -> None:
+    """#721: worker task가 처음 submit한 요청의 path/request_id를 물려받지 않는다."""
+    import structlog
+
+    factory = FlakyFactory([None])
+    outbox = ApiCallLogOutbox(factory, flush_interval=0.001)
+    structlog.contextvars.bind_contextvars(path="/admin/etl/summary", request_id="req-1")
+    try:
+        outbox.submit({"provider": "fixture"})
+    finally:
+        structlog.contextvars.clear_contextvars()
+    await outbox.close()
+    assert outbox.persisted == 1
+    assert factory.contexts == [{}]
+
+
 async def test_response_and_exception_cannot_duplicate_same_attempt() -> None:
     factory = RecordingFactory()
     factory.release.set()
