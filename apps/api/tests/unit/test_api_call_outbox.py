@@ -229,6 +229,7 @@ async def test_flush_timeout_is_retried_once_instead_of_dropping_batch() -> None
     retries_before = _retry_count()
     for i in range(3):
         outbox.submit({"provider": "fixture", "endpoint": f"/{i}"})
+    await outbox.flush()
     await outbox.close()
     assert factory.attempts == 2
     assert outbox.persisted == 3
@@ -237,15 +238,24 @@ async def test_flush_timeout_is_retried_once_instead_of_dropping_batch() -> None
     assert _retry_count() == retries_before + 1
 
 
-async def test_second_failure_drops_batch_and_logs_size_and_elapsed() -> None:
-    from structlog.testing import capture_logs
+async def test_second_failure_drops_batch_and_logs_size_and_elapsed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.middleware.api_call_logging as module
 
+    logs: list[dict] = []
+
+    class RecordingLog:
+        def warning(self, event: str, **fields: object) -> None:
+            logs.append({"event": event, **fields})
+
+    monkeypatch.setattr(module, "log", RecordingLog())
     factory = FlakyFactory(["fail_enter", "hang_enter"])
     outbox = ApiCallLogOutbox(factory, flush_interval=60, flush_timeout=0.05, retry_backoff=0.01)
     outbox.submit({"provider": "fixture"})
     outbox.submit({"provider": "fixture"})
-    with capture_logs() as logs:
-        await outbox.close()
+    await outbox.flush()
+    await outbox.close()
     assert factory.attempts == 2
     assert outbox.dropped == 2
     assert outbox.persisted == 0
@@ -255,7 +265,7 @@ async def test_second_failure_drops_batch_and_logs_size_and_elapsed() -> None:
     assert failed[0]["dropped"] == 2
     assert failed[0]["attempts"] == 2
     assert failed[0]["during_commit"] is False
-    assert failed[0]["elapsed_ms"] >= 50
+    assert failed[0]["elapsed_ms"] >= 40  # Windows timer tick은 ~15ms 일찍 깰 수 있다
     assert "secret" not in repr(logs)
 
 
@@ -268,6 +278,45 @@ async def test_commit_timeout_is_not_retried_to_avoid_duplicate_rows() -> None:
     assert factory.attempts == 1
     assert outbox.dropped == 1
     assert factory.rows == []
+
+
+async def test_non_transient_failure_is_not_retried() -> None:
+    """데이터·제약 오류는 다시 보내도 같은 결과다 — 재시도로 0.5s를 태우지 않는다."""
+    factory = RecordingFactory()
+    factory.release.set()
+    factory.fail = True  # RuntimeError
+    outbox = ApiCallLogOutbox(factory, flush_interval=60, retry_backoff=0.01)
+    retries_before = _retry_count()
+    outbox.submit({"provider": "fixture"})
+    await outbox.flush()
+    await outbox.close()
+    assert outbox.dropped == 1
+    assert _retry_count() == retries_before
+
+
+async def test_retry_is_skipped_while_shutting_down() -> None:
+    """종료 drain에서 재시도하면 shutdown_timeout을 넘겨 남은 큐까지 버린다."""
+    factory = FlakyFactory(["fail_enter", None])
+    outbox = ApiCallLogOutbox(factory, flush_interval=60, retry_backoff=0.01)
+    outbox.submit({"provider": "fixture"})
+    await outbox.close()
+    assert factory.attempts == 1
+    assert outbox.dropped == 1
+
+
+async def test_cleanup_failure_after_commit_counts_rows_as_persisted() -> None:
+    class ExitFails(FlakyFactory):
+        async def __aexit__(self, *_args):
+            raise ConnectionError("close after commit")
+
+    factory = ExitFails([None])
+    outbox = ApiCallLogOutbox(factory, flush_interval=60, retry_backoff=0.01)
+    outbox.submit({"provider": "fixture"})
+    await outbox.flush()
+    await outbox.close()
+    assert factory.attempts == 1
+    assert outbox.persisted == 1
+    assert outbox.dropped == 0
 
 
 async def test_flusher_does_not_inherit_request_log_context() -> None:

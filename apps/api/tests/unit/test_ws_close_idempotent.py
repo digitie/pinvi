@@ -134,13 +134,7 @@ async def test_reject_when_client_left_during_settle_does_not_raise(
     assert [message["type"] for message in peer.sent] == ["websocket.accept"]
 
 
-async def test_rate_limit_close_after_client_left_during_grace(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """prod 재현: RATE_LIMITED → 클라이언트 이탈 → grace 중 broadcast 실패 → grace 끝 close."""
-    trip_id = uuid.uuid4()
-    user_id = uuid.uuid4()
-
+def _patch_channel_deps(monkeypatch: pytest.MonkeyPatch, user_id: uuid.UUID) -> None:
     async def authenticate(_websocket: WebSocket, *, trip_id: uuid.UUID) -> uuid.UUID:
         return user_id
 
@@ -157,6 +151,45 @@ async def test_rate_limit_close_after_client_left_during_grace(
     monkeypatch.setattr(ws_module, "_authenticate", authenticate)
     monkeypatch.setattr(ws_module, "get_trip_for_user", get_trip)
     monkeypatch.setattr(ws_module.db_session, "async_session_factory", _Session)
+
+
+async def test_reply_send_failure_then_next_receive_does_not_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """리뷰 P1: 처리 중 응답(presence broadcast)이 끊긴 전송에서 실패하면 다음
+    receive_json()이 WebSocketDisconnected를 올린다 — 정상 이탈로 끝나야 한다."""
+    trip_id = uuid.uuid4()
+    _patch_channel_deps(monkeypatch, uuid.uuid4())
+    monkeypatch.setattr(settings, "pinvi_ws_client_rate_per_second", 0)
+    monkeypatch.setattr(settings, "pinvi_ws_client_rate_per_minute", 0)
+    await realtime_broker.reset()
+
+    heartbeat = {
+        "type": "websocket.receive",
+        "text": json.dumps({"type": "presence.heartbeat", "payload": {}}),
+    }
+    peer = Peer([{"type": "websocket.connect"}])
+    close_before = _close_metric("__other__", "client_disconnect")
+    channel = asyncio.create_task(ws_module.trip_channel(_websocket(peer), trip_id))
+    for _ in range(100):
+        if any(m["type"] == "websocket.send" for m in peer.sent):
+            break
+        await asyncio.sleep(0.01)
+    peer.gone = True  # 클라이언트가 heartbeat를 보내고 바로 떠난다.
+    peer.inbox.put_nowait(heartbeat)
+    await asyncio.wait_for(channel, 5)  # 수정 전: WebSocketDisconnected
+
+    assert _closes(peer) == []
+    assert _close_metric("__other__", "client_disconnect") == close_before + 1
+    assert await realtime_broker.connection_count(trip_id) == 0
+
+
+async def test_rate_limit_close_after_client_left_during_grace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """prod 재현: RATE_LIMITED → 클라이언트 이탈 → grace 중 broadcast 실패 → grace 끝 close."""
+    trip_id = uuid.uuid4()
+    _patch_channel_deps(monkeypatch, uuid.uuid4())
     monkeypatch.setattr(settings, "pinvi_ws_client_rate_per_second", 2)
     monkeypatch.setattr(settings, "pinvi_ws_client_rate_per_minute", 60)
     monkeypatch.setattr(settings, "pinvi_ws_rate_limit_close_grace_seconds", 0.2)
