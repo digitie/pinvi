@@ -6,10 +6,19 @@
  * (hour12 default — see README open question), origin/main TripDayHeader.tsx pending messages.
  */
 import { expect, test } from '@playwright/test';
-import { createTrip, deleteTrip, e2ePrefix, loginAsUser, openPanel, searchAndAddPlace, shot } from '../../helpers/live';
+import { createTrip, deleteTrip, e2ePrefix, isoDate, loginAsUser, openPanel, searchAndAddPlace, shot } from '../../helpers/live';
 import { annotate, isMobileViewport, PLACES } from '../../helpers/core';
 
-const KO_DATE = /2026년 11월 5일/;
+// 고정 날짜는 지나면 여행 목록 기본 보기(다가오는 여행)에서 빠져 카드가 사라진다(2026-11-10 실측).
+// 그래서 오늘 기준 미래 날짜로 만들고 같은 날짜의 한국어 표기를 기대값으로 쓴다.
+const START = isoDate(30);
+const END = isoDate(33);
+function koDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${y}년 ${m}월 ${d}일`;
+}
+const KO_RANGE = `${koDate(START)} - ${koDate(END)}`;
+const KO_DATE = new RegExp(koDate(START));
 const TIME_24H = /\b([01]\d|2[0-3]):[0-5]\d\b/;
 
 test.describe('CORE i18n/format', () => {
@@ -21,24 +30,24 @@ test.describe('CORE i18n/format', () => {
 
   test('CORE-031 한국어 날짜·24h 시각·km 거리 포맷', async ({ page }, testInfo) => {
     await loginAsUser(page);
-    const { id } = await createTrip(page, { title: `${e2ePrefix} CORE-031 ${Date.now()}`, start: '2026-11-05', end: '2026-11-08' });
+    const { id } = await createTrip(page, { title: `${e2ePrefix} CORE-031 ${Date.now()}`, start: START, end: END });
     tripId = id;
     // trips list card shows the range
     await page.goto('/trips');
     const card = page.getByTestId('trip-list').getByRole('link').filter({ hasText: `${e2ePrefix} CORE-031` }).first();
-    await expect(card).toContainText('2026년 11월 5일 - 2026년 11월 8일');
+    await expect(card).toContainText(KO_RANGE);
 
     await page.goto(`/trips/${id}`);
     await searchAndAddPlace(page, 1, PLACES.sosu);
     await searchAndAddPlace(page, 1, PLACES.dosan);
     if (isMobileViewport(page)) {
       await openPanel(page); // searchAndAddPlace already left the drawer open
-      await expect(page.getByTestId('trip-detail-panel')).toContainText('2026년 11월 5일 - 2026년 11월 8일');
+      await expect(page.getByTestId('trip-detail-panel')).toContainText(KO_RANGE);
     } else {
-      await expect(page.getByTestId('trip-top-panel')).toContainText('2026년 11월 5일 - 2026년 11월 8일');
-      await expect(page.getByTestId('trip-top-panel')).toContainText(/업데이트 2026년 \d{1,2}월 \d{1,2}일/);
+      await expect(page.getByTestId('trip-top-panel')).toContainText(KO_RANGE);
+      await expect(page.getByTestId('trip-top-panel')).toContainText(/업데이트 \d{4}년 \d{1,2}월 \d{1,2}일/);
     }
-    // day tab date (effective_date) — '2026년 11월 5일 · 표시'
+    // day tab date (effective_date) — '<START 한국어> · 표시'
     const day1 = page.getByRole('tab', { name: '1일차' });
     await expect(day1).toContainText(KO_DATE);
 
