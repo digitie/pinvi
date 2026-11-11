@@ -1,3 +1,8 @@
+## #733 장소 추가 직후 목록 행 (2026-11-12)
+
+PR fix/733-add-poi-immediate: POST 응답으로 임시 POI 행을 곧바로 그리고, 재조회가 덮어쓴다(NEAR beforeAll flake 원인).
+다음: 회전 배포 뒤 live NEAR 재실행. #621은 weather markers 캐시·view 예산이 남았다.
+
 ## 2026-11-12 — 이미지 source provenance 동등성 수정
 
 원 A의328 image OCI/ENV가 synthetic2ce였던 오류를 재현했다. 실제 HEAD 단일 output·예상PRhead 대조·실제 built inspect 비교·서로 다른 유효40hex negative control을 연결했다.6 contract/clean CI trigger4검사 PASS. 원 B obsolete vendor CI 경로는 이미 수정됐고5cb full required API CI도 SUCCESS다. SDK4·main476·C11은 보존하고 새 immutable input의 실제 CI와 원 A/B closure를 확인한다. [기록](reports/pinvi-image-provenance-20261112.json).

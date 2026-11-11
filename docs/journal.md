@@ -1,3 +1,13 @@
+## 2026-11-12 — #733 장소 추가 직후 목록 행·#621 재측정
+
+- **#733**: 2026-11-11 live e2e `trip-map.live.spec.ts:95` beforeAll 실패 3건(03:46·04:00·12:04 run)을 조사했다. 세 번 모두 POI는 DB에 저장됐다. UI만 15 s 안에 행을 그리지 못했다.
+  - 원인: 행이 `GET /trips/{id}` 재조회 뒤에야 보인다. 이 재조회는 weather markers를 기다리고, `createLatestReload` 때문에 진행 중 조회 뒤에 한 번 더 읽는다.
+  - API 재현(e2e 사용자, 4곳 ×2): POST 58~135 ms, 이어지는 GET 2.4~7.6 s(markers 2.3~7.5 s).
+  - 수정: POST 응답으로 임시 행을 곧바로 끼운다(`lib/tripViewCreatedPoi.ts`). 뒤따르는 재조회가 서버 계산값으로 덮어쓴다. 확정 전에는 pending에 둬서, 먼저 출발한 조회 결과가 행을 지우지 않게 한다. 검색·지도 feature·수동 POI 생성 모두 적용된다.
+  - 실패 먼저: vitest 5건과 mocked e2e 1건(재조회를 붙잡아 둔 채 5 s 안에 행 표시).
+  - 실패 run 사이의 7.5~17 s 공백은 inbound 로그가 컨테이너 재생성(11-11 21:59Z)으로 사라져 끝까지 확정하지 못했다.
+- **#621 재측정**(Weather #219~#223 배포 뒤): weather markers 5,093건 p95 4,478 ms. 생성 부하로 잰 trip view 30회는 p50 2,243 ms·p95 3,577 ms다. bulkhead 거부는 0이다. p95가 3 s를 넘어 열어 둔다. 가장 느린 의존성은 weather `/v1/weather/markers`다. PinVi markers 짧은 TTL 캐시와 view weather 예산 축소를 제안했다(이슈 코멘트).
+
 ## 2026-11-12 — 이미지 source provenance 동등성 수정
 
 원 A의328 image OCI/ENV가 synthetic2ce였던 오류를 재현했다. 실제 HEAD 단일 output·예상PRhead 대조·실제 built inspect 비교·서로 다른 유효40hex negative control을 연결했다.6 contract/clean CI trigger4검사 PASS. 원 B obsolete vendor CI 경로는 이미 수정됐고5cb full required API CI도 SUCCESS다. SDK4·main476·C11은 보존하고 새 immutable input의 실제 CI와 원 A/B closure를 확인한다. [기록](reports/pinvi-image-provenance-20261112.json).
