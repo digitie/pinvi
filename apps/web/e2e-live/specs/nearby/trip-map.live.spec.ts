@@ -235,8 +235,8 @@ test.describe('NEAR trip map — four-place trip', () => {
     // 여행의 투영 범위가 한 축에서 지도 1/4 이상을 사용해야 한다.
     expect(Math.max(viewport.spanX / viewport.width, viewport.spanY / viewport.height)).toBeGreaterThan(0.25);
     // 맞춤이 피하는 것은 교통 패널의 상시 부분이다 — 펼쳐지는 사건 목록([data-map-fit-transient])은 제품
-    // 설계상 맞춤 여백에서 뺀다(lib/mapFitPadding.ts fitPanelRect, #619 리뷰). 모바일에서 그 목록이 지도 가운데를
-    // 덮는 UX는 #712에서 다룬다.
+    // 설계상 맞춤 여백에서 뺀다(lib/mapFitPadding.ts fitPanelRect, #619 리뷰). 여행 지도에서 그 목록은 접혀 있다가
+    // 사용자가 상태 줄을 눌러야 펼쳐진다(#729) — 맞춤 뒤에 저절로 자라 핀을 덮지 않는다.
     const panelFull = (await controls(page).boundingBox())!;
     const transient = controls(page).locator('[data-map-fit-transient]');
     const transientTop = (await transient.count()) > 0 ? (await transient.first().boundingBox())?.y : undefined;
