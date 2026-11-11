@@ -260,5 +260,30 @@ describe('TransportLayerControls', () => {
         'false',
       );
     });
+
+    it('재조회가 0건을 돌려주면 접는다 — 다음 결과에서 목록이 저절로 펼쳐지지 않는다', () => {
+      const enabled = new Set<TransportLayer>(['highway_incident']);
+      const withIncidents = makeState({ enabled, results: incidentResults });
+      const { rerender } = render(
+        <TransportLayerControls state={withIncidents} onOpenDetail={vi.fn()} collapseIncidents />,
+      );
+      fireEvent.click(screen.getByTestId('transport-incident-toggle'));
+      expect(screen.getByTestId('transport-incident-list')).toBeInTheDocument();
+      rerender(
+        <TransportLayerControls
+          state={makeState({
+            enabled,
+            results: [{ ...incidentResults[0]!, items: [] }],
+          })}
+          onOpenDetail={vi.fn()}
+          collapseIncidents
+        />,
+      );
+      expect(screen.queryByTestId('transport-incident-toggle')).toBeNull();
+      rerender(
+        <TransportLayerControls state={withIncidents} onOpenDetail={vi.fn()} collapseIncidents />,
+      );
+      expect(screen.queryByTestId('transport-incident-list')).toBeNull();
+    });
   });
 });

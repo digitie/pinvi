@@ -75,16 +75,16 @@ export function TransportLayerControls({
   collapseIncidents = false,
 }: TransportLayerControlsProps) {
   const listId = useId();
-  const incidentLayerOn = state.enabled.has('highway_incident');
+  const incidents = state.enabled.has('highway_incident') ? incidentsOf(state.results) : [];
+  const hasIncidents = incidents.length > 0;
   const [expanded, setExpanded] = useState(false);
-  // 레이어를 끄면 접는다 — 다시 켰을 때 맞춤 뒤에 목록이 저절로 펼쳐지지 않게.
-  const [prevIncidentLayerOn, setPrevIncidentLayerOn] = useState(incidentLayerOn);
-  if (incidentLayerOn !== prevIncidentLayerOn) {
-    setPrevIncidentLayerOn(incidentLayerOn);
-    if (!incidentLayerOn) setExpanded(false);
+  // 목록이 비면(레이어 끔·0건·불러올 수 없음) 접는다 — 다음 결과가 왔을 때 목록이 저절로 펼쳐지지 않게.
+  const [prevHasIncidents, setPrevHasIncidents] = useState(hasIncidents);
+  if (hasIncidents !== prevHasIncidents) {
+    setPrevHasIncidents(hasIncidents);
+    if (!hasIncidents) setExpanded(false);
   }
   if (!state.visible) return null;
-  const incidents = incidentLayerOn ? incidentsOf(state.results) : [];
   const showList = incidents.length > 0 && (!collapseIncidents || expanded);
   return (
     // data-map-fit-panel: 여행 지도 맞춤이 이 패널 밑에 든 핀을 피한다(사건 목록은 transient로 뺀다).
@@ -133,19 +133,24 @@ export function TransportLayerControls({
           if (collapseIncidents && meta.layer === 'highway_incident') {
             // 접기 버튼 높이(44px)를 켠 순간부터 차지한다 — 결과가 와서 버튼이 돼도 상시 높이가 그대로다.
             return (
-              <li key={meta.layer} className="flex min-h-11 items-center text-muted" {...attrs}>
-                {incidents.length > 0 ? (
+              // 글자는 다른 상태 줄처럼 위에 붙인다. 오른쪽엔 펼침 표시만 둬 문구 폭을 지킨다 — '오래된 정보'가
+              // 잘리지 않게(#712).
+              <li key={meta.layer} className="flex min-h-11 items-start text-muted" {...attrs}>
+                {hasIncidents ? (
                   <button
                     type="button"
                     aria-expanded={expanded}
                     aria-controls={expanded ? listId : undefined}
                     onClick={() => setExpanded((v) => !v)}
                     data-testid="transport-incident-toggle"
-                    className="focus-ring -mx-1 flex min-h-11 w-[calc(100%+0.5rem)] items-center gap-1 rounded-sm px-1 text-left hover:bg-surface-soft"
+                    className="focus-ring -mx-1 flex min-h-11 w-[calc(100%+0.5rem)] items-start gap-1 rounded-sm px-1 text-left hover:bg-surface-soft"
                   >
-                    <span className="line-clamp-2 flex-1">{text}</span>
-                    <span className="shrink-0 font-semibold text-body">
-                      목록<span aria-hidden="true">{expanded ? ' ▴' : ' ▾'}</span>
+                    <span className="line-clamp-2 flex-1">
+                      {text}
+                      <span className="sr-only"> 목록</span>
+                    </span>
+                    <span aria-hidden="true" className="shrink-0 whitespace-nowrap text-body">
+                      {expanded ? '▴' : '▾'}
                     </span>
                   </button>
                 ) : (
