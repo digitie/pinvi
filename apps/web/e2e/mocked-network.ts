@@ -81,7 +81,16 @@ export async function installMockedNetwork(
     try { pageClosed = route?.request().frame().page().isClosed() ?? false; } catch { /* frame 생성 전 요청 */ }
     // page fixture와 worker가 context보다 먼저 끝내는 요청도 Playwright의 명시 종료 사유로 구분한다.
     const testEnded = /route\.(?:fetch|fulfill|abort): Test ended\./.test(error.message);
-    return terminal && (closing || pageClosed || testEnded);
+    const request = route?.request();
+    // C10 전체 suite의 context.close 도중 취소된 로컬 RSC prefetch를 재현했다.
+    // 실행 중 오류·일반 요청·mutation은 이 예외에 포함하지 않는다.
+    const cancelledPrefetch = closing &&
+      error.message.startsWith('route.fetch: socket hang up (ECONNRESET)') &&
+      request?.method() === 'GET' &&
+      new URL(request.url()).origin === appOrigin &&
+      request.headers()['next-router-prefetch'] === '1' &&
+      request.headers()['rsc'] === '1';
+    return (terminal || cancelledPrefetch) && (closing || pageClosed || testEnded);
   };
   const close = context.close.bind(context);
   context.close = async (...args: Parameters<BrowserContext['close']>) => {

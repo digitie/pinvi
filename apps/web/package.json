@@ -39,7 +39,7 @@
     "@pinvi/i18n": "*",
     "@pinvi/schemas": "*",
     "@pinvi/state": "*",
-    "@radix-ui/react-focus-scope": "file:vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.1.tgz",
+    "@radix-ui/react-focus-scope": "file:vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.2.tgz",
     "@tanstack/react-query": "5.107.1",
     "@tanstack/react-table": "9.3.1",
     "@tanstack/react-virtual": "3.14.26",

@@ -1,0 +1,232 @@
+{
+  "canonical": "integration-11-review",
+  "baseHead": "f3d4ddd87c5b7fed557112e2e3b9564628a77805",
+  "originalReviewBase": "ada425db9deead43a9416d6c761c3fffadd974c1",
+  "producerSources": {
+    "common": "a35481349d6747b4f13b958ae64d9c0bbd0b5413",
+    "maplibre-vworld-react": "9a7a348b02d61969b394c681b024d5851eef836b",
+    "lightningcss": "748651cbd845971e65c411166ddee101745dab21",
+    "serde-content": "18e53fcf6f8ace093a292891b34fa3411192617d",
+    "radix-ui-primitives": "1752a539c8d5ae57961a0fa2702d2573d48fefe7"
+  },
+  "canonicalSha256": "be0bbaba1b825b33754cdbe4352168265d1ccb71467a1031aa095707b0b5eec8",
+  "initialReleaseImmutable": true,
+  "centralWorkflowCodePin": "55a921b55d248106cbe320e7f5305f3d3cdb60fe",
+  "foundationMain": "e8ed3ae75000be5cd22a3a11492bd97660635d78",
+  "usedPackages": {
+    "@kor-travel/tokens": {
+      "version": "0.1.1",
+      "filename": "kor-travel-tokens-0.1.1.tgz",
+      "integrity": "sha512-85mqNJXqhTlA4RbtKUhmzx6rH6mOOeNmsXTJtCetQ5y8njLy+5XLZbdT6j1tf3ME9XQA6X63Ah4kmuLdqEZHbA=="
+    },
+    "@kor-travel/ui": {
+      "version": "0.2.0",
+      "filename": "kor-travel-ui-0.2.0.tgz",
+      "integrity": "sha512-BsRRdnJUp6FQ2KWkXtINb7IkrxxwnWFlLP/oVlNN4UXBKren7uTlnYT4iJsdaO98iA4Tn2EMPX06eT2uB5jEDA=="
+    },
+    "lightningcss": {
+      "version": "1.33.0+nativecss.fix.4",
+      "filename": "lightningcss-1.33.0+nativecss.fix.4.tgz",
+      "integrity": "sha512-zDQ03VJE37OlyBrLsRcsEdIVu0T4BXJKDH5y9//To6GlGN2UrKQGERFVAFblkPQ5ZEbhuOp5wpXxGARZNdbQLA=="
+    },
+    "vworld-map-core": {
+      "version": "1.0.1",
+      "filename": "vworld-map-core-1.0.1.tgz",
+      "integrity": "sha512-Djm14Arr7U0r7Sabj6P0V57CdzWIGaJmecklmY1hwrq1QUZJjMUFgkZfGRFalUo6AFzHEwwzOEzbJPMifGhINw=="
+    },
+    "vworld-map-rn": {
+      "version": "1.0.1",
+      "filename": "vworld-map-rn-1.0.1.tgz",
+      "integrity": "sha512-lgDBasKIEG2ElQ9jnHDB9pA+x04Xge9yzBb1NPPw1auyvlkQvxsq4NfRPIrw1VWiutcGiIefySLiVaZDUkO69Q=="
+    },
+    "vworld-map-web": {
+      "version": "1.0.3",
+      "filename": "vworld-map-web-1.0.3.tgz",
+      "integrity": "sha512-HPXZcz/wP6tFsCZqlAbansWNICcZPubC+/V7rDWXYTQVlOBLl9cZQ1HSMJd25c2CZoMNreVFTQA0vzkVglkS1w=="
+    },
+    "@radix-ui/react-focus-scope": {
+      "version": "1.3.1+kortravel.fix.2",
+      "filename": "radix-ui-react-focus-scope-1.3.1+kortravel.fix.2.tgz",
+      "integrity": "sha512-v3XweXrUSZ/QfrMVvYmsAkVNDnvcN21QKbSrViXYf0OQf5Ue9xSgqQIukgGjsYMEBQ5qxQW8fnOC9t1Y0ENPXw=="
+    }
+  },
+  "actualInstalled": {
+    "@kor-travel/tokens": {
+      "files": 25,
+      "version": "0.1.1",
+      "allBytesMatch": true
+    },
+    "@kor-travel/ui": {
+      "files": 94,
+      "version": "0.2.0",
+      "allBytesMatch": true
+    },
+    "lightningcss": {
+      "files": 19,
+      "version": "1.33.0+nativecss.fix.4",
+      "allBytesMatch": true
+    },
+    "vworld-map-core": {
+      "files": 25,
+      "version": "1.0.1",
+      "allBytesMatch": true
+    },
+    "vworld-map-rn": {
+      "files": 34,
+      "version": "1.0.1",
+      "allBytesMatch": true
+    },
+    "vworld-map-web": {
+      "files": 85,
+      "version": "1.0.3",
+      "allBytesMatch": true
+    },
+    "@radix-ui/react-focus-scope": {
+      "files": 15,
+      "version": "1.3.1+kortravel.fix.2",
+      "allBytesMatch": true
+    }
+  },
+  "n150Actual": {
+    "packages": {
+      "@kor-travel/tokens": {
+        "files": 25,
+        "version": "0.1.1",
+        "mismatches": 0
+      },
+      "@kor-travel/ui": {
+        "files": 94,
+        "version": "0.2.0",
+        "mismatches": 0
+      },
+      "lightningcss": {
+        "files": 19,
+        "version": "1.33.0+nativecss.fix.4",
+        "mismatches": 0
+      },
+      "vworld-map-core": {
+        "files": 25,
+        "version": "1.0.1",
+        "mismatches": 0
+      },
+      "vworld-map-rn": {
+        "files": 34,
+        "version": "1.0.1",
+        "mismatches": 0
+      },
+      "vworld-map-web": {
+        "files": 85,
+        "version": "1.0.3",
+        "mismatches": 0
+      },
+      "@radix-ui/react-focus-scope": {
+        "files": 15,
+        "version": "1.3.1+kortravel.fix.2",
+        "mismatches": 0
+      }
+    },
+    "scopeLockCopies": 1
+  },
+  "n150Runtime": {
+    "node": "22.23.1",
+    "npm": "12.0.1",
+    "playwright": "1.65.0"
+  },
+  "originalUnitCount": 521,
+  "newRegressionCount": 6,
+  "unitPassed": 527,
+  "unitFiles": 89,
+  "fullBrowser": {
+    "passed": 209,
+    "failed": 0,
+    "skipped": 4,
+    "newSkips": 0,
+    "workers": 1,
+    "retries": 0,
+    "testTimeoutMs": 30000,
+    "expectTimeoutMs": 10000
+  },
+  "featureFlags": {
+    "canvasPassed": 3,
+    "restorePassed": 2,
+    "productionBuildPerMode": true
+  },
+  "webLint": {
+    "errors": 0,
+    "existingAuthWarnings": 1
+  },
+  "mobileLint": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "doctor": {
+    "webIssues": 0,
+    "mobileIssues": 0
+  },
+  "gateExits": {
+    "prepare-owned-stale": 0,
+    "install-scope": 0,
+    "install-web": 0,
+    "install-mobile": 0,
+    "normalize-web": 0,
+    "install-root": 0,
+    "actual-files": 0,
+    "lock-exact": 0,
+    "web-canonical": 0,
+    "mobile-canonical": 0,
+    "own-source": 0,
+    "mobile-style": 0,
+    "lock-integrity": 0,
+    "tree": 0,
+    "web-type": 0,
+    "mobile-type": 0,
+    "web-lint": 0,
+    "mobile-lint": 0,
+    "web-doctor": 0,
+    "mobile-doctor": 0,
+    "web-unit": 0,
+    "full-e2e": 0,
+    "canvas-e2e": 0,
+    "restore-e2e": 0
+  },
+  "appRuntimeSourceChanged": false,
+  "scopeRuntimeChanged": true,
+  "testHarnessChanged": true,
+  "reviewDelta": [
+    {
+      "path": "apps/web/e2e/mocked-network.ts",
+      "baseSha256": "51799b18b3c7cd76f4707175cb336a6b49bee3f4bb7fbdcc37b970d7a8fc955f",
+      "finalSha256": "6b7ed2975e319c2931cf1520da9400a6fa272774d4159893124edacf09bf8003"
+    },
+    {
+      "path": "apps/web/tests/mockedNetwork.test.ts",
+      "baseSha256": null,
+      "finalSha256": "da02b1ab56ba5bc87a555cbc4577447104a79d76d8d5f6ed23a634641c12a70a"
+    },
+    {
+      "path": "apps/web/tests/publicDialog.test.tsx",
+      "baseSha256": "ea3b05c36f0922fbfc7c8b4e8d107ecf5f3525c92adf7f993a1e7c18763c8bdf",
+      "finalSha256": "4c19b2baef246a993fd306ec8b89196a125e03ae681ba6b6f35cbca8198bd5fb"
+    }
+  ],
+  "testedSourceFiles": 654,
+  "testedSourceManifestSha256": "a29f185d4d84067b62b4f6fd6c3aaf5b75b00a8ee740e0f89950ef499e2df59f",
+  "c10ToC11UnchangedUiTokenFiles": 117,
+  "mobileEvidence": "기존 fix4 native4export/출력4OTF/375·1280px 웹 PASS를 native 소스·tokens runtime 동일성으로 유지; 재export 없음",
+  "previousFailures": {
+    "c9": "520/1 unit, 207/2/4 browser (보존)",
+    "c10": "521/0 unit, 207/2/4 browser (보존)",
+    "rawC10Copy": ".git/c11-c10-full-before.log",
+    "prefetchBefore": ".git/c11-prefetch-before.log",
+    "prefetchBeforeResult": "1FAIL/3PASS"
+  },
+  "rawLogs": ".git/c11-n150-attempt2/evidence",
+  "remaining": [
+    "소비자 독립2리뷰",
+    "정확 HEAD GitHub CI",
+    "PR merge",
+    "부모 go 및 병합 source 새 이미지 배포"
+  ],
+  "productionMutated": false,
+  "databaseRustfsMutated": false
+}

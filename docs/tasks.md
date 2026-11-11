@@ -4,7 +4,7 @@
 
 2026-11-11 공통 이관 checkpoint: 지도 source9a의 core1.0.1/web1.0.3/RN1.0.1과 Lightning CSS1.33.0+nativecss.fix.3 동일 tgz 실제 설치·lock/원장 SHA512 일치. 웹/모바일 타입·lint 및 Doctor482/45files 진단0. Android/iOS/Web export와 SDK58 N150375/1280px 로그인·글꼴 스모크PASS. 웹 unit493PASS/1FAIL은 최종 common LoginForm 자동완성 수정 pack 대기. 최종 common 정책·clean ci/build/e2e·독립2리뷰 미완료이며 push/배포 대기. 후속 N150 production buildPASS/E2E203PASS6FAIL(긴 공통Dialog)4SKIP, 별도 실제 canvas3casesPASS. ESLint도 전이까지10.14.0 하나로 정리했다. 상세는 docs/reports/common-unification-20261111.md.
 
-- [/] T-COMMON-20261111 — Pinvi 관리자 VirtualTable/Radix·모바일 NativeWind5RC/Expo58 이관; 최종 shared artifact·Lightning CSS1.33 원본 fix·Dialog 계약 수신 후 전체 검사/두 독립 리뷰/CI/merge/부모 go 및 이미지 배포. 근거: docs/reports/common-unification-20261111.md.
+- [/] T-COMMON-20261111 — C11 actual7종297파일·원장/lock/guard·unit527·type/Doctor0 검증. N150 새 production 전체browser209/0/기존flagSKIP4·canvas3·restore2 PASS. 소비자 독립2리뷰·정확 HEAD CI·merge·부모 go 및 이미지 배포. 근거: docs/reports/common-unification-20261111.md.
 
 - [/] #636/#638 — PR688 일정 수동 전송·사용자 opt-in 일간/주간 예약의 최종 WSL UI·두 전문 적대리뷰·정확HEAD CI 후 일반 merge. 운영·실수신자 전송 없음.
 - [ ] #637 — Weather201의 공식 지역별 발령/해제·행정구역 매핑 계약을 선병합하고 Pinvi 대표지역 특보 알림을 후속 구현한다.

@@ -52,7 +52,7 @@
     "expo": "58.0.23",
     "expo-router": "58.0.30",
     "vworld-map-core": "file:apps/web/vendor/vworld-map-core-1.0.1.tgz",
-    "@radix-ui/react-focus-scope": "file:apps/web/vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.1.tgz"
+    "@radix-ui/react-focus-scope": "file:apps/web/vendor/radix-ui-react-focus-scope-1.3.1+kortravel.fix.2.tgz"
   },
   "devDependencies": {
     "eslint": "10.14.0",

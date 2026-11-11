@@ -1,3 +1,7 @@
+## 2026-11-12 — C11 격리 최종 검증 완료
+
+C10 f3d4ddd8을 보존하고 소유권을 인계받았다. C11 사용7종297파일·3원장·lock·canonical 웹/모바일 검사를 통과했다. 기존521+새 경계6건=unit527·양쪽 타입/Doctor0·mobile lint0을 확인했다. 웹 lint는 기존 인증 경고1이다. 새 production 전체browser209PASS/0FAIL/기존flagSKIP4와 각 flag의 별도build canvas3PASS/restore2PASS를 완료했다. 이전 C9/C10 실패 기록·native fix4 승인 증거는 보존했다. 최종 소비자2리뷰·정확 HEAD CI·merge·부모 go 전에는 배포하지 않는다. [최신 보고서](reports/common-unification-20261111.md)를 따른다.
+
 ## 2026-11-11 — 공통 UI·모바일 통합 후보 진행
 
 2026-11-12 공개 UI 공통화 후속: Dialog/ConfirmDialog 자체 모달 엔진을 공통 Radix 어댑터로 이관하고 useModalDialog를 정리했다. 기존14행동cases와 추가회귀 유지, AppShell 더보기 common Popover6casesPASS. 새공통overlayProps/unstyled pack 대기 및 실제브라우저 initial-panel ShiftTab 회귀1건이 남는다. 과거전체493/1·203/6/4는 최종PASS가 아니며 새pack후전체재검증필수. 상세 docs/reports/common-unification-20261111.md.

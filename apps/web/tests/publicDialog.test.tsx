@@ -175,6 +175,38 @@ describe('공통 Radix 공개 Dialog 행동 계약', () => {
     expect(screen.getByTestId('last')).toHaveFocus();
   });
 
+  it('disabled fieldset의 자손은 역방향 포커스 경계에서 제외한다', async () => {
+    render(
+      <Dialog open title="비활성 그룹" onClose={vi.fn()} showClose={false}>
+        <button>활성 경계</button>
+        <fieldset disabled>
+          <legend>비활성 그룹</legend>
+          <button>비활성 자손</button>
+        </fieldset>
+      </Dialog>,
+    );
+    screen.getByRole('dialog').focus();
+    await userEvent.setup().tab({ shift: true });
+    expect(screen.getByRole('button', { name: '활성 경계' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '비활성 자손' })).toBeDisabled();
+  });
+
+  it('disabled fieldset의 첫 legend 내부는 활성 포커스 경계로 유지한다', async () => {
+    render(
+      <Dialog open title="첫 범례 예외" onClose={vi.fn()} showClose={false}>
+        <button>그룹 앞</button>
+        <fieldset disabled>
+          <legend><button>활성 범례</button></legend>
+          <button>비활성 자손</button>
+        </fieldset>
+      </Dialog>,
+    );
+    screen.getByRole('dialog').focus();
+    await userEvent.setup().tab({ shift: true });
+    expect(screen.getByRole('button', { name: '활성 범례' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '비활성 자손' })).toBeDisabled();
+  });
+
   it('패널에 포커스가 있을 때 Tab하면 첫 요소로 가둔다', async () => {
     render(<Harness onClose={vi.fn()} />);
     screen.getByTestId('panel').focus();

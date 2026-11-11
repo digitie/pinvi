@@ -1,5 +1,42 @@
 # 공통 관리자 UI 이관 (2026-11-11)
 
+## 2026-11-12 최우선 현재 상태 — C11 격리 최종 검증 완료
+
+Harvey의 소유권 이전 ACK와 부모 지시로 f3d4ddd87c5b7fed557112e2e3b9564628a77805(C10)를 보존하고 이어받았다.
+원 리뷰 입력 ada425db의 과거 범위는 변경하지 않는다. 현재 정본은 integration-11-review이며
+producer common a35481349d6747b4f13b958ae64d9c0bbd0b5413, Scope1752a539c8d5ae57961a0fa2702d2573d48fefe7이다.
+중앙 workflow code/common-ref는 55a921b55d248106cbe320e7f5305f3d3cdb60fe를 유지한다.
+부모 확인 기준 common PR49는 reviewed2d4579에서 main e8ed3ae75000be5cd22a3a11492bd97660635d78로 병합됐고
+C11 단일7팩은 최초릴리스로 확정됐다. 동일 버전의 bytes는 바꾸지 않으며 후속 runtime은 새 버전을 요구한다.
+공통/원본 Scope의 리뷰·CI PASS와 소비자 최종2리뷰·정확 HEAD CI gate는 구분한다.
+
+동결된7종 vendor와 root/web/mobile 원장의 source·version/SRI를 정렬했다. 각 file 경로만 workspace에 맞춘다.
+Scope fix.2는 공식 runtime file 의존성으로 root/web에만 선언하고 root $@radix-ui/react-focus-scope를 유지한다.
+mobile에는 직접 DOM engine을 추가하지 않는다. 33,511bytes·SHA256 1ca04870692565c243130d99c3dba91f3ac853ab2ec9538fc7b658b17fb7b49a가
+부모 정본과 일치한다. 동명 UI/tokens는 명시 file 설치했고 actual7종297파일을 로컬·N150 모두 archive 원문과 비교했다.
+UI94/tokens25 중 policy JSON2개만 바뀌고 나머지117파일은 동일하다. native 소스와 tokens runtime은 그대로이므로
+승인된 fix4 native4export·출력 글꼴·375/1280px 모바일 웹 증거를 유지하고 재export하지 않았다.
+
+원격 installed/external canonical 웹·모바일 guard, own AST/style·전체 tree·lock integrity·양쪽 타입,
+웹 lint오류0/기존 인증 경고1·모바일 lint경고0·양쪽 Doctor0, 전체 unit527/89파일 PASS다.
+이는 기존521건에 실제 Dialog fieldset 경계2건과 격리 network 종료 경계4건을 추가한 결과다.
+모달 초기 panel Shift+Tab과 disabled fieldset 제외·첫 legend 예외를 실제 공통 경로로 검사한다.
+
+C10 전체213건 중207PASS/2FAIL/4SKIP는 그대로 보존했다. 두 실패는 관리자 종합30초 예산과
+협업5context 종료 중 로컬 RSC prefetch ECONNRESET이었다. 후자는 C11 집중 회귀에서1FAIL/3PASS로 재현하고,
+명시 context 종료 상태의 동일 app origin·GET·RSC·next-router-prefetch에 한해 취소 오류를 정리하도록 보완했다.
+실행 중 오류·일반 요청·POST는 계속 실패한다. 앱 runtime·네트워크 fence·기존 브라우저 단언·30초 제한은 유지한다.
+새 production build와 원래 전체 suite는 N150 슬롯1 worker1에서209PASS/0FAIL/기존flagSKIP4를 확인했다.
+각 flag의 새 production build로 canvas3PASS/restore2PASS도 완료했다. 기존 per-test30초·expect10초·원래 단언은 유지했다.
+관리자 종합은 같은 전체 실행에서4.8초, 협업5context는5.2초로 통과했다. 과거 단독 성공으로 전체 실패를 덮지 않았다.
+[최종 검증·helper 변경 manifest](common-unification-20261112-c11-validation.json)에 실제 입력·해시·전체 수치를 고정했다.
+
+기존 C10 snapshot은 보존하고 새 전용 C11 stage를 사용한다. 실행 전 이전 controller와 QA 종료를 확인했으며
+인계받은 본인 모듈 volume만 갱신했다. workspace 상대 경로로 Scope를 명시 설치한 첫 시도의 ENOENT는 설치 명령을
+root 경로로 바로잡은 뒤 actual bytes·lock·guard를 다시 통과했다. 최초 로그도 보존한다.
+운영 source·DB/RustFS·서비스·키는 변경하지 않았다. 최종 2소비자 리뷰·정확 HEAD CI·merge·부모 go 이후의
+이미지 전환은 [배포 계획](common-unification-deploy-plan-20261111.md)을 따른다.
+
 ## 범위와 실행 기준
 
 별도 ext4 clone의 agent/codex-common-unification-20261111에서 작업한다. 원본 checkout과 사용자 웹·모바일 UX는 보존한다. push·PR·merge는 부모 통합 후 진행한다. 최종 독립 적대 리뷰 2인을 별도 수행하고 발견 회귀를 수정·검증한다.
