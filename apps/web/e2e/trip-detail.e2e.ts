@@ -1627,9 +1627,28 @@ test.describe('모바일 여행 지도 교통 결과(#712)', () => {
     await expect(page.getByTestId('transport-layer-state-highway_incident')).not.toContainText(
       '확대하면 보여요',
     );
-    await expect(page.getByTestId('transport-incident-list')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('transport-layer-state-highway_incident')).toContainText('5곳', {
+      timeout: 10_000,
+    });
     // 결과가 온 뒤 디바운스(250ms)·재맞춤이 끝날 시간을 넉넉히 준다.
     await page.waitForTimeout(1_500);
+    expect(markersRequests).toHaveLength(1);
+    // #729: 맞춤이 끝난 뒤 돌발 목록이 저절로 펼쳐져 핀을 덮지 않는다 — 교통 패널 전체가 어느 핀과도
+    // 겹치지 않고, 핀을 실제로 누를 수 있다.
+    const controlsBox = (await page.getByTestId('transport-layer-controls').boundingBox())!;
+    const markers = page.locator('.maplibregl-marker.trip-map-marker');
+    await expect(markers).toHaveCount(nearbyPois.length);
+    for (const marker of await markers.all()) {
+      expect(boxesOverlap((await marker.boundingBox())!, controlsBox)).toBe(false);
+      await marker.click({ trial: true, timeout: 5_000 });
+    }
+    const toggle = page.getByTestId('transport-incident-toggle');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('transport-incident-list')).toHaveCount(0);
+    // 펼치는 것은 사용자다 — 펼쳐도 다시 맞추거나 다시 조회하지 않는다.
+    await toggle.click();
+    await expect(page.getByTestId('transport-incident-list')).toBeVisible();
+    await page.waitForTimeout(800);
     expect(markersRequests).toHaveLength(1);
   });
 });
