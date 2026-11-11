@@ -126,3 +126,17 @@ c8 런타임 gate 실행 종료 뒤 부모 c9 단일 UI/tokens 파일을 복사�
 설치 뒤 6종 archive의 모든 실제설치파일과 원장/lock을 비교하여 UI94/tokens25/CSS19/core25/RN34/web85 파일이 각각 정확히 일치했다. 모든 패키지 위치·버전은 이전 lock과 같고 UI/tokens SRI만 갱신됐다. root $lightningcss 및 root/web/mobile CSS 직접 dev 의존성을 유지한다. c9 실제설치guard 두 곳, 최신 외부 도구의 --policy/--canonical guard 두 곳, own source AST, styling, npm12 전체tree가 모두 통과했다. parent 소유 중앙 workflow는 편집/커밋하지 않았다.
 
 checker 변경 때문에 모바일 export/build를 재실행하지 않는다. 후속 웹 검증은 별도 busy 도메인 소스 수정이 이유다. 그 수정의 전체unit은 **520PASS/1FAIL(521)**, 타입/lint오류0/기존auth경고1, fullDoctor486files0 및 자체ASTguardPASS다. known FocusScope reverse-entry는 아직 남아 있고 새 전체 브라우저에서 보완된 busy 포커스와 기존768px prefetch 실패도 다시 확인한다.
+
+## 최종 고정 입력의 최신 확정 검증
+
+실제 앱·의존성 소스 f6313347b85d62c7070031c3e7a452f746db8b18을 N150 Node22.23.1/공식 Playwright digest에서 검증했다. 이후 커밋은 승인된 중앙정책 workflow pin2c와 이 검증 기록만 포함한다. 기존 후보의 실패 수치를 최신 결과로 사용하지 않는다.
+
+- 최신 전체unit: WSL/N150 모두 **520PASS/1FAIL(521)**. 실제 남은 실패는 초기패널 ShiftTab 역진입이며 CLI3건은 모두 재통과했다.
+- 최신 전체E2E: **207PASS/2FAIL/4SKIP**. 두 실패는 Radix FocusScope1.3.1 역진입과 복합 관리자 시나리오의 전체30초 예산초과다. 원본 관리자 case는 소스·expect·timeout을 바꾸지 않고 단일worker에서 **1PASS(8.7초)**했다. 이 단독 성공으로 전체207/2/4를 다시 쓰지 않는다.
+- 같은 최신 앱 소스의 별도 지도canvas **3PASS**, 복원 UI **2PASS**. busy 요청취소·닫기와768px 검사는 최신 전체에서 통과했다.
+- c9 local/N150 실제6패키지282파일diff0, 원장·lock 일치, 새installed/externalcanonical 웹·모바일 guard·ownAST·style·tree PASS. 타입PASS, lint오류0/기존auth경고1, fullDoctor웹486/모바일45files 진단0.
+- fix4의 실제 Android native/iOS native/WebSSR35routes/별도빈cache 강제WASM iOS export 모두PASS. 모바일 소스는 검증한00bd 이후 동일하고 c8↔c9 tokens runtime/CSS/metadata 동일성이 증명됐다. 실제4OTF 출력 bytes 및 최신모바일웹375/1280px 스모크 PASS. native실기기/macOS/EAS는 미실행이다.
+- 모든 소유 QA컨테이너는 종료됐다. 원본checkout·타인프로세스·DB/RustFS/운영서비스 수명주기를 변경하지 않았다.
+- 기존 두 독립 리뷰는3626 및00bd수정재확인 범위로만 기록한다. 최종 Mill/Epicurus 리뷰와 원본 FocusScope 차단 해소, CI, 병합·배포 판단은 부모 통합 단계다. 이 PR은 draft이며 전체PASS/배포가능으로 표시하지 않는다.
+
+최종 runtime 증거는 공유 root의 consumer-tools/pinvi-c9-evidence/n150-final 및 PINVI-FINAL-HANDOFF.md, 입력·raw리뷰 증거는 PINVI-REVIEW-AUDIT.md와 내용 주소 manifest에 보존했다. 공개 Git에는 원본 trace나 로컬 운영노트를 추가하지 않는다.
