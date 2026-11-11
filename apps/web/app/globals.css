@@ -176,7 +176,6 @@ body {
     /* stroke %23ffffff = 토큰 on-primary(#ffffff). data URI 안에서는 var()를 못 써 값 리터럴로 둔다. */
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");
   }
-
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -238,25 +237,63 @@ body {
   }
 }
 
-/* 공용 표시 컴포넌트는 PinVi의 기존 역할 색을 사용한다. */
+/* 공통 로그인·메뉴의 색상 역할을 PinVi 팔레트에 매핑한다. 사용자 표면에는 전파하지 않는다. */
 [data-pv-surface='admin'] {
+  --kt-font-sans: var(--font-sans);
   --kt-brand: var(--color-cta);
   --kt-brand-hover: var(--color-cta-hover);
   --kt-brand-foreground: var(--color-on-primary);
+  --kt-brand-tint: var(--color-admin-brand-tint);
+  --kt-focus: var(--color-cta);
   --kt-text-primary: var(--color-ink);
   --kt-text-secondary: var(--color-muted);
+  --kt-text-disabled: var(--color-muted);
   --kt-surface-page: var(--color-canvas);
+  --kt-surface-subtle: var(--color-admin-subtle);
+  --kt-surface-muted: var(--color-admin-muted);
+  --kt-border: var(--color-admin-line);
+  --kt-surface-card: var(--color-canvas);
+  --kt-destructive: var(--color-admin-danger);
+  --kt-destructive-tint: var(--color-admin-danger-tint);
   --kt-control-line: var(--color-admin-control-line);
 }
-.pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-link'] { justify-content: center; padding-inline: .5rem; }
+.pinvi-common-menu [data-slot='app-menu'] {
+  padding: 0;
+  gap: 1.25rem;
+}
+.pinvi-common-menu [data-slot='app-menu-group-label'] {
+  font-size: var(--text-2xs);
+  margin-bottom: 0.5rem;
+}
+.pinvi-common-menu [data-slot='app-menu-link'] {
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
 @media (min-width: 1024px) {
+  .pinvi-common-menu [data-slot='app-menu-link'] {
+    min-height: var(--spacing-control-sm);
+    padding-block: 0.375rem;
+  }
+  .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-link'] {
+    justify-content: center;
+    padding-inline: 0.5rem;
+  }
   .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-group-label'],
-  .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-link'] > span:not([aria-hidden='true']),
+  .pinvi-common-menu[data-collapsed='true']
+    [data-slot='app-menu-link']
+    > span:not([aria-hidden='true']),
   .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-link'] > kbd {
-    position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%);
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-link'] {
+    min-height: var(--spacing-control);
   }
 }
-
 
 /* 라이브러리의 첫 popup inline z-index(2)보다 앱 지도 패널(z10)이 높다.
    선택 popup의 닫기를 막지 않도록 앱 전용 class만 올린다. dialog/sheet(z50)는 그대로 위다. */

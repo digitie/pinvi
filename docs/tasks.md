@@ -84,3 +84,7 @@
 - [ ] **T-320** — 모바일 위치 동의 gate 런타임 확인. VWorld 키가 있는 환경에서 지도 표면을
       띄우고 "현재 위치로"가 OS 권한 요청 전 동의를 받는지 확인한다(T-310 smoke에서 키 부재로
       미확인). T-353이 풀려 SDK 57 development APK가 나왔으므로(EAS `b3a52da4`, 2026-09-05) 이제 진행 가능하다. VWorld 키가 있는 환경에서 그 APK를 설치해 확인한다.
+
+## 사용자 요청: PinVi Admin 공통 UI 정렬 (2026-11-11)
+
+- [x] common LoginForm/AppMenu 적용 확인·PinVi 토큰 매핑·map rail 정렬, 메뉴/권한 회귀 및 N150 시각 검증. [실행 계획](execplan/pinvi-admin-common-map-shell.md).
