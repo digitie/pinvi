@@ -106,3 +106,15 @@ c8 실제modules/lock/상대file/원장일치PASS, web/mobile의새공통guard�
 각 회귀 테스트의 수정 전 실패를 확인했으며 수정 후 관리자 focus/404/영구정리/기존dismiss/ConfirmDialog25건 및 삭제 성공2건, 공개 설명1건이 통과했다. 최신 전체 검사는 후속 로그를 따른다. 기존 initial-panel ShiftTab 단위 실패와 실제 Chromium 증거는 삭제하거나 기대를 낮추지 않았다. 부모의 c9는 checker만 변경 예정이므로 runtime/CSS bytes 동등 증명 후 새 guard와 lock/실제설치 정합성을 추가 검증한다.
 
 리뷰 수정 후 WSL 전체unit은 **518PASS/1FAIL(519)**, TypeScript PASS, ESLint 오류0/기존auth경고1, Doctor full486files 진단0, 자체overlay ASTguard PASS다. 잔여1은 기존 Radix reverse-entry이며 별도source엔진을 추가하지 않았다.
+
+독립 [리뷰 A](common-unification-review-a-20261112.md)와 [리뷰 B](common-unification-review-b-20261112.md)는 00bd8c8d 수정 범위를 다시 확인하여 기존 P2 다섯 건의 해소와 추가 차단 발견 없음을 기록했다. known Radix 실패는 별도 미해결 gate다. 리뷰 후 모바일 Android/iOS/Web/강제WASM export4종과 N150375/1280px 스모크도 재통과했다.
+
+## c8 전체 브라우저 결과와 busy 포커스 보완
+
+00bd8c8d의 N150 전체 E2E는 **206PASS/3FAIL/4SKIP**다. 기존 긴 공통 Dialog 실패6건은 재통과했다. 새실패는 initial-panel ShiftTab, 저장 버튼 disabled 뒤 busy 포커스 이탈, 768px 검사 중 로컬 RSC prefetch의 route.fetch ECONNRESET다. 마지막 건은 레이아웃 부등식 실패가 아니며 별도 재검증한다. canvas3건과 restore UI mock2건은 각각 별도 생산build에서 모두 통과했다. N150 전체unit516PASS/3FAIL에는 known Radix 외 cold CLI20초 하위프로세스 두 건이 포함된다. 이를 WSL518/1 또는 후속 재실행으로 덮어쓰지 않는다.
+
+공개 Dialog/ConfirmDialog는 busy 전환으로 활성 버튼이 disabled되거나 body로 떨어질 때 패널을 선택한다. busy overlay pointerdown의 기본 포커스 이동도 막는다. 이는 React 상태 전환과 기존 공통 overlay 이벤트에 연결한 도메인 정책이며 document listener/Tabtrap/stack/portal 엔진을 추가하지 않는다. 중첩 모달의 유효한 포커스는 유지한다. 두 busy 회귀 테스트의 수정 전 실패와 수정 후 통과를 확인했다. 기존 ShiftTab 기대는 그대로 남는다.
+
+배포 Dockerfile과 동일한 Node22.23.1 Bookworm digest(glibc2.36)에서도 CSSfix4 native와 강제WASM을 실제 로드해 같은 transform 결과를 확인했다. 사용자에게 전달한 네 플랫폼 export를 이 단순 transform으로 대체하지 않는다.
+
+독립 리뷰의 실제 thread A=01a1cb51-e757-7ee0-82e1-7cb7bcf9eeae, B=01a1cb51-eb7c-7e42-b0ba-0779bb8abd89다. Harvey는 구현 소유자의 파일태그였다. 원본 provider JSON·실제 probe·원입력 commit/tree/lock/manifest hashes는 저장소 밖 PINVI-REVIEW-AUDIT.md 및 내용 주소 input manifest로 보존한다. 원검토3626/수정재확인00bd 이후 busy 변경은 기존 판정의 범위가 아니며 부모 최종 독립 gate를 대체하지 않는다.

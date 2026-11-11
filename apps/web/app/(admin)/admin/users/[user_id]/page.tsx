@@ -36,11 +36,11 @@ import {
 import Link from 'next/link';
 import { redirect, useParams, useRouter } from 'next/navigation';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
-// T-356: 이 화면의 두 모달을 admin base-ui 프리미티브로 수렴했다.
+// T-356: 이 화면의 두 모달을 admin 공통 Radix 프리미티브로 수렴했다.
 //  - 사유를 입력받는 운영 액션(이메일 원본 보기/강제 인증/비활성화) → `Dialog`
-//    (수제 `fixed inset-0` scrim + role 없는 패널이었다 — 이제 role/포커스/Escape는 base-ui).
+//    (수제 `fixed inset-0` scrim + role 없는 패널이었다 — 이제 role/포커스/Escape는 공통 Radix).
 //  - 되돌릴 수 없는 확인(아바타 삭제·삭제 대기·즉시 익명화) → KTM 규약대로 `AlertDialog`.
-//    사용자 표면 `components/ui/ConfirmDialog`(useModalDialog)를 대체한다.
+//    사용자 표면 `components/ui/ConfirmDialog`(이전 전용 훅)를 대체한다.
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import {
   AlertDialog,
@@ -673,7 +673,7 @@ function AdminUserDetailPageView2({ viewModel }: { viewModel: AdminUserDetailPag
 
       {actionDialog && <AdminUserDetailPageSection2_5 viewModel={viewModel} />}
       {/* 되돌릴 수 없는 확인 — KTM 규약대로 AlertDialog(role=alertdialog). scrim 클릭 닫기는
-          base-ui가 alertdialog에서 강제로 끈다. 조건부 마운트라 닫힘 중 제목/라벨이 비지 않는다. */}
+          공통 Radix가 alertdialog에서 강제로 끈다. 조건부 마운트라 닫힘 중 제목/라벨이 비지 않는다. */}
       {pendingDestructive != null && <AdminUserDetailPageSection2_6 viewModel={viewModel} />}
     </AdminPage>
   );

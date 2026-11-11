@@ -6,7 +6,7 @@ import {
   AlertDialogTitle,
 } from '@kor-travel/ui/alert-dialog';
 import { buttonClassName } from '@/components/ui/button-styles';
-import { useDialogFocus } from '@/lib/dialogFocus';
+import { useBusyDialogFocus, useDialogFocus } from '@/lib/dialogFocus';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useId, useRef, type MouseEvent, type ReactNode, type RefObject } from 'react';
 
@@ -61,6 +61,7 @@ export function ConfirmDialog({
     cancelRef,
     returnFocusRef,
   );
+  useBusyDialogFocus(contentRef, open, busy);
   const isDanger = tone === 'danger';
   return (
     <AlertDialog
@@ -85,6 +86,9 @@ export function ConfirmDialog({
         overlayProps={{
           'data-testid': testId + '-backdrop',
           className: 'fixed inset-0 z-modal bg-scrim/50',
+          onPointerDown: (event) => {
+            if (busy) event.preventDefault();
+          },
           // AlertDialog은 outside dismiss를 막는다. 기존 scrim 클릭은 명시적 취소 의도로 연결한다.
           onClick: (event: MouseEvent<HTMLDivElement>) => {
             if (!busy && event.target === event.currentTarget) onCancel();

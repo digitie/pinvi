@@ -38,7 +38,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-// T-356: 상세 모달을 사용자 표면 `components/ui/Dialog`(useModalDialog)에서 admin base-ui
+// T-356: 상세 모달을 사용자 표면 `components/ui/Dialog`(이전 전용 훅)에서 admin 공통 Radix
 // `Dialog`로 옮겼다. admin 화면에서는 두 모달 스택을 섞지 않는다. 본문의 `Button`(앱 공용)은
 // 이번 작업 범위가 아니라 그대로 두고, 다이얼로그 닫기 버튼만 admin `Button`을 별칭으로 쓴다.
 import { Button as AdminButton } from '@/components/admin/ui/button';

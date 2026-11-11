@@ -23,7 +23,7 @@ import Link from 'next/link';
 import { redirect, useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 // KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 이 페이지의 세 모달이 손으로
-// 들고 있던 scrim/`role="dialog"`/`aria-modal`을 base-ui가 대신한다.
+// 들고 있던 scrim/`role="dialog"`/`aria-modal`을 공통 Radix가 대신한다.
 import {
   Dialog,
   DialogContent,

@@ -48,9 +48,9 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-// T-356: 검토 모달을 사용자 표면 `components/ui/Dialog`/`ConfirmDialog`(useModalDialog)에서
-// admin base-ui 프리미티브로 옮겼다. 되돌릴 수 없는 **거절 확정**은 KTM 규약대로
-// `AlertDialog`다(scrim 클릭으로는 닫히지 않는다 — base-ui가 alertdialog에서 강제로 끈다).
+// T-356: 검토 모달을 사용자 표면 `components/ui/Dialog`/`ConfirmDialog`(이전 전용 훅)에서
+// admin 공통 Radix 프리미티브로 옮겼다. 되돌릴 수 없는 **거절 확정**은 KTM 규약대로
+// `AlertDialog`다(scrim 클릭으로는 닫히지 않는다 — 공통 Radix가 alertdialog에서 강제로 끈다).
 // 본문의 `Button`(앱 공용)은 이번 범위가 아니라 그대로 두고, 닫기 버튼만 admin `Button` 별칭.
 import {
   AlertDialog,
@@ -912,9 +912,9 @@ function ReviewDialogView0({ viewModel }: { viewModel: ReviewDialogView0Model })
       </DialogContent>
       <ReviewDialogSection0_1 viewModel={viewModel} />
       <ReviewDialogSection0_2 viewModel={viewModel} />
-      {/* 되돌릴 수 없는 거절 확정 — KTM 규약대로 AlertDialog(role=alertdialog). base-ui가
+      {/* 되돌릴 수 없는 거절 확정 — KTM 규약대로 AlertDialog(role=alertdialog). 공통 Radix가
           alertdialog에서 scrim 클릭 닫기를 강제로 끄므로, 오조작으로 확인창이 사라지지 않는다.
-          검토 Dialog 안에 중첩해 두어 base-ui가 두 모달의 스택 관계를 알게 한다. */}
+          검토 Dialog 안에 중첩해 두어 공통 Radix가 두 모달의 스택 관계를 알게 한다. */}
       {rejectConfirmOpen && <ReviewDialogSection0_3 viewModel={viewModel} />}
     </Dialog>
   );

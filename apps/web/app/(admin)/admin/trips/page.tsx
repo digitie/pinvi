@@ -18,7 +18,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type FormEvent } from 'react';
 // KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 손수 만든
-// `role="dialog"` + scrim + `aria-modal`을 base-ui가 대신한다.
+// `role="dialog"` + scrim + `aria-modal`을 공통 Radix가 대신한다.
 import {
   Dialog,
   DialogContent,
@@ -204,7 +204,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
 
   return (
     // `open`은 상수 true — 이 컴포넌트를 조건부로 마운트하는 호출부(`showCreateDialog`)가
-    // 계속 열림/닫힘 상태를 **소유**한다. 다만 base-ui는 소유자와 별개로 Escape·바깥클릭이라는
+    // 계속 열림/닫힘 상태를 **소유**한다. 다만 공통 Radix는 소유자와 별개로 Escape·바깥클릭이라는
     // **닫기 경로**를 추가하므로 폼 입력 보호는 `hasUnsavedInput`이 담당한다(아래).
     <Dialog
       // 미저장 폼 입력 보호 — Escape/바깥클릭 닫기를 막는다(전환 전 수제 모달에는

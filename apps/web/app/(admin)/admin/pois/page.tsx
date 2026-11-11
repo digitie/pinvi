@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type FormEvent } from 'react';
 // KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 손수 만든
-// `role="dialog"` + scrim + `aria-modal`을 base-ui가 대신한다.
+// `role="dialog"` + scrim + `aria-modal`을 공통 Radix가 대신한다.
 import {
   Dialog,
   DialogContent,
@@ -301,7 +301,7 @@ function AdminPoiCreateDialogView0({ viewModel }: { viewModel: AdminPoiCreateDia
   } = viewModel;
   return (
     // `open`은 상수 true다 — 이 컴포넌트 자체가 호출부에서 조건부 마운트되므로 열림/닫힘
-    // 상태의 **소유자**는 그대로 `showCreateDialog`다. 다만 base-ui는 소유자와 별개로
+    // 상태의 **소유자**는 그대로 `showCreateDialog`다. 다만 공통 Radix는 소유자와 별개로
     // Escape·바깥클릭이라는 **닫기 경로**를 추가하므로, 폼 입력을 지키려면 `hasUnsavedInput`으로
     // 그 둘을 꺼야 한다(아래).
     <Dialog

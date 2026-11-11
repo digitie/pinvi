@@ -38,7 +38,7 @@ import Link from 'next/link';
 import { redirect, useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 // KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 손수 만든 scrim +
-// `role="dialog"`/`aria-modal`을 base-ui가 대신한다(Escape·focus trap·scroll lock 포함).
+// `role="dialog"`/`aria-modal`을 공통 Radix가 대신한다(Escape·focus trap·scroll lock 포함).
 import { DetailList } from '@/components/admin/detail-list';
 import { JsonViewer } from '@/components/admin/json-viewer';
 import {

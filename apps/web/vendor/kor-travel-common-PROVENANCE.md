@@ -1,30 +1,29 @@
-# Common vendored artifacts
+# 공통 산출물 출처 및 무결성
 
-- UI: `kor-travel-ui-0.1.0-dev.9.tgz`, source `kor-travel-common@aa232ad5f255233184de80eceaab2e9b6ccb00c9`, SHA256 `b738d8824e36eb6e58d8cc6b78af7dc31233b6763248d634286044def795b403`.
-  dev.9 제품 커밋은 `f0b60bb`(Common PR #47)이고, 현재 main `c289b4624c8640eb918cc915803e72ae754e58fb`의 `packages/`·루트 `package.json`/`package-lock.json`/`.nvmrc`는 aa232ad와 같다.
-- Tokens: `kor-travel-tokens-0.1.0.tgz`, source `kor-travel-common@426de4fbad35282bb558712d922c06268e9aba62`, SHA256 `554ae3f6a18cbf453130b29f8a2d737ddb880101b55e14535cf8d63174b47505`. 이후 tokens 소스 변경이 없어 그대로 쓴다.
-- Python: API(`[http]`)·ETL(`[dagster]`) 모두 exact `c289b4624c8640eb918cc915803e72ae754e58fb` Git dependency, 각 uv.lock 고정.
-- License: GPL-3.0-or-later. Copyright 2026 Youn-sok Choi (digitie).
-- Original Dagster model/UI: kor-travel-weather GPL-3.0-or-later. Tarball LICENSE/NOTICE/THIRD_PARTY_NOTICES를 보존한다.
-- dev.7+ 지도 작업면(map-controls)은 `digitie/kor-travel-map@974e2d025`의 Feature 지도 레시피(GPL-3.0-or-later)를 재구성했고 Base UI(MIT)·Lucide(ISC)를
-  런타임 의존으로 쓴다(tarball THIRD_PARTY_NOTICES). Common T-217(dev.9)은 Common 쪽에서 아직 IN_PROGRESS이며 Common의 소비자 수용 기록은 Transport만 다룬다.
-- dev.7부터 UI는 지도 작업면(`@kor-travel/ui/map-controls`)용 runtime dependency `lucide-react` 1.41.0과 peer `@base-ui/react` ^1.8.0을 선언한다. PinVi는 `@base-ui/react` 1.9.0을 이미 쓰고 map-controls는 import하지 않는다. lucide는 루트 1.61.0과 달라 `node_modules/@kor-travel/ui/node_modules` 아래에 따로 설치된다.
+현재 프런트엔드 후보는 integration-8-review이며 정식 registry 릴리스가 아니다. 부모가 만든 단일 tgz를 그대로 전달받아 사용한다. 같은 후보 버전의 bytes 변경은 승인된 통합 검증에 한하며 소비자가 자체 pack을 만들지 않는다.
 
-## 재현과 무결성
+| 패키지             | 버전                   | 라이선스(실제 package.json) |
+| ------------------ | ---------------------- | --------------------------- |
+| @kor-travel/tokens | 0.1.1                  | GPL-3.0-or-later            |
+| @kor-travel/ui     | 0.2.0                  | GPL-3.0-or-later            |
+| lightningcss       | 1.33.0+nativecss.fix.4 | MPL-2.0                     |
+| vworld-map-core    | 1.0.1                  | GPL-3.0-only                |
+| vworld-map-rn      | 1.0.1                  | GPL-3.0-only                |
+| vworld-map-web     | 1.0.3                  | GPL-3.0-only                |
 
-Common `docs.yml`의 pack 명령과 같다(그 CI는 `.nvmrc` Node 22.23.1, 아래 재현은 Node 22.22.2). source checkout에서 npm 11.19.1로 `npm ci --no-audit --no-fund` 뒤
-`npm pack --workspace packages/ui --pack-destination <dir>`를 실행하고, 산출물 SHA256이 위 값(Common T-217 기록값)과 같을 때만 vendor한다.
-2026-10-27 N150(Node 22.22.2)에서 aa232ad의 산출물은 27파일·35441 bytes·위 SHA256으로, 대조군 `e28559803c1ec1134ef7ba7736b9acf4cadb9a32`의 dev.6은
-아래 기록 SHA256으로 재현됐다. 새 버전은 **새 파일명**으로만 들여오고 `apps/web/package.json` specifier를 바꾼 뒤 npm 12.0.1의
-`npm install --package-lock-only`로 lock을 갱신한다(같은 파일명의 내용만 바꾸면 lock `integrity`가 갱신되지 않는다 — `docs/agent-failure-patterns.md` 패턴 F).
-lock `integrity`는 vendor 파일의 SHA-512이며 실제 bytes 대조는 `npm ci`가 한다(`scripts/check-lockfile-integrity.mjs`는 `file:` 항목을
-건너뛰고 registry 항목의 integrity 보유율만 본다). 갱신 직후 `sha512sum`/base64로 파일 해시와 lock 값을 직접 대조한다(패턴 F).
-새 파일명 방식은 기존 lock 항목의 specifier가 바뀌어 재해시되므로 lock을 통째로 다시 만들 필요가 없다 — 같은 파일명의 내용만 바꿀 때만 패턴 F의 전체 재생성을 따른다.
+## 소스 정본
 
-## 이전 산출물
+- common: 670a753bc17f956f71bdc28385d6241a6e4ee017
+- maplibre-vworld-react: 9a7a348b02d61969b394c681b024d5851eef836b
+- lightningcss: 748651cbd845971e65c411166ddee101745dab21
+- serde-content: 18e53fcf6f8ace093a292891b34fa3411192617d
 
-작업 트리에는 `package.json`이 참조하는 파일만 둔다. 아래 tarball은 PR #575(`07cfef22`)부터 dev.9 채택 직전까지의 Git 이력에 bytes 그대로 남는다.
+정확한 SHA512·파일명·상대 file 참조는 [앱 원장](../common-artifacts.json), root lock과 각 workspace 원장이 함께 고정한다. 현재 CSSfix4 파일은 15,376,394 bytes다. root의 $lightningcss/$vworld-map-core override와 각 앱 직접 file 의존성이 같은 물리 vendor 파일을 사용한다. LICENSE/NOTICE/소스 고지는 전달 archive 그대로 보존한다.
 
-- dev.4: SHA256 `7504b77aa451d238fdaa1a6a8f2ec43e2f0cf6ed611341a3b37a688bc9070dda`. 새 버전으로 upstream dev.3 frozen bytes를 바꾸지 않았다. 무태그 cap은 null=미확인이다.
-- dev.5: source `fa8179e9c495987019494bdf28d15059f6e0aeb0`, SHA256 `bb8b0441276b208e01be55df4d03fc72dfe44226b3a7f49615bac61b48ebbbb0`. 모바일 표의 최소 너비와 내부 스크롤을 적용했다.
-- dev.6: source `e28559803c1ec1134ef7ba7736b9acf4cadb9a32`, SHA256 `e4945d01d9eb89ed505a95b551899fd0ecf41be66c9ee6b76246701350447e6d`. 공통 기본 구성 너비 회귀 수정.
+## 갱신과 검증
+
+새 후보를 받을 때 부모 원장의 SHA512를 검증하여 동일 파일을 복사한다. UI/tokens는 apps/web에서 npm12.0.1의 명시적 file install로 lock과 실제 modules를 함께 갱신하고, apps/mobile의 공유 tokens file 경로도 명시적으로 재설치한다. lock만 편집하거나 integrity 값을 수동으로 바꾸지 않는다. CSS/core override 대상을 갱신할 때는 root의 apps/web/vendor 상대 경로에서 명시적으로 설치해야 workspace 재해석 ENOENT를 피한다.
+
+설치 뒤 common guard·최신 외부 canonical guard와 실제 archive 전체 파일 비교를 수행한다. 기존 후보와 runtime/CSS/metadata가 같다는 파일별 증명이 있을 때 checker만의 변경으로 전체 앱 build/export를 재반복하지 않는다. 실행 증거와 한계는 [통합 보고서](../../../docs/reports/common-unification-20261111.md)에 기록한다.
+
+이전 dev.9/tokens0.1.0 및 Base UI 후보의 파일·해시는 Git 이력에 보존되어 있다. 현재 작업 트리에는 manifest가 사용하는 tgz만 둔다.

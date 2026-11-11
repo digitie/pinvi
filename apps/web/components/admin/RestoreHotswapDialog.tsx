@@ -56,9 +56,9 @@ function phaseIcon(phase: AdminBackupRestorePhase) {
 }
 
 /* Hallmark · component: dialog(admin, destructive) · design-system: design.md(KTM admin)
- * admin 프리미티브(`components/admin/ui/dialog`, base-ui)로 뜬다 — T-356에서 사용자 표면
+ * admin 프리미티브(`components/admin/ui/dialog`, 공통 Radix)로 뜬다 — T-356에서 사용자 표면
  * 공개 디자인 셸에서 관리자 어댑터로 옮겼다. 포털·배경 inert·Tab 트랩·Escape·포커스
- * 복원은 base-ui가 담당한다.
+ * 복원은 공통 Radix가 담당한다.
  *
  * 파괴적 흐름이므로 `restoring` 동안 닫기 경로는 잠긴 채 유지한다: Escape/scrim은
  * `onOpenChange` → `closeIfIdle`이 삼키고, 헤더 ×와 푸터 `닫기`는 native `disabled`다

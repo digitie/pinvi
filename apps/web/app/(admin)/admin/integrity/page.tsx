@@ -18,7 +18,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Ban, CheckCircle2, ChevronRight, RefreshCw, RotateCcw, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 // KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356). 이 페이지의 손수 만든
-// `role="dialog"` + scrim + Escape/Tab 트랩은 base-ui가 대신한다.
+// `role="dialog"` + scrim + Escape/Tab 트랩은 공통 Radix가 대신한다.
 import {
   Dialog,
   DialogContent,
@@ -148,7 +148,7 @@ function useAdminIntegrityPageModel() {
     }
   }, [selectedIssue]);
 
-  // Escape 닫기 + Tab focus-trap은 base-ui `Dialog`가 담당한다(T-356) — 손수 만든
+  // Escape 닫기 + Tab focus-trap은 공통 Radix `Dialog`가 담당한다(T-356) — 손수 만든
   // `handleDialogKeyDown`은 걷어냈다. 두 트랩을 겹치면 서로의 preventDefault를 밟는다.
 
   const issueParams = useMemo<AdminIntegrityIssueListParams>(

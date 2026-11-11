@@ -32,6 +32,29 @@ function backdrop(prefix = '') {
 }
 
 describe('공통 Radix 공개 Dialog 행동 계약', () => {
+  it('저장 시작으로 포커스한 버튼이 비활성화되면 busy 패널로 옮긴다', async () => {
+    const onClose = vi.fn();
+    function BusyForm() {
+      const [busy, setBusy] = useState(false);
+      return (
+        <Dialog open title="저장" onClose={onClose} busy={busy} onCancelBusy={vi.fn()}>
+          <button disabled={busy} onClick={() => setBusy(true)}>
+            저장 시작
+          </button>
+        </Dialog>
+      );
+    }
+    const user = userEvent.setup();
+    render(<BusyForm />);
+    const save = screen.getByRole('button', { name: '저장 시작' });
+    await user.click(save);
+    expect(save).toBeDisabled();
+    expect(screen.getByRole('dialog')).toHaveFocus();
+    await user.click(screen.getByTestId('dialog-backdrop'));
+    expect(screen.getByRole('dialog')).toHaveFocus();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('숨겨진 대상은 focus 복원 대상으로 취급하지 않는다', () => {
     const target = document.createElement('button');
     document.body.append(target);
@@ -243,12 +266,14 @@ describe('공개 Dialog 도메인 정책', () => {
         <Harness idPrefix="b-" onClose={b} />
       </>,
     );
+    expect(screen.getByTestId('b-panel')).toHaveFocus();
     rerender(
       <>
         <Harness idPrefix="a-" onClose={a} busy />
         <Harness idPrefix="b-" onClose={b} />
       </>,
     );
+    expect(screen.getByTestId('b-panel')).toHaveFocus();
     await userEvent.setup().keyboard('{Escape}');
     expect(b).toHaveBeenCalledTimes(1);
     expect(a).not.toHaveBeenCalled();

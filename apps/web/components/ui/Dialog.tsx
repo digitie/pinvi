@@ -8,7 +8,7 @@ import {
 } from '@kor-travel/ui/dialog';
 import { useId, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { X } from 'lucide-react';
-import { useDialogFocus } from '@/lib/dialogFocus';
+import { useBusyDialogFocus, useDialogFocus } from '@/lib/dialogFocus';
 
 export type DialogSize = 'sm' | 'md' | 'lg';
 /** `center`=데스크톱 중앙, `sheet`=모바일 하단 시트 + sm↑ 중앙(지도 상세 등). */
@@ -84,6 +84,7 @@ export function Dialog({
     initialFocusRef,
     returnFocusRef,
   );
+  useBusyDialogFocus(contentRef, open, busy);
   const closeWhileBusy = busy ? onCancelBusy : undefined;
   const sheet = variant === 'sheet';
   return (
@@ -113,6 +114,9 @@ export function Dialog({
         overlayProps={{
           'data-testid': testId + '-backdrop',
           className: 'fixed inset-0 z-modal bg-scrim/50',
+          onPointerDown: (event) => {
+            if (busy) event.preventDefault();
+          },
           onClick: (event: MouseEvent<HTMLDivElement>) => {
             if (!busy && event.target === event.currentTarget) onClose();
           },

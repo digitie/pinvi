@@ -1,7 +1,29 @@
 'use client';
 
-import { useRef, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { isRestorableFocusTarget } from './focusTarget';
+
+/** busy로 비활성화된 제출 버튼 대신 패널을 선택한다. 전역 focus trap은 Radix가 소유한다. */
+export function useBusyDialogFocus(
+  contentRef: RefObject<HTMLElement | null>,
+  open: boolean,
+  busy: boolean,
+) {
+  useEffect(() => {
+    if (!open || !busy) return;
+    const panel = contentRef.current;
+    const active = document.activeElement;
+    // 저장 버튼의 disabled 전환으로 포커스가 사라질 때만 유효한 도메인 대상을 유지한다.
+    // 다른(중첩) 모달의 유효한 포커스는 공통 Radix가 소유한다.
+    if (
+      panel &&
+      (active === document.body ||
+        (active instanceof HTMLElement && panel.contains(active) && active.matches(':disabled')))
+    ) {
+      panel.focus({ preventScroll: true });
+    }
+  }, [busy, contentRef, open]);
+}
 
 /** Radix 생명주기에 초기 대상/비활성 트리거 폴백만 연결한다. trap/stack/격리/scroll은 소유하지 않는다. */
 export function useDialogFocus(

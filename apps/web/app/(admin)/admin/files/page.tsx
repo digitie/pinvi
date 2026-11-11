@@ -10,9 +10,9 @@ import { useEffect, useRef, useState } from 'react';
 // T-356: 필터 툴바에 이어 삭제 다이얼로그까지 admin 프리미티브로 전환했다. `AdminButton`
 // 별칭은 기존 호출부를 그대로 두기 위해 유지한다(앱 공용 `Button` import는 제거됨).
 import { Button as AdminButton } from '@/components/admin/ui/button';
-// 사용자 표면 `components/ui/Dialog`(useModalDialog) → admin base-ui `Dialog`.
+// 사용자 표면 `components/ui/Dialog`(이전 전용 훅) → admin 공통 Radix `Dialog`.
 // AlertDialog가 아니라 Dialog인 이유: 이 다이얼로그는 필수 사유를 **입력받는 폼**이고,
-// base-ui AlertDialog는 scrim 클릭 닫기를 강제로 끈다 — 전환 전 동작(Escape·scrim 닫기)을
+// 공통 Radix AlertDialog는 scrim 클릭 닫기를 강제로 끈다 — 전환 전 동작(Escape·scrim 닫기)을
 // 유지하려면 Dialog여야 한다.
 import {
   Dialog,

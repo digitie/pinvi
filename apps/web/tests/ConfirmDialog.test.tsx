@@ -1,4 +1,5 @@
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -94,6 +95,30 @@ describe('ConfirmDialog', () => {
 });
 
 describe('공통 AlertDialog 취소 정책', () => {
+  it('확인 요청 중 버튼이 disabled돼도 포커스와 취소 잠금은 패널 안에 남는다', async () => {
+    const cancel = vi.fn();
+    function PendingConfirm() {
+      const [busy, setBusy] = useState(false);
+      return (
+        <ConfirmDialog
+          open
+          title="삭제"
+          busy={busy}
+          onCancel={cancel}
+          onConfirm={() => setBusy(true)}
+        />
+      );
+    }
+    const user = userEvent.setup();
+    render(<PendingConfirm />);
+    await user.click(screen.getByTestId('confirm-dialog-confirm'));
+    expect(screen.getByTestId('confirm-dialog')).toHaveFocus();
+    await user.click(screen.getByTestId('confirm-dialog-backdrop'));
+    await user.keyboard('{Escape}');
+    expect(screen.getByTestId('confirm-dialog')).toHaveFocus();
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
   it('초기 포커스는 취소 버튼에 있고 Escape는 취소만 호출한다', async () => {
     const cancel = vi.fn(),
       confirm = vi.fn();
