@@ -6,7 +6,7 @@
 
 ## 2026-11-11 — PinVi Admin 공통 UI·map 셸 정렬
 
-최신 PinVi는 common LoginForm/AppMenu dev.9를 이미 소비한다. 관리자 의미 색상 매핑 누락을 보완하고 map 기준 rail·밀도·접힘·사용자/로그아웃 footer를 정리했다. 메뉴30개·권한·document navigation을 보존한다. 검증과 범위는 [실행 계획](execplan/pinvi-admin-common-map-shell.md)을 따른다. 원 trunk·기존 dirty worktree는 수정하지 않았다.
+최신 PinVi는 common LoginForm/AppMenu dev.9를 이미 소비한다. 관리자 의미 색상 매핑 누락을 보완하고 map 기준 rail·밀도·접힘·사용자/로그아웃 footer를 정리했다. 메뉴30개·권한·document navigation을 보존한다. 검증과 범위는 [실행 계획](execplan/pinvi-admin-common-map-shell.md)을 따른다. 원 trunk·기존 dirty worktree는 수정하지 않았다. 모바일 로그아웃44px finding을 수정하고 두 독립 재리뷰·Linux 검사·N150 최종 시나리오(키보드/반응형/로그아웃 오류 재시도)를 통과했다. 동기화 권한 실패와 테스트의 Next alert 충돌은 실행 계획에 남겼다.
 
 ## 2026-11-10 — Map ADR-121 user·admin 스펙 재vendor(d8253e85)
 

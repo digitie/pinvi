@@ -3,9 +3,9 @@
 PR claude/621-dependency-resilience: Map 표면별 bulkhead·geo/weather/Telegram 상한 settings화, 외부 호출 전 읽기 트랜잭션 해제(위치 동의·내 POI·require_role), pool overflow 기본 5, edge HTTP/2 확인(h2).
 다음: 운영 배포 뒤 `pinvi_api_db_pool_wait_seconds`·`pinvi_outbound_bulkhead_rejections_total` 관찰, worker 증설 판단.
 
-## 2026-11-11 — Admin 공통 UI 정렬 검증 중
+## 2026-11-11 — Admin 공통 UI 정렬·N150 검증 완료
 
-사용자 요청에 따라 PinVi 색상을 유지하면서 map 기준 관리자 셸을 정리한다. 공통 로그인/메뉴 패키지는 기존 vendored 의존을 유지한다. [실행 계획](execplan/pinvi-admin-common-map-shell.md)에 검증·스크린샷·미실행 gate를 기록한다. 다른 도메인 후속 작업을 자동 진행하지 않는다.
+사용자 요청에 따라 PinVi 색상을 유지하면서 map 기준 관리자 셸을 정리한다. 공통 로그인/메뉴 패키지는 기존 vendored 의존을 유지한다. [실행 계획](execplan/pinvi-admin-common-map-shell.md)에 검증·스크린샷·미실행 gate를 기록한다. Linux typecheck/lint/build·관련13개 단위·N150 최종 브라우저 검증·두 독립 리뷰를 완료했다. 다른 도메인 후속 작업을 자동 진행하지 않는다.
 
 ## #702·#699·#700·#686·WX-004 묶음 (2026-11-07)
 

@@ -87,4 +87,4 @@
 
 ## 사용자 요청: PinVi Admin 공통 UI 정렬 (2026-11-11)
 
-- [/] common LoginForm/AppMenu 적용 확인·PinVi 토큰 매핑·map rail 정렬, 메뉴/권한 회귀 및 N150 시각 검증. [실행 계획](execplan/pinvi-admin-common-map-shell.md).
+- [x] common LoginForm/AppMenu 적용 확인·PinVi 토큰 매핑·map rail 정렬, 메뉴/권한 회귀 및 N150 시각 검증. [실행 계획](execplan/pinvi-admin-common-map-shell.md).

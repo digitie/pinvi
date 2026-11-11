@@ -1,0 +1,12 @@
+{
+  "candidate": "8ee56763b66f261f18e1c2ebcfbed4cf605bbf7f",
+  "n150SourceMatch": true,
+  "sha256": {
+    "apps/web/app/(admin)/admin/layout.tsx": "5a8bbe07e1af475a9b94fbfd115ff420bae7efd1343d69501d68bd5115bad579",
+    "apps/web/app/globals.css": "f700abc5b62ef56f2926dd8570cc6e01b2bd57e27135fc4bd7d64dded8036054",
+    "apps/web/e2e/admin-common-shell.e2e.ts": "54b28bb0885e4214c030f166ce60cd76c5f2b91f051dccbe43f0da27608b9566",
+    "apps/web/tests/adminCommonShell.test.tsx": "b8f94f71a9b8e0b29be6935469b02f8c68f373a838f7bbb963377f100855acd0"
+  },
+  "browser": "PASS",
+  "unitTests": 13
+}
