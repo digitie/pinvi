@@ -37,6 +37,7 @@ import {
   holidayLabel,
   holidaysByDate,
 } from '@/lib/tripDateLabels';
+import { withCreatedPois } from '@/lib/tripViewCreatedPoi';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import {
   ApiError,
@@ -54,6 +55,7 @@ import { appendRank, paletteHex, reorderMoves, tripDaysToMapPoints } from '@pinv
 import type {
   FeatureSummary,
   PlaceSearchResult,
+  PoiResponse,
   PoiUpdate,
   TripDayUpdate,
   TripStatus,
@@ -494,6 +496,8 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
   const [busy, setBusy] = useState(false);
   const realtimeClientRef = useRef<TripRealtimeClient | null>(null);
   const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // POST로 만들었지만 아직 그 뒤에 출발한 재조회로 확정되지 않은 POI(#733).
+  const pendingCreatedPoisRef = useRef(new Map<string, PoiResponse>());
   // Track the latest viewing day so a freshly (re)created realtime client can re-apply it
   // without adding selectedDayIndex to the client-creation effect deps (T-289).
   // 렌더 중 ref.current를 쓰지 않는다(react-hooks/refs) — 대신 effect에서 동기화한다. 이 ref는
@@ -522,7 +526,8 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
       createLatestReload(async (): Promise<TripView | null> => {
         try {
           const res = await tripApi(apiClient).get(tripId);
-          setView(res);
+          // 이 조회가 방금 만든 POI보다 먼저 출발했으면 그 행이 빠져 있다 — 확정될 때까지 끼워 둔다(#733).
+          setView(withCreatedPois(res, pendingCreatedPoisRef.current.values()));
           setError(null);
           return res;
         } catch (err) {
@@ -793,6 +798,25 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     [reload],
   );
 
+  // 장소 추가: POST 응답으로 행을 곧바로 그리고, 뒤따르는 재조회(weather 보강 포함)가 서버 값으로
+  // 덮어쓴다(#733). 그 재조회가 끝날 때까지 pending에 두어, 먼저 출발한 진행 중 조회의 결과가 행을
+  // 지우지 않게 한다.
+  const runMutationShowingCreatedPoi = (
+    create: () => Promise<PoiResponse>,
+    options?: MutationOptions,
+  ): Promise<boolean> => {
+    let createdId: string | null = null;
+    return runMutation(async () => {
+      const created = await create();
+      createdId = created.attachment_id;
+      pendingCreatedPoisRef.current.set(created.attachment_id, created);
+      setView((current) => (current ? withCreatedPois(current, [created]) : current));
+      return created;
+    }, options).finally(() => {
+      if (createdId) pendingCreatedPoisRef.current.delete(createdId);
+    });
+  };
+
   // 공용 POI 생성 — feature marker(handleAddFeature)와 검색 결과(handleAddPlace)가 함께 쓴다.
   const addPoiToSelectedDay = (input: {
     feature_id: string | null;
@@ -812,7 +836,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     if (selectedDay == null) return Promise.resolve(false);
     setAddNotice(null);
     const last = selectedDay.pois[selectedDay.pois.length - 1]?.sort_order ?? null;
-    return runMutation(() =>
+    return runMutationShowingCreatedPoi(() =>
       poiApi(apiClient).create(tripId, {
         day_index: selectedDay.day_index,
         sort_order: appendRank(last),
@@ -925,7 +949,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     }
     setManualPoiError(null);
     const last = selectedDay.pois[selectedDay.pois.length - 1]?.sort_order ?? null;
-    return runMutation(
+    return runMutationShowingCreatedPoi(
       async () => {
         const created = await poiApi(apiClient).create(tripId, {
           day_index: selectedDay.day_index,
@@ -939,6 +963,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
         });
         setSelectedDayIndex(selectedDay.day_index);
         setSelectedPoiId(created.attachment_id);
+        return created;
       },
       // 이 다이얼로그가 자기 오류를 소유한다(전역 배너는 scrim 뒤라 읽히지 않는다).
       { captureError: setManualPoiError },
