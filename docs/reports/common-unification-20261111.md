@@ -37,7 +37,7 @@ Pinvi 관리자 로그인은 common LoginForm을 사용한다. 모바일 로그�
 | 웹 unit             | 493PASS/1FAIL(494): c5 공통 LoginForm의 change 이벤트 없는 DOM 자동완성. 부모 현재 소스는 수정됐으며 최종 pack 수신 대기 |
 | shared unit         | domain138/schema24 모두PASS                                                                                              |
 | 웹 lint·타입        | ESLint 오류0/기존 인증 hard-navigation 경고1; TypeScript PASS                                                            |
-| 웹 production build | 이전 webpack 컴파일PASS 뒤 타입FAIL. 타입 원인 제거 후 전체 build는 N150 격리 재검증 예정                                |
+| 웹 production build | ff80323d N150 clean npm ci 뒤 production buildPASS; 전체 E2E 진행 중                                                     |
 | 웹 Doctor           | full/warning/no-cache 482files, 오류0/경고0                                                                              |
 | 모바일 Expo58       | 타입/lint/스타일 계약PASS; Doctor45files 오류0/경고0                                                                     |
 | 모바일 bundle       | 실제 fix.3 + 지도 RN1.0.1로 Android/iOS Hermes exportPASS; 양쪽 Pretendard OTF4종 포함                                   |
@@ -56,3 +56,11 @@ Grafana iframe은 브라우저의 parent origin과 target origin을 비교한다
 React Doctor0.9.22의 js-set-map-lookups는 string.includes도 배열 검색으로 오판한다. readFileSync(abs, 'utf8')는 string이며 live seed matcher의 row도 DOM text인 string이다. substring 검색을 Set의 원소 동일성 비교로 바꾸면 검증 의미가 달라지므로 build-index.mjs 한 줄과 global-setup.ts 두 줄에 근거 있는 oxlint-disable-next-line만 사용한다. full scope와 blocking warning, 앱 소스 전체 검사, 나머지 규칙은 유지한다. 최종 검증에는 inline disable을 중화한 원시 진단도 별도로 기록해 이 세 줄을 숨기지 않는다.
 
 빌드가 설치된 maplibre-gl의 worker/shared 두 minified 산출물을 public/maplibre에 복사한다. 이 파일은 앱 소스가 아니므로 Doctor의 ignore.files에 정확한 두 경로만 지정한다. predoctor는 설치 원본으로 다시 복사하고 Buffer.equals로 원본 바이트 일치를 검사하며 check:maplibre-worker로 별도 검사할 수 있다. 앱 소스 범위나 규칙은 제외하지 않는다. 패키지 버전·다운로드 무결성은 lock/의존성 guard가 검사한다.
+
+## ESLint10 전이 의존성 정리
+
+초기 checkpoint의 웹 CLI는 ESLint10이었지만 eslint-config-next16.4.6의 eslint-plugin-react/import/jsx-a11y peer가9까지만 허용하여 npm이 root에 ESLint9.39.5를 별도로 설치했다. force/legacy-peer-deps로 통과시키지 않고 eslint-config-next를 제거했다. Next public plugin16.4.6·typescript-eslint8.72.2·React Hooks7.1.1, React5.30.1·import-x4.18.1·jsx-a11y-x0.2.0의 실제 registry peer를 확인해 기존 Next/TS/Hooks·React key/children/DOM·접근성 검사와 자체 테마/모달 경계 가드를 연결했다. root direct ESLint10.14.0 및 $eslint override로 전이9 유입을 차단한다. npm ls --all과 웹/모바일 lint가 강제 peer 옵션 없이 통과했으며 lock의 ESLint 설치 노드는10.14.0 하나다.
+
+참고: [Next public plugin 직접 구성](https://nextjs.org/docs/app/api-reference/config/eslint), [ESLint10 이관](https://eslint.org/docs/latest/use/migrate-to-10.0.0), [React ESLint10 지원](https://eslint-react.xyz/docs/getting-started/typescript).
+
+N150 checkpoint E2E는 공식 Playwright1.65.0 이미지의 Node26.13.0에서 실행 중이다(앱 engines 지원 범위). 로컬 WSL 타입·단위·Expo export는 Node22.22.2이다. Node22.23.1 정본 Docker 이미지 빌드/CI를 이 검사로 대체하지 않는다. 현재 긴 공통 Dialog가 viewport 밖으로 헤더 닫기를 밀어내는 회귀2건을 포착하여 부모에 공통 높이/스크롤 수정을 요청했다. 전체 최종 결과는 아직 확정하지 않는다.

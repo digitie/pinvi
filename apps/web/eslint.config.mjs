@@ -1,5 +1,56 @@
-import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
-import nextTypescript from "eslint-config-next/typescript";
+import nextPlugin from '@next/eslint-plugin-next';
+import tseslint from 'typescript-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
+import react from '@eslint-react/eslint-plugin';
+import jsxA11y from 'eslint-plugin-jsx-a11y-x';
+import importPlugin from 'eslint-plugin-import-x';
+import globals from 'globals';
+
+// eslint-config-next의 React/import/a11y 플러그인은 peer가 ESLint9까지라 전이9를
+// 설치한다. ESLint10 지원 public 플러그인으로 기존 Next·TS·Hooks·접근성 검사를 연결한다.
+const eslint10Base = [
+  {
+    files: ['**/*.{js,jsx,mjs,cjs,ts,tsx}'],
+    plugins: {
+      '@next/next': nextPlugin,
+      '@eslint-react': react,
+      'react-hooks': reactHooks,
+      'jsx-a11y': jsxA11y,
+      import: importPlugin,
+    },
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    rules: {
+      ...nextPlugin.configs['core-web-vitals'].rules,
+      ...reactHooks.configs.recommended.rules,
+      'import/no-anonymous-default-export': 'warn',
+      '@eslint-react/no-missing-component-display-name': 'error',
+      '@eslint-react/no-missing-key': 'error',
+      '@eslint-react/no-duplicate-key': 'error',
+      '@eslint-react/jsx-no-comment-textnodes': 'error',
+      '@eslint-react/jsx-no-children-prop': 'error',
+      '@eslint-react/dom-no-dangerously-set-innerhtml-with-children': 'error',
+      '@eslint-react/no-component-will-mount': 'error',
+      '@eslint-react/no-component-will-receive-props': 'error',
+      '@eslint-react/no-component-will-update': 'error',
+      '@eslint-react/no-direct-mutation-state': 'error',
+      '@eslint-react/dom-no-find-dom-node': 'error',
+      '@eslint-react/dom-no-render': 'error',
+      '@eslint-react/dom-no-hydrate': 'error',
+      '@eslint-react/dom-no-render-return-value': 'error',
+      'jsx-a11y/alt-text': ['warn', { elements: ['img'], img: ['Image'] }],
+      'jsx-a11y/aria-props': 'warn',
+      'jsx-a11y/aria-proptypes': 'warn',
+      'jsx-a11y/aria-unsupported-elements': 'warn',
+      'jsx-a11y/role-has-required-aria-props': 'warn',
+      'jsx-a11y/role-supports-aria-props': 'warn',
+    },
+  },
+  ...tseslint.configs.recommended.map((config) => ({ ...config, files: ['**/*.{ts,tsx}'] })),
+  { ignores: ['.next/**', 'out/**', 'build/**', 'next-env.d.ts'] },
+];
 
 /**
  * Hallmark 잠금 시스템(DESIGN.md) 재발 방지 가드 — T-316/T-317.
@@ -48,7 +99,7 @@ const KAKAO_IMPORT_GUARD = {
 /**
  * `lib/useModalDialog`에 **전이로 닿는** 사용자 표면 컴포넌트.
  *
- * admin이 이 중 하나를 import하면 base-ui와 `useModalDialog` focus trap이 한 화면에서
+ * admin이 이 중 하나를 import하면 common Radix와 `useModalDialog` focus trap이 한 화면에서
  * 겹친다. 개별 파일(`components/ui/Dialog`)만 막으면 우회된다 — `components/trips/ConflictDialog`가
  * 그 안에서 Dialog를 끌어오기 때문이다.
  *
@@ -79,132 +130,157 @@ const MODAL_STACK_MODULES = [
   'components/trips/TripMapView',
 ];
 
-const config = [...nextCoreWebVitals, ...nextTypescript, {
-  rules: {
-    'react/no-unescaped-entities': 'off',
-    // Pinvi `(lng, lat)` 좌표 순서 일관 — react-kakao 호환 잔존 코드 방지
-    'no-restricted-imports': ['error', { patterns: [KAKAO_IMPORT_GUARD] }],
-  }
-}, {
-  // 사용자 표면(공개·앱)만 — `(admin)`과 admin 컴포넌트는 밀도 규칙이 달라 제외한다.
-  files: ['app/**/*.tsx', 'components/**/*.tsx'],
-  ignores: ['app/(admin)/**', 'components/admin/**'],
-  rules: {
-    'no-restricted-syntax': [
-      'error',
-      // esquery 선택자 안의 `/`는 정규식 종료로 읽히므로 이스케이프한다.
-      ...HALLMARK_CLASS_GUARDS.map(({ pattern, message }) => ({
-        selector: `Literal[value=/${pattern.replace(/\//g, '\\/')}/]`,
-        message,
-      })),
-      ...HALLMARK_CLASS_GUARDS.map(({ pattern, message }) => ({
-        selector: `TemplateElement[value.raw=/${pattern.replace(/\//g, '\\/')}/]`,
-        message,
-      })),
+const config = [
+  ...eslint10Base,
+  {
+    rules: {
+      // Pinvi `(lng, lat)` 좌표 순서 일관 — react-kakao 호환 잔존 코드 방지
+      'no-restricted-imports': ['error', { patterns: [KAKAO_IMPORT_GUARD] }],
+    },
+  },
+  {
+    // 사용자 표면(공개·앱)만 — `(admin)`과 admin 컴포넌트는 밀도 규칙이 달라 제외한다.
+    files: ['app/**/*.tsx', 'components/**/*.tsx'],
+    ignores: ['app/(admin)/**', 'components/admin/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        // esquery 선택자 안의 `/`는 정규식 종료로 읽히므로 이스케이프한다.
+        ...HALLMARK_CLASS_GUARDS.map(({ pattern, message }) => ({
+          selector: `Literal[value=/${pattern.replace(/\//g, '\\/')}/]`,
+          message,
+        })),
+        ...HALLMARK_CLASS_GUARDS.map(({ pattern, message }) => ({
+          selector: `TemplateElement[value.raw=/${pattern.replace(/\//g, '\\/')}/]`,
+          message,
+        })),
+      ],
+    },
+  },
+  {
+    // ── 모달 스택 경계: admin 표면 (T-356) ──
+    //
+    // admin은 common Radix 기반 `components/admin/ui/{dialog,alert-dialog,popover,tooltip}`을 쓰고,
+    // 사용자 표면은 `lib/useModalDialog` + `components/ui/Dialog`를 쓴다. **한 화면에서 섞으면
+    // focus trap과 `inert` 스냅샷이 서로를 덮는다** — 두 구현이 각자 body 자식에 inert를 걸고
+    // 각자 복원 스냅샷을 들고 있어서, 나중에 닫히는 쪽이 상대의 복원을 무효화한다.
+    //
+    // DESIGN.md의 "모달 계약" 절이 이 분리를 명문화하지만 문서만으로는 약하다 — 이 저장소는
+    // T-356에서 "로컬 4개 게이트를 전부 통과한 회귀"를 두 번 겪었다. 규칙을 실행 가능한
+    // 가드로 옮긴다.
+    // `.ts`도 포함한다 — admin에는 `lib/admin/*.ts`, `components/admin/ui/form-field.ts`,
+    // route handler 등 `.ts` 파일이 여럿 있고, 거기서 헤더를 만들면 가드를 우회하게 된다.
+    files: [
+      'app/(admin)/**/*.{ts,tsx}',
+      'components/admin/**/*.{ts,tsx}',
+      // `lib/admin/**`도 admin 소유다 — 여기서 헬퍼를 만들면서 사용자 표면 모듈을 끌어오면
+      // 그 헬퍼를 쓰는 admin 컴포넌트로 모달 스택이 전이된다.
+      'lib/admin/**/*.{ts,tsx}',
     ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            KAKAO_IMPORT_GUARD,
+            {
+              // 전이 도달 집합을 명시한다(위 MODAL_STACK_MODULES 주석 참고). `components/ui/Dialog`
+              // 하나만 막으면 `components/trips/ConflictDialog` 경유로 우회되고, 디렉터리 통째로
+              // 막으면 모달과 무관한 Button·FormField까지 걸린다.
+              group: MODAL_STACK_MODULES.flatMap((mod) => [`**/${mod}`, `@/${mod}`]),
+              message:
+                'T-356 — 이 모듈은 `lib/useModalDialog` 기반 모달 스택에 (전이로) 닿는다. admin에서 ' +
+                '쓰면 common Radix와 focus trap·inert 스냅샷이 충돌한다. admin 모달은 ' +
+                '`@/components/admin/ui/dialog`(또는 `alert-dialog`)를 쓴다.',
+            },
+            {
+              group: ['**/lib/useModalDialog', '@/lib/useModalDialog'],
+              message:
+                'T-356 — admin은 common Radix가 focus trap을 소유한다. `useModalDialog`를 함께 쓰면 ' +
+                '트랩이 두 벌이 된다. 포커스 복원 대상 판별이 필요하면 `@/lib/focusTarget`의 ' +
+                '`isRestorableFocusTarget`을 쓴다(T-357에서 스택 밖으로 분리했다 — 복제하지 마라).',
+            },
+          ],
+        },
+      ],
+    },
   },
-}, {
-  // ── 모달 스택 경계: admin 표면 (T-356) ──
-  //
-  // admin은 base-ui 기반 `components/admin/ui/{dialog,alert-dialog,popover,tooltip}`을 쓰고,
-  // 사용자 표면은 `lib/useModalDialog` + `components/ui/Dialog`를 쓴다. **한 화면에서 섞으면
-  // focus trap과 `inert` 스냅샷이 서로를 덮는다** — 두 구현이 각자 body 자식에 inert를 걸고
-  // 각자 복원 스냅샷을 들고 있어서, 나중에 닫히는 쪽이 상대의 복원을 무효화한다.
-  //
-  // DESIGN.md의 "모달 계약" 절이 이 분리를 명문화하지만 문서만으로는 약하다 — 이 저장소는
-  // T-356에서 "로컬 4개 게이트를 전부 통과한 회귀"를 두 번 겪었다. 규칙을 실행 가능한
-  // 가드로 옮긴다.
-  // `.ts`도 포함한다 — admin에는 `lib/admin/*.ts`, `components/admin/ui/form-field.ts`,
-  // route handler 등 `.ts` 파일이 여럿 있고, 거기서 헤더를 만들면 가드를 우회하게 된다.
-  files: [
-    'app/(admin)/**/*.{ts,tsx}',
-    'components/admin/**/*.{ts,tsx}',
-    // `lib/admin/**`도 admin 소유다 — 여기서 헬퍼를 만들면서 사용자 표면 모듈을 끌어오면
-    // 그 헬퍼를 쓰는 admin 컴포넌트로 모달 스택이 전이된다.
-    'lib/admin/**/*.{ts,tsx}',
-  ],
-  rules: {
-    'no-restricted-imports': [
-      'error',
-      {
-        patterns: [
-          KAKAO_IMPORT_GUARD,
-          {
-            // 전이 도달 집합을 명시한다(위 MODAL_STACK_MODULES 주석 참고). `components/ui/Dialog`
-            // 하나만 막으면 `components/trips/ConflictDialog` 경유로 우회되고, 디렉터리 통째로
-            // 막으면 모달과 무관한 Button·FormField까지 걸린다.
-            group: MODAL_STACK_MODULES.flatMap((mod) => [`**/${mod}`, `@/${mod}`]),
-            message:
-              'T-356 — 이 모듈은 `lib/useModalDialog` 기반 모달 스택에 (전이로) 닿는다. admin에서 ' +
-              '쓰면 base-ui와 focus trap·inert 스냅샷이 충돌한다. admin 모달은 ' +
-              '`@/components/admin/ui/dialog`(또는 `alert-dialog`)를 쓴다.',
-          },
-          {
-            group: ['**/lib/useModalDialog', '@/lib/useModalDialog'],
-            message:
-              'T-356 — admin은 base-ui가 focus trap을 소유한다. `useModalDialog`를 함께 쓰면 ' +
-              '트랩이 두 벌이 된다. 포커스 복원 대상 판별이 필요하면 `@/lib/focusTarget`의 ' +
-              '`isRestorableFocusTarget`을 쓴다(T-357에서 스택 밖으로 분리했다 — 복제하지 마라).',
-          },
-        ],
-      },
-    ],
+  {
+    // ── 모달 스택 경계: 사용자 표면 (T-356, 반대 방향) ──
+    //
+    // 사용자 표면이 admin 컴포넌트나 common Radix를 끌어오면 같은 충돌이 반대로 일어나고, admin 전용
+    // 번들(cva/clsx/tailwind-merge/common Radix)이 사용자 표면 코드 스플릿 경계로 새어 들어간다.
+    // `.ts`도 포함한다 — `lib/**` 같은 사용자 표면 `.ts`가 가드 밖이면 거기서 common Radix나 admin
+    // 컴포넌트를 끌어와도 침묵한다. `lib/admin/**`은 admin 소유라 제외한다.
+    files: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
+    ignores: ['app/(admin)/**', 'components/admin/**', 'lib/admin/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            KAKAO_IMPORT_GUARD,
+            {
+              group: ['**/components/admin/**', '@/components/admin/**'],
+              message:
+                'T-356 — admin 컴포넌트는 admin 표면 전용이다. 사용자 표면은 `components/ui/*`와 ' +
+                '`lib/useModalDialog`를 쓴다(DESIGN.md Hallmark 잠금 + 모달 계약).',
+            },
+            {
+              group: ['@base-ui/react', '@base-ui/react/**'],
+              message:
+                'T-356 — common Radix는 admin 오버레이 프리미티브 전용이다. 사용자 표면 모달은 ' +
+                '`lib/useModalDialog`가 소유한다.',
+            },
+          ],
+        },
+      ],
+    },
   },
-}, {
-  // ── 모달 스택 경계: 사용자 표면 (T-356, 반대 방향) ──
-  //
-  // 사용자 표면이 admin 컴포넌트나 base-ui를 끌어오면 같은 충돌이 반대로 일어나고, admin 전용
-  // 번들(cva/clsx/tailwind-merge/base-ui)이 사용자 표면 코드 스플릿 경계로 새어 들어간다.
-  // `.ts`도 포함한다 — `lib/**` 같은 사용자 표면 `.ts`가 가드 밖이면 거기서 base-ui나 admin
-  // 컴포넌트를 끌어와도 침묵한다. `lib/admin/**`은 admin 소유라 제외한다.
-  files: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
-  ignores: ['app/(admin)/**', 'components/admin/**', 'lib/admin/**'],
-  rules: {
-    'no-restricted-imports': [
-      'error',
-      {
-        patterns: [
-          KAKAO_IMPORT_GUARD,
-          {
-            group: ['**/components/admin/**', '@/components/admin/**'],
-            message:
-              'T-356 — admin 컴포넌트는 admin 표면 전용이다. 사용자 표면은 `components/ui/*`와 ' +
-              '`lib/useModalDialog`를 쓴다(DESIGN.md Hallmark 잠금 + 모달 계약).',
-          },
-          {
-            group: ['@base-ui/react', '@base-ui/react/**'],
-            message:
-              'T-356 — base-ui는 admin 오버레이 프리미티브 전용이다. 사용자 표면 모달은 ' +
-              '`lib/useModalDialog`가 소유한다.',
-          },
-        ],
-      },
-    ],
+  {
+    // Playwright fixture 파일의 `use(page)`는 React hook이 아니다 — 이름이 `use*`로 시작한다는
+    // 이유만으로 react-hooks/rules-of-hooks가 오탐한다(ESLint 10 + eslint-plugin-react-hooks 7).
+    files: ['e2e/**/*.ts', 'e2e-live/**/*.ts'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+    },
   },
-}, {
-  // Playwright fixture 파일의 `use(page)`는 React hook이 아니다 — 이름이 `use*`로 시작한다는
-  // 이유만으로 react-hooks/rules-of-hooks가 오탐한다(ESLint 10 + eslint-plugin-react-hooks 7).
-  files: ['e2e/**/*.ts', 'e2e-live/**/*.ts'],
-  rules: {
-    'react-hooks/rules-of-hooks': 'off',
-  },
-}];
+];
 
 config.push({
   files: ['e2e/**/*.e2e.ts'],
   rules: {
-    'no-restricted-imports': ['error', {
-      paths: [{ name: '@playwright/test', importNames: ['test'], message: '#618 — mocked 검사는 ./fixtures의 격리 test를 사용하세요.' }],
-      patterns: [KAKAO_IMPORT_GUARD],
-    }],
-    'no-restricted-syntax': ['error',
-      { selector: 'CallExpression[callee.object.name="route"][callee.property.name="continue"]', message: '#618 — mock 미처리 요청은 route.fallback()으로 격리 guard에 넘기세요.' },
-      { selector: 'CallExpression[callee.object.name="browser"][callee.property.name=/^(newContext|newPage)$/]', message: '#618 — 추가 세션은 newMockContext fixture를 사용하세요.' },
+    'no-restricted-imports': [
+      'error',
+      {
+        paths: [
+          {
+            name: '@playwright/test',
+            importNames: ['test'],
+            message: '#618 — mocked 검사는 ./fixtures의 격리 test를 사용하세요.',
+          },
+        ],
+        patterns: [KAKAO_IMPORT_GUARD],
+      },
+    ],
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: 'CallExpression[callee.object.name="route"][callee.property.name="continue"]',
+        message: '#618 — mock 미처리 요청은 route.fallback()으로 격리 guard에 넘기세요.',
+      },
+      {
+        selector:
+          'CallExpression[callee.object.name="browser"][callee.property.name=/^(newContext|newPage)$/]',
+        message: '#618 — 추가 세션은 newMockContext fixture를 사용하세요.',
+      },
     ],
   },
 });
 
 // worker와 Playwright trace/report의 번들 생성물은 소스 lint 대상이 아니다.
-config.unshift({ ignores: ['public/maplibre/**', 'test-results/**', 'playwright-report/**', 'blob-report/**'] });
+config.unshift({
+  ignores: ['public/maplibre/**', 'test-results/**', 'playwright-report/**', 'blob-report/**'],
+});
 
 export default config;

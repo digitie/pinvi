@@ -20,16 +20,9 @@ import {
 import { apiClient } from '../lib/api';
 import { Body, Card, Muted, Subheading } from './ui';
 
-/** `vworld-map-rn` `onCameraChanged`가 주는 카메라. */
-
 const DEBOUNCE_MS = 400;
 /** 클러스터링이 없는 네이티브 마커라 레이어당 상한을 낮게 둔다. */
 const LIMIT = 100;
-
-/**
- * 카메라 → `lng_min,lat_min,lng_max,lat_max`(국내 범위로 clamp). bounds가 없으면 중심·줌으로 어림한다.
- * 소수 3자리로 반올림해 작은 흔들림이 새 요청이 되지 않게 한다.
- */
 
 /** 지도 화면의 transport 레이어 상태(ADR-076). 기능이 꺼져 있으면 `visible=false`. */
 export function useMobileTransport(camera: MapCamera | null) {

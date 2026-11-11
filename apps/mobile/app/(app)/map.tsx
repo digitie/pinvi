@@ -29,12 +29,12 @@ import {
 import type { TransportItem } from '@pinvi/schemas';
 
 /**
- * 지도 화면 — VWorld + MapLibre (`vworld-map-rn`). VWorld 키는 앱에 번들하지 않고
+ * 지도 화면 — VWorld + MapLibre의 플랫폼별 공개 어댑터. VWorld 키는 앱에 번들하지 않고
  * `GET /mobile/vworld/token`으로 server-issued 발급받아 `apiKey`로 주입한다(ADR-043).
  * 내 위치 마커 + "현재 위치로" 카메라 이동(`VWorldMapHandle.flyTo`).
  *
- * 네이티브 모듈(`@maplibre/maplibre-react-native`)이 필요하므로 Expo Dev Client(EAS) 빌드에서만
- * 동작한다(Expo Go 미사용, ADR-043).
+ * Android/iOS는 네이티브 모듈(`@maplibre/maplibre-react-native`)이 포함된 Expo Dev Client(EAS)를
+ * 사용한다(Expo Go 미사용, ADR-043). 웹은 public web 어댑터를 SSR 이후에 로드한다.
  */
 /**
  * 자동 센터링 결정이 늦어도 지도가 영원히 placeholder로 남지 않게 하는 상한.

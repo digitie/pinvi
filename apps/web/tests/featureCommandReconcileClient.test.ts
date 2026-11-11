@@ -6,8 +6,8 @@ const rid = '00000000-0000-4000-8000-000000000668';
 const key = '00000000-0000-4000-8000-000000000669';
 
 it('원래 명령 키와 별도 확인 사유를 HTTP 경계까지 보존한다', async () => {
-  const fetcher = vi.fn(
-    async (..._args: unknown[]) =>
+  const fetcher = vi.fn<(...args: unknown[]) => Promise<Response>>(
+    async () =>
       new Response(
         JSON.stringify({
           data: { request_id: rid, status: 'pending', resolution: 'abandoned' },
@@ -47,8 +47,8 @@ it('세대 키 누락·짧은 확인 사유를 전송 전에 거부한다', () =
 });
 
 it('알 수 없는 결과는 해제 성공으로 소비하지 않는다', async () => {
-  const fetcher = vi.fn(
-    async (..._args: unknown[]) =>
+  const fetcher = vi.fn<(...args: unknown[]) => Promise<Response>>(
+    async () =>
       new Response(
         JSON.stringify({
           data: { request_id: rid, status: 'pending', resolution: 'unknown' },
