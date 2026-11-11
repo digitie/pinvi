@@ -1,3 +1,7 @@
+## 2026-11-12 — SDK styling guard 기대값 정렬
+
+새 hosted 필수 Expo Doctor20/20은 통과했으나 styling guard의 이전Expo58.0.23 기대값이 type/macOS job을 막았다. 로컬 별도 guard 누락을 확인하고 SDK4 exact를 모두 명시 검사하도록 갱신했다. 수정 전 실패/수정 후 PASS를 보존했고 검사 완화·C11 변경·runtime source 변경은 없다. 새 hosted validation을 이어간다.
+
 ## 2026-11-12 — SDK4 latest patch·필수 진단·main 병합
 
 SDK4 latest exact patch를 strict 설치하고 물리 Expo Doctor20/20·React Doctor0·type/lint/guard를 확인했다. main476의5파일을 먼저 병합해 기존 synthetic CI tree와 같음을 확인하고 SDK WIP를 복원했다. 깨끗한 CI 경로 회귀1FAIL/3PASS→4PASS이며 SDK 진단을 aggregate 필수로 연결했다. C11 bytes/원장·328 baseline/batch2는 보존한다. 새SDK exports/smoke 및 새main web 전체는 hosted CI 확인 대상이다. N150·운영 변경은 없다. [기록](reports/pinvi-expo-sdk-patches-20261112.json).

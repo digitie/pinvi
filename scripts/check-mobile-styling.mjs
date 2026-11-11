@@ -9,7 +9,10 @@ const mobile = json('apps/mobile/package.json'),
   web = json('apps/web/package.json'),
   lock = json('package-lock.json');
 const wanted = {
-  expo: '58.0.23',
+  expo: '58.0.24',
+  'expo-constants': '58.0.16',
+  'expo-linking': '58.0.17',
+  'expo-router': '58.0.31',
   'react-native': '0.88.1',
   'react-native-worklets': '0.13.1',
   nativewind: '5.0.0-rc.1',

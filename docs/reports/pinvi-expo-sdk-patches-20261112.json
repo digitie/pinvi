@@ -402,5 +402,15 @@
     "continueOnErrorPresent": false,
     "aggregateWaitsForMobileDoctor": true,
     "SDKPathExplicit": true
+  },
+  "stylingGuardCorrection": {
+    "beforeHead": "d4187761a8f77bfae189cceb0ae21f611bfee9db",
+    "cause": "oldExpo58.0.23 exact; omitted local styling guard while SDK4 upgraded",
+    "freshHostedSdkDoctor": "20/20 SUCCESS job130764005230",
+    "beforeLog": ".git/sdk-style-before.log",
+    "afterLog": ".git/sdk-style-after.log",
+    "exactSDK4NowAllChecked": true,
+    "result": "PASS",
+    "runtimeSourceChanged": false
   }
 }
