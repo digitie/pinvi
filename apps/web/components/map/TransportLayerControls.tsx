@@ -1,5 +1,6 @@
 'use client';
 
+import { useId, useState } from 'react';
 import type { HighwayIncidentItem, TransportLayer, TransportLayerResult } from '@pinvi/schemas';
 import {
   TRANSPORT_LAYER_META,
@@ -55,6 +56,12 @@ export interface TransportLayerControlsProps {
   state: TransportLayersState;
   onOpenDetail: (target: TransportDetailTarget) => void;
   className?: string;
+  /**
+   * 돌발 목록을 접어 두고 '교통 돌발' 상태 줄을 눌러 펴게 한다(여행 지도, #729). 여행 지도는 맞춤이 끝난
+   * 뒤 결과가 오므로, 목록이 저절로 펼쳐지면 맞춤이 피한 패널 아래로 자라 핀을 덮는다. 상태 줄은 켠
+   * 순간부터 터치 높이(44px)를 차지해, 결과가 와서 버튼이 돼도 패널 상시 높이가 그대로다(#712).
+   */
+  collapseIncidents?: boolean;
 }
 
 /**
@@ -65,9 +72,20 @@ export function TransportLayerControls({
   state,
   onOpenDetail,
   className,
+  collapseIncidents = false,
 }: TransportLayerControlsProps) {
-  if (!state.visible) return null;
+  const listId = useId();
   const incidents = state.enabled.has('highway_incident') ? incidentsOf(state.results) : [];
+  const hasIncidents = incidents.length > 0;
+  const [expanded, setExpanded] = useState(false);
+  // 목록이 비면(레이어 끔·0건·불러올 수 없음) 접는다 — 다음 결과가 왔을 때 목록이 저절로 펼쳐지지 않게.
+  const [prevHasIncidents, setPrevHasIncidents] = useState(hasIncidents);
+  if (hasIncidents !== prevHasIncidents) {
+    setPrevHasIncidents(hasIncidents);
+    if (!hasIncidents) setExpanded(false);
+  }
+  if (!state.visible) return null;
+  const showList = incidents.length > 0 && (!collapseIncidents || expanded);
   return (
     // data-map-fit-panel: 여행 지도 맞춤이 이 패널 밑에 든 핀을 피한다(사건 목록은 transient로 뺀다).
     <div
@@ -101,23 +119,62 @@ export function TransportLayerControls({
         {TRANSPORT_LAYER_META.filter((meta) => state.enabled.has(meta.layer)).map((meta) => {
           const line = layerLine(meta.layer, meta.minZoom, state);
           const result = state.results.find((r) => r.layer === meta.layer);
-          return line ? (
+          if (!line) return null;
+          const text = (
+            <>
+              <span className="font-semibold text-body">{meta.label}</span> {line}
+            </>
+          );
+          const attrs = {
+            'data-testid': `transport-layer-state-${meta.layer}`,
+            'data-status': result?.status ?? (line === LOADING_TEXT ? 'loading' : ''),
+            'data-reason': result?.reason ?? '',
+          };
+          if (collapseIncidents && meta.layer === 'highway_incident') {
+            // 접기 버튼 높이(44px)를 켠 순간부터 차지한다 — 결과가 와서 버튼이 돼도 상시 높이가 그대로다.
+            return (
+              // 글자는 다른 상태 줄처럼 위에 붙인다. 오른쪽엔 펼침 표시만 둬 문구 폭을 지킨다 — '오래된 정보'가
+              // 잘리지 않게(#712).
+              <li key={meta.layer} className="flex min-h-11 items-start text-muted" {...attrs}>
+                {hasIncidents ? (
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={expanded ? listId : undefined}
+                    onClick={() => setExpanded((v) => !v)}
+                    data-testid="transport-incident-toggle"
+                    className="focus-ring -mx-1 flex min-h-11 w-[calc(100%+0.5rem)] items-start gap-1 rounded-sm px-1 text-left hover:bg-surface-soft"
+                  >
+                    <span className="line-clamp-2 flex-1">
+                      {text}
+                      <span className="sr-only"> 목록</span>
+                    </span>
+                    <span aria-hidden="true" className="shrink-0 whitespace-nowrap text-body">
+                      {expanded ? '▴' : '▾'}
+                    </span>
+                  </button>
+                ) : (
+                  <span className="line-clamp-2">{text}</span>
+                )}
+              </li>
+            );
+          }
+          return (
             <li
               key={meta.layer}
               // 두 줄 높이 고정 — 결과 문구 길이로 줄 수가 바뀌면 상시 높이가 바뀌어 다시 맞춘다(#712).
               // 한 줄로 자르면 모바일 폭에서 '오래된 정보'·'일부만 표시'가 잘린다.
               className="line-clamp-2 min-h-[2lh] text-muted"
-              data-testid={`transport-layer-state-${meta.layer}`}
-              data-status={result?.status ?? (line === LOADING_TEXT ? 'loading' : '')}
-              data-reason={result?.reason ?? ''}
+              {...attrs}
             >
-              <span className="font-semibold text-body">{meta.label}</span> {line}
+              {text}
             </li>
-          ) : null;
+          );
         })}
       </ul>
-      {incidents.length > 0 && (
+      {showList && (
         <div
+          id={listId}
           className="mt-2 border-t border-hairline pt-1"
           data-testid="transport-incident-list"
           data-map-fit-transient=""

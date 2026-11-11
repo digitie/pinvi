@@ -669,6 +669,8 @@ function useTripMapViewModel({
   const transportControls = (
     <TransportLayerControls
       state={transport}
+      // 맞춤 뒤에 돌발 목록이 저절로 펼쳐져 핀을 덮지 않게 접어 둔다(#729).
+      collapseIncidents
       onOpenDetail={(target) => {
         setSelectedFeature(null);
         transport.openDetail(target);
