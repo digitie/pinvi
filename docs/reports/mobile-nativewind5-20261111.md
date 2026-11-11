@@ -71,4 +71,6 @@ vworld-map-rn은 native-only 어댑터다. Expo web 정적 경로 수집에서 �
 
 root/web/mobile의 직접 dev file 참조와 root $lightningcss override를 맞추고 루트cache가 아닌 임시 전용cache에서 명시 재설치했다. npm12 workspace에서 override 대상 core/CSS를 다시 명시하면 root file spec을 workspace 아래로 중복 해석하는 ENOENT가 재현됐다. 고유 core/CSS는 루트에서 명시 설치하고, UI/tokens/web/RN은 각 소비자에서 명시 설치했다. 같은 단일 물리 vendor를 사용하며 수동 lock 수정/force/legacy peer/node_modules 패치는 없다. 두 surface guard와 styling guard, 실제 tgz/lock/module/원장 SHA512 비교가 통과했다.
 
-fix4의 새 독립 TMPDIR에서 Android/iOS Hermes export와4OTF 포함을 확인했다. 웹SSR·별도빈cache 강제WASM iOS 및 N150 최신산출물스모크는 이번 정본으로 계속 검증한다. 과거 fix3 증거를 fix4 성공으로 재사용하지 않는다.
+fix4의 새 독립 TMPDIR에서 Android/iOS Hermes export와 각4OTF 포함, 웹SSR35routes, 별도빈cache 강제WASM iOS export가 모두 통과했다. N150의 c8 웹산출물375/1280px CSS·폰트·로그인 입력·오류·무가로넘침 스모크도 통과했다. 증거는 /tmp/pinvi-c8-*-export.log(WSL), /tmp/pinvi-c8-mobile-harvey/evidence(N150)이다. 과거 fix3 증거를 fix4 성공으로 재사용하지 않는다.
+
+독립 리뷰 B에서 추출된 지도/이메일 인증 컴포넌트의 fragment 첫 자식 공백 문자열 두 곳을 지적하여 제거했다. RN Text 밖 raw text를 만드는 회귀이며 최종 소스의 export는 후속 재검증한다. native 실기기/EAS/macOS 실행은 아직 없다.

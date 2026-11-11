@@ -1,7 +1,8 @@
 'use client';
 
 import { AlertDialogContent as CommonContent } from '@kor-travel/ui/alert-dialog';
-import type { ComponentProps, RefObject } from 'react';
+import { useRef, type ComponentProps, type RefObject } from 'react';
+import { isRestorableFocusTarget } from '@/lib/focusTarget';
 export {
   AlertDialog,
   AlertDialogAction,
@@ -27,11 +28,14 @@ export function AlertDialogContent({
   initialFocus?: RefObject<HTMLElement | null>;
   finalFocus?: RefObject<HTMLElement | null>;
 }) {
+  const openerRef = useRef<HTMLElement | null>(null);
   return (
     <CommonContent
       {...props}
       data-pv-surface="admin"
       onOpenAutoFocus={(event) => {
+        openerRef.current =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null;
         onOpenAutoFocus?.(event);
         if (!event.defaultPrevented && initialFocus?.current) {
           event.preventDefault();
@@ -40,9 +44,13 @@ export function AlertDialogContent({
       }}
       onCloseAutoFocus={(event) => {
         onCloseAutoFocus?.(event);
-        if (!event.defaultPrevented && finalFocus?.current) {
+        if (event.defaultPrevented) return;
+        const target = isRestorableFocusTarget(finalFocus?.current)
+          ? finalFocus.current
+          : openerRef.current;
+        if (isRestorableFocusTarget(target)) {
           event.preventDefault();
-          finalFocus.current.focus();
+          target.focus({ preventScroll: true });
         }
       }}
     />

@@ -793,8 +793,9 @@ function useAdminTripDetailPageModel() {
     }
   };
 
+  if (missing) redirect('/admin/trips');
+
   if (error) {
-    if (missing) redirect('/admin/trips');
     return { renderBranch: 'render0' as const, error };
   }
 

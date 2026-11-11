@@ -133,7 +133,7 @@ export function Dialog({
               {title}
             </DialogTitle>
             {description != null ? (
-              <DialogDescription id={titleId + '-desc'} className="mt-1 text-sm text-muted">
+              <DialogDescription className="mt-1 text-sm text-muted">
                 {description}
               </DialogDescription>
             ) : null}

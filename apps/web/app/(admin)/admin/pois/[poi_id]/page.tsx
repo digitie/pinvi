@@ -321,8 +321,9 @@ function useAdminPoiDetailPageModel() {
     }
   };
 
+  if (missing) redirect('/admin/pois');
+
   if (error) {
-    if (missing) redirect('/admin/pois');
     return { renderBranch: 'render0' as const, error };
   }
 

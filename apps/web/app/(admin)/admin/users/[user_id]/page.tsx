@@ -513,8 +513,9 @@ function useAdminUserDetailPageModel() {
     }
   };
 
+  if (missing) redirect('/admin/users');
+
   if (error && !user) {
-    if (missing) redirect('/admin/users');
     return { renderBranch: 'render0' as const, error };
   }
 

@@ -5,6 +5,7 @@ import {
   DialogContent as CommonDialogContent,
 } from '@kor-travel/ui/dialog';
 import * as React from 'react';
+import { isRestorableFocusTarget } from '@/lib/focusTarget';
 export {
   DialogClose,
   DialogDescription,
@@ -41,12 +42,15 @@ export function DialogContent({
   ...props
 }: DialogContentProps) {
   const unsaved = React.useContext(UnsavedInputContext);
+  const openerRef = React.useRef<HTMLElement | null>(null);
   return (
     <CommonDialogContent
       showCloseButton={false}
       {...props}
       data-pv-surface="admin"
       onOpenAutoFocus={(event) => {
+        openerRef.current =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null;
         onOpenAutoFocus?.(event);
         if (!event.defaultPrevented && initialFocus?.current) {
           event.preventDefault();
@@ -55,9 +59,14 @@ export function DialogContent({
       }}
       onCloseAutoFocus={(event) => {
         onCloseAutoFocus?.(event);
-        if (!event.defaultPrevented && finalFocus?.current) {
+        if (event.defaultPrevented) return;
+        // 조건부 마운트 호출부는 DialogTrigger가 없어도 실제 열기 버튼으로 복귀한다.
+        const target = isRestorableFocusTarget(finalFocus?.current)
+          ? finalFocus.current
+          : openerRef.current;
+        if (isRestorableFocusTarget(target)) {
           event.preventDefault();
-          finalFocus.current.focus();
+          target.focus({ preventScroll: true });
         }
       }}
       onEscapeKeyDown={(event) => {

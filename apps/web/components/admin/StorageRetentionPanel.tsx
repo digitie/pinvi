@@ -12,7 +12,7 @@ import { buttonClassName } from '@/components/ui/button-styles';
 import { apiClient } from '@/lib/api';
 import { adminApi, ApiError } from '@pinvi/api-client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 const key = ['admin', 'storage-retention'] as const;
 const reasons: Record<string, string> = {
@@ -89,6 +89,7 @@ function StorageRetentionPanelView0Part0({
   viewModel: StorageRetentionPanelView0Model;
 }) {
   const { summary, data, error, run, setConfirm, confirm } = viewModel;
+  const cancelRef = useRef<HTMLButtonElement>(null);
   return (
     <div className="space-y-4" data-testid="storage-retention">
       <p className="text-sm text-muted">
@@ -185,7 +186,11 @@ function StorageRetentionPanelView0Part0({
           if (!run.isPending) setConfirm(open);
         }}
       >
-        <AlertDialogContent data-testid="storage-retention-confirm" aria-busy={run.isPending}>
+        <AlertDialogContent
+          data-testid="storage-retention-confirm"
+          aria-busy={run.isPending}
+          initialFocus={cancelRef}
+        >
           <AlertDialogTitle>보관 기한이 지난 여행과 파일을 정리할까요?</AlertDialogTitle>
           <AlertDialogDescription>
             정리가 시작된 여행은 복원할 수 없습니다. 삭제 실패는 기록되며 다음 실행에서
@@ -193,6 +198,7 @@ function StorageRetentionPanelView0Part0({
           </AlertDialogDescription>
           <AlertDialogFooter>
             <button
+              ref={cancelRef}
               type="button"
               className={buttonClassName({ variant: 'ghost' })}
               disabled={run.isPending}

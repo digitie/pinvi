@@ -377,7 +377,6 @@ function MapLocationControls({
 }) {
   return (
     <>
-      {' '}
       {error ? (
         <Card className="gap-1">
           <Body className="text-error-text">

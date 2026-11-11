@@ -2,7 +2,7 @@
 
 ## 범위와 실행 기준
 
-별도 ext4 clone의 agent/codex-common-unification-20261111에서 작업한다. 원본 checkout과 사용자 웹·모바일 UX는 보존한다. push·PR·merge는 부모 통합 후 진행한다. 최종 별도 독립 적대 리뷰 2인은 부모 통합 단계의 gate다.
+별도 ext4 clone의 agent/codex-common-unification-20261111에서 작업한다. 원본 checkout과 사용자 웹·모바일 UX는 보존한다. push·PR·merge는 부모 통합 후 진행한다. 최종 독립 적대 리뷰 2인을 별도 수행하고 발견 회귀를 수정·검증한다.
 
 ## 사용처 조사와 이관
 
@@ -22,15 +22,15 @@ Pinvi 관리자 로그인은 common LoginForm을 사용한다. 모바일 로그�
 
 버전은 common의 versions.json axes/frontendPolicy 및 생성 frontend-dependencies 정책을 따른다. root version-targets.json과 additional-dependency-audit.json은 registry 확인 근거이며 모바일 Expo58 추가 감사를 반영했다. TypeScript는 5.9.3을 유지한다. 최신 7 전환은 openapi-typescript 및 typescript-eslint의 peer 범위와 함께 별도로 검증해야 한다. @types/node는 실행 환경 22와 맞춘 22.20.5다.
 
-지도는 부모가 고정한 최신 GitHub source 9a7a348b02d61969b394c681b024d5851eef836b의 core1.0.1/web1.0.3/RN1.0.1을 실제 설치했다. GPL-3.0-only LICENSE/NOTICE·src·tsconfig 포함 산출물이며 원본 core1.0.0 golden bytes는 덮어쓰지 않는다. root와 각 앱은 같은 apps/web/vendor의 tgz를 상대 file 경로로 공유한다. core의 transitive registry 요청을 차단하도록 root direct file 및 $vworld-map-core override를 사용한다. Lightning CSS도 원본 수정 후보1.33.0+nativecss.fix.3을 같은 물리 tgz로 root/web/mobile에 직접 선언하고 $lightningcss override로 맞췄다. 각 원장의 file은 실제 manifest 참조 경로이며 SHA512를 lock과 대조했다.
+지도는 부모가 고정한 최신 GitHub source 9a7a348b02d61969b394c681b024d5851eef836b의 core1.0.1/web1.0.3/RN1.0.1을 실제 설치했다. GPL-3.0-only LICENSE/NOTICE·src·tsconfig 포함 산출물이며 원본 core1.0.0 golden bytes는 덮어쓰지 않는다. root와 각 앱은 같은 apps/web/vendor의 tgz를 상대 file 경로로 공유한다. core의 transitive registry 요청을 차단하도록 root direct file 및 $vworld-map-core override를 사용한다. Lightning CSS도 원본 수정 후보1.33.0+nativecss.fix.4을 같은 물리 tgz로 root/web/mobile에 직접 선언하고 $lightningcss override로 맞췄다. 각 원장의 file은 실제 manifest 참조 경로이며 SHA512를 lock과 대조했다.
 
 공통 UI0.2.0/tokens0.1.1과 지도 산출물은 frontend/common-artifacts.json 원장에 SHA512를 고정한다. check:dependencies는 선언·lock·산출물 해시와 공통 UI 우회 구현을 검사하며 CI의 필수 단계로 실행한다.
 
 사용자가 모바일 NativeWind5 RC1/Tailwind4.3.5 이관도 승인했다. [모바일 이관 기록](mobile-nativewind5-20261111.md)에 실제 peer·구성·검증 범위를 기록한다.
 
-## 검증 상태
+## e68141df 체크포인트 검증 이력
 
-현재 변경은 배포 전 검토용 checkpoint이다. 아래는 WSL Linux/Node22.22.2/npm12.0.1 결과이며 최종 공통 후보로 다시 검증해야 한다. 과거 배포 결과를 이번 후보 검증으로 재사용하지 않는다.
+당시 변경은 배포 전 검토용 checkpoint이다. 아래는 WSL Linux/Node22.22.2/npm12.0.1 결과이며 최종 공통 후보로 다시 검증해야 한다. 과거 배포 결과를 이번 후보 검증으로 재사용하지 않는다.
 
 | 검사                | 실제 결과·남은 계약                                                                                                      |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -81,7 +81,7 @@ N150 새 clean npm12 ci로 ESLint10 전이 통일까지 설치하고 실제 MapL
 
 공개 floating inventory에서 AppShell 더보기에 실제 document pointerdown/focusin/keydown 엔진도 확인해 common nonmodal Popover로 바꿨다. 기존 위치(top/end offset8)·폭192·경로 변경/데스크톱 전환 닫기·포커스를 유지한다. 관련6단위 모두PASS. 다른 공개 custom Dialog/Popover 엔진은 소스 AST/rg 조사에서 찾지 못했다. 지도 좌표/맞춤 계산은 floating 엔진이 아니며 MapLibre Popup 자체는 upstream 공개 패키지가 소유한다.
 
-현재 설치는 여전히 c5라 새 overlayProps/unstyled가 없어 타입2계약 오류와 관련 overlay 테스트 실패가 남는다. 공통 코드를 앱별로 복사하거나 node_modules를 수정하지 않는다. 기존 전체 기준선493PASS1FAIL 및 E2E203PASS6FAIL4SKIP은 그대로 보존하며 새 변경의 전체PASS로 표현하지 않는다. 최종 단일 pack 후 전체unit/E2E를 다시 실행해야 한다.
+공개후속 초기 검증은 c5라 새 overlayProps/unstyled가 없어 타입2계약 오류와 관련 overlay 테스트 실패가 남는다. 공통 코드를 앱별로 복사하거나 node_modules를 수정하지 않는다. 기존 전체 기준선493PASS1FAIL 및 E2E203PASS6FAIL4SKIP은 그대로 보존하며 새 변경의 전체PASS로 표현하지 않는다. 최종 단일 pack 후 전체unit/E2E를 다시 실행해야 한다.
 
 추가 실회귀: 패널 자체에 초기 포커스를 둔 상태의 Shift+Tab이 마지막 항목으로 가지 않고 패널에 머문다. 기존 기대를 유지한 unit와 N150 Chromium 실제probe 둘 다 실패했다. probe 결과 initial=probe, afterShiftTab=probe, afterTab=first, Escape closed=true이다. 공통 담당자에게 정확히 전달했으며 Radix 원본 FocusScope의 초기 reverse-entry 보완이 정합 위치다. 앱에서 Tabtrap을 복사하거나 테스트를 낮추지 않았다. 증거는 root PINVI-BLOCKERS.md와 /tmp/pinvi-public-overlay-probe-harvey(N150), /tmp/pinvi-public-overlay-tests-c5-2.log(WSL)에 보존한다.
 
@@ -93,6 +93,16 @@ Radix 원본은 [고정 source eb3a2b7의 FocusScope](https://github.com/radix-u
 
 공통source670a753의 UI/tokens·fix4 단일pack을 채택하고 6종전달tgz를 SHA512 검증 후 같은파일로 복사했다. root/web/mobile 원장은 부모c8의 source/versions/integrities를 그대로 보존하고 실제 direct file 경로만 표기한다. CSS4는모두dev직접의존성, root override는 $lightningcss이다. 구fix3 미사용vendor를 제거했다. 기존source9a 지도3종은같은bytes다.
 
-c8 실제modules/lock/상대file/원장일치PASS, web/mobile의새공통guard와 styling guardPASS, npm12 ls --all PASS이다. TypeScript web/mobile 및 mobile lintPASS. 웹전체unit은 **509PASS/1FAIL(510)**이며 LoginForm·공통API미반영8건은해소됐다. 남은1건은이미실제Chromium재현한Radix initial-panel ShiftTab계약이다. 새 전체E2E/생산build·CSS4모든exports는이번정본으로검증중이며 과거203/6/4를현재PASS로표현하지않는다.
+c8 실제modules/lock/상대file/원장일치PASS, web/mobile의새공통guard와 styling guardPASS, npm12 ls --all PASS이다. TypeScript web/mobile 및 mobile lintPASS. 웹전체unit은 **509PASS/1FAIL(510)**이며 LoginForm·공통API미반영8건은해소됐다. 남은1건은이미실제Chromium재현한Radix initial-panel ShiftTab계약이다. CSS4 Android/iOS/Web SSR·별도빈cache 강제WASM iOS export와 최신 N150 모바일 웹 스모크는 통과했다. 전체E2E/생산build는 Node22.23.1/공식Playwright digest의 N150 clean npm12 ci 후 실행 중이며 과거203/6/4를현재PASS로표현하지않는다.
 
 로컬root는npm실행중 일시ENOSPC를재현했다. 본인종료/tmp npmcache·rawDoctor복제·fix3WASM cache만절대경로확인후약249MiB정리했고source/증거/타인cache는보존했다. 대형clean설치와Nextbuild는N150격리환경에서진행한다.
+
+## 독립 적대 리뷰 후속 수정
+
+독립 A는 관리자 상세404/삭제 성공 목록복귀, Trigger 없는 Dialog의 닫기 후 포커스, 영구정리 AlertDialog의 취소 초기포커스, 공개 Dialog 설명 ID 연결의 P2 네 건을 발견했다. 독립 B는 RN View 아래 공백 문자열 생성 두 위치의 P2 한 건을 발견했다. root PINVI-REVIEW-A-HARVEY.md 및 PINVI-REVIEW-B-HARVEY.md는 지정후보3626a624 기준의 독립 보고서다.
+
+404는 error 값과 무관한 missing 분기로 복구하고 실제 페이지404 세 경로·삭제 성공 두 경로를 검증한다. 관리자 모달은 Radix 이벤트에 opener/명시적 finalFocus 대상만 연결하며 trap/dismiss 엔진은 추가하지 않았다. 첨부 정리의 비동기 실행 정책을 유지하면서 취소 ref를 초기 대상으로 명시한다. 공개 설명은 Radix context ID를 사용한다. Android 지도/이메일 인증 fragment의 불필요한 문자열은 제거한다.
+
+각 회귀 테스트의 수정 전 실패를 확인했으며 수정 후 관리자 focus/404/영구정리/기존dismiss/ConfirmDialog25건 및 삭제 성공2건, 공개 설명1건이 통과했다. 최신 전체 검사는 후속 로그를 따른다. 기존 initial-panel ShiftTab 단위 실패와 실제 Chromium 증거는 삭제하거나 기대를 낮추지 않았다. 부모의 c9는 checker만 변경 예정이므로 runtime/CSS bytes 동등 증명 후 새 guard와 lock/실제설치 정합성을 추가 검증한다.
+
+리뷰 수정 후 WSL 전체unit은 **518PASS/1FAIL(519)**, TypeScript PASS, ESLint 오류0/기존auth경고1, Doctor full486files 진단0, 자체overlay ASTguard PASS다. 잔여1은 기존 Radix reverse-entry이며 별도source엔진을 추가하지 않았다.

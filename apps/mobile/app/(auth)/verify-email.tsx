@@ -108,7 +108,6 @@ function VerificationMessage({
 }) {
   return (
     <>
-      {' '}
       {state === 'error' ? (
         <ErrorBanner message={error} />
       ) : (

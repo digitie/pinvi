@@ -86,6 +86,19 @@ describe('공통 Radix 공개 Dialog 행동 계약', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('설명과 aria-describedby를 같은 실제 요소로 연결한다', () => {
+    render(
+      <Dialog open onClose={vi.fn()} title="설명 제목" description="작업 설명">
+        본문
+      </Dialog>,
+    );
+    const panel = screen.getByRole('dialog', { name: '설명 제목' });
+    expect(panel).toHaveAccessibleDescription('작업 설명');
+    expect(document.getElementById(panel.getAttribute('aria-describedby') ?? '')).toHaveTextContent(
+      '작업 설명',
+    );
+  });
+
   it('기본은 heading을 aria-labelledby로 연결한다', () => {
     render(<Harness onClose={vi.fn()} />);
     const panel = screen.getByTestId('panel');
