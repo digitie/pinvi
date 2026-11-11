@@ -1,0 +1,54 @@
+{
+  "finding": "A-CONS-P2-05",
+  "originalInput": "328c7b634e34d56a1be4067b222e87ed3ae0ebf5",
+  "wrongCiLabel": "2ce8198cf23c757cdc552aaefa50dad1893c4548",
+  "originalFullTreesDiffer": true,
+  "oldFormatValidator": {
+    "old328FormatValidator": {
+      "328c7b634e34d56a1be4067b222e87ed3ae0ebf5": 0,
+      "2ce8198cf23c757cdc552aaefa50dad1893c4548": 0
+    },
+    "consequence": "both different valid source commits accepted; no equality check"
+  },
+  "preservedOriginalBuildBoot": "PASS but OCI/ENV revision was wrong; CI local image only, not production incident",
+  "fix": {
+    "singleSource": "git rev-parse --verify HEAD^{commit}",
+    "expected": "github.event.pull_request.head.sha || github.sha",
+    "buildArgTagBoot": "steps.source.outputs.revision",
+    "postBuild": "actual docker image inspect OCI revision and unique source ENV equal checkout",
+    "actualNegativeControl": "copy actual built inspect JSON; change OCI label to a different valid40hex; checker must reject"
+  },
+  "contractTests": {
+    "passed": 6,
+    "cases": [
+      "correct OCI/ENV",
+      "wrong valid40 OCI",
+      "wrong valid40 ENV",
+      "same wrong valid40 both fields",
+      "duplicate ENV",
+      "multiple images"
+    ]
+  },
+  "ciTriggerCoverage": {
+    "cleanSourceTests": 4,
+    "result": "PASS",
+    "log": ".git/provenance-clean-trigger-tests.log"
+  },
+  "checker": "scripts/check_web_image_provenance.py",
+  "test": "scripts/tests/test_web_image_provenance.py",
+  "sourceRuntimeChanged": false,
+  "C11SevenPacksChanged": false,
+  "sdk4AndMain476Preserved": true,
+  "previous5cbFunctionalCI": {
+    "head": "5cb742f5d10e93e5b9dcbe3e83969871a310fdd0",
+    "web": "SUCCESS",
+    "mobile": "SUCCESS includingSDK20/20/native exports/fonts/macOSWASM",
+    "api": "SUCCESS after B-CONS-P1-02 path correction",
+    "central": "SUCCESS",
+    "provenance": "still old-label bug; new image equality acceptance is pending"
+  },
+  "currentNewImageCI": "PENDING commit/push; record final result in PR/root handoff without moving tested source head",
+  "AOwnClosure": "PENDING immutable followup",
+  "BOwnClosure": "PENDING same immutable followup",
+  "productionMutated": false
+}

@@ -1,3 +1,7 @@
+## 2026-11-12 — 이미지 source provenance 동등성 수정
+
+원 A의328 image OCI/ENV가 synthetic2ce였던 오류를 재현했다. 실제 HEAD 단일 output·예상PRhead 대조·실제 built inspect 비교·서로 다른 유효40hex negative control을 연결했다.6 contract/clean CI trigger4검사 PASS. 원 B obsolete vendor CI 경로는 이미 수정됐고5cb full required API CI도 SUCCESS다. SDK4·main476·C11은 보존하고 새 immutable input의 실제 CI와 원 A/B closure를 확인한다. [기록](reports/pinvi-image-provenance-20261112.json).
+
 ## 2026-11-12 — SDK styling guard 기대값 정렬
 
 새 hosted 필수 Expo Doctor20/20은 통과했으나 styling guard의 이전Expo58.0.23 기대값이 type/macOS job을 막았다. 로컬 별도 guard 누락을 확인하고 SDK4 exact를 모두 명시 검사하도록 갱신했다. 수정 전 실패/수정 후 PASS를 보존했고 검사 완화·C11 변경·runtime source 변경은 없다. 새 hosted validation을 이어간다.

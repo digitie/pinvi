@@ -1,3 +1,7 @@
+## 2026-11-12 — 이미지 source provenance 동등성 수정
+
+원 A의328 image OCI/ENV가 synthetic2ce였던 오류를 재현했다. 실제 HEAD 단일 output·예상PRhead 대조·실제 built inspect 비교·서로 다른 유효40hex negative control을 연결했다.6 contract/clean CI trigger4검사 PASS. 원 B obsolete vendor CI 경로는 이미 수정됐고5cb full required API CI도 SUCCESS다. SDK4·main476·C11은 보존하고 새 immutable input의 실제 CI와 원 A/B closure를 확인한다. [기록](reports/pinvi-image-provenance-20261112.json).
+
 ## 2026-11-12 — SDK patch 후 hosted 검증
 
 SDK4 latest exact patch를 strict 설치하고 물리 Expo Doctor20/20·React Doctor0·type/lint/guard를 확인했다. main476의5파일을 먼저 병합해 기존 synthetic CI tree와 같음을 확인하고 SDK WIP를 복원했다. 깨끗한 CI 경로 회귀1FAIL/3PASS→4PASS이며 SDK 진단을 aggregate 필수로 연결했다. C11 bytes/원장·328 baseline/batch2는 보존한다. 새SDK exports/smoke 및 새main web 전체는 hosted CI 확인 대상이다. N150·운영 변경은 없다. [기록](reports/pinvi-expo-sdk-patches-20261112.json).

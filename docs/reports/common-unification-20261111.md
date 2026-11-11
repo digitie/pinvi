@@ -1,5 +1,24 @@
 # 공통 관리자 UI 이관 (2026-11-11)
 
+## 2026-11-12 — 원 A image provenance·원 B CI 경로 후속
+
+A-CONS-P2-05는328 checkout 이미지에 synthetic2ce8198을 label/ENV로 기록한 CI 식별 오류다.
+기존 build/HTTP boot 성공은 보존하며 실제 운영 incident로 확대하지 않는다.
+기존 format 검사에 production/328과 production/2ce를 각각 전달해 둘 다0임을 재현했다.
+
+Docker job은 실제 git HEAD를 한 번 확정하고 기대 PR head와 대조한 뒤 그 output만 build arg·tag·boot에 사용한다.
+build 후 실제 inspect의 OCI revision과 단일 PINVI_SOURCE_REVISION ENV를 checkout과 대조한다.
+잘못된 유효40hex label·ENV·양쪽값 등6개 contract 검사는 PASS다.
+실제 build metadata 사본의 OCI label만 다른 유효40hex로 바꿔 반드시 거부하는 negative control도 CI에 연결했다.
+[수정·음성 대조 기록](pinvi-image-provenance-20261112.json)에 source 입력·기존 실패·새 검사 범위를 고정했다.
+
+B-CONS-P1-02는 SDK d418에서 obsolete mobile/vendor PR/push/aggregate 경로를 제거해 수정했다.
+깨끗한328 source1FAIL/3PASS→수정4PASS와 full required API5cb CI SUCCESS를 보존한다.
+추가 provenance 검사 파일을 포함한 깨끗한 source의 CI trigger4검사도 PASS다.
+SDK4·필수 SDK Doctor·styling guard와 main476 유입5파일은 그대로이며 C11 bytes·원장은 바뀌지 않았다.
+새 immutable HEAD에서 실제 image label/ENV CI를 확인한 뒤 같은 입력으로 원 A/B closure를 요청한다.
+이전5cb web/mobile/API/central 성공과 새 provenance acceptance를 구분한다. merge/deploy는 부모 gate 이후다.
+
 ## 2026-11-12 — SDK4 patch·필수 진단·main 동기화
 
 registry latest exact/peer를 확인하여 Expo58.0.24·Constants58.0.16·Linking58.0.17·Router58.0.31을 적용했다.

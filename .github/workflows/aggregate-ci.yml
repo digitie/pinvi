@@ -111,6 +111,8 @@ jobs:
               equals("scripts/m05_activation_attestation.py"),
               equals("scripts/n150-playwright-runner.sh"),
               equals("scripts/verify-v100-live-gate.sh"),
+              equals("scripts/check_web_image_provenance.py"),
+              equals("scripts/tests/test_web_image_provenance.py"),
               equals("infra/docker-compose.app.yml"),
               equals("infra/.env.prod.example"),
               equals(".env.example"),
