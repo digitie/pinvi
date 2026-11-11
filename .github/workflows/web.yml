@@ -197,6 +197,12 @@ jobs:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:13805
         run: npm run test:e2e:map-canvas
 
+      - name: Run restore UI with isolated mocked API
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:13805
+        run: npm run test:e2e:restore
+
       - name: Upload e2e traces
         if: failure()
         uses: actions/upload-artifact@v4

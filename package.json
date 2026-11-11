@@ -53,10 +53,10 @@
     "vworld-map-core": "file:apps/web/vendor/vworld-map-core-1.0.1.tgz"
   },
   "devDependencies": {
-    "lightningcss": "file:apps/web/vendor/lightningcss-1.33.0+nativecss.fix.3.tgz",
+    "eslint": "10.14.0",
+    "lightningcss": "file:apps/web/vendor/lightningcss-1.33.0+nativecss.fix.4.tgz",
     "prettier": "3.9.10",
-    "typescript": "5.9.3",
-    "eslint": "10.14.0"
+    "typescript": "5.9.3"
   },
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0",

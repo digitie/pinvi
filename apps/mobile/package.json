@@ -36,6 +36,7 @@
     "export:ios": "expo export --platform ios --output-dir dist/ios"
   },
   "dependencies": {
+    "@kor-travel/tokens": "file:../web/vendor/kor-travel-tokens-0.1.1.tgz",
     "@maplibre/maplibre-react-native": "11.5.1",
     "@pinvi/api-client": "*",
     "@pinvi/design-tokens": "*",
@@ -50,6 +51,7 @@
     "expo-build-properties": "58.0.12",
     "expo-constants": "58.0.15",
     "expo-dev-client": "58.0.19",
+    "expo-font": "58.0.12",
     "expo-linking": "58.0.16",
     "expo-location": "58.0.21",
     "expo-router": "58.0.30",
@@ -57,9 +59,12 @@
     "expo-status-bar": "58.0.5",
     "expo-web-browser": "58.0.8",
     "nativewind": "5.0.0-rc.1",
+    "pretendard": "1.3.9",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "react-hook-form": "7.92.0",
     "react-native": "0.88.1",
+    "react-native-css": "3.1.0-rc.1",
     "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "5.11.1",
     "react-native-screens": "4.30.1",
@@ -67,26 +72,21 @@
     "react-native-worklets": "0.13.1",
     "vworld-map-core": "file:../web/vendor/vworld-map-core-1.0.1.tgz",
     "vworld-map-rn": "file:../web/vendor/vworld-map-rn-1.0.1.tgz",
+    "vworld-map-web": "file:../web/vendor/vworld-map-web-1.0.3.tgz",
     "zod": "4.6.7",
-    "zustand": "5.1.0",
-    "react-native-css": "3.1.0-rc.1",
-    "expo-font": "58.0.12",
-    "pretendard": "1.3.9",
-    "@kor-travel/tokens": "file:../web/vendor/kor-travel-tokens-0.1.1.tgz",
-    "react-hook-form": "7.92.0",
-    "vworld-map-web": "file:../web/vendor/vworld-map-web-1.0.3.tgz"
+    "zustand": "5.1.0"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",
+    "@tailwindcss/postcss": "4.3.5",
     "@types/react": "19.3.0",
     "eslint": "10.14.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "lightningcss": "file:../web/vendor/lightningcss-1.33.0+nativecss.fix.4.tgz",
+    "postcss": "8.5.32",
+    "react-doctor": "0.9.22",
     "tailwindcss": "4.3.5",
     "typescript": "5.9.3",
-    "@tailwindcss/postcss": "4.3.5",
-    "postcss": "8.5.32",
-    "lightningcss": "file:../web/vendor/lightningcss-1.33.0+nativecss.fix.3.tgz",
-    "react-doctor": "0.9.22",
-    "typescript-eslint": "8.72.2",
-    "eslint-plugin-react-hooks": "7.1.1"
+    "typescript-eslint": "8.72.2"
   }
 }

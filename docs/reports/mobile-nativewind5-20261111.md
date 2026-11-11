@@ -6,7 +6,7 @@
 
 registry nativewind5.0.0-rc.1은 react-native-css3.1.0-rc.1을 exact peer로 요구하며 Tailwind>4.1.11을 허용한다. engine은 React>=19, RN>=0.81, @expo/metro-config>=54, lightningcss>=1.27을 요구한다. Expo58/RN0.88.1/React19.3.1인 현재 앱은 이 범위 안이다. 실제 설치·bundle 검증은 별도로 기록한다.
 
-공식 [이관 가이드](https://www.nativewind.dev/v5/guides/migrate-from-v4)와 [설치 가이드](https://www.nativewind.dev/v5/getting-started/installation)는 RC0 예시다. 여기에 나온 Tailwind4.1.12를 복사하지 않고 사용자 정본인 Tailwind/PostCSS4.3.5와 실제 registry RC1 페어를 사용했다. compiler 직렬화 회귀를 원본에서 수정한 lightningcss1.33.0+nativecss.fix.3을 root/web/mobile에서 같은 file 산출물로 사용한다. 공식 문서의1.30.1은 비교 기준선으로만 남긴다.
+공식 [이관 가이드](https://www.nativewind.dev/v5/guides/migrate-from-v4)와 [설치 가이드](https://www.nativewind.dev/v5/getting-started/installation)는 RC0 예시다. 여기에 나온 Tailwind4.1.12를 복사하지 않고 사용자 정본인 Tailwind/PostCSS4.3.5와 실제 registry RC1 페어를 사용했다. compiler 직렬화 회귀를 원본에서 수정한 lightningcss1.33.0+nativecss.fix.4를 root/web/mobile에서 같은 file 산출물로 사용한다. 공식 문서의1.30.1은 비교 기준선으로만 남긴다.
 
 ## 변경과 소비자 조사
 
@@ -64,3 +64,11 @@ vworld-map-rn은 native-only 어댑터다. Expo web 정적 경로 수집에서 �
 웹 어댑터는 앱에서 쓰는 카메라 ref, bounds의 lon/lat 순서, marker 선택 callback과 접근성/적층을 연결한다. 위치 동의 정책을 보존하도록 wrapper의 추가 geolocate/navigation/scale UI는 끈다. 기존 native 원형 마커 표현을 유지한다. SSR sentinel와 카메라·마커3개 회귀 테스트 및 실제 Expo 웹 export로 검증했다.
 
 별도빈 TMPDIR와 LIGHTNINGCSS_FORCE_WASM=1로 실제 iOS Hermes export도 PASS했다. 이는 Linux 강제WASM 검증이며 macOS 자동선택/EAS/실기기 검증을 대신하지 않는다.
+
+## integration-8 단일 정본 채택 (2026-11-12)
+
+부모common670a753bc17f956f71bdc28385d6241a6e4ee017의 UI0.2.0/tokens0.1.1과 Lightning CSS1.33.0+nativecss.fix.4를 동일 tgz로 실제 설치했다. fix4 크기는15,376,394 bytes, SRI zDQ03VJE37OlyBrLsRcsEdIVu0T4BXJKDH5y9//To6GlGN2UrKQGERFVAFblkPQ5ZEbhuOp5wpXxGARZNdbQLA==이다. 원본 source748651c, serde18e53fc provenance를 부모 원장 그대로 보존한다.
+
+root/web/mobile의 직접 dev file 참조와 root $lightningcss override를 맞추고 루트cache가 아닌 임시 전용cache에서 명시 재설치했다. npm12 workspace에서 override 대상 core/CSS를 다시 명시하면 root file spec을 workspace 아래로 중복 해석하는 ENOENT가 재현됐다. 고유 core/CSS는 루트에서 명시 설치하고, UI/tokens/web/RN은 각 소비자에서 명시 설치했다. 같은 단일 물리 vendor를 사용하며 수동 lock 수정/force/legacy peer/node_modules 패치는 없다. 두 surface guard와 styling guard, 실제 tgz/lock/module/원장 SHA512 비교가 통과했다.
+
+fix4의 새 독립 TMPDIR에서 Android/iOS Hermes export와4OTF 포함을 확인했다. 웹SSR·별도빈cache 강제WASM iOS 및 N150 최신산출물스모크는 이번 정본으로 계속 검증한다. 과거 fix3 증거를 fix4 성공으로 재사용하지 않는다.

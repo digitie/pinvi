@@ -16,7 +16,7 @@ const wanted = {
   'react-native-css': '3.1.0-rc.1',
   tailwindcss: '4.3.5',
   '@tailwindcss/postcss': '4.3.5',
-  lightningcss: '1.33.0+nativecss.fix.3',
+  lightningcss: '1.33.0+nativecss.fix.4',
   eslint: '10.14.0',
   'react-doctor': '0.9.22',
 };

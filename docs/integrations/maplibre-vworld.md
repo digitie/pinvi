@@ -45,14 +45,15 @@ MapLibre GL JS 채택 결정은 유지하되, 기존 Web 의존성 `maplibre-vwo
 manifest와 원장 갱신 뒤 frontend cwd에서 명시 설치하여 같은 버전 후보의 이전 integrity가 lock에 남지 않게 한다. 다음은 웹 명령이다.
 
 ```bash
+npx --yes npm@12.0.1 install vworld-map-core@file:apps/web/vendor/vworld-map-core-1.0.1.tgz
 cd apps/web
-npx --yes npm@12.0.1 install   vworld-map-core@file:vendor/vworld-map-core-1.0.1.tgz   vworld-map-web@file:vendor/vworld-map-web-1.0.3.tgz
+npx --yes npm@12.0.1 install vworld-map-web@file:vendor/vworld-map-web-1.0.3.tgz
 cd ../..
 node scripts/check-lockfile-integrity.mjs
 npx --yes npm@12.0.1 ci --no-audit --no-fund
 ```
 
-lock을 삭제하거나 force/legacy-peer-deps를 사용하지 않는다. 공통 guard로 manifest·실제tgz·lock·canonical 원장을 대조하고 빈 빌드 디렉터리에서 다시 검증한다. 모바일도 RN/core/web의 public package와 원장을 함께 맞춘다. Android/iOS export·Expo web SSR·N150 브라우저 검사와 네이티브 실기기 검증은 결과를 구분해 보고한다.
+root override를 적용한 core는 루트에서 고유 파일을 명시한다. 같은 대상을 workspace CLI에도 명시하면 npm12가 root file 경로를 중복해석하는 ENOENT가 생길 수 있다. lock을 삭제하거나 force/legacy-peer-deps를 사용하지 않는다. 공통 guard로 manifest·실제tgz·lock·canonical 원장을 대조하고 빈 빌드 디렉터리에서 다시 검증한다. 모바일도 RN/core/web의 public package와 원장을 함께 맞춘다. Android/iOS export·Expo web SSR·N150 브라우저 검사와 네이티브 실기기 검증은 결과를 구분해 보고한다.
 
 peer dependency(`maplibre-gl`, `@maplibre/maplibre-react-native` 등)의 요구 범위가
 바뀌었으면 Pinvi `apps/web`·`apps/mobile`의 `package.json`도 함께 올리고, `npm run

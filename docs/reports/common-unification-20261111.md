@@ -88,3 +88,11 @@ N150 새 clean npm12 ci로 ESLint10 전이 통일까지 설치하고 실제 MapL
 후속 소스의 실제 c5 전체unit은 **501PASS/9FAIL(510)**이다. 기존LoginForm1, 새overlayProps/unstyled 미반영7, 실제initial-panel ShiftTab1로 구분한다. 전체lint 오류0/기존인증경고1, Doctor full483files 진단0, 자체엔진 AST guardPASS. TypeScript는 새공통 API 미반영2곳에서만 실패한다. 추가unit/브라우저증거는 API를 fake/mock하거나 node_modules를 수정하지 않고 현재 실제c5를 사용했다.
 
 Radix 원본은 [고정 source eb3a2b7의 FocusScope](https://github.com/radix-ui/primitives/blob/eb3a2b7091293e27df8f9ba906632d8daa3d81a3/packages/react/focus-scope/src/focus-scope.tsx)에서 같은 경계 처리를 확인했다. npm 실제 설치/registry latest 모두 @radix-ui/react-focus-scope1.3.1이므로 단순 버전 상향으로 해결되지 않는다. 체크포인트 검증로그는 저장소 밖 consumer-tools/pinvi-public-overlay-checkpoint에 hash 원장과 함께 보존했다. 부모 common670a753의 최종 pack은 별도 통지 전까지 설치하지 않는다.
+
+## integration-8 실제 적용과 재검증 (2026-11-12)
+
+공통source670a753의 UI/tokens·fix4 단일pack을 채택하고 6종전달tgz를 SHA512 검증 후 같은파일로 복사했다. root/web/mobile 원장은 부모c8의 source/versions/integrities를 그대로 보존하고 실제 direct file 경로만 표기한다. CSS4는모두dev직접의존성, root override는 $lightningcss이다. 구fix3 미사용vendor를 제거했다. 기존source9a 지도3종은같은bytes다.
+
+c8 실제modules/lock/상대file/원장일치PASS, web/mobile의새공통guard와 styling guardPASS, npm12 ls --all PASS이다. TypeScript web/mobile 및 mobile lintPASS. 웹전체unit은 **509PASS/1FAIL(510)**이며 LoginForm·공통API미반영8건은해소됐다. 남은1건은이미실제Chromium재현한Radix initial-panel ShiftTab계약이다. 새 전체E2E/생산build·CSS4모든exports는이번정본으로검증중이며 과거203/6/4를현재PASS로표현하지않는다.
+
+로컬root는npm실행중 일시ENOSPC를재현했다. 본인종료/tmp npmcache·rawDoctor복제·fix3WASM cache만절대경로확인후약249MiB정리했고source/증거/타인cache는보존했다. 대형clean설치와Nextbuild는N150격리환경에서진행한다.
