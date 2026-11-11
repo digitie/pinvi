@@ -1,6 +1,5 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ClusterPoint, MapLibreEvent, MapLibreMap } from '@/components/map/vworldPrimitives';
 import {
   ClusterLayer,
@@ -10,6 +9,7 @@ import {
   Popup,
   VWorldMap,
 } from '@/components/map/vworldPrimitives';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 const DEFAULT_CENTER: [number, number] = [126.978, 37.5665];
 const DEFAULT_ZOOM = 12;
@@ -94,7 +94,7 @@ export function MapView({
   const setViewport = (next: MapViewportSnapshot) => {
     viewportRef.current = next;
   };
-  const [selectedPointId, setSelectedPointId] = useState<string>(
+  const [selectedPointId, setSelectedPointId] = useState<string>(() =>
     DEFAULT_SELECTED_POINT.id.toString(),
   );
   const selectedPoint = useMemo(

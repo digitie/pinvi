@@ -842,7 +842,7 @@ sync`가 file watcher 없이도 가능 → CI / 자동화에 친화적.
          cut-over한다: `app` → `app_previous_<ts>`,
          `app_restore_<ts>` → `app`.
     - 3. previous schema는 N150/staging 7일 보존 후 자동 삭제한다. (당시 Odroid M1S
-      24시간 보존안은 ADR-067에 의해 폐기됐다.)
+         24시간 보존안은 ADR-067에 의해 폐기됐다.)
     - 핫스왑은 무중단이 아니라 near-zero downtime(목표 30~90초) schema-swap이다.
   - **훈련**: 분기 1회 staging에서 핫스왑 PoC. Sprint 6 종료 시 1회 prod에서
     훈련 (read-only mode + 가족 베타 사용자에게 안내).
@@ -2877,7 +2877,7 @@ command까지 허용하는 umbrella 권한이었다. PinVi는 command/consumer t
   high-watermark 세 cursor의 exact equality를 더 강하게 요구한다.
 - 이미 성공한 run도 fresh remote live call과 전체 local provenance 재검증 없이는 receipt를 반환하지 않는다.
 - forward commit의 final boundary는 canary live call과 분리한다. Manager가 `csv5 → Map H35 gc → final
-  all-writer fence → stopped-Map DB typed evidence → Pin finalize` 순서를 소유하며, Pin finalize는 HTTP를
+all-writer fence → stopped-Map DB typed evidence → Pin finalize` 순서를 소유하며, Pin finalize는 HTTP를
   호출하지 않는다. Map evidence object/SHA-256과 fresh Pin provenance를 한 transaction에서 대조한다.
 - final audit는 outer transaction PK, cutover unique, canonical 13-field request SHA-256, initial/final writer
   fence, Map evidence, prior receipt와 전체 evidence SHA-256을 typed column에 저장하고 UPDATE/DELETE/TRUNCATE를
@@ -3324,7 +3324,7 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
    앵커를 provisioning하기 전에는 전환하지 않는다. 2026-09-17 실측 기준 전국 KMA 격자
    앵커는 `e2e-seoul` 1개뿐이고, 실제 관광지에서는 상용 provider 예보만 잡힌다.
    G-1은 표본 좌표 커버리지 테스트로 **기계적으로** 강제한다.
-6b. **cutover는 게이트 G-2(개인정보 처리방침 정합)에도 건다.** 현재
+   6b. **cutover는 게이트 G-2(개인정보 처리방침 정합)에도 건다.** 현재
    `docs/compliance/data-policy.md`는 날씨 출처를 "기상청"으로 적고 제공 provider가 전부
    국내 공공기관이므로 **국외 이전 의무가 발생하지 않는다**고 선언한다. 상용 provider
    (OpenWeatherMap·WeatherAPI·wttr.in·Open-Meteo 등 국외 사업자)의 값을 표시하는 순간 그
@@ -3439,7 +3439,7 @@ Admin 1개는 별도 transport인 `apps/api/app/clients/kor_travel_map_admin.py`
 - `kor-travel-map`의 `weather-feature-normalization.md`에 있는 "PinVi는 별도 weather DB를
   만들지 않는다"는 문장은 map을 소스로 쓰는 전제에서 쓰였다. 결정 8이 그 전제를 대체한다.
 - **개인정보 처리방침·위탁 목록이 갱신 대상이 된다** — 결정 6b. `docs/compliance/
-  data-policy.md`의 "날씨: 기상청"과 "국외 이전 의무 발생 안 함"이 사실과 어긋나게 된다.
+data-policy.md`의 "날씨: 기상청"과 "국외 이전 의무 발생 안 함"이 사실과 어긋나게 된다.
 - **web 변경은 0이 아니다.** `TripWeatherSummary.tsx`의 `WEATHER_LABELS`·`WEATHER_RE`·
   `DUST_RE`는 KMA 코드 전용이라 상용 어휘(`TEMP`/`HUMIDITY`/`WIND_SPEED`/`PRECIP_PROB`
   등)를 **한 건도 인식하지 못하고 조용히 버린다**. metric key를 서버에서 정규화하거나
@@ -3535,7 +3535,7 @@ compose, 자체 nginx 게이트웨이 없음)에 맞게 적용한다.
 
 1. **`pinvi.etl.definitions`를 실제로 import·실행하는 프로세스를 별도
    `pinvi-dagster-code-server` 컨테이너로 분리한다.** `dagster api grpc -p 12803
-   -m pinvi.etl.definitions`. webserver/daemon은 새 `apps/etl/workspace.yaml`의
+-m pinvi.etl.definitions`. webserver/daemon은 새 `apps/etl/workspace.yaml`의
    `grpc_server` 항목으로 이 컨테이너에 접속하고(`-w` 플래그), **더 이상 유저
    코드를 직접 import하지 않는다.**
 2. **`host: 127.0.0.1`을 쓴다 — weather의 서비스명 DNS(bridge network)가 아니다.**
@@ -3711,7 +3711,6 @@ head까지 올린다. DB를 지우는 길은 명시적 `rebuild-pinned --restart
 
 - ADR-070의 "데이터 보존 불필요"는 **이관 시점의 판단**으로 남고, 그 뒤의 배포에는 적용되지
   않는다.
-
 
 ## ADR-072: Common Dagster 정책과 운영 UI를 PinVi에 채택한다
 
@@ -3915,7 +3914,7 @@ Track 2 프로그램(소유자 지시 2026-10-13)은 geo·weather·transport를 
 - 순서(값·절차는 복제하지 않고 포인터만): **T-374 머지·배포**(의존 없음) → odroid 초기화(Manager
   ADR-58 §11.1/T-OPS-01 — 2026-10-13 현재 NTP 드롭인·compose v2/buildx·방화벽·fstab bind·swapfile
   **미완**) → Manager T-MGR-01c(pinvi-api 블록 변수) → weather 플립 PR(T-MGR-06) → odroid `ensure
-  weather`(6b) → n150 `ensure pinvi`(7) → 게이트 3(§8.2-2) → 전원 off drill(§8.2-3).
+weather`(6b) → n150 `ensure pinvi`(7) → 게이트 3(§8.2-2) → 전원 off drill(§8.2-3).
 
 ## ADR-075: kor-travel-geo 공개 API key는 geo가 발급한 전용 key이며 VWorld key로 fallback하지 않는다 (ADR-048 대체)
 
@@ -3946,7 +3945,6 @@ ADR-048은 geo v2 `key`를 서버 VWorld key와 같은 값으로 쓰고 geo의 `
 
 - 2026-10-14 odroid geo에서 label `pinvi-api` key를 발급해 n150 Manager root `.env`에 저장했다.
 - geo 쪽 `KTG_VWORLD_API_KEY`를 Pinvi key와 맞출 필요가 없어졌다.
-
 
 ## ADR-076: 지도 교통 정보(transport) 레이어는 kor-travel-map REST로만 읽고, 레이어별로 강등한다
 
@@ -4047,3 +4045,9 @@ ADR-048은 geo v2 `key`를 서버 VWorld key와 같은 값으로 쓰고 geo의 `
 앱이 소유하는 app 테이블과 신규 0103 migration으로 처리한다. 봉인된 0100/0101은 수정하지 않으며 M05 지원 revision·runtime ACL repair를 같이 확장한다. 실제 운영 적용·최종 운영 검증은 Claude Code가 담당한다.
 
 버전 삭제의 근거: [S3 DeleteObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html), [ListObjectVersions](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectVersions.html).
+
+## ADR-079: 관리자 공통 Radix UI와 모바일 NativeWind5 RC·Tailwind4 통일
+
+- 상태: accepted (2026-11-11 사용자 명시 승인)
+
+관리자 표와 overlay는 common VirtualTable/shadcn Radix를 사용하고 공급 산출물·exact 버전·lock 해시를 CI에서 검사한다. 모바일의 NativeWind4/Tailwind3 구성은 NativeWind5.0.0-rc.1/engine3.1.0-rc.1 및 웹/common과 같은 Tailwind/PostCSS4.3.5로 대체한다. 기존 웹 preset은 토큰 정본으로 유지하고 모바일용 Tailwind4 CSS를 생성한다. RC의 실기기 검증 한계는 별도 기록한다. 인증·세션 정책은 바꾸지 않는다. [공통 UI 기록](reports/common-unification-20261111.md), [모바일 이관](reports/mobile-nativewind5-20261111.md).

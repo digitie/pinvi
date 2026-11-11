@@ -1,17 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, MessageSquare, Send, Trash2 } from 'lucide-react';
-import { ApiError, authApi, tripApi } from '@pinvi/api-client';
-import type { TripCommentResponse } from '@pinvi/schemas';
 import { apiClient, sharedApiClient } from '@/lib/api';
 import { sharedLoginHref } from '@/lib/loginReturnTo';
+import { ApiError, authApi, tripApi } from '@pinvi/api-client';
 import { canDeleteComment } from '@pinvi/domain';
+import type { TripCommentResponse } from '@pinvi/schemas';
+import { Loader2, MessageSquare, Send, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+const displayFormatter1 = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  dateStyle: 'short',
+  timeStyle: 'short',
+});
 
 function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+  return displayFormatter1.format(new Date(value));
 }
 
 export interface TripCommentsProps {
@@ -21,7 +25,16 @@ export interface TripCommentsProps {
   sharedToken?: string;
 }
 
-export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken }: TripCommentsProps) {
+function advanceLoadRevision(sequence: { current: number }) {
+  return ++sequence.current;
+}
+
+export function TripComments({
+  tripId,
+  ownerUserId,
+  refreshKey = 0,
+  sharedToken,
+}: TripCommentsProps) {
   const [comments, setComments] = useState<TripCommentResponse[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,16 +45,17 @@ export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken 
 
   const loadRevision = useRef(0);
   const reload = useCallback(async () => {
-    const revision = ++loadRevision.current;
+    const revision = advanceLoadRevision(loadRevision);
+    setError(null);
     try {
       const result = await (sharedToken
         ? tripApi(apiClient).listSharedComments(tripId, sharedToken)
         : tripApi(apiClient).listComments(tripId));
       if (revision !== loadRevision.current) return;
       setComments(result);
-      setError(null);
     } catch (err) {
-      if (revision === loadRevision.current) setError(err instanceof ApiError ? err.message : '댓글을 불러오지 못했습니다.');
+      if (revision === loadRevision.current)
+        setError(err instanceof ApiError ? err.message : '댓글을 불러오지 못했습니다.');
     } finally {
       if (revision === loadRevision.current) setLoading(false);
     }
@@ -57,15 +71,25 @@ export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken 
         /* 비로그인/실패는 삭제 버튼만 숨김. */
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [sharedToken]);
 
   useEffect(() => {
-    void (async () => { await reload(); })();
-    const timer = sharedToken ? setInterval(() => { void reload(); }, 30_000) : null;
+    void (async () => {
+      await reload();
+    })();
+    if (!sharedToken)
+      return () => {
+        advanceLoadRevision(loadRevision);
+      };
+    const timer = setInterval(() => {
+      void reload();
+    }, 30_000);
     return () => {
-      ++loadRevision.current;
-      if (timer) clearInterval(timer);
+      advanceLoadRevision(loadRevision);
+      clearInterval(timer);
     };
   }, [reload, refreshKey, sharedToken]);
 
@@ -76,11 +100,16 @@ export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken 
     setError(null);
     try {
       if (sharedToken) {
-        await tripApi(sharedApiClient).createSharedComment(tripId, sharedToken, { body: trimmed, target_type: 'trip' });
+        await tripApi(sharedApiClient).createSharedComment(tripId, sharedToken, {
+          body: trimmed,
+          target_type: 'trip',
+        });
         try {
           const me = await authApi(sharedApiClient).me();
           setCurrentUserId(me.user_id);
-        } catch { /* 작성은 성공했으므로 삭제 버튼용 조회 실패는 별도로 무시한다. */ }
+        } catch {
+          /* 작성은 성공했으므로 삭제 버튼용 조회 실패는 별도로 무시한다. */
+        }
       } else {
         await tripApi(apiClient).createComment(tripId, { body: trimmed, target_type: 'trip' });
       }
@@ -122,9 +151,16 @@ export function TripComments({ tripId, ownerUserId, refreshKey = 0, sharedToken 
 
       {sharedToken && (
         <p className="text-sm text-muted">
-          작성하려면 <a className="focus-ring underline" target="_blank" rel="noopener noreferrer"
-            href={sharedLoginHref(tripId)}>새 탭에서 로그인</a>한 뒤
-          이 화면에서 다시 작성해 주세요. 입력은 유지됩니다.
+          작성하려면{' '}
+          <a
+            className="focus-ring underline"
+            target="_blank"
+            rel="noopener noreferrer"
+            href={sharedLoginHref(tripId)}
+          >
+            새 탭에서 로그인
+          </a>
+          한 뒤 이 화면에서 다시 작성해 주세요. 입력은 유지됩니다.
         </p>
       )}
 

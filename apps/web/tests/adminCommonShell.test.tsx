@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import AdminLayout from '@/app/(admin)/admin/layout';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AdminLayout from '@/app/(admin)/admin/layout';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   pathname: '/admin/users/detail',
@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   logout: vi.fn(),
 }));
 vi.mock('next/navigation', () => ({
+  redirect: (href: string) => mocks.replace(href),
   usePathname: () => mocks.pathname,
   useRouter: () => ({ replace: mocks.replace }),
 }));

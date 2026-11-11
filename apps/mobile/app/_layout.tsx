@@ -1,3 +1,5 @@
+import { tokens } from '@kor-travel/tokens';
+import { useFonts } from 'expo-font';
 import { useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -6,6 +8,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../lib/auth';
 import '../global.css';
 
+const fontFamily = tokens.font.sans.$value[0].replace(/ Variable$/, '');
+
 /**
  * Expo Router 루트 레이아웃 — 프로바이더 스택(SafeArea → Query → Auth).
  * TanStack Query는 @pinvi/api-client query key와 같은 클라이언트를 공유한다
@@ -13,12 +17,20 @@ import '../global.css';
  * `(auth)`(비인증), `shared`(익명 공유 뷰).
  */
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    [fontFamily + '-Regular']: require('pretendard/dist/public/static/Pretendard-Regular.otf'),
+    [fontFamily + '-Medium']: require('pretendard/dist/public/static/Pretendard-Medium.otf'),
+    [fontFamily + '-SemiBold']: require('pretendard/dist/public/static/Pretendard-SemiBold.otf'),
+    [fontFamily + '-Bold']: require('pretendard/dist/public/static/Pretendard-Bold.otf'),
+  });
   const [queryClient] = useState(
     () =>
       new QueryClient({
         defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
       }),
   );
+
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider>

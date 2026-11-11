@@ -1,6 +1,18 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
+import { apiClient } from '@/lib/api';
+import {
+  ApiError,
+  adminApi,
+  queryKeys,
+  type AdminSecurityIncidentListParams,
+} from '@pinvi/api-client';
+import type { AdminSecurityIncidentRecord } from '@pinvi/schemas';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
@@ -12,19 +24,7 @@ import {
   Send,
   ShieldAlert,
 } from 'lucide-react';
-import {
-  ApiError,
-  adminApi,
-  queryKeys,
-  type AdminSecurityIncidentListParams,
-} from '@pinvi/api-client';
-import type { AdminSecurityIncidentRecord } from '@pinvi/schemas';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FilterBar, FilterField } from '@/components/admin/filter-bar';
-import { NativeSelect } from '@/components/admin/ui/native-select';
-import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
-import { apiClient } from '@/lib/api';
+import { useMemo, useState, type FormEvent } from 'react';
 
 const STATUS_OPTIONS = [
   { value: '', label: '상태 전체' },
@@ -101,7 +101,14 @@ function ErrorBox({ message }: { message: string }) {
   );
 }
 
-export default function AdminIncidentsPage() {
+export default function AdminIncidentsPage(...args: Parameters<typeof useAdminIncidentsPageModel>) {
+  const viewModel = useAdminIncidentsPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminIncidentsPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminIncidentsPageModel() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]['value']>('');
   const [severityFilter, setSeverityFilter] =
@@ -336,6 +343,73 @@ export default function AdminIncidentsPage() {
     actionMutation.mutate();
   };
 
+  return {
+    renderBranch: 'render0' as const,
+    actionMutation,
+    actionReason,
+    affectedCount,
+    closureNote,
+    columns,
+    createMutation,
+    createReason,
+    createSeverity,
+    decisionReason,
+    decisionRequired,
+    error,
+    incidentType,
+    incidentsQuery,
+    notice,
+    notifyEmail,
+    notifyMessage,
+    overdueFilter,
+    receiptRef,
+    selectedAction,
+    selectedIncident,
+    setActionReason,
+    setAffectedCount,
+    setClosureNote,
+    setCreateReason,
+    setCreateSeverity,
+    setDecisionReason,
+    setDecisionRequired,
+    setIncidentType,
+    setNotifyEmail,
+    setNotifyMessage,
+    setOverdueFilter,
+    setReceiptRef,
+    setSelectedAction,
+    setSelectedIncident,
+    setSeverityFilter,
+    setSource,
+    setStatusFilter,
+    setSummary,
+    severityFilter,
+    source,
+    statusFilter,
+    submitAction,
+    submitCreate,
+    summary,
+  };
+}
+
+type AdminIncidentsPageView0Model = Extract<
+  ReturnType<typeof useAdminIncidentsPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminIncidentsPageView0({ viewModel }: { viewModel: AdminIncidentsPageView0Model }) {
+  const {
+    columns,
+    error,
+    incidentsQuery,
+    notice,
+    overdueFilter,
+    selectedIncident,
+    setOverdueFilter,
+    setSeverityFilter,
+    setStatusFilter,
+    severityFilter,
+    statusFilter,
+  } = viewModel;
   return (
     <AdminPage
       title="Security incidents"
@@ -425,210 +499,259 @@ export default function AdminIncidentsPage() {
         </div>
 
         <div className="space-y-4">
-          <Section title="새 incident">
-            <form className="grid gap-3" onSubmit={submitCreate}>
-              <label className="grid gap-1 text-sm font-semibold text-ink">
-                유형
-                <input
-                  value={incidentType}
-                  onChange={(event) => setIncidentType(event.target.value)}
-                  className={inputClass}
-                  maxLength={64}
-                />
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-ink">
-                Severity
-                <select
-                  value={createSeverity}
-                  onChange={(event) => setCreateSeverity(event.target.value as SeverityFilter)}
-                  className={inputClass}
-                >
-                  {SEVERITY_OPTIONS.filter((option) => option.value).map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-ink">
-                Source
-                <input
-                  value={source}
-                  onChange={(event) => setSource(event.target.value)}
-                  className={inputClass}
-                  maxLength={64}
-                />
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-ink">
-                Summary
-                <input
-                  value={summary}
-                  onChange={(event) => setSummary(event.target.value)}
-                  className={inputClass}
-                  maxLength={240}
-                  required
-                />
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-ink">
-                영향 사용자
-                <input
-                  type="number"
-                  min={0}
-                  value={affectedCount}
-                  onChange={(event) => setAffectedCount(event.target.value)}
-                  className={inputClass}
-                />
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-ink">
-                사유
-                <textarea
-                  value={createReason}
-                  onChange={(event) => setCreateReason(event.target.value)}
-                  className={textareaClass}
-                  maxLength={500}
-                  required
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={createMutation.isPending}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
-                data-testid="admin-incidents-create"
-              >
-                {createMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-                )}
-                등록
-              </button>
-            </form>
-          </Section>
+          <AdminIncidentsPageSection0_0 viewModel={viewModel} />
 
-          {selectedIncident && (
-            <Section title="상태 조치">
-              <form className="grid gap-3" onSubmit={submitAction}>
-                <div className="font-mono text-xs text-muted">{selectedIncident.incident_id}</div>
-                <label className="grid gap-1 text-sm font-semibold text-ink">
-                  Action
-                  <select
-                    value={selectedAction}
-                    onChange={(event) => setSelectedAction(event.target.value as IncidentAction)}
-                    className={inputClass}
-                  >
-                    {actionsForIncident(selectedIncident).map((action) => (
-                      <option key={action} value={action}>
-                        {ACTION_LABEL[action]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {selectedAction === 'decision' && (
-                  <>
-                    <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-                      <input
-                        type="checkbox"
-                        checked={decisionRequired}
-                        onChange={(event) => setDecisionRequired(event.target.checked)}
-                      />
-                      정보주체 통지 필요
-                    </label>
-                    <label className="grid gap-1 text-sm font-semibold text-ink">
-                      판정 사유
-                      <textarea
-                        value={decisionReason}
-                        onChange={(event) => setDecisionReason(event.target.value)}
-                        className={textareaClass}
-                        maxLength={1000}
-                        required
-                      />
-                    </label>
-                  </>
-                )}
-                {selectedAction === 'notify' && (
-                  <>
-                    <label className="grid gap-1 text-sm font-semibold text-ink">
-                      수신 이메일
-                      <input
-                        value={notifyEmail}
-                        onChange={(event) => setNotifyEmail(event.target.value)}
-                        className={inputClass}
-                        maxLength={320}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-sm font-semibold text-ink">
-                      통지 내용
-                      <textarea
-                        value={notifyMessage}
-                        onChange={(event) => setNotifyMessage(event.target.value)}
-                        className={textareaClass}
-                        maxLength={4000}
-                        required
-                      />
-                    </label>
-                  </>
-                )}
-                {selectedAction === 'report' && (
-                  <label className="grid gap-1 text-sm font-semibold text-ink">
-                    접수번호
-                    <input
-                      value={receiptRef}
-                      onChange={(event) => setReceiptRef(event.target.value)}
-                      className={inputClass}
-                      maxLength={160}
-                      required
-                    />
-                  </label>
-                )}
-                {selectedAction === 'close' && (
-                  <label className="grid gap-1 text-sm font-semibold text-ink">
-                    종결 메모
-                    <textarea
-                      value={closureNote}
-                      onChange={(event) => setClosureNote(event.target.value)}
-                      className={textareaClass}
-                      maxLength={1000}
-                      required
-                    />
-                  </label>
-                )}
-                <label className="grid gap-1 text-sm font-semibold text-ink">
-                  사유
-                  <textarea
-                    value={actionReason}
-                    onChange={(event) => setActionReason(event.target.value)}
-                    className={textareaClass}
-                    maxLength={500}
-                    required
-                  />
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    disabled={actionMutation.isPending}
-                    className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
-                    data-testid="admin-incidents-action-submit"
-                  >
-                    {actionMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Send className="h-4 w-4" aria-hidden="true" />
-                    )}
-                    적용
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedIncident(null)}
-                    className="h-10 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-                  >
-                    취소
-                  </button>
-                </div>
-              </form>
-            </Section>
-          )}
+          {selectedIncident && <AdminIncidentsPageSection0_1 viewModel={viewModel} />}
         </div>
       </div>
     </AdminPage>
+  );
+}
+
+function AdminIncidentsPageSection0_0({ viewModel }: { viewModel: AdminIncidentsPageView0Model }) {
+  const {
+    affectedCount,
+    createMutation,
+    createReason,
+    createSeverity,
+    incidentType,
+    setAffectedCount,
+    setCreateReason,
+    setCreateSeverity,
+    setIncidentType,
+    setSource,
+    setSummary,
+    source,
+    submitCreate,
+    summary,
+  } = viewModel;
+  return (
+    <Section title="새 incident">
+      <form className="grid gap-3" onSubmit={submitCreate}>
+        <label className="grid gap-1 text-sm font-semibold text-ink">
+          유형
+          <input
+            value={incidentType}
+            onChange={(event) => setIncidentType(event.target.value)}
+            className={inputClass}
+            maxLength={64}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold text-ink">
+          Severity
+          <select
+            value={createSeverity}
+            onChange={(event) => setCreateSeverity(event.target.value as SeverityFilter)}
+            className={inputClass}
+          >
+            {SEVERITY_OPTIONS.filter((option) => option.value).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-sm font-semibold text-ink">
+          Source
+          <input
+            value={source}
+            onChange={(event) => setSource(event.target.value)}
+            className={inputClass}
+            maxLength={64}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold text-ink">
+          Summary
+          <input
+            value={summary}
+            onChange={(event) => setSummary(event.target.value)}
+            className={inputClass}
+            maxLength={240}
+            required
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold text-ink">
+          영향 사용자
+          <input
+            type="number"
+            min={0}
+            value={affectedCount}
+            onChange={(event) => setAffectedCount(event.target.value)}
+            className={inputClass}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold text-ink">
+          사유
+          <textarea
+            value={createReason}
+            onChange={(event) => setCreateReason(event.target.value)}
+            className={textareaClass}
+            maxLength={500}
+            required
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={createMutation.isPending}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
+          data-testid="admin-incidents-create"
+        >
+          {createMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+          )}
+          등록
+        </button>
+      </form>
+    </Section>
+  );
+}
+
+function AdminIncidentsPageSection0_1({ viewModel }: { viewModel: AdminIncidentsPageView0Model }) {
+  const {
+    actionMutation,
+    actionReason,
+    closureNote,
+    decisionReason,
+    decisionRequired,
+    notifyEmail,
+    notifyMessage,
+    receiptRef,
+    selectedAction,
+    selectedIncident,
+    setActionReason,
+    setClosureNote,
+    setDecisionReason,
+    setDecisionRequired,
+    setNotifyEmail,
+    setNotifyMessage,
+    setReceiptRef,
+    setSelectedAction,
+    setSelectedIncident,
+    submitAction,
+  } = viewModel;
+  if (selectedIncident == null) return null;
+  return (
+    <Section title="상태 조치">
+      <form className="grid gap-3" onSubmit={submitAction}>
+        <div className="font-mono text-xs text-muted">{selectedIncident.incident_id}</div>
+        <label className="grid gap-1 text-sm font-semibold text-ink">
+          Action
+          <select
+            value={selectedAction}
+            onChange={(event) => setSelectedAction(event.target.value as IncidentAction)}
+            className={inputClass}
+          >
+            {actionsForIncident(selectedIncident).map((action) => (
+              <option key={action} value={action}>
+                {ACTION_LABEL[action]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedAction === 'decision' && (
+          <>
+            <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <input
+                type="checkbox"
+                checked={decisionRequired}
+                onChange={(event) => setDecisionRequired(event.target.checked)}
+              />
+              정보주체 통지 필요
+            </label>
+            <label className="grid gap-1 text-sm font-semibold text-ink">
+              판정 사유
+              <textarea
+                value={decisionReason}
+                onChange={(event) => setDecisionReason(event.target.value)}
+                className={textareaClass}
+                maxLength={1000}
+                required
+              />
+            </label>
+          </>
+        )}
+        {selectedAction === 'notify' && (
+          <>
+            <label className="grid gap-1 text-sm font-semibold text-ink">
+              수신 이메일
+              <input
+                value={notifyEmail}
+                onChange={(event) => setNotifyEmail(event.target.value)}
+                className={inputClass}
+                maxLength={320}
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-semibold text-ink">
+              통지 내용
+              <textarea
+                value={notifyMessage}
+                onChange={(event) => setNotifyMessage(event.target.value)}
+                className={textareaClass}
+                maxLength={4000}
+                required
+              />
+            </label>
+          </>
+        )}
+        {selectedAction === 'report' && (
+          <label className="grid gap-1 text-sm font-semibold text-ink">
+            접수번호
+            <input
+              value={receiptRef}
+              onChange={(event) => setReceiptRef(event.target.value)}
+              className={inputClass}
+              maxLength={160}
+              required
+            />
+          </label>
+        )}
+        {selectedAction === 'close' && (
+          <label className="grid gap-1 text-sm font-semibold text-ink">
+            종결 메모
+            <textarea
+              value={closureNote}
+              onChange={(event) => setClosureNote(event.target.value)}
+              className={textareaClass}
+              maxLength={1000}
+              required
+            />
+          </label>
+        )}
+        <label className="grid gap-1 text-sm font-semibold text-ink">
+          사유
+          <textarea
+            value={actionReason}
+            onChange={(event) => setActionReason(event.target.value)}
+            className={textareaClass}
+            maxLength={500}
+            required
+          />
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={actionMutation.isPending}
+            className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
+            data-testid="admin-incidents-action-submit"
+          >
+            {actionMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Send className="h-4 w-4" aria-hidden="true" />
+            )}
+            적용
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedIncident(null)}
+            className="h-10 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+          >
+            취소
+          </button>
+        </div>
+      </form>
+    </Section>
   );
 }

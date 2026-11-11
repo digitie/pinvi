@@ -1,4 +1,4 @@
-import { forwardRef, type ReactNode } from 'react';
+import { forwardRef, type ComponentRef, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,7 +13,7 @@ import { colors } from '@pinvi/design-tokens';
 
 /**
  * 모바일 RN UI 키트(NativeWind). 웹 shadcn/ui 대응 — 각자 구현(frontend.md §2.1).
- * 색/타이포는 @pinvi/design-tokens preset(`tailwind.config.js`)에서 온다.
+ * 색/타이포는 @pinvi/design-tokens CSS 테마(`theme.css`)에서 온다.
  */
 
 /** 화면 컨테이너 — SafeArea + 스크롤 + canvas 배경. */
@@ -45,19 +45,31 @@ export function Screen({
 }
 
 export function Heading({ children, className }: { children: ReactNode; className?: string }) {
-  return <Text className={`text-2xl font-bold text-ink ${className ?? ''}`}>{children}</Text>;
+  return (
+    <Text className={`text-2xl font-bold font-pinvi-bold text-ink ${className ?? ''}`}>
+      {children}
+    </Text>
+  );
 }
 
 export function Subheading({ children, className }: { children: ReactNode; className?: string }) {
-  return <Text className={`text-base font-semibold text-ink ${className ?? ''}`}>{children}</Text>;
+  return (
+    <Text className={`text-base font-semibold font-pinvi-semibold text-ink ${className ?? ''}`}>
+      {children}
+    </Text>
+  );
 }
 
 export function Body({ children, className }: { children: ReactNode; className?: string }) {
-  return <Text className={`text-sm text-body ${className ?? ''}`}>{children}</Text>;
+  return (
+    <Text className={`text-sm font-pinvi-regular text-body ${className ?? ''}`}>{children}</Text>
+  );
 }
 
 export function Muted({ children, className }: { children: ReactNode; className?: string }) {
-  return <Text className={`text-xs text-muted ${className ?? ''}`}>{children}</Text>;
+  return (
+    <Text className={`text-xs font-pinvi-regular text-muted ${className ?? ''}`}>{children}</Text>
+  );
 }
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
@@ -110,18 +122,21 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? colors['on-primary'] : colors.ink} />
       ) : (
-        <Text className={`text-base font-semibold ${BUTTON_TEXT[variant]}`}>{label}</Text>
+        <Text className={`text-base font-semibold font-pinvi-semibold ${BUTTON_TEXT[variant]}`}>
+          {label}
+        </Text>
       )}
     </Pressable>
   );
 }
 
 /** 라벨 + TextInput + 오류 메시지(공용 validateForm 결과 결선용). */
-export const Field = forwardRef<TextInput, TextInputProps & { label: string; error?: string }>(
+export type FieldHandle = ComponentRef<typeof TextInput>;
+export const Field = forwardRef<FieldHandle, TextInputProps & { label: string; error?: string }>(
   function Field({ label, error, className, ...props }, ref) {
     return (
       <View className="gap-1.5">
-        <Text className="text-sm font-medium text-ink">{label}</Text>
+        <Text className="text-sm font-medium font-pinvi-medium text-ink">{label}</Text>
         <TextInput
           ref={ref}
           placeholderTextColor={colors['muted-soft']}
@@ -162,7 +177,7 @@ export function EmptyState({
 }) {
   return (
     <View className="items-center gap-2 py-16">
-      <Text className="text-base font-semibold text-ink">{title}</Text>
+      <Text className="text-base font-semibold font-pinvi-semibold text-ink">{title}</Text>
       {description ? <Text className="text-center text-sm text-muted">{description}</Text> : null}
       {action ? <View className="mt-2">{action}</View> : null}
     </View>
@@ -213,8 +228,8 @@ export function Checkbox({
         {checked ? <Text className="text-xs font-bold text-white">✓</Text> : null}
       </View>
       <View className="flex-1">
-        <Text className="text-sm font-medium text-ink">{label}</Text>
-        {summary ? <Text className="text-xs text-muted">{summary}</Text> : null}
+        <Text className="text-sm font-medium font-pinvi-medium text-ink">{label}</Text>
+        {summary ? <Text className="text-xs font-pinvi-regular text-muted">{summary}</Text> : null}
       </View>
     </Pressable>
   );
@@ -234,7 +249,9 @@ export function ChipGroup<T extends string>({
 }) {
   return (
     <View className="gap-1.5">
-      {label ? <Text className="text-sm font-medium text-ink">{label}</Text> : null}
+      {label ? (
+        <Text className="text-sm font-medium font-pinvi-medium text-ink">{label}</Text>
+      ) : null}
       <View className="flex-row flex-wrap gap-2">
         {options.map((opt) => {
           const active = value === opt.value;
@@ -246,7 +263,9 @@ export function ChipGroup<T extends string>({
               onPress={() => onChange(opt.value)}
               className={`min-h-11 justify-center rounded-sm border px-3 py-2 ${active ? 'border-primary bg-primary' : 'border-hairline bg-canvas'}`}
             >
-              <Text className={`text-sm font-medium ${active ? 'text-white' : 'text-body'}`}>
+              <Text
+                className={`text-sm font-medium font-pinvi-medium ${active ? 'text-white' : 'text-body'}`}
+              >
                 {opt.label}
               </Text>
             </Pressable>

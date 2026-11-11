@@ -1,10 +1,5 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, KeyRound, Trash2 } from 'lucide-react';
-import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import type { McpToken } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
@@ -14,6 +9,11 @@ import { NativeSelect } from '@/components/admin/ui/native-select';
 import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { FormField } from '@/components/forms/FormField';
 import { FormSelect } from '@/components/forms/FormSelect';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import type { McpToken } from '@pinvi/schemas';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Copy, KeyRound, Trash2 } from 'lucide-react';
+import { useCallback, useMemo, useRef, useState, type FormEvent } from 'react';
 
 type IssueFieldErrors = { userId?: string; reason?: string };
 
@@ -40,7 +40,14 @@ function tokenStatus(token: McpToken): string {
   return 'active';
 }
 
-export default function AdminMcpTokensPage() {
+export default function AdminMcpTokensPage(...args: Parameters<typeof useAdminMcpTokensPageModel>) {
+  const viewModel = useAdminMcpTokensPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminMcpTokensPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminMcpTokensPageModel() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<'active' | 'expired' | 'revoked' | ''>('active');
   const [query, setQuery] = useState('');
@@ -213,6 +220,55 @@ export default function AdminMcpTokensPage() {
     await navigator.clipboard.writeText(issued);
   };
 
+  return {
+    renderBranch: 'render0' as const,
+    columns,
+    error,
+    expiry,
+    issueErrors,
+    issueMutation,
+    issued,
+    name,
+    onCopy,
+    onIssue,
+    onSearch,
+    query,
+    reason,
+    reasonRef,
+    revokeReason,
+    setExpiry,
+    setName,
+    setQuery,
+    setReason,
+    setRevokeReason,
+    setStatusFilter,
+    setUserId,
+    statusFilter,
+    tokensQuery,
+    userId,
+    userIdRef,
+  };
+}
+
+type AdminMcpTokensPageView0Model = Extract<
+  ReturnType<typeof useAdminMcpTokensPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminMcpTokensPageView0({ viewModel }: { viewModel: AdminMcpTokensPageView0Model }) {
+  const {
+    columns,
+    error,
+    issued,
+    onCopy,
+    onSearch,
+    query,
+    revokeReason,
+    setQuery,
+    setRevokeReason,
+    setStatusFilter,
+    statusFilter,
+    tokensQuery,
+  } = viewModel;
   return (
     <AdminPage title="MCP 토큰" description="외부 agent read-only 토큰 관리">
       {/*
@@ -262,67 +318,7 @@ export default function AdminMcpTokensPage() {
         </p>
       )}
 
-      <Section title="대리 발급">
-        <form
-          onSubmit={onIssue}
-          className="grid items-start gap-3 lg:grid-cols-[1.2fr_1fr_120px_1.2fr_auto]"
-        >
-          <FormField
-            ref={userIdRef}
-            id="admin-mcp-user"
-            label="대상 user_id"
-            type="text"
-            value={userId}
-            onChange={(event) => setUserId(event.target.value)}
-            placeholder="user_id"
-            error={issueErrors.userId}
-            data-testid="admin-mcp-user"
-          />
-          <FormField
-            id="admin-mcp-name"
-            label="토큰 이름"
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            minLength={1}
-            maxLength={120}
-            data-testid="admin-mcp-name"
-          />
-          <FormSelect
-            id="admin-mcp-expiry"
-            label="만료"
-            value={expiry}
-            onChange={(event) =>
-              setExpiry(event.target.value as (typeof EXPIRY_OPTIONS)[number]['value'])
-            }
-          >
-            {EXPIRY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </FormSelect>
-          <FormField
-            ref={reasonRef}
-            id="admin-mcp-reason"
-            label="발급 사유"
-            type="text"
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="발급 사유"
-            error={issueErrors.reason}
-            data-testid="admin-mcp-reason"
-          />
-          <button
-            type="submit"
-            disabled={issueMutation.isPending}
-            className="mt-7 inline-flex h-9 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
-          >
-            <KeyRound className="h-4 w-4" aria-hidden="true" />
-            {issueMutation.isPending ? '발급 중…' : '발급'}
-          </button>
-        </form>
-      </Section>
+      <AdminMcpTokensPageSection0_0 viewModel={viewModel} />
 
       {issued && (
         <Section title="발급 원문">
@@ -368,5 +364,86 @@ export default function AdminMcpTokensPage() {
         rowTestId={(t) => `admin-mcp-row-${t.token_id ?? t.user_id}`}
       />
     </AdminPage>
+  );
+}
+
+function AdminMcpTokensPageSection0_0({ viewModel }: { viewModel: AdminMcpTokensPageView0Model }) {
+  const {
+    expiry,
+    issueErrors,
+    issueMutation,
+    name,
+    onIssue,
+    reason,
+    reasonRef,
+    setExpiry,
+    setName,
+    setReason,
+    setUserId,
+    userId,
+    userIdRef,
+  } = viewModel;
+  return (
+    <Section title="대리 발급">
+      <form
+        onSubmit={onIssue}
+        className="grid items-start gap-3 lg:grid-cols-[1.2fr_1fr_120px_1.2fr_auto]"
+      >
+        <FormField
+          ref={userIdRef}
+          id="admin-mcp-user"
+          label="대상 user_id"
+          type="text"
+          value={userId}
+          onChange={(event) => setUserId(event.target.value)}
+          placeholder="user_id"
+          error={issueErrors.userId}
+          data-testid="admin-mcp-user"
+        />
+        <FormField
+          id="admin-mcp-name"
+          label="토큰 이름"
+          type="text"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          minLength={1}
+          maxLength={120}
+          data-testid="admin-mcp-name"
+        />
+        <FormSelect
+          id="admin-mcp-expiry"
+          label="만료"
+          value={expiry}
+          onChange={(event) =>
+            setExpiry(event.target.value as (typeof EXPIRY_OPTIONS)[number]['value'])
+          }
+        >
+          {EXPIRY_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </FormSelect>
+        <FormField
+          ref={reasonRef}
+          id="admin-mcp-reason"
+          label="발급 사유"
+          type="text"
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="발급 사유"
+          error={issueErrors.reason}
+          data-testid="admin-mcp-reason"
+        />
+        <button
+          type="submit"
+          disabled={issueMutation.isPending}
+          className="mt-7 inline-flex h-9 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
+        >
+          <KeyRound className="h-4 w-4" aria-hidden="true" />
+          {issueMutation.isPending ? '발급 중…' : '발급'}
+        </button>
+      </form>
+    </Section>
   );
 }

@@ -189,6 +189,7 @@ export const queryKeys = {
     emailDeliverability: () => ['admin', 'emails', 'deliverability'] as const,
     emailsAll: () => ['admin', 'emails'] as const,
     audit: (params: { limit?: number }) => ['admin', 'audit', params] as const,
+    auditAll: () => ['admin', 'audit'] as const,
     locationAudit: (params: { userId?: string; from?: string; to?: string; limit?: number }) =>
       ['admin', 'location-audit', params] as const,
     apiCalls: (params: {

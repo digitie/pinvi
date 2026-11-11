@@ -83,10 +83,10 @@ apps/mobile/
 ├── vendor/                  # vworld-map-{core,rn} tarball (ADR-044, file: 핀)
 ├── app.json                 # Expo Dev Client / New Architecture / minSdk 24 / VWorld 설정
 ├── eas.json                 # EAS Build profile (developmentClient=true)
-├── babel.config.js          # babel-preset-expo + nativewind
-├── metro.config.js          # monorepo watchFolders + NativeWind
-├── tailwind.config.js       # @pinvi/design-tokens preset + NativeWind preset
-├── global.css               # Tailwind directives
+├── babel.config.js          # babel-preset-expo (NativeWind5는 Metro 통합)
+├── metro.config.js          # monorepo watchFolders + NativeWind5
+├── postcss.config.mjs       # @tailwindcss/postcss4.3.5
+├── global.css               # Tailwind4 layer + 생성된 Pinvi CSS 테마
 ├── tsconfig.json            # ../../tsconfig.base.json 확장
 └── package.json             # Expo SDK 56 + @pinvi/* (설치 완료)
 ```
@@ -152,3 +152,7 @@ API(`12801`)는 WSL에서 `127.0.0.1`(IPv4)로 바인딩되므로 `10.0.2.2:1280
 > clean npm ci에서는 실제 CLI → router-server → `expo-router/_ctx-shared` 해석과 Android Metro export를
 > 수동 symlink 없이 확인했다. 예전 symlink 우회는 추가하지 않는다. 이 확인은 native Dev Client의
 > 기기 실행 성공을 뜻하지 않는다. 지도 표면 확인에는 서버의 `PINVI_VWORLD_API_KEY`가 필요하다.
+
+## NativeWind5 RC 이관
+
+NativeWind5.0.0-rc.1/react-native-css3.1.0-rc.1, Tailwind/PostCSS4.3.5 exact를 사용한다. [이관·검증 기록](../../docs/reports/mobile-nativewind5-20261111.md)을 참고한다. `npm run check:styling`·`npm run doctor`·`npm run export:web`·`npm run export:android`로 검사한다.

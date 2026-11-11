@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bookmark, ExternalLink, Loader2, MapPin, Search } from 'lucide-react';
+import { isAbortError } from '@/lib/abort';
+import { apiClient } from '@/lib/api';
+import { searchResultCategory } from '@/lib/searchResultCategory';
 import { ApiError, geoApi } from '@pinvi/api-client';
 import type { PlaceSearchResult } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
-import { isAbortError } from '@/lib/abort';
+import { Bookmark, ExternalLink, Loader2, MapPin, Search } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface MapSearchBoxProps {
   onSelect: (result: PlaceSearchResult) => void;
@@ -33,16 +34,6 @@ const SOURCE_META: Record<Source, { label: string; badgeClass: string; icon: 'pi
     kakao: { label: '카카오', badgeClass: 'bg-marker-p-03/20 text-ink', icon: 'pin' },
     naver: { label: '네이버 검색', badgeClass: 'bg-marker-p-05/15 text-ink', icon: 'pin' },
   };
-
-/**
- * 결과 둘째 줄의 분류 이름. feature의 `category`는 Map 코드(`02010100`)라 사람에게 보이지 않고
- * 서버가 채운 `category_label`(잎 이름)만 쓴다. 외부(kakao/naver) 결과의 `category`는 provider가
- * 준 이름이라 그대로 쓴다(2026-11-02 prod e2e — 검색 결과가 숫자 코드만 보였다).
- */
-export function searchResultCategory(result: PlaceSearchResult): string | null {
-  if (result.category_label) return result.category_label;
-  return result.source === 'feature' ? null : (result.category ?? null);
-}
 
 function resultKey(r: PlaceSearchResult, index: number): string {
   return `${r.source}-${r.feature_id ?? r.poi_id ?? r.external_id ?? index}`;
@@ -85,7 +76,7 @@ export function MapSearchBox({
       if (isAbortError(err) || searchAbort.current !== controller) return;
       setError(err instanceof ApiError ? err.message : '검색에 실패했습니다.');
     } finally {
-      if (searchAbort.current === controller) setLoading(false);
+      setLoading((current) => (searchAbort.current === controller ? false : current));
     }
   }, []);
 

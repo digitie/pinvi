@@ -1,9 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { apiClient } from '@/lib/api';
 import { ApiError, telegramApi } from '@pinvi/api-client';
 import type { TelegramNotification, TelegramTarget } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
+
+const displayFormatter1 = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  dateStyle: 'short',
+  timeStyle: 'short',
+});
+const displayFormatter2 = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  dateStyle: 'short',
+  timeStyle: 'medium',
+});
 
 const names: Record<string, string> = {
   itinerary: '일정 보내기',
@@ -48,25 +59,26 @@ export function TelegramNotificationHistory({
     }
   }, [tripId]);
 
+  const loadLatest = useEffectEvent(load);
   useEffect(() => {
     const timer = setTimeout(() => {
-      void load();
+      void loadLatest();
     }, 0);
     return () => {
       clearTimeout(timer);
       sequence.current += 1;
     };
-  }, [load, refreshKey]);
+  }, [tripId, refreshKey]);
   const pending = rows.some((row) =>
     row.deliveries.some((delivery) => delivery.status === 'pending'),
   );
   useEffect(() => {
     if (!pending) return;
     const timer = setInterval(() => {
-      void load();
+      void loadLatest();
     }, 5000);
     return () => clearInterval(timer);
-  }, [pending, load]);
+  }, [pending, tripId]);
 
   return (
     <section
@@ -99,12 +111,7 @@ export function TelegramNotificationHistory({
             <li key={row.id} className="space-y-1 rounded-sm border border-hairline p-3 text-sm">
               <p className="font-semibold text-ink">
                 {names[row.category] ?? '알림'} ·{' '}
-                {new Intl.DateTimeFormat('ko-KR', {
-                  timeZone: 'Asia/Seoul',
-                  dateStyle: 'short',
-                  timeStyle: 'short',
-                }).format(new Date(row.created_at))}{' '}
-                KST
+                {displayFormatter1.format(new Date(row.created_at))} KST
               </p>
               {row.error_message && (
                 <p role="status" className="text-error-text">
@@ -129,15 +136,7 @@ export function TelegramNotificationHistory({
                     </p>
                   )}
                   {delivery.status === 'pending' && delivery.retry_at && (
-                    <p>
-                      다음 시도:{' '}
-                      {new Intl.DateTimeFormat('ko-KR', {
-                        timeZone: 'Asia/Seoul',
-                        dateStyle: 'short',
-                        timeStyle: 'medium',
-                      }).format(new Date(delivery.retry_at))}{' '}
-                      KST
-                    </p>
+                    <p>다음 시도: {displayFormatter2.format(new Date(delivery.retry_at))} KST</p>
                   )}
                 </div>
               ))}

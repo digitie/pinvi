@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react';
-import { TextInput, View } from 'react-native';
+import { useController, useForm } from 'react-hook-form';
+import { useState } from 'react';
+import { View } from 'react-native';
 import { Link } from 'expo-router';
 import { LoginRequestSchema } from '@pinvi/schemas';
 import { ApiError } from '@pinvi/api-client';
-import { validateForm, type FieldErrors } from '@pinvi/domain';
+import { validateForm } from '@pinvi/domain';
 import { useAuth } from '../../lib/auth';
 import { OAuthCancelledError, OAuthProviderError, loginWithGoogle } from '../../lib/oauth';
 import { Body, Button, ErrorBanner, Field, Heading, Muted, Screen } from '../../components/ui';
@@ -22,13 +23,27 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
  */
 export default function LoginScreen() {
   const { login, adoptSession } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const form = useForm<{ email: string; password: string }>({
+    defaultValues: { email: '', password: '' },
+    resolver: (values) => {
+      const result = validateForm(LoginRequestSchema, values);
+      if (result.success && result.data) return { values: result.data, errors: {} };
+      return {
+        values: {},
+        errors: Object.fromEntries(
+          Object.entries(result.fieldErrors).map(([field, message]) => [
+            field,
+            { type: 'validate', message },
+          ]),
+        ),
+      };
+    },
+  });
+  const email = useController({ name: 'email', control: form.control });
+  const password = useController({ name: 'password', control: form.control });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const passwordRef = useRef<TextInput>(null);
 
   const onGoogle = async () => {
     setError(null);
@@ -50,17 +65,11 @@ export default function LoginScreen() {
     }
   };
 
-  const onSubmit = async () => {
+  const onSubmit = form.handleSubmit(async (credentials) => {
     setError(null);
-    const result = validateForm(LoginRequestSchema, { email, password });
-    setFieldErrors(result.fieldErrors);
-    if (!result.success || !result.data) {
-      return;
-    }
-
     setLoading(true);
     try {
-      await login(result.data);
+      await login(credentials);
       // 성공 시 상태 전환 → 그룹 가드가 홈으로 이동.
     } catch (err) {
       if (err instanceof ApiError) {
@@ -77,7 +86,7 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  });
 
   return (
     <Screen>
@@ -91,30 +100,41 @@ export default function LoginScreen() {
           <ErrorBanner message={error} />
           <Field
             label="이메일"
-            value={email}
-            onChangeText={setEmail}
-            error={fieldErrors.email}
+            value={email.field.value}
+            onChangeText={email.field.onChange}
+            onBlur={email.field.onBlur}
+            ref={email.field.ref}
+            error={email.fieldState.error?.message}
             autoCapitalize="none"
             autoComplete="email"
             keyboardType="email-address"
             inputMode="email"
             returnKeyType="next"
-            onSubmitEditing={() => passwordRef.current?.focus()}
+            onSubmitEditing={() => form.setFocus('password')}
             placeholder="you@example.com"
           />
           <Field
-            ref={passwordRef}
+            ref={password.field.ref}
             label="비밀번호"
-            value={password}
-            onChangeText={setPassword}
-            error={fieldErrors.password}
+            value={password.field.value}
+            onChangeText={password.field.onChange}
+            onBlur={password.field.onBlur}
+            error={password.fieldState.error?.message}
             secureTextEntry
             autoComplete="password"
             returnKeyType="go"
-            onSubmitEditing={onSubmit}
+            onSubmitEditing={() => {
+              void onSubmit();
+            }}
             placeholder="비밀번호"
           />
-          <Button label="로그인" onPress={onSubmit} loading={loading} />
+          <Button
+            label="로그인"
+            onPress={() => {
+              void onSubmit();
+            }}
+            loading={loading}
+          />
 
           <View className="flex-row items-center gap-3 py-1">
             <View className="h-px flex-1 bg-hairline" />

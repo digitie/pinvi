@@ -1,10 +1,14 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm, useWatch } from 'react-hook-form';
+import { z } from 'zod';
+
 import { ApiClient, ApiError, adminApi, isRequestTimeoutError, queryKeys } from '@pinvi/api-client';
 import type { KorTravelMapCurationCollectionImportResponse } from '@pinvi/schemas';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Download, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -12,6 +16,13 @@ const apiClient = new ApiClient({
 
 const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const importFormSchema = z.object({
+  collectionId: z
+    .string()
+    .trim()
+    .regex(uuidPattern, 'Map canonical collection UUID를 정확히 입력하세요.'),
+});
 
 type PublishSelection = 'unchanged' | 'published' | 'draft';
 
@@ -42,7 +53,11 @@ function importErrorMessage(error: unknown): string {
 
 export function KorTravelMapCurationCollectionImportPanel() {
   const queryClient = useQueryClient();
-  const [collectionId, setCollectionId] = useState('');
+  const form = useForm<{ collectionId: string }>({
+    resolver: zodResolver(importFormSchema),
+    defaultValues: { collectionId: '' },
+  });
+  const collectionId = useWatch({ control: form.control, name: 'collectionId' });
   const [mode, setMode] = useState<'create' | 'refresh'>('create');
   const [publishSelection, setPublishSelection] = useState<PublishSelection>('unchanged');
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
@@ -90,18 +105,15 @@ export function KorTravelMapCurationCollectionImportPanel() {
     },
   });
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const normalizedCollectionId = collectionId.trim();
-    if (!uuidPattern.test(normalizedCollectionId)) {
-      setValidationError('Map canonical collection UUID를 정확히 입력하세요.');
-      return;
-    }
-    setValidationError(null);
-    const commandKey = idempotencyKey ?? crypto.randomUUID();
-    setIdempotencyKey(commandKey);
-    importMutation.mutate({ commandKey });
-  };
+  const submit = form.handleSubmit(
+    () => {
+      setValidationError(null);
+      const commandKey = idempotencyKey ?? crypto.randomUUID();
+      setIdempotencyKey(commandKey);
+      importMutation.mutate({ commandKey });
+    },
+    (errors) => setValidationError(errors.collectionId?.message ?? null),
+  );
 
   const resetForChangedInput = () => {
     if (idempotencyKey !== null || result !== null || importMutation.error !== null) {
@@ -138,11 +150,7 @@ export function KorTravelMapCurationCollectionImportPanel() {
           <span>collection UUID</span>
           <input
             className={inputClass}
-            value={collectionId}
-            onChange={(event) => {
-              setCollectionId(event.target.value);
-              resetForChangedInput();
-            }}
+            {...form.register('collectionId', { onChange: () => resetForChangedInput() })}
             placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
             inputMode="text"
             data-testid="admin-notice-canonical-import-collection-id"

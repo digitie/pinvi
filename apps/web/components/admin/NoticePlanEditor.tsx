@@ -1,15 +1,15 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import type { NoticePlan, NoticePlanCreate, NoticePlanUpdate } from '@pinvi/schemas';
-import { ArrowLeft, Loader2, Save, Trash2 } from 'lucide-react';
 import { AdminPage } from '@/components/admin/AdminPage';
 import { NoticeAttachmentPanel } from '@/components/admin/NoticeAttachmentPanel';
 import { NoticePoiEditor } from '@/components/admin/NoticePoiEditor';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import type { NoticePlan, NoticePlanCreate, NoticePlanUpdate } from '@pinvi/schemas';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Loader2, Save, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState, type FormEvent } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -92,7 +92,15 @@ function canonicalUpdateBody(draft: PlanDraft): NoticePlanUpdate {
   return { is_published: draft.is_published };
 }
 
-export function NoticePlanEditor({ planId }: { planId?: string }) {
+export function NoticePlanEditor(...args: Parameters<typeof useNoticePlanEditorModel>) {
+  const viewModel = useNoticePlanEditorModel(...args);
+  if (viewModel.renderBranch === 'render0') return <NoticePlanEditorView0 />;
+  if (viewModel.renderBranch === 'render1') return <NoticePlanEditorView1 viewModel={viewModel} />;
+  if (viewModel.renderBranch === 'render2') return <NoticePlanEditorView2 viewModel={viewModel} />;
+  return null;
+}
+
+function useNoticePlanEditorModel({ planId }: { planId?: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const isNew = !planId;
@@ -174,28 +182,63 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
   const busy = saveMutation.isPending || deleteMutation.isPending;
 
   if (!isNew && planQuery.isLoading) {
-    return (
-      <AdminPage title="추천 여행 편집">
-        <div className="flex min-h-40 items-center justify-center text-sm text-muted">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-          불러오는 중…
-        </div>
-      </AdminPage>
-    );
+    return { renderBranch: 'render0' as const };
   }
 
   if (!isNew && planQuery.isError) {
-    return (
-      <AdminPage title="추천 여행 편집">
-        <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text">
-          {planQuery.error instanceof ApiError
-            ? planQuery.error.message
-            : '추천 여행을 불러오지 못했습니다.'}
-        </p>
-      </AdminPage>
-    );
+    return { renderBranch: 'render1' as const, planQuery };
   }
 
+  return {
+    renderBranch: 'render2' as const,
+    busy,
+    deleteMutation,
+    draft,
+    error,
+    isCanonicalPlan,
+    isNew,
+    message,
+    plan,
+    reload,
+    saveMutation,
+    submit,
+    update,
+  };
+}
+function NoticePlanEditorView0() {
+  return (
+    <AdminPage title="추천 여행 편집">
+      <div className="flex min-h-40 items-center justify-center text-sm text-muted">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+        불러오는 중…
+      </div>
+    </AdminPage>
+  );
+}
+
+type NoticePlanEditorView1Model = Extract<
+  ReturnType<typeof useNoticePlanEditorModel>,
+  { renderBranch: 'render1' }
+>;
+function NoticePlanEditorView1({ viewModel }: { viewModel: NoticePlanEditorView1Model }) {
+  const { planQuery } = viewModel;
+  return (
+    <AdminPage title="추천 여행 편집">
+      <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text">
+        {planQuery.error instanceof ApiError
+          ? planQuery.error.message
+          : '추천 여행을 불러오지 못했습니다.'}
+      </p>
+    </AdminPage>
+  );
+}
+
+type NoticePlanEditorView2Model = Extract<
+  ReturnType<typeof useNoticePlanEditorModel>,
+  { renderBranch: 'render2' }
+>;
+function NoticePlanEditorView2({ viewModel }: { viewModel: NoticePlanEditorView2Model }) {
+  const { error, isNew, message, plan, reload } = viewModel;
   return (
     <AdminPage
       title={isNew ? '추천 여행 생성' : '추천 여행 편집'}
@@ -219,131 +262,7 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
         </p>
       )}
 
-      <form onSubmit={submit} className="space-y-4 rounded-sm border border-hairline bg-canvas p-4">
-        {isCanonicalPlan && (
-          <p className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">
-            Map에서 가져온 필드는 refresh로만 갱신됩니다. 여기에서는 공개 상태만 바꿀 수 있습니다.
-          </p>
-        )}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <label className="block text-xs text-muted">
-            slug
-            <input
-              value={draft.slug}
-              onChange={(event) => update({ slug: event.target.value })}
-              className={inputClass}
-              disabled={!isNew || isCanonicalPlan}
-              data-testid="admin-notice-slug"
-            />
-          </label>
-          <label className="block text-xs text-muted">
-            category
-            <input
-              value={draft.category}
-              onChange={(event) => update({ category: event.target.value })}
-              className={inputClass}
-              disabled={isCanonicalPlan}
-              data-testid="admin-notice-category"
-            />
-          </label>
-          <label className="block text-xs text-muted md:col-span-2">
-            제목
-            <input
-              value={draft.title}
-              onChange={(event) => update({ title: event.target.value })}
-              className={inputClass}
-              disabled={isCanonicalPlan}
-              data-testid="admin-notice-title"
-            />
-          </label>
-          <label className="block text-xs text-muted md:col-span-2">
-            요약
-            <textarea
-              value={draft.summary}
-              onChange={(event) => update({ summary: event.target.value })}
-              className={`${inputClass} min-h-20`}
-              disabled={isCanonicalPlan}
-              data-testid="admin-notice-summary"
-            />
-          </label>
-          <label className="block text-xs text-muted">
-            출처
-            <input
-              value={draft.source_name}
-              onChange={(event) => update({ source_name: event.target.value })}
-              className={inputClass}
-              disabled={isCanonicalPlan}
-            />
-          </label>
-          <label className="block text-xs text-muted">
-            목적지
-            <input
-              value={draft.destination}
-              onChange={(event) => update({ destination: event.target.value })}
-              className={inputClass}
-              disabled={isCanonicalPlan}
-              data-testid="admin-notice-destination"
-            />
-          </label>
-          <label className="block text-xs text-muted">
-            시작일
-            <input
-              type="date"
-              value={draft.starts_on}
-              onChange={(event) => update({ starts_on: event.target.value })}
-              className={inputClass}
-              disabled={isCanonicalPlan}
-            />
-          </label>
-          <label className="block text-xs text-muted">
-            종료일
-            <input
-              type="date"
-              value={draft.ends_on}
-              onChange={(event) => update({ ends_on: event.target.value })}
-              className={inputClass}
-              disabled={isCanonicalPlan}
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-ink">
-            <input
-              type="checkbox"
-              checked={draft.is_published}
-              onChange={(event) => update({ is_published: event.target.checked })}
-              data-testid="admin-notice-published"
-            />
-            공개
-          </label>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="submit"
-            disabled={busy}
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas disabled:opacity-50"
-            data-testid="admin-notice-save"
-          >
-            {saveMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Save className="h-4 w-4" aria-hidden="true" />
-            )}
-            저장
-          </button>
-          {!isNew && !isCanonicalPlan && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => deleteMutation.mutate()}
-              className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm font-semibold text-error-text disabled:opacity-50"
-            >
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-              삭제
-            </button>
-          )}
-          {plan && <span className="self-center text-xs text-muted">version {plan.version}</span>}
-        </div>
-      </form>
+      <NoticePlanEditorSection2_0 viewModel={viewModel} />
 
       {plan && (
         <>
@@ -352,5 +271,146 @@ export function NoticePlanEditor({ planId }: { planId?: string }) {
         </>
       )}
     </AdminPage>
+  );
+}
+
+function NoticePlanEditorSection2_0({ viewModel }: { viewModel: NoticePlanEditorView2Model }) {
+  const {
+    busy,
+    deleteMutation,
+    draft,
+    isCanonicalPlan,
+    isNew,
+    plan,
+    saveMutation,
+    submit,
+    update,
+  } = viewModel;
+  return (
+    <form onSubmit={submit} className="space-y-4 rounded-sm border border-hairline bg-canvas p-4">
+      {isCanonicalPlan && (
+        <p className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">
+          Map에서 가져온 필드는 refresh로만 갱신됩니다. 여기에서는 공개 상태만 바꿀 수 있습니다.
+        </p>
+      )}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <label className="block text-xs text-muted">
+          slug
+          <input
+            value={draft.slug}
+            onChange={(event) => update({ slug: event.target.value })}
+            className={inputClass}
+            disabled={!isNew || isCanonicalPlan}
+            data-testid="admin-notice-slug"
+          />
+        </label>
+        <label className="block text-xs text-muted">
+          category
+          <input
+            value={draft.category}
+            onChange={(event) => update({ category: event.target.value })}
+            className={inputClass}
+            disabled={isCanonicalPlan}
+            data-testid="admin-notice-category"
+          />
+        </label>
+        <label className="block text-xs text-muted md:col-span-2">
+          제목
+          <input
+            value={draft.title}
+            onChange={(event) => update({ title: event.target.value })}
+            className={inputClass}
+            disabled={isCanonicalPlan}
+            data-testid="admin-notice-title"
+          />
+        </label>
+        <label className="block text-xs text-muted md:col-span-2">
+          요약
+          <textarea
+            value={draft.summary}
+            onChange={(event) => update({ summary: event.target.value })}
+            className={`${inputClass} min-h-20`}
+            disabled={isCanonicalPlan}
+            data-testid="admin-notice-summary"
+          />
+        </label>
+        <label className="block text-xs text-muted">
+          출처
+          <input
+            value={draft.source_name}
+            onChange={(event) => update({ source_name: event.target.value })}
+            className={inputClass}
+            disabled={isCanonicalPlan}
+          />
+        </label>
+        <label className="block text-xs text-muted">
+          목적지
+          <input
+            value={draft.destination}
+            onChange={(event) => update({ destination: event.target.value })}
+            className={inputClass}
+            disabled={isCanonicalPlan}
+            data-testid="admin-notice-destination"
+          />
+        </label>
+        <label className="block text-xs text-muted">
+          시작일
+          <input
+            type="date"
+            value={draft.starts_on}
+            onChange={(event) => update({ starts_on: event.target.value })}
+            className={inputClass}
+            disabled={isCanonicalPlan}
+          />
+        </label>
+        <label className="block text-xs text-muted">
+          종료일
+          <input
+            type="date"
+            value={draft.ends_on}
+            onChange={(event) => update({ ends_on: event.target.value })}
+            className={inputClass}
+            disabled={isCanonicalPlan}
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={draft.is_published}
+            onChange={(event) => update({ is_published: event.target.checked })}
+            data-testid="admin-notice-published"
+          />
+          공개
+        </label>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="submit"
+          disabled={busy}
+          className="inline-flex h-9 items-center gap-1 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas disabled:opacity-50"
+          data-testid="admin-notice-save"
+        >
+          {saveMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Save className="h-4 w-4" aria-hidden="true" />
+          )}
+          저장
+        </button>
+        {!isNew && !isCanonicalPlan && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => deleteMutation.mutate()}
+            className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm font-semibold text-error-text disabled:opacity-50"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            삭제
+          </button>
+        )}
+        {plan && <span className="self-center text-xs text-muted">version {plan.version}</span>}
+      </div>
+    </form>
   );
 }

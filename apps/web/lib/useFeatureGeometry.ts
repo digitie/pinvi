@@ -1,11 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ApiError, featureApi } from '@pinvi/api-client';
-import type { FeaturesInBoundsResponse } from '@pinvi/schemas';
-import type { MapLibreMap } from 'vworld-map-web';
-import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
+import { apiClient } from '@/lib/api';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import {
   geometryBounds,
@@ -15,6 +11,10 @@ import {
   type GeometryFeature,
   type GeometryKind,
 } from '@/lib/featureGeometry';
+import { ApiError, featureApi } from '@pinvi/api-client';
+import type { FeaturesInBoundsResponse } from '@pinvi/schemas';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { MapLibreMap } from 'vworld-map-web';
 
 const EMPTY: GeometryFeature[] = [];
 const TTL_MS = 60_000;
@@ -155,10 +155,11 @@ export function useFeatureGeometry({
   const items = data?.data?.items;
   const features = useMemo(() => {
     if (!query || !items) return EMPTY;
+    const visibleKinds = new Set(kinds);
     return items
       .filter(isGeometryFeature)
       .filter(
-        (feature) => kinds.includes(feature.kind) && !hiddenFeatureIds?.has(feature.feature_id),
+        (feature) => visibleKinds.has(feature.kind) && !hiddenFeatureIds?.has(feature.feature_id),
       );
   }, [query, items, kinds, hiddenFeatureIds]);
 

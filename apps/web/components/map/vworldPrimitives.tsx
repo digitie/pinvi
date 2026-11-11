@@ -5,21 +5,21 @@
  * SSR 비활성(ssr:false) — 지도 엔진은 브라우저에서만 로드.
  */
 
+import 'maplibre-gl/dist/maplibre-gl.css';
 import dynamic from 'next/dynamic';
 import type {
   ClusterLayerProps,
   MakiMarkerProps,
   MapContextMenuProps,
   PinMarkerProps,
+  PolygonAreaProps,
   PopupProps,
   RouteLineProps,
-  PolygonAreaProps,
   UserLocationMarkerProps,
   VWorldMapFallbackInfo,
   VWorldMapViewProps,
   WeatherMarkerProps,
 } from 'vworld-map-web';
-import 'maplibre-gl/dist/maplibre-gl.css';
 
 export type {
   ClusterPoint,
@@ -80,9 +80,9 @@ export function MapFallback({
  * 지도 인스턴스가 만들어지기 전에 한 번만 설정하면 되므로 지도 엔진을 불러오는 이 동적 import
  * 안에서 부른다 — 저장소에서 지도를 만드는 길은 `VWorldMap` 하나다.
  */
-export const MAPLIBRE_WORKER_URL = '/maplibre/maplibre-gl-worker.mjs';
+const MAPLIBRE_WORKER_URL = '/maplibre/maplibre-gl-worker.mjs';
 
-export const VWorldMap = dynamic<VWorldMapViewProps>(
+const DynamicVWorldMap = dynamic<VWorldMapViewProps>(
   () =>
     Promise.all([import('maplibre-gl'), import('vworld-map-web')]).then(([maplibre, module]) => {
       // maplibre 기본값처럼 버전을 붙인다 — public 파일은 해시가 없어 프록시 캐시가 옛 worker를 줄 수 있다.
@@ -92,17 +92,17 @@ export const VWorldMap = dynamic<VWorldMapViewProps>(
   { ssr: false, loading: () => <MapLoadingSkeleton /> },
 );
 
-export const ClusterLayer = dynamic<ClusterLayerProps>(
+const DynamicClusterLayer = dynamic<ClusterLayerProps>(
   () => import('vworld-map-web').then((module) => module.ClusterLayer),
   { ssr: false },
 );
 
-export const MakiMarker = dynamic<MakiMarkerProps>(
+const DynamicMakiMarker = dynamic<MakiMarkerProps>(
   () => import('vworld-map-web').then((module) => module.MakiMarker),
   { ssr: false },
 );
 
-export const PinMarker = dynamic<PinMarkerProps>(
+const DynamicPinMarker = dynamic<PinMarkerProps>(
   () => import('vworld-map-web').then((module) => module.PinMarker),
   { ssr: false },
 );
@@ -122,27 +122,63 @@ export function Popup(props: PopupProps) {
   );
 }
 
-export const UserLocationMarker = dynamic<UserLocationMarkerProps>(
+const DynamicUserLocationMarker = dynamic<UserLocationMarkerProps>(
   () => import('vworld-map-web').then((module) => module.UserLocationMarker),
   { ssr: false },
 );
 
-export const WeatherMarker = dynamic<WeatherMarkerProps>(
+const DynamicWeatherMarker = dynamic<WeatherMarkerProps>(
   () => import('vworld-map-web').then((module) => module.WeatherMarker),
   { ssr: false },
 );
 
-export const MapContextMenu = dynamic<MapContextMenuProps>(
+const DynamicMapContextMenu = dynamic<MapContextMenuProps>(
   () => import('vworld-map-web').then((module) => module.MapContextMenu),
   { ssr: false },
 );
 
-export const RouteLine = dynamic<RouteLineProps>(
+const DynamicRouteLine = dynamic<RouteLineProps>(
   () => import('vworld-map-web').then((module) => module.RouteLine),
   { ssr: false },
 );
 
-export const PolygonArea = dynamic<PolygonAreaProps>(
+const DynamicPolygonArea = dynamic<PolygonAreaProps>(
   () => import('vworld-map-web').then((module) => module.PolygonArea),
   { ssr: false },
 );
+
+export function VWorldMap(props: VWorldMapViewProps) {
+  return <DynamicVWorldMap {...props} />;
+}
+
+export function ClusterLayer(props: ClusterLayerProps) {
+  return <DynamicClusterLayer {...props} />;
+}
+
+export function MakiMarker(props: MakiMarkerProps) {
+  return <DynamicMakiMarker {...props} />;
+}
+
+export function PinMarker(props: PinMarkerProps) {
+  return <DynamicPinMarker {...props} />;
+}
+
+export function UserLocationMarker(props: UserLocationMarkerProps) {
+  return <DynamicUserLocationMarker {...props} />;
+}
+
+export function WeatherMarker(props: WeatherMarkerProps) {
+  return <DynamicWeatherMarker {...props} />;
+}
+
+export function MapContextMenu(props: MapContextMenuProps) {
+  return <DynamicMapContextMenu {...props} />;
+}
+
+export function RouteLine(props: RouteLineProps) {
+  return <DynamicRouteLine {...props} />;
+}
+
+export function PolygonArea(props: PolygonAreaProps) {
+  return <DynamicPolygonArea {...props} />;
+}

@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { isAbortError } from '@/lib/abort';
+import { apiClient } from '@/lib/api';
 import { ApiError, featureApi } from '@pinvi/api-client';
 import type { FeatureDetailCard } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
-import { isAbortError } from '@/lib/abort';
+import { useEffect, useState } from 'react';
 
 export type EnrichmentProvider = 'kakao' | 'naver';
 
@@ -45,6 +45,7 @@ export function useFeatureDetailCard(
   useEffect(() => {
     if (!featureId) return;
     const controller = new AbortController();
+    let active = true;
     void (async () => {
       try {
         const requested = providersKey
@@ -55,16 +56,20 @@ export function useFeatureDetailCard(
           { providers: requested },
           { signal: controller.signal },
         );
-        if (controller.signal.aborted) return;
+        if (!active) return;
         setCard(result);
       } catch (err) {
-        if (isAbortError(err) || controller.signal.aborted) return;
+        if (!active) return;
+        if (isAbortError(err)) return;
         setError(err instanceof ApiError ? err.message : '상세 정보를 불러오지 못했습니다.');
       } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        if (active) setLoading(false);
       }
     })();
-    return () => controller.abort();
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [featureId, providersKey]);
 
   return { card, loading, error };

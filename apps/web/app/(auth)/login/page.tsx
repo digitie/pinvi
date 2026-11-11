@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { safeLoginReturnTo } from '@/lib/loginReturnTo';
-import { LoginRequestSchema } from '@pinvi/schemas';
-import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 import { FormField } from '@/components/forms/FormField';
 import { Button } from '@/components/ui/Button';
+import { safeLoginReturnTo } from '@/lib/loginReturnTo';
+import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 import { validateForm, type FieldErrors } from '@pinvi/domain';
+import { LoginRequestSchema } from '@pinvi/schemas';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -50,11 +50,8 @@ function getOAuthErrorMessage(code: string, provider: OAuthProviderName = 'googl
 
 // URL의 `?error=` 쿼리로 전달되는 OAuth 콜백 오류 — 마운트 시 1회만 읽으면 되는 순수 파생값이므로
 // effect 대신 초기 state 계산에서 바로 읽는다(react-hooks/set-state-in-effect).
-function readOAuthErrorFromLocation(): string | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  const params = new URLSearchParams(window.location.search);
+function readOAuthErrorFromLocation(search: string): string | null {
+  const params = new URLSearchParams(search);
   const code = params.get('error');
   if (!code) {
     return null;
@@ -89,7 +86,16 @@ export default function LoginPage() {
   const [oauthProviders, setOauthProviders] = useState(DISABLED_OAUTH_PROVIDERS);
   const [oauthLoading, setOauthLoading] = useState<OAuthProviderName | null>(null);
   const [oauthProvidersLoading, setOauthProvidersLoading] = useState(true);
-  const [oauthError, setOauthError] = useState<string | null>(readOAuthErrorFromLocation);
+  const locationSearch = useSyncExternalStore(
+    noopSubscribe,
+    () => window.location.search,
+    () => '',
+  );
+  const [oauthErrorOverride, setOauthError] = useState<string | null | undefined>(undefined);
+  const oauthError =
+    oauthErrorOverride === undefined
+      ? readOAuthErrorFromLocation(locationSearch)
+      : oauthErrorOverride;
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
@@ -112,7 +118,12 @@ export default function LoginPage() {
         setOauthProviders(next);
       } catch {
         if (active) {
-          setOauthError((current) => current ?? '소셜 로그인 상태를 불러오지 못했습니다.');
+          setOauthError(
+            (current) =>
+              current ??
+              readOAuthErrorFromLocation(window.location.search) ??
+              '소셜 로그인 상태를 불러오지 못했습니다.',
+          );
         }
       } finally {
         if (active) {

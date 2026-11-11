@@ -1,0 +1,58 @@
+# 공통 관리자 UI 이관 (2026-11-11)
+
+## 범위와 실행 기준
+
+별도 ext4 clone의 agent/codex-common-unification-20261111에서 작업한다. 원본 checkout과 사용자 웹·모바일 UX는 보존한다. push·PR·merge는 부모 통합 후 진행한다. 최종 별도 독립 적대 리뷰 2인은 부모 통합 단계의 gate다.
+
+## 사용처 조사와 이관
+
+기존 AdminTable과 DataTable 호환 경로 아래의 TanStack 복제 구현을 @kor-travel/ui/virtual-table로 교체한다. 기존 관리자 목록 및 system 컨테이너/사용자 세션 표도 모두 같은 구현을 사용한다. AdminTable의 모바일 카드·초기/서버 정렬·실제 스크롤 testid·가상화 임계·헤더 폭을 보존한다.
+
+Base UI 기반 Button·Checkbox·Dialog·AlertDialog·Popover·Tooltip·Tabs·Switch·Badge·Input·Separator 등의 구현은 common의 shadcn/ui Radix 프리미티브를 기존 import 경로로 제공한다. trigger의 render 합성은 asChild로 전환한다. 폼 라벨·오류 슬롯과 도메인별 닫기/포커스 정책만 소비자 어댑터에 남긴다.
+
+자체 공통 후보인 CopyButton, HelpTip, ConfirmActionButton은 부모에게 공유했다. 클립보드 오류 정책과 도메인별 비동기 작업은 소비자가 소유하며, 표/overlay의 기반 구현을 복제하지 않는다.
+
+## 실제 폼·상태·글꼴 사용
+
+collection 가져오기 직접 폼은 RHF useForm/useWatch와 Zod UUID 검증으로 연결한다. 기존 Idempotency-Key 재시도·성공 후 초기화 정책을 보존한다.
+
+Pinvi 관리자 로그인은 common LoginForm을 사용한다. 모바일 로그인은 DOM/Radix를 설치하지 않고 Pinvi Zod 스키마와 RHF로 검증한다. common의 RHF·Zod 입력 검증과 인스턴스별 Zustand UI 상태를 소비하며, 앱 로그인 오류 상태도 독립 Zustand store로 관리한다. 인증/세션/권한 정책은 변경하지 않는다. Pretendard Variable은 @kor-travel/tokens/font.css 전달 경로로 불러온다.
+
+## 의존성과 지도
+
+버전은 common의 versions.json axes/frontendPolicy 및 생성 frontend-dependencies 정책을 따른다. root version-targets.json과 additional-dependency-audit.json은 registry 확인 근거이며 모바일 Expo58 추가 감사를 반영했다. TypeScript는 5.9.3을 유지한다. 최신 7 전환은 openapi-typescript 및 typescript-eslint의 peer 범위와 함께 별도로 검증해야 한다. @types/node는 실행 환경 22와 맞춘 22.20.5다.
+
+지도는 부모가 고정한 최신 GitHub source 9a7a348b02d61969b394c681b024d5851eef836b의 core1.0.1/web1.0.3/RN1.0.1을 실제 설치했다. GPL-3.0-only LICENSE/NOTICE·src·tsconfig 포함 산출물이며 원본 core1.0.0 golden bytes는 덮어쓰지 않는다. root와 각 앱은 같은 apps/web/vendor의 tgz를 상대 file 경로로 공유한다. core의 transitive registry 요청을 차단하도록 root direct file 및 $vworld-map-core override를 사용한다. Lightning CSS도 원본 수정 후보1.33.0+nativecss.fix.3을 같은 물리 tgz로 root/web/mobile에 직접 선언하고 $lightningcss override로 맞췄다. 각 원장의 file은 실제 manifest 참조 경로이며 SHA512를 lock과 대조했다.
+
+공통 UI0.2.0/tokens0.1.1과 지도 산출물은 frontend/common-artifacts.json 원장에 SHA512를 고정한다. check:dependencies는 선언·lock·산출물 해시와 공통 UI 우회 구현을 검사하며 CI의 필수 단계로 실행한다.
+
+사용자가 모바일 NativeWind5 RC1/Tailwind4.3.5 이관도 승인했다. [모바일 이관 기록](mobile-nativewind5-20261111.md)에 실제 peer·구성·검증 범위를 기록한다.
+
+## 검증 상태
+
+현재 변경은 배포 전 검토용 checkpoint이다. 아래는 WSL Linux/Node22.22.2/npm12.0.1 결과이며 최종 공통 후보로 다시 검증해야 한다. 과거 배포 결과를 이번 후보 검증으로 재사용하지 않는다.
+
+| 검사                | 실제 결과·남은 계약                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 웹 unit             | 493PASS/1FAIL(494): c5 공통 LoginForm의 change 이벤트 없는 DOM 자동완성. 부모 현재 소스는 수정됐으며 최종 pack 수신 대기 |
+| shared unit         | domain138/schema24 모두PASS                                                                                              |
+| 웹 lint·타입        | ESLint 오류0/기존 인증 hard-navigation 경고1; TypeScript PASS                                                            |
+| 웹 production build | 이전 webpack 컴파일PASS 뒤 타입FAIL. 타입 원인 제거 후 전체 build는 N150 격리 재검증 예정                                |
+| 웹 Doctor           | full/warning/no-cache 482files, 오류0/경고0                                                                              |
+| 모바일 Expo58       | 타입/lint/스타일 계약PASS; Doctor45files 오류0/경고0                                                                     |
+| 모바일 bundle       | 실제 fix.3 + 지도 RN1.0.1로 Android/iOS Hermes exportPASS; 양쪽 Pretendard OTF4종 포함                                   |
+| 모바일 Web          | public web/native 분리 후 실제 fix.3 SSR35routes exportPASS; 플랫폼 계약 회귀3tests PASS                                 |
+| guard/tree          | 앱 공통 소비 경계PASS, npm12 ls --all PASS; root/web/mobile 실제 tgz SHA512·lock·원장 일치. 최종 부모 guard pack 대기    |
+| 브라우저·기기       | SDK58 최신 산출물 N150 Chromium375/1280px 로그인/CSS/글꼴·유효성·무가로넘침 PASS. Android/iOS 실기기·macOS/EAS 미실행    |
+
+최종 UI/tokens 단일 pack과 공유vendor/CSS 정책 원장을 수신한 뒤 explicit install, clean npm ci, 전체 gate를 다시 실행한다. macOS 자동 WASM iOS export는 필수 CI job에 연결했지만 아직 실행 결과가 없다. 두 독립 리뷰·CI·merge·부모 go 전에는 push/배포하지 않는다.
+
+## Doctor 진단 해소와 제한된 정적 오탐
+
+웹 전체 최초7errors/161warnings를 실제 UI/요청 수명 리팩터로 줄인다. 지도 상세 카드의 취소된 응답은 선택 변경/해제 뒤 버리며 abort를 무시하는 mock 응답 두 경우를 회귀 테스트로 검증했다. 권한/404 복귀는 Next render redirect로 이전 화면을 커밋하지 않는다. 제안 형식 dry-run은 백엔드 feature_requests.py의 dry_run 분기가 상태 쓰기 전에 결과를 반환함을 확인하여 인스턴스별 Zustand 진행 상태만 갖는 검증 action으로 옮겼다. 감사 로그를 남기는 seed/reset dry-run은 감사 캐시를 무효화한다.
+
+Grafana iframe은 브라우저의 parent origin과 target origin을 비교한다. 동일 origin에 allow-scripts/allow-same-origin을 함께 부여하면 iframe이 sandbox를 제거할 수 있으므로 같은 origin에는 두 권한을 주지 않고 별도 origin 설정/새 탭 열기를 안내한다. 다른 origin에서는 기존 쿠키·스크립트 동작을 유지한다. 두 경우를 실제 렌더 테스트로 검증한다.
+
+React Doctor0.9.22의 js-set-map-lookups는 string.includes도 배열 검색으로 오판한다. readFileSync(abs, 'utf8')는 string이며 live seed matcher의 row도 DOM text인 string이다. substring 검색을 Set의 원소 동일성 비교로 바꾸면 검증 의미가 달라지므로 build-index.mjs 한 줄과 global-setup.ts 두 줄에 근거 있는 oxlint-disable-next-line만 사용한다. full scope와 blocking warning, 앱 소스 전체 검사, 나머지 규칙은 유지한다. 최종 검증에는 inline disable을 중화한 원시 진단도 별도로 기록해 이 세 줄을 숨기지 않는다.
+
+빌드가 설치된 maplibre-gl의 worker/shared 두 minified 산출물을 public/maplibre에 복사한다. 이 파일은 앱 소스가 아니므로 Doctor의 ignore.files에 정확한 두 경로만 지정한다. predoctor는 설치 원본으로 다시 복사하고 Buffer.equals로 원본 바이트 일치를 검사하며 check:maplibre-worker로 별도 검사할 수 있다. 앱 소스 범위나 규칙은 제외하지 않는다. 패키지 버전·다운로드 무결성은 lock/의존성 guard가 검사한다.

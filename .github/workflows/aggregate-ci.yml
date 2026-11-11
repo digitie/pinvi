@@ -136,6 +136,10 @@ jobs:
             }
             if (hasAny([
               startsWith("apps/mobile/"),
+              startsWith("apps/web/vendor/"),
+              equals("scripts/check-mobile-styling.mjs"),
+              equals("scripts/mobile-web-smoke.mjs"),
+              equals("scripts/serve-mobile-export.py"),
               startsWith("packages/"),
               equals("package.json"),
               equals("package-lock.json"),
@@ -144,6 +148,8 @@ jobs:
             ])) {
               requiredChecks.push("mobile-typecheck");
               requiredChecks.push("mobile-lint");
+              requiredChecks.push("mobile-export");
+              requiredChecks.push("mobile-wasm-macos");
             }
             if (hasAny([
               // etl.yml의 `on.pull_request.paths`를 전부 덮어야 한다 — 덮지 않은 경로만

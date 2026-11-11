@@ -1,7 +1,7 @@
 'use client';
 
+import type { ColumnDef, OnChangeFn, RowData, SortingState } from '@kor-travel/ui/virtual-table';
 import { type ReactNode, useCallback, useMemo } from 'react';
-import type { ColumnDef, OnChangeFn, SortingState } from '@tanstack/react-table';
 
 import { DataTable, type DataTableColumnMeta } from '@/components/admin/ui/data-table';
 
@@ -26,7 +26,7 @@ import { DataTable, type DataTableColumnMeta } from '@/components/admin/ui/data-
  * pinvi `AdminTable`은 지금까지 클라이언트 정렬만 했으므로 어댑터는 `manualSorting={false}`로
  * 고정해 기존 동작을 유지한다(서버 정렬이 필요한 페이지는 `DataTable`을 직접 쓰면 된다).
  */
-export interface AdminTableColumn<R> {
+export interface AdminTableColumn<R extends RowData> {
   key: string;
   header: string;
   width?: string;
@@ -43,7 +43,7 @@ export interface AdminTableColumn<R> {
   align?: 'left' | 'right';
 }
 
-export interface AdminTableProps<R> {
+export interface AdminTableProps<R extends RowData> {
   columns: AdminTableColumn<R>[];
   rows: R[];
   rowKey: (row: R) => string;
@@ -98,7 +98,7 @@ function pxWidthToSize(width: string | undefined): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
-export function AdminTable<R>({
+export function AdminTable<R extends RowData>({
   columns,
   rows,
   rowKey,

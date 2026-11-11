@@ -1,23 +1,29 @@
 'use client';
 
-import Link from 'next/link';
-import { useState } from 'react';
-import { Copy, ExternalLink, Link2, Loader2, Trash2 } from 'lucide-react';
-import { ApiError, tripApi } from '@pinvi/api-client';
-import type { TripShareLinkVisibility, TripViewShareLink } from '@pinvi/schemas';
 import { apiClient } from '@/lib/api';
+import { ApiError, tripApi } from '@pinvi/api-client';
 import {
+  buildShareUrl,
   SHARE_STATUS_LABEL,
   SHARE_VISIBILITY_LABEL,
   shareLinkStatus,
-  buildShareUrl,
 } from '@pinvi/domain';
+import type { TripShareLinkVisibility, TripViewShareLink } from '@pinvi/schemas';
+import { Copy, ExternalLink, Link2, Loader2, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { useState } from 'react';
+
+const displayFormatter1 = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  dateStyle: 'medium',
+});
+const displayFormatter2 = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' });
 
 const VISIBILITIES: TripShareLinkVisibility[] = ['view_only', 'comment', 'edit'];
 
 function formatDate(value: string | null): string {
   if (!value) return '무기한';
-  return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(value));
+  return displayFormatter1.format(new Date(value));
 }
 
 export interface TripShareLinksProps {
@@ -28,7 +34,7 @@ export interface TripShareLinksProps {
 
 /** 만료일 입력과 같은 기준(KST)의 오늘 `YYYY-MM-DD`. */
 function todayInSeoul(): string {
-  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date());
+  return displayFormatter2.format(new Date());
 }
 
 export function TripShareLinks({ tripId, shareLinks, onChanged }: TripShareLinksProps) {

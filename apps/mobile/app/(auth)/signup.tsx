@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { TextInput, View } from 'react-native';
+import { View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { RegisterRequestSchema } from '@pinvi/schemas';
 import type { ConsentType } from '@pinvi/schemas';
@@ -13,6 +13,7 @@ import {
   Checkbox,
   ErrorBanner,
   Field,
+  type FieldHandle,
   Heading,
   Muted,
   Screen,
@@ -51,8 +52,8 @@ export default function SignupScreen() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const passwordRef = useRef<TextInput>(null);
-  const nicknameRef = useRef<TextInput>(null);
+  const passwordRef = useRef<FieldHandle>(null);
+  const nicknameRef = useRef<FieldHandle>(null);
 
   const allRequired = REQUIRED_CONSENTS.every((item) => consents[item.type]);
 

@@ -1,14 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Copy, KeyRound, Trash2 } from 'lucide-react';
-import { ApiError, userApi } from '@pinvi/api-client';
-import type { McpToken } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
 import { SettingsList, SettingsSection } from '@/components/app/SettingsSurface';
 import { FormField } from '@/components/forms/FormField';
 import { FormSelect } from '@/components/forms/FormSelect';
-import { buttonClassName } from '@/components/ui/Button';
+import { buttonClassName } from '@/components/ui/button-styles';
+import { apiClient } from '@/lib/api';
+import { ApiError, userApi } from '@pinvi/api-client';
+import type { McpToken } from '@pinvi/schemas';
+import { Copy, KeyRound, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
 const EXPIRY_OPTIONS = [
   { value: '30', label: '30일' },

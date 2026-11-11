@@ -342,7 +342,9 @@ test('정합성 페이지가 issue/report와 각각의 필터 query를 표시한
 
   await page.getByTestId('admin-integrity-action-resolve-issue-1').click();
   await expect(page.getByTestId('admin-integrity-action-dialog')).toBeVisible();
-  await page.getByTestId('admin-integrity-action-overlay').click({ position: { x: 2, y: 2 } });
+  const overlay = page.locator('[data-slot="dialog-overlay"][data-state="open"]');
+  await expect(overlay).toHaveCount(1);
+  await overlay.click({ position: { x: 2, y: 2 } });
   await expect(page.getByTestId('admin-integrity-action-dialog')).toHaveCount(0);
 
   await page.getByTestId('admin-integrity-action-resolve-issue-1').click();

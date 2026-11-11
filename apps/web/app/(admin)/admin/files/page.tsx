@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Download, Loader2, Save, Trash2 } from 'lucide-react';
-import { ApiError, adminApi } from '@pinvi/api-client';
-import type { AdminFileStorageSettings, AttachmentLibraryItem } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { ApiError, adminApi } from '@pinvi/api-client';
+import type { AdminFileStorageSettings, AttachmentLibraryItem } from '@pinvi/schemas';
+import { Download, Loader2, Save, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 // T-356: 필터 툴바에 이어 삭제 다이얼로그까지 admin 프리미티브로 전환했다. `AdminButton`
 // 별칭은 기존 호출부를 그대로 두기 위해 유지한다(앱 공용 `Button` import는 제거됨).
 import { Button as AdminButton } from '@/components/admin/ui/button';
@@ -51,7 +51,13 @@ const scopeOptions: { value: '' | AttachmentLibraryItem['target_scope']; label: 
   { value: 'curated_poi', label: '추천 POI' },
 ];
 
-export default function AdminFilesPage() {
+export default function AdminFilesPage(...args: Parameters<typeof useAdminFilesPageModel>) {
+  const viewModel = useAdminFilesPageModel(...args);
+  if (viewModel.renderBranch === 'render0') return <AdminFilesPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminFilesPageModel() {
   const [items, setItems] = useState<AttachmentLibraryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [settings, setSettings] = useState<AdminFileStorageSettings | null>(null);
@@ -253,58 +259,63 @@ export default function AdminFilesPage() {
     },
   ];
 
+  return {
+    renderBranch: 'render0' as const,
+    applyFilter,
+    busyId,
+    columns,
+    deleteReason,
+    deleteReasonError,
+    deleteReasonRef,
+    deleteTriggerRef,
+    error,
+    fileSectionRef,
+    items,
+    loading,
+    pendingDelete,
+    q,
+    remove,
+    saveSettings,
+    scope,
+    setDeleteReason,
+    setDeleteReasonError,
+    setPendingDelete,
+    setQ,
+    setScope,
+    setSettingsDraft,
+    setSettingsReason,
+    settings,
+    settingsBusy,
+    settingsDraft,
+    settingsReason,
+    total,
+  };
+}
+
+type AdminFilesPageView0Model = Extract<
+  ReturnType<typeof useAdminFilesPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminFilesPageView0({ viewModel }: { viewModel: AdminFilesPageView0Model }) {
+  const {
+    applyFilter,
+    columns,
+    error,
+    fileSectionRef,
+    items,
+    loading,
+    pendingDelete,
+    q,
+    scope,
+    setQ,
+    setScope,
+    total,
+  } = viewModel;
   return (
     <AdminPage title="파일" description="여행/날짜/POI 첨부 관리">
       {error && <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>}
 
-      <Section title="전역 용량 정책">
-        <div className="grid gap-3 lg:grid-cols-4">
-          {(
-            [
-              ['attachment_max_upload_bytes', '개별 파일'],
-              ['trip_attachment_quota_bytes', '계획 총량'],
-              ['user_attachment_quota_bytes', '사용자 총량'],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="text-sm">
-              <span className="mb-1 block text-xs font-semibold text-muted">{label}</span>
-              <input
-                value={settingsDraft[key]}
-                onChange={(e) => setSettingsDraft((prev) => ({ ...prev, [key]: e.target.value }))}
-                inputMode="numeric"
-                className="h-10 w-full rounded-sm border border-hairline px-3"
-                data-testid={`admin-file-setting-${key}`}
-              />
-              {settings && (
-                <span className="mt-1 block text-xs text-muted">{formatBytes(settings[key])}</span>
-              )}
-            </label>
-          ))}
-          <div className="space-y-2">
-            <FormTextArea
-              id="admin-file-settings-reason"
-              label="사유"
-              value={settingsReason}
-              onChange={(e) => setSettingsReason(e.target.value)}
-              rows={2}
-            />
-            <button
-              type="button"
-              onClick={saveSettings}
-              disabled={settingsBusy || settingsReason.trim().length < 1}
-              className="inline-flex h-10 items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
-              data-testid="admin-file-settings-save"
-            >
-              {settingsBusy ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Save className="h-4 w-4" aria-hidden="true" />
-              )}
-              저장
-            </button>
-          </div>
-        </div>
-      </Section>
+      <AdminFilesPageSection0_0 viewModel={viewModel} />
 
       <FilterBar>
         <FilterField className="w-64" htmlFor="admin-files-search" label="검색">
@@ -360,68 +371,147 @@ export default function AdminFilesPage() {
       )}
       {/* 삭제 대상이 있을 때만 마운트한다 — 닫힘 트랜지션 동안 `pendingDelete`가 null이 되어
           제목/파일명이 사라지는 깜빡임을 피한다. 열림/닫힘 상태 소유자는 그대로 `pendingDelete`. */}
-      {pendingDelete != null && (
-        <Dialog
-          open
-          onOpenChange={(open) => {
-            // 진행 중(busyId)에는 Escape/scrim으로 닫히지 않게 한다 — 전환 전 `busy` 계약 그대로.
-            if (!open && busyId == null) setPendingDelete(null);
-          }}
-        >
-          <DialogContent
-            className="max-w-md"
-            data-testid="admin-file-delete-dialog"
-            initialFocus={deleteReasonRef}
-            finalFocus={deleteTriggerRef}
-          >
-            <DialogHeader>
-              <div className="min-w-0">
-                <DialogTitle>파일을 삭제할까요?</DialogTitle>
-                <DialogDescription className="mt-1">
-                  {pendingDelete.original_filename}
-                </DialogDescription>
-              </div>
-            </DialogHeader>
-            <div className="p-4">
-              <FormTextArea
-                ref={deleteReasonRef}
-                id="admin-file-delete-reason"
-                label="삭제 사유"
-                hint="audit log에 남습니다."
-                value={deleteReason}
-                onChange={(event) => {
-                  if (deleteReasonError) setDeleteReasonError(null);
-                  setDeleteReason(event.target.value);
-                }}
-                error={deleteReasonError ?? undefined}
-                disabled={busyId != null}
-                maxLength={500}
-                rows={3}
-                data-testid="admin-file-delete-reason"
-              />
-            </div>
-            <DialogFooter>
-              <AdminButton
-                type="button"
-                variant="outline"
-                onClick={() => setPendingDelete(null)}
-                disabled={busyId != null}
-              >
-                취소
-              </AdminButton>
-              <AdminButton
-                type="button"
-                variant="destructive-solid"
-                onClick={() => void remove()}
-                loading={busyId != null}
-                data-testid="admin-file-delete-submit"
-              >
-                삭제
-              </AdminButton>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+      {pendingDelete != null && <AdminFilesPageSection0_1 viewModel={viewModel} />}
     </AdminPage>
+  );
+}
+
+function AdminFilesPageSection0_0({ viewModel }: { viewModel: AdminFilesPageView0Model }) {
+  const {
+    saveSettings,
+    setSettingsDraft,
+    setSettingsReason,
+    settings,
+    settingsBusy,
+    settingsDraft,
+    settingsReason,
+  } = viewModel;
+  return (
+    <Section title="전역 용량 정책">
+      <div className="grid gap-3 lg:grid-cols-4">
+        {(
+          [
+            ['attachment_max_upload_bytes', '개별 파일'],
+            ['trip_attachment_quota_bytes', '계획 총량'],
+            ['user_attachment_quota_bytes', '사용자 총량'],
+          ] as const
+        ).map(([key, label]) => (
+          <label key={key} className="text-sm">
+            <span className="mb-1 block text-xs font-semibold text-muted">{label}</span>
+            <input
+              value={settingsDraft[key]}
+              onChange={(e) => setSettingsDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+              inputMode="numeric"
+              className="h-10 w-full rounded-sm border border-hairline px-3"
+              data-testid={`admin-file-setting-${key}`}
+            />
+            {settings && (
+              <span className="mt-1 block text-xs text-muted">{formatBytes(settings[key])}</span>
+            )}
+          </label>
+        ))}
+        <div className="space-y-2">
+          <FormTextArea
+            id="admin-file-settings-reason"
+            label="사유"
+            value={settingsReason}
+            onChange={(e) => setSettingsReason(e.target.value)}
+            rows={2}
+          />
+          <button
+            type="button"
+            onClick={saveSettings}
+            disabled={settingsBusy || settingsReason.trim().length < 1}
+            className="inline-flex h-10 items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
+            data-testid="admin-file-settings-save"
+          >
+            {settingsBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Save className="h-4 w-4" aria-hidden="true" />
+            )}
+            저장
+          </button>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function AdminFilesPageSection0_1({ viewModel }: { viewModel: AdminFilesPageView0Model }) {
+  const {
+    busyId,
+    deleteReason,
+    deleteReasonError,
+    deleteReasonRef,
+    deleteTriggerRef,
+    pendingDelete,
+    remove,
+    setDeleteReason,
+    setDeleteReasonError,
+    setPendingDelete,
+  } = viewModel;
+  if (pendingDelete == null) return null;
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        // 진행 중(busyId)에는 Escape/scrim으로 닫히지 않게 한다 — 전환 전 `busy` 계약 그대로.
+        if (!open && busyId == null) setPendingDelete(null);
+      }}
+    >
+      <DialogContent
+        className="max-w-md"
+        data-testid="admin-file-delete-dialog"
+        initialFocus={deleteReasonRef}
+        finalFocus={deleteTriggerRef}
+      >
+        <DialogHeader>
+          <div className="min-w-0">
+            <DialogTitle>파일을 삭제할까요?</DialogTitle>
+            <DialogDescription className="mt-1">
+              {pendingDelete.original_filename}
+            </DialogDescription>
+          </div>
+        </DialogHeader>
+        <div className="p-4">
+          <FormTextArea
+            ref={deleteReasonRef}
+            id="admin-file-delete-reason"
+            label="삭제 사유"
+            hint="audit log에 남습니다."
+            value={deleteReason}
+            onChange={(event) => {
+              if (deleteReasonError) setDeleteReasonError(null);
+              setDeleteReason(event.target.value);
+            }}
+            error={deleteReasonError ?? undefined}
+            disabled={busyId != null}
+            maxLength={500}
+            rows={3}
+            data-testid="admin-file-delete-reason"
+          />
+        </div>
+        <DialogFooter>
+          <AdminButton
+            type="button"
+            variant="outline"
+            onClick={() => setPendingDelete(null)}
+            disabled={busyId != null}
+          >
+            취소
+          </AdminButton>
+          <AdminButton
+            type="button"
+            variant="destructive-solid"
+            onClick={() => void remove()}
+            loading={busyId != null}
+            data-testid="admin-file-delete-submit"
+          >
+            삭제
+          </AdminButton>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

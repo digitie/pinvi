@@ -1,6 +1,6 @@
 /**
  * Tailwind preset — `apps/web/tailwind.config.ts`가 import.
- * 모바일 NativeWind (v2)도 동일 preset 사용.
+ * 모바일 NativeWind5는 이 preset에서 생성한 theme.css를 사용한다.
  */
 
 /** @type {import('tailwindcss').Config} */

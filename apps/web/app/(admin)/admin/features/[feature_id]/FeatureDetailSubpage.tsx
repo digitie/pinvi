@@ -1,17 +1,17 @@
 'use client';
 
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type {
   AdminFeatureDetailOverride,
   AdminFeatureDetailSource,
   AdminFeatureWeatherMetric,
 } from '@pinvi/schemas';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, CloudSun, Database, History, RefreshCw } from 'lucide-react';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -39,7 +39,7 @@ function firstParam(value: string | string[] | undefined) {
 }
 
 function formatDateTime(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString('ko-KR') : '—';
+  return value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '—';
 }
 
 function featureTabHref(featureId: string, tab: FeatureDetailTab) {

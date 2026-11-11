@@ -1,0 +1,66 @@
+/* 이 파일은 scripts/build-theme.mjs로 생성한다. 정본: tailwind-preset.cjs */
+@theme {
+  --color-primary: #ff385c;
+  --color-primary-active: #e00b41;
+  --color-primary-disabled: #ffd1da;
+  --color-cta: #e00b41;
+  --color-cta-hover: #c8093a;
+  --color-focus: #ff385c;
+  --color-luxe: #460479;
+  --color-plus: #92174d;
+  --color-canvas: #ffffff;
+  --color-surface-soft: #f7f7f7;
+  --color-surface-strong: #f2f2f2;
+  --color-hairline: #dddddd;
+  --color-hairline-soft: #ebebeb;
+  --color-border-strong: #c1c1c1;
+  --color-ink: #222222;
+  --color-body: #3f3f3f;
+  --color-muted: #6a6a6a;
+  --color-muted-soft: #929292;
+  --color-star-rating: #222222;
+  --color-on-primary: #ffffff;
+  --color-error-text: #c13515;
+  --color-error-text-hover: #b32505;
+  --color-error-bg: #fdecea;
+  --color-success-text: #1b873f;
+  --color-success-bg: #e6f4ea;
+  --color-legal-link: #428bff;
+  --color-scrim: #000000;
+  --color-marker-p-01: #E53935;
+  --color-marker-p-02: #FB8C00;
+  --color-marker-p-03: #FDD835;
+  --color-marker-p-04: #7CB342;
+  --color-marker-p-05: #43A047;
+  --color-marker-p-06: #00897B;
+  --color-marker-p-07: #00ACC1;
+  --color-marker-p-08: #1E88E5;
+  --color-marker-p-09: #3949AB;
+  --color-marker-p-10: #8E24AA;
+  --color-marker-p-11: #D81B60;
+  --color-marker-p-12: #6D4C41;
+  --color-marker-p-13: #757575;
+  --color-marker-p-14: #212121;
+  --color-marker-p-15: #F4511E;
+  --color-marker-p-16: #039BE5;
+  --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", system-ui, -apple-system, Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 32px;
+  --shadow-card: 0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.08);
+  --shadow-overlay: 0 0 0 1px rgba(0,0,0,0.02), 0 8px 24px rgba(0,0,0,0.08);
+  --spacing-section: 64px;
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-moderate: 300ms;
+  --ease-pinvi: cubic-bezier(0.2, 0, 0, 1);
+}
+@utility z-nav { z-index: 30; }
+@utility z-panel { z-index: 40; }
+@utility z-overlay { z-index: 50; }
+@utility z-modal { z-index: 60; }
+@utility z-toast { z-index: 70; }
+@utility min-h-touch { min-height: 44px; }
+@utility min-w-touch { min-width: 44px; }

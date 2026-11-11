@@ -8,7 +8,22 @@
  *  - packages/schemas/src/trip.ts (TripViewDay/weather schema)
  */
 import { expect, test, type Locator, type Page, type Response } from '@playwright/test';
-import { apiBaseURL, openPanel, deleteAllE2eTrips, deleteTrip, e2ePrefix, requireEnv, waitForRequest } from './live';
+import {
+  apiBaseURL,
+  deleteAllE2eTrips,
+  deleteTrip,
+  e2ePrefix,
+  openPanel,
+  requireEnv,
+  waitForRequest,
+} from './live';
+
+const displayFormatter1 = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
 
 export const TEXT = {
   noData: '이 날짜의 날씨 정보가 없습니다.',
@@ -59,12 +74,7 @@ export const PROVIDER_LABELS = [
 ];
 
 // ───────────────────────────── dates (KST) ─────────────────────────────
-const KST_DATE = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Asia/Seoul',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
+const KST_DATE = displayFormatter1;
 
 export function kstToday(): string {
   return KST_DATE.format(new Date()); // en-CA → YYYY-MM-DD
@@ -154,7 +164,9 @@ async function unwrap(page: Page, tripId: string, resPromise: Promise<Response>)
     // A body discarded by a reload can hang instead of throwing (168 s on 2026-11-03) — cap the wait.
     body = (await Promise.race([
       res.json(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('response body timeout')), 10_000)),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('response body timeout')), 10_000),
+      ),
     ])) as { data?: WxTripView } & WxTripView;
   } catch {
     // The page navigated/reloaded after this response (body discarded) — read the same trip view
@@ -212,12 +224,7 @@ export function centroid(coords: { lon: number; lat: number }[]) {
 }
 
 export function metricsForDate(card: WxCard, isoDate: string): WxMetric[] {
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
+  const fmt = displayFormatter1;
   return card.metrics.filter((m) => {
     const inst = m.effective_at ?? m.valid_at ?? m.observed_at ?? m.valid_from ?? null;
     if (!inst) return false;
@@ -270,7 +277,8 @@ export const daySection = (scope: Locator | Page) => scope.getByLabel(TEXT.dayLa
 export const poiRow = (scope: Locator | Page, name: string) =>
   scope.getByTestId('trip-poi-list').locator('li').filter({ hasText: name }).first();
 export const poiSection = (row: Locator) => row.getByLabel(TEXT.poiLabel).first();
-export const riseSuccess = (scope: Locator | Page) => scope.getByTestId('trip-day-rise-set').first();
+export const riseSuccess = (scope: Locator | Page) =>
+  scope.getByTestId('trip-day-rise-set').first();
 export const risePending = (scope: Locator | Page) =>
   scope.getByTestId('trip-day-rise-set-pending').first();
 
@@ -297,7 +305,10 @@ export async function expectWeatherConsistent(
     expect(card, 'found 는 참조하는 card 가 있어야 한다(계약 불변식)').toBeTruthy();
     if (kind === 'status') {
       await expect(section).toContainText(TEXT.noData);
-      expect(metricsForDate(card!, isoDate).length, '카드에 그 날짜 metric 이 없을 때만 no_data 문구').toBe(0);
+      expect(
+        metricsForDate(card!, isoDate).length,
+        '카드에 그 날짜 metric 이 없을 때만 no_data 문구',
+      ).toBe(0);
     } else {
       await expect(section).toContainText(/현재|예보|미세먼지|시간대별/);
     }
@@ -308,10 +319,17 @@ export async function expectWeatherConsistent(
   return kind;
 }
 
-export function parseRiseSet(text: string): { sunrise: string | null; sunset: string | null; reference: string | null } {
+export function parseRiseSet(text: string): {
+  sunrise: string | null;
+  sunset: string | null;
+  reference: string | null;
+} {
   const sunrise = /일출\s*(\d{1,2}:\d{2})/.exec(text)?.[1] ?? null;
   const sunset = /일몰\s*(\d{1,2}:\d{2})/.exec(text)?.[1] ?? null;
-  const rest = text.replace(/일출\s*\d{1,2}:\d{2}|일몰\s*\d{1,2}:\d{2}/g, '').replace(/\s+/g, ' ').trim();
+  const rest = text
+    .replace(/일출\s*\d{1,2}:\d{2}|일몰\s*\d{1,2}:\d{2}/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const reference = /^(.*?)\s*기준$/.exec(rest)?.[1]?.trim() || null;
   return { sunrise, sunset, reference };
 }
@@ -334,7 +352,10 @@ export function useTripCleanup() {
         await deleteTrip(page, id);
       } catch (err) {
         failed = true;
-        testInfo.annotations.push({ type: 'cleanup', description: `deleteTrip(${id}) 실패: ${String(err)}` });
+        testInfo.annotations.push({
+          type: 'cleanup',
+          description: `deleteTrip(${id}) 실패: ${String(err)}`,
+        });
       }
     }
     if (failed) {

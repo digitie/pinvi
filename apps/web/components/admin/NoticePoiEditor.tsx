@@ -1,12 +1,12 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
-import type { NoticePlan, NoticePoi, NoticePoiCreate, NoticePoiUpdate } from '@pinvi/schemas';
-import { Edit3, Plus, Save, Trash2, X } from 'lucide-react';
-import { NoticeAttachmentPanel } from '@/components/admin/NoticeAttachmentPanel';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { NoticeAttachmentPanel } from '@/components/admin/NoticeAttachmentPanel';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import type { NoticePlan, NoticePoi, NoticePoiCreate, NoticePoiUpdate } from '@pinvi/schemas';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Edit3, Plus, Save, Trash2, X } from 'lucide-react';
+import { useMemo, useState, type FormEvent } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -105,6 +105,7 @@ export function NoticePoiEditor({
   plan: NoticePlan;
   onReload: () => Promise<void>;
 }) {
+  const queryClient = useQueryClient();
   const [newPoi, setNewPoi] = useState(() => newDraft(nextSortOrder(plan)));
   const [editing, setEditing] = useState<NoticePoi | null>(null);
   const [editDraft, setEditDraft] = useState<PoiDraft | null>(null);
@@ -123,6 +124,7 @@ export function NoticePoiEditor({
   const createMutation = useMutation({
     mutationFn: () => adminApi(apiClient).createNoticePoi(plan.notice_plan_id, createBody(newPoi)),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.noticePlansAll() });
       setMessage('POI를 추가했습니다.');
       setError(null);
       await onReload();
@@ -141,6 +143,7 @@ export function NoticePoiEditor({
       );
     },
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.noticePlansAll() });
       setMessage('POI를 저장했습니다.');
       setError(null);
       setEditing(null);
@@ -154,6 +157,7 @@ export function NoticePoiEditor({
     mutationFn: (poi: NoticePoi) =>
       adminApi(apiClient).deleteNoticePoi(plan.notice_plan_id, poi.notice_poi_id, poi.version),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.noticePlansAll() });
       setMessage('POI를 삭제했습니다.');
       setError(null);
       await onReload();

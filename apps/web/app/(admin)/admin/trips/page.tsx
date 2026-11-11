@@ -1,10 +1,9 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
-import { Plus } from 'lucide-react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AdminPage } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
 import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
 import type {
   AdminTripCreateRequest,
@@ -13,10 +12,11 @@ import type {
   TripStatus,
   TripVisibility,
 } from '@pinvi/schemas';
-import { AdminPage } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
-import { Button } from '@/components/admin/ui/button';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useRef, useState, type FormEvent } from 'react';
 // KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 손수 만든
 // `role="dialog"` + scrim + `aria-modal`을 base-ui가 대신한다.
 import {
@@ -144,6 +144,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
     enabled: ownerQuery.length > 0,
   });
 
+  const createInFlight = useRef(false);
   const createMutation = useMutation({
     mutationFn: (body: AdminTripCreateRequest) => adminApi(apiClient).createTrip(body),
     onSuccess: (trip) => {
@@ -178,6 +179,8 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
       setFormError('시작일과 종료일은 함께 입력하세요.');
       return;
     }
+    if (createInFlight.current) return;
+    createInFlight.current = true;
     setFormError(null);
     try {
       await createMutation.mutateAsync({
@@ -194,6 +197,8 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
       });
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : '여행계획 생성 실패');
+    } finally {
+      createInFlight.current = false;
     }
   };
 

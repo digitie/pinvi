@@ -12,9 +12,9 @@
 | 프레임워크 (웹)      | **Next.js 15** (App Router) + **React 19**                                           | RSC + Server Actions 일부 사용                                                                                              |
 | 프레임워크 (모바일)  | **Expo SDK 56+ Dev Client** (React Native + Expo Router)                             | Expo Go 미사용, `apps/mobile` 활성 Sprint M-1 track. `v1.0.0` Web/API/Admin release blocker에서는 제외(T-284) — ADR-041/043 |
 | UI 컴포넌트 (웹)     | **shadcn/ui** + Radix Primitives                                                     | Tailwind 기반, copy-paste vendoring                                                                                         |
-| UI 컴포넌트 (모바일) | **Tamagui** 또는 native + Tailwind (NativeWind)                                      | Sprint 결정 후보                                                                                                            |
-| 스타일 (웹)          | **Tailwind CSS 3.4+**                                                                | `tailwind.config.ts`에서 디자인 토큰 import                                                                                 |
-| 스타일 (모바일)      | **NativeWind** (Tailwind for RN)                                                     | 디자인 토큰 동일 import                                                                                                     |
+| UI 컴포넌트 (모바일) | **NativeWind5 RC1** + React Native                                                   | ADR-079 확정                                                                                                                |
+| 스타일 (웹)          | **Tailwind CSS 4.3.5**                                                               | `tailwind.config.ts`에서 디자인 토큰 import                                                                                 |
+| 스타일 (모바일)      | **NativeWind5.0.0-rc.1** + Tailwind4.3.5                                             | 디자인 토큰 동일 import                                                                                                     |
 | 폼                   | **React Hook Form** + **Zod** resolver                                               | schema는 공용 패키지 (`packages/schemas`)                                                                                   |
 | 데이터 검증          | **Zod**                                                                              | 공용                                                                                                                        |
 | 클라이언트 상태      | **Zustand**                                                                          | 공용 store는 `packages/state`                                                                                               |
@@ -52,7 +52,7 @@ apps/
 │
 └── mobile/                      # Expo (v2 — Sprint 결정 후 추가)
     ├── app/                    # Expo Router (동일 라우트 구조)
-    ├── components/             # 모바일 전용 (Tamagui or NativeWind)
+    ├── components/             # 모바일 전용 (NativeWind5)
     ├── lib/                    # 모바일 전용 어댑터 (expo-location, react-native-maps)
     └── package.json
 
@@ -100,7 +100,7 @@ packages/                        # Next.js / Expo 공용
 │   │   ├── radii.ts            # 8/14/full
 │   │   ├── shadows.ts
 │   │   └── index.ts
-│   ├── tailwind-preset.cjs     # Tailwind preset (웹 + NativeWind 둘 다 사용)
+│   ├── tailwind-preset.cjs     # 토큰 정본 preset (모바일 theme.css 생성)
 │   └── package.json
 │
 ├── hooks/                      # 공용 React hook (RN 호환)
@@ -128,7 +128,7 @@ packages/                        # Next.js / Expo 공용
 | **TanStack Query key factory**       | `packages/api-client` ✓ 공용                   | invalidation 일관성                                                                                          |
 | **Zustand store**                    | `packages/state` ✓ 공용                        | storage adapter만 주입 (web: localStorage, mobile: AsyncStorage)                                             |
 | **순수 비즈니스 로직**               | **`packages/domain`** ✓ 공용 (2026-06-16 신설) | 거리/정렬(LexoRank)/폼 검증/공유링크/업로드/마커 스타일 등 — 웹·Expo 공유. DOM/next/react-native import 금지 |
-| **디자인 토큰**                      | `packages/design-tokens` ✓ 공용                | Tailwind preset 양쪽 사용                                                                                    |
+| **디자인 토큰**                      | `packages/design-tokens` ✓ 공용                | 웹 preset + 모바일 생성 CSS 사용                                                                             |
 | **i18n 메시지**                      | `packages/i18n` ✓ 공용                         |                                                                                                              |
 | **공용 hook (생명주기 무관)**        | `packages/hooks` ✓ 공용                        | useDebounce 등                                                                                               |
 | **UI 컴포넌트**                      | `apps/{web,mobile}/components` ✗ 전용          | shadcn/ui (DOM) ≠ RN view                                                                                    |
@@ -304,7 +304,7 @@ export const spacing = {
 ### 3.5 Tailwind preset
 
 `packages/design-tokens/tailwind-preset.cjs` 한 파일에서 모든 토큰을 export →
-`apps/web/tailwind.config.ts`와 `apps/mobile/tailwind.config.ts`(NativeWind)가
+`apps/web/tailwind.config.ts`와 `apps/mobile/global.css`(생성된 NativeWind5 CSS 테마)가
 import:
 
 ```ts
@@ -482,7 +482,7 @@ export const noticePlansApi = (client: ApiClient) => ({
   - 자격 증명 확인 경로(`/auth/login`·`/auth/register`·`/auth/verify-email`·`/auth/logout`),
     `/auth/refresh` 자신, 다시 보낼 수 없는 stream body는 갱신하지 않는다.
   - 웹소켓 재인증이 갱신에 실패하면 예전처럼 `/login`으로 보낸다.
-  2026-11-02 prod e2e 전에는 이 갱신이 없어 로그인 10분 뒤 작업 중이던 사용자가 튕겼다.
+    2026-11-02 prod e2e 전에는 이 갱신이 없어 로그인 10분 뒤 작업 중이던 사용자가 튕겼다.
 - 모바일(token 모드): `apps/mobile/lib/api.ts`의 `refreshingFetcher`가 single-flight 갱신 +
   성공 시 1회 재시도를 SecureStore 토큰으로 수행한다(갱신 실패면 재시도 없이 401). `ApiClient`의
   cookie 갱신은 token 모드에서 꺼진다.
@@ -497,15 +497,9 @@ export const queryKeys = {
     list: (params: ListParams) => ['notice-plans', 'list', params] as const,
     detail: (planId: string) => ['notice-plans', 'detail', planId] as const,
   },
-  trips: {
-    /* ... */
-  },
-  pois: {
-    /* ... */
-  },
-  features: {
-    /* ... */
-  },
+  trips: {/* ... */},
+  pois: {/* ... */},
+  features: {/* ... */},
 } as const;
 
 // packages/api-client/src/hooks.ts (공용 hook)
@@ -696,7 +690,7 @@ Print route는 `GET /trips/{trip_id}/exports/print-data` 응답을 렌더링하�
 5. 공용 패키지 import 검증 (`packages/schemas`, `packages/api-client` 등)
 6. 화면별 RN 컴포넌트 작성 — 라우트 파일명은 웹과 같게 유지
 7. 플랫폼 어댑터 (`apps/mobile/lib/`): expo-location, AsyncStorage, 지도 엔진
-8. 디자인 토큰은 `packages/design-tokens`에서 그대로 사용 (NativeWind preset)
+8. 디자인 토큰은 `packages/design-tokens`에서 그대로 사용 (NativeWind5용 CSS 테마 생성)
 
 ### 6.2.1 모바일 런타임 / 키 기준선
 

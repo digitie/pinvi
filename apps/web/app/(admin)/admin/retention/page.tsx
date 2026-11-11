@@ -1,6 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { StorageRetentionPanel } from '@/components/admin/StorageRetentionPanel';
+import { apiClient } from '@/lib/api';
+import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import type { AdminRetentionRun } from '@pinvi/schemas';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
@@ -12,12 +17,9 @@ import {
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
-import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import type { AdminRetentionRun } from '@pinvi/schemas';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { apiClient } from '@/lib/api';
-import { StorageRetentionPanel } from '@/components/admin/StorageRetentionPanel';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+
+const displayFormatter1 = new Intl.NumberFormat('ko-KR');
 
 const SCOPE_OPTIONS = [
   { value: 'all', label: '전체' },
@@ -33,11 +35,11 @@ const textareaClass =
   'min-h-20 rounded-sm border border-hairline px-3 py-2 text-sm outline-hidden focus:border-primary';
 
 function formatMetric(value: number | null | undefined) {
-  return new Intl.NumberFormat('ko-KR').format(value ?? 0);
+  return displayFormatter1.format(value ?? 0);
 }
 
 function formatDateTime(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString('ko-KR') : '-';
+  return value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-';
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -99,7 +101,18 @@ function ErrorBox({ message }: { message: string }) {
   );
 }
 
-export default function AdminRetentionPage() {
+export default function AdminRetentionPage(...args: Parameters<typeof useAdminRetentionPageModel>) {
+  const viewModel = useAdminRetentionPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminRetentionPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function retentionQueryError(query: { isError: boolean; error: unknown }, fallback: string) {
+  return query.isError ? errorMessage(query.error, fallback) : null;
+}
+
+function useAdminRetentionPageModel() {
   const queryClient = useQueryClient();
   const [dryScope, setDryScope] = useState<RetentionScope>('all');
   const [dryReason, setDryReason] = useState('');
@@ -165,15 +178,10 @@ export default function AdminRetentionPage() {
   });
 
   const error =
-    (summaryQuery.isError &&
-      errorMessage(summaryQuery.error, 'retention summary 조회에 실패했습니다.')) ||
-    (runsQuery.isError &&
-      errorMessage(runsQuery.error, 'retention 실행 이력 조회에 실패했습니다.')) ||
-    (dryRunMutation.isError &&
-      errorMessage(dryRunMutation.error, 'retention dry-run 기록에 실패했습니다.')) ||
-    (executeMutation.isError &&
-      errorMessage(executeMutation.error, 'retention execute에 실패했습니다.')) ||
-    null;
+    retentionQueryError(summaryQuery, 'retention summary 조회에 실패했습니다.') ??
+    retentionQueryError(runsQuery, 'retention 실행 이력 조회에 실패했습니다.') ??
+    retentionQueryError(dryRunMutation, 'retention dry-run 기록에 실패했습니다.') ??
+    retentionQueryError(executeMutation, 'retention execute에 실패했습니다.');
 
   const refresh = () => {
     setNotice(null);
@@ -273,6 +281,54 @@ export default function AdminRetentionPage() {
     !executeReason.trim() ||
     confirmPhrase !== expectedConfirmPhrase;
 
+  return {
+    renderBranch: 'render0' as const,
+    audit,
+    columns,
+    confirmPhrase,
+    dryReason,
+    dryRunMutation,
+    dryScope,
+    error,
+    executeDisabled,
+    executeMutation,
+    executeReason,
+    executeScope,
+    expectedConfirmPhrase,
+    location,
+    notice,
+    pii,
+    refresh,
+    runs,
+    runsQuery,
+    setConfirmPhrase,
+    setDryReason,
+    setDryScope,
+    setExecuteReason,
+    setExecuteScope,
+    submitDryRun,
+    submitExecute,
+    summary,
+    summaryQuery,
+  };
+}
+
+type AdminRetentionPageView0Model = Extract<
+  ReturnType<typeof useAdminRetentionPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminRetentionPageView0({ viewModel }: { viewModel: AdminRetentionPageView0Model }) {
+  const {
+    columns,
+    error,
+    expectedConfirmPhrase,
+    notice,
+    refresh,
+    runs,
+    runsQuery,
+    summary,
+    summaryQuery,
+  } = viewModel;
   return (
     <AdminPage
       title="Retention"
@@ -312,172 +368,9 @@ export default function AdminRetentionPage() {
         )}
       </Section>
 
-      <Section title="대상 요약">
-        <div className="grid gap-4 xl:grid-cols-3">
-          <div className="rounded-sm border border-hairline p-3">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-              PII
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <MetricBox
-                label="candidates"
-                value={pii?.total_candidates}
-                testId="admin-retention-pii-total"
-              />
-              <MetricBox label="deleted users" value={pii?.deleted_user_pii_candidates} />
-              <MetricBox
-                label="sessions"
-                value={(pii?.old_revoked_sessions ?? 0) + (pii?.old_expired_sessions ?? 0)}
-              />
-            </div>
-            <div className="mt-3 grid gap-2 text-xs text-muted sm:grid-cols-2">
-              <div>OAuth {formatMetric(pii?.expired_oauth_login_states)}</div>
-              <div>mobile OAuth {formatMetric(pii?.expired_mobile_oauth_exchanges)}</div>
-              <div>privileged excluded {formatMetric(pii?.excluded_privileged_deleted_users)}</div>
-            </div>
-          </div>
+      <AdminRetentionPageSection0_0 viewModel={viewModel} />
 
-          <div className="rounded-sm border border-hairline p-3">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-              <ScrollText className="h-4 w-4" aria-hidden="true" />
-              Audit retention
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <MetricBox
-                label="append-only skip"
-                value={audit?.admin_audit_pii_over_retention}
-                testId="admin-retention-audit-total"
-              />
-              <MetricBox label="retention days" value={audit?.audit_retention_days} />
-            </div>
-            <div className="mt-3 grid gap-2 text-xs text-muted">
-              <div>cutoff {formatDateTime(audit?.audit_cutoff)}</div>
-              <div>policy {audit?.policy ?? '-'}</div>
-            </div>
-          </div>
-
-          <div className="rounded-sm border border-hairline p-3">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-              <Archive className="h-4 w-4" aria-hidden="true" />
-              위치 로그 archive
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <MetricBox
-                label="candidates"
-                value={location?.total_candidates}
-                testId="admin-retention-location-total"
-              />
-              <MetricBox label="active rows" value={location?.active_rows_after_cutoff} />
-              <MetricBox
-                label="pending outbox"
-                value={`${formatMetric(location?.pending_outbox_before_cutoff)} / ${formatMetric(
-                  location?.pending_outbox_total,
-                )}`}
-              />
-            </div>
-            <div className="mt-3 grid gap-2 text-xs text-muted sm:grid-cols-2">
-              <div>cutoff {formatDateTime(location?.archive_cutoff)}</div>
-              <div>blocked {location?.archive_blocked_by_pending_outbox ? 'yes' : 'no'}</div>
-              <div>tail {location?.archive_tail_log_id ?? '-'}</div>
-              <div>
-                bridge{' '}
-                {location?.chain_bridge_required
-                  ? location.bridge_anchor_matches
-                    ? 'match'
-                    : 'mismatch'
-                  : 'none'}
-              </div>
-            </div>
-          </div>
-        </div>
-      </Section>
-
-      <Section title="작업">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <form className="space-y-3" onSubmit={submitDryRun}>
-            <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-              <PlayCircle className="h-4 w-4" aria-hidden="true" />
-              Dry-run
-            </div>
-            <select
-              aria-label="Dry-run scope"
-              className={inputClass}
-              value={dryScope}
-              onChange={(event) => setDryScope(event.target.value as RetentionScope)}
-            >
-              {SCOPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <textarea
-              aria-label="Dry-run 사유"
-              className={`${textareaClass} w-full`}
-              value={dryReason}
-              onChange={(event) => setDryReason(event.target.value)}
-            />
-            <button
-              type="submit"
-              disabled={dryRunMutation.isPending || !dryReason.trim()}
-              className="inline-flex h-10 items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
-              data-testid="admin-retention-dry-run"
-            >
-              {dryRunMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              )}
-              Dry-run 기록
-            </button>
-          </form>
-
-          <form className="space-y-3" onSubmit={submitExecute}>
-            <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-              <Trash2 className="h-4 w-4" aria-hidden="true" />
-              Execute
-            </div>
-            <select
-              aria-label="Execute scope"
-              className={inputClass}
-              value={executeScope}
-              onChange={(event) => setExecuteScope(event.target.value as RetentionScope)}
-            >
-              {SCOPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <textarea
-              aria-label="Execute 사유"
-              className={`${textareaClass} w-full`}
-              value={executeReason}
-              onChange={(event) => setExecuteReason(event.target.value)}
-            />
-            <input
-              aria-label="Confirm phrase"
-              className={`${inputClass} w-full font-mono`}
-              value={confirmPhrase}
-              onChange={(event) => setConfirmPhrase(event.target.value)}
-            />
-            <button
-              type="submit"
-              disabled={executeDisabled}
-              className="inline-flex h-10 items-center gap-2 rounded-sm bg-error-text px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
-              data-testid="admin-retention-execute"
-            >
-              {executeMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              )}
-              Execute
-            </button>
-          </form>
-        </div>
-      </Section>
+      <AdminRetentionPageSection0_1 viewModel={viewModel} />
 
       <Section title="실행 이력">
         <AdminTable
@@ -491,5 +384,198 @@ export default function AdminRetentionPage() {
         />
       </Section>
     </AdminPage>
+  );
+}
+
+function AdminRetentionPageSection0_0({ viewModel }: { viewModel: AdminRetentionPageView0Model }) {
+  const { audit, location, pii } = viewModel;
+  return (
+    <Section title="대상 요약">
+      <div className="grid gap-4 xl:grid-cols-3">
+        <div className="rounded-sm border border-hairline p-3">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            PII
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MetricBox
+              label="candidates"
+              value={pii?.total_candidates}
+              testId="admin-retention-pii-total"
+            />
+            <MetricBox label="deleted users" value={pii?.deleted_user_pii_candidates} />
+            <MetricBox
+              label="sessions"
+              value={(pii?.old_revoked_sessions ?? 0) + (pii?.old_expired_sessions ?? 0)}
+            />
+          </div>
+          <div className="mt-3 grid gap-2 text-xs text-muted sm:grid-cols-2">
+            <div>OAuth {formatMetric(pii?.expired_oauth_login_states)}</div>
+            <div>mobile OAuth {formatMetric(pii?.expired_mobile_oauth_exchanges)}</div>
+            <div>privileged excluded {formatMetric(pii?.excluded_privileged_deleted_users)}</div>
+          </div>
+        </div>
+
+        <div className="rounded-sm border border-hairline p-3">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+            <ScrollText className="h-4 w-4" aria-hidden="true" />
+            Audit retention
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MetricBox
+              label="append-only skip"
+              value={audit?.admin_audit_pii_over_retention}
+              testId="admin-retention-audit-total"
+            />
+            <MetricBox label="retention days" value={audit?.audit_retention_days} />
+          </div>
+          <div className="mt-3 grid gap-2 text-xs text-muted">
+            <div>cutoff {formatDateTime(audit?.audit_cutoff)}</div>
+            <div>policy {audit?.policy ?? '-'}</div>
+          </div>
+        </div>
+
+        <div className="rounded-sm border border-hairline p-3">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+            <Archive className="h-4 w-4" aria-hidden="true" />
+            위치 로그 archive
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MetricBox
+              label="candidates"
+              value={location?.total_candidates}
+              testId="admin-retention-location-total"
+            />
+            <MetricBox label="active rows" value={location?.active_rows_after_cutoff} />
+            <MetricBox
+              label="pending outbox"
+              value={`${formatMetric(location?.pending_outbox_before_cutoff)} / ${formatMetric(
+                location?.pending_outbox_total,
+              )}`}
+            />
+          </div>
+          <div className="mt-3 grid gap-2 text-xs text-muted sm:grid-cols-2">
+            <div>cutoff {formatDateTime(location?.archive_cutoff)}</div>
+            <div>blocked {location?.archive_blocked_by_pending_outbox ? 'yes' : 'no'}</div>
+            <div>tail {location?.archive_tail_log_id ?? '-'}</div>
+            <div>
+              bridge{' '}
+              {location?.chain_bridge_required
+                ? location.bridge_anchor_matches
+                  ? 'match'
+                  : 'mismatch'
+                : 'none'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function AdminRetentionPageSection0_1({ viewModel }: { viewModel: AdminRetentionPageView0Model }) {
+  const {
+    confirmPhrase,
+    dryReason,
+    dryRunMutation,
+    dryScope,
+    executeDisabled,
+    executeMutation,
+    executeReason,
+    executeScope,
+    setConfirmPhrase,
+    setDryReason,
+    setDryScope,
+    setExecuteReason,
+    setExecuteScope,
+    submitDryRun,
+    submitExecute,
+  } = viewModel;
+  return (
+    <Section title="작업">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <form className="space-y-3" onSubmit={submitDryRun}>
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <PlayCircle className="h-4 w-4" aria-hidden="true" />
+            Dry-run
+          </div>
+          <select
+            aria-label="Dry-run scope"
+            className={inputClass}
+            value={dryScope}
+            onChange={(event) => setDryScope(event.target.value as RetentionScope)}
+          >
+            {SCOPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <textarea
+            aria-label="Dry-run 사유"
+            className={`${textareaClass} w-full`}
+            value={dryReason}
+            onChange={(event) => setDryReason(event.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={dryRunMutation.isPending || !dryReason.trim()}
+            className="inline-flex h-10 items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
+            data-testid="admin-retention-dry-run"
+          >
+            {dryRunMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            )}
+            Dry-run 기록
+          </button>
+        </form>
+
+        <form className="space-y-3" onSubmit={submitExecute}>
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            Execute
+          </div>
+          <select
+            aria-label="Execute scope"
+            className={inputClass}
+            value={executeScope}
+            onChange={(event) => setExecuteScope(event.target.value as RetentionScope)}
+          >
+            {SCOPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <textarea
+            aria-label="Execute 사유"
+            className={`${textareaClass} w-full`}
+            value={executeReason}
+            onChange={(event) => setExecuteReason(event.target.value)}
+          />
+          <input
+            aria-label="Confirm phrase"
+            className={`${inputClass} w-full font-mono`}
+            value={confirmPhrase}
+            onChange={(event) => setConfirmPhrase(event.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={executeDisabled}
+            className="inline-flex h-10 items-center gap-2 rounded-sm bg-error-text px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
+            data-testid="admin-retention-execute"
+          >
+            {executeMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            )}
+            Execute
+          </button>
+        </form>
+      </div>
+    </Section>
   );
 }

@@ -1,20 +1,20 @@
 'use client';
 
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import type { AdminRequestTimelineEvent, AdminRequestTimelineSource } from '@pinvi/schemas';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import type { AdminRequestTimelineEvent, AdminRequestTimelineSource } from '@pinvi/schemas';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
 });
 
 const formatDateTime = (value: string | null | undefined) =>
-  value ? new Date(value).toLocaleString('ko-KR') : '—';
+  value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '—';
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;

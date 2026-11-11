@@ -56,11 +56,11 @@ export default function VerifyEmailScreen() {
     if (token) verify(token);
   }, [token, verify]);
 
-  const state: VerifyState = verifyMutation.isError
-    ? 'error'
-    : token && (verifyMutation.isPending || verifyMutation.isIdle)
-      ? 'verifying'
-      : 'pending';
+  const state = verifyState(
+    verifyMutation.isError,
+    Boolean(token),
+    verifyMutation.isPending || verifyMutation.isIdle,
+  );
   const error = verifyMutation.isError ? verifyErrorText(verifyMutation.error) : null;
 
   if (state === 'verifying') {
@@ -79,16 +79,7 @@ export default function VerifyEmailScreen() {
       <View className="flex-1 justify-center gap-6">
         <View className="gap-2">
           <Heading>이메일 인증</Heading>
-          {state === 'error' ? (
-            <ErrorBanner message={error} />
-          ) : (
-            <Body>
-              {email ? `${email} 으로 ` : ''}
-              {dispatched
-                ? '인증 메일을 보냈습니다. 메일의 링크를 열어 인증을 완료해 주세요.'
-                : '계정이 생성되었습니다. 인증 메일을 확인해 주세요(메일이 오지 않으면 잠시 후 다시 시도).'}
-            </Body>
-          )}
+          <VerificationMessage state={state} error={error} email={email} dispatched={dispatched} />
           <Muted>메일 링크를 열면 앱이 자동으로 인증을 처리합니다.</Muted>
         </View>
 
@@ -97,5 +88,37 @@ export default function VerifyEmailScreen() {
         ) : null}
       </View>
     </Screen>
+  );
+}
+
+function verifyState(error: boolean, hasToken: boolean, waiting: boolean): VerifyState {
+  if (error) return 'error';
+  return hasToken && waiting ? 'verifying' : 'pending';
+}
+function VerificationMessage({
+  state,
+  error,
+  email,
+  dispatched,
+}: {
+  state: VerifyState;
+  error: string | null;
+  email?: string;
+  dispatched: boolean;
+}) {
+  return (
+    <>
+      {' '}
+      {state === 'error' ? (
+        <ErrorBanner message={error} />
+      ) : (
+        <Body>
+          {email ? `${email} 으로 ` : ''}
+          {dispatched
+            ? '인증 메일을 보냈습니다. 메일의 링크를 열어 인증을 완료해 주세요.'
+            : '계정이 생성되었습니다. 인증 메일을 확인해 주세요(메일이 오지 않으면 잠시 후 다시 시도).'}
+        </Body>
+      )}
+    </>
   );
 }

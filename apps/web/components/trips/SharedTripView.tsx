@@ -1,20 +1,20 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Loader2, MapPin } from 'lucide-react';
-import { ApiError, tripApi } from '@pinvi/api-client';
-import type { TripSharedView } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
-import { tripDaysToMapPoints } from '@pinvi/domain';
-import { TripComments } from '@/components/trips/TripComments';
-import { TripExportButton } from '@/components/trips/TripExportButton';
 import { SharedTripEditor } from '@/components/trips/SharedTripEditor';
+import { TripComments } from '@/components/trips/TripComments';
 import { TripDayHeader } from '@/components/trips/TripDayHeader';
+import { TripExportButton } from '@/components/trips/TripExportButton';
 import { TripMapView } from '@/components/trips/TripMapView';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 import { ButtonLink } from '@/components/ui/Button';
-import { formatTripDateRange, holidayLabel, holidaysByDate } from '@/lib/tripDateLabels';
+import { apiClient } from '@/lib/api';
 import { sharedLoginHref } from '@/lib/loginReturnTo';
+import { formatTripDateRange, holidayLabel, holidaysByDate } from '@/lib/tripDateLabels';
+import { ApiError, tripApi } from '@pinvi/api-client';
+import { tripDaysToMapPoints } from '@pinvi/domain';
+import type { TripSharedView } from '@pinvi/schemas';
+import { CalendarDays, Loader2, MapPin } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 const VWORLD_API_KEY = process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? '';
 
@@ -26,14 +26,26 @@ export interface SharedTripViewProps {
 export function SharedTripView(props: SharedTripViewProps) {
   // token이나 여행이 바뀌면 이전 조회·내보내기 snapshot을 즉시 언마운트한다.
   // 비밀 token을 React key/URL에 복사하지 않는다.
-  const [identity, setIdentity] = useState({ tripId: props.tripId, token: props.token, revision: 0 });
+  const [identity, setIdentity] = useState({
+    tripId: props.tripId,
+    token: props.token,
+    revision: 0,
+  });
   if (identity.tripId !== props.tripId || identity.token !== props.token) {
     setIdentity({ tripId: props.tripId, token: props.token, revision: identity.revision + 1 });
   }
   return <SharedTripContent key={identity.revision} {...props} />;
 }
 
-function SharedTripContent({ tripId, token }: SharedTripViewProps) {
+function SharedTripContent(...args: Parameters<typeof useSharedTripContentModel>) {
+  const viewModel = useSharedTripContentModel(...args);
+  if (viewModel.renderBranch === 'render0') return <SharedTripContentView0 />;
+  if (viewModel.renderBranch === 'render1') return <SharedTripContentView1 viewModel={viewModel} />;
+  if (viewModel.renderBranch === 'render2') return <SharedTripContentView2 viewModel={viewModel} />;
+  return null;
+}
+
+function useSharedTripContentModel({ tripId, token }: SharedTripViewProps) {
   const [view, setView] = useState<TripSharedView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,53 +92,108 @@ function SharedTripContent({ tripId, token }: SharedTripViewProps) {
   };
 
   if (loading) {
-    return (
-      <div
-        className="flex min-h-64 items-center justify-center rounded-sm bg-surface-soft text-sm text-muted"
-        role="status"
-        aria-live="polite"
-      >
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-        여행을 불러오는 중…
-      </div>
-    );
+    return { renderBranch: 'render0' as const };
   }
 
   if (error || !view) {
     // 오류는 dead end가 아니라 원인 + 다음 행동(홈/로그인) — 404 페이지와 같은 구조·언어.
-    return (
-      <section
-        className="max-w-md space-y-6 border-t-2 border-ink pt-6"
-        aria-labelledby="shared-error-title"
-        data-testid="shared-error"
-      >
-        <div className="space-y-2">
-          <h1 id="shared-error-title" className="text-2xl font-bold tracking-tight text-ink">
-            공유 링크를 열 수 없어요
-          </h1>
-          <p className="text-base text-body" role="alert">
-            {error ?? '공유 링크가 만료되었거나 유효하지 않습니다.'} 링크를 보낸 사람에게 새 링크를
-            요청하거나, 내 여행에서 직접 확인해 주세요.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <ButtonLink href="/" variant="primary">
-            홈으로
-          </ButtonLink>
-          <ButtonLink href={sharedLoginHref(tripId)} prefetch={false} variant="secondary">
-            로그인
-          </ButtonLink>
-        </div>
-      </section>
-    );
+    return { renderBranch: 'render1' as const, error, tripId };
   }
 
   const { trip } = view;
 
+  return {
+    renderBranch: 'render2' as const,
+    handleSelectPoi,
+    holidayMap,
+    mapPoints,
+    selectedDay,
+    selectedDayIndex,
+    selectedPoiId,
+    setSelectedDayIndex,
+    setView,
+    token,
+    trip,
+    tripId,
+    view,
+  };
+}
+function SharedTripContentView0() {
+  return (
+    <div
+      className="flex min-h-64 items-center justify-center rounded-sm bg-surface-soft text-sm text-muted"
+      role="status"
+      aria-live="polite"
+    >
+      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+      여행을 불러오는 중…
+    </div>
+  );
+}
+
+type SharedTripContentView1Model = Extract<
+  ReturnType<typeof useSharedTripContentModel>,
+  { renderBranch: 'render1' }
+>;
+function SharedTripContentView1({ viewModel }: { viewModel: SharedTripContentView1Model }) {
+  const { error, tripId } = viewModel;
+  return (
+    <section
+      className="max-w-md space-y-6 border-t-2 border-ink pt-6"
+      aria-labelledby="shared-error-title"
+      data-testid="shared-error"
+    >
+      <div className="space-y-2">
+        <h1 id="shared-error-title" className="text-2xl font-bold tracking-tight text-ink">
+          공유 링크를 열 수 없어요
+        </h1>
+        <p className="text-base text-body" role="alert">
+          {error ?? '공유 링크가 만료되었거나 유효하지 않습니다.'} 링크를 보낸 사람에게 새 링크를
+          요청하거나, 내 여행에서 직접 확인해 주세요.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <ButtonLink href="/" variant="primary">
+          홈으로
+        </ButtonLink>
+        <ButtonLink href={sharedLoginHref(tripId)} prefetch={false} variant="secondary">
+          로그인
+        </ButtonLink>
+      </div>
+    </section>
+  );
+}
+
+type SharedTripContentView2Model = Extract<
+  ReturnType<typeof useSharedTripContentModel>,
+  { renderBranch: 'render2' }
+>;
+function SharedTripContentView2({ viewModel }: { viewModel: SharedTripContentView2Model }) {
+  const {
+    handleSelectPoi,
+    holidayMap,
+    mapPoints,
+    selectedDay,
+    selectedDayIndex,
+    selectedPoiId,
+    setSelectedDayIndex,
+    setView,
+    token,
+    trip,
+    tripId,
+    view,
+  } = viewModel;
   return (
     <div className="space-y-5">
       <header className="space-y-2 border-b border-hairline pb-4">
-        <p className="text-sm text-muted">공유된 여행 · {view.visibility === 'edit' ? '편집 가능' : view.visibility === 'comment' ? '댓글 가능' : '읽기 전용'}</p>
+        <p className="text-sm text-muted">
+          공유된 여행 ·{' '}
+          {view.visibility === 'edit'
+            ? '편집 가능'
+            : view.visibility === 'comment'
+              ? '댓글 가능'
+              : '읽기 전용'}
+        </p>
         <h1 className="text-2xl font-bold tracking-tight text-ink [overflow-wrap:anywhere] md:text-3xl">
           {trip.title}
         </h1>
@@ -144,12 +211,21 @@ function SharedTripContent({ tripId, token }: SharedTripViewProps) {
       </header>
 
       {view.visibility === 'edit' && (
-        <SharedTripEditor key={tripId + token} tripId={tripId} token={token} trip={trip}
-          onSaved={(updated) => setView((current) => current ? { ...current, trip: updated } : current)} />
+        <SharedTripEditor
+          key={tripId + token}
+          tripId={tripId}
+          token={token}
+          trip={trip}
+          onSaved={(updated) =>
+            setView((current) => (current ? { ...current, trip: updated } : current))
+          }
+        />
       )}
       {view.visibility !== 'view_only' && (
         <>
-          <p className="text-sm text-muted">댓글 작성·삭제와 여행 정보 편집에는 로그인이 필요합니다.</p>
+          <p className="text-sm text-muted">
+            댓글 작성·삭제와 여행 정보 편집에는 로그인이 필요합니다.
+          </p>
           <TripComments tripId={tripId} ownerUserId={trip.owner_user_id} sharedToken={token} />
         </>
       )}

@@ -1,6 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { apiClient } from '@/lib/api';
+import { ApiError, storageApi, tripApi } from '@pinvi/api-client';
+import {
+  allowedUploadMessage,
+  buildAttachmentCreate,
+  contentTypeFromFile,
+  isAllowedUploadFile,
+  putToPresigned,
+} from '@pinvi/domain';
+import type { TripAttachmentResponse } from '@pinvi/schemas';
 import {
   ChevronDown,
   ChevronRight,
@@ -10,16 +19,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { ApiError, storageApi, tripApi } from '@pinvi/api-client';
-import type { TripAttachmentResponse } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
-import {
-  allowedUploadMessage,
-  buildAttachmentCreate,
-  contentTypeFromFile,
-  isAllowedUploadFile,
-  putToPresigned,
-} from '@pinvi/domain';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,application/pdf';
 
@@ -37,7 +37,13 @@ export interface TripAttachmentsProps {
   compact?: boolean;
 }
 
-export function TripAttachments({
+export function TripAttachments(...args: Parameters<typeof useTripAttachmentsModel>) {
+  const viewModel = useTripAttachmentsModel(...args);
+  if (viewModel.renderBranch === 'render0') return <TripAttachmentsView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useTripAttachmentsModel({
   tripId,
   dayIndex,
   poiId,
@@ -167,6 +173,35 @@ export function TripAttachments({
     }
   };
 
+  return {
+    renderBranch: 'render0' as const,
+    busyId,
+    compact,
+    download,
+    error,
+    inputRef,
+    items,
+    listId,
+    listOpen,
+    loading,
+    onPick,
+    remove,
+    setListOpen,
+    title,
+    uploading,
+  };
+}
+
+type TripAttachmentsView0Model = Extract<
+  ReturnType<typeof useTripAttachmentsModel>,
+  { renderBranch: 'render0' }
+>;
+function TripAttachmentsView0({ viewModel }: { viewModel: TripAttachmentsView0Model }) {
+  return <TripAttachmentsSection0_0 viewModel={viewModel} />;
+}
+
+function TripAttachmentsSection0_0({ viewModel }: { viewModel: TripAttachmentsView0Model }) {
+  const { compact, error, listOpen } = viewModel;
   return (
     <section
       className={
@@ -176,70 +211,7 @@ export function TripAttachments({
       }
       aria-label="첨부"
     >
-      <div className="flex items-center justify-between gap-2">
-        <h2
-          className={
-            compact
-              ? 'flex items-center gap-1.5 text-xs font-bold text-ink'
-              : 'flex items-center gap-2 text-sm font-bold text-ink'
-          }
-        >
-          <Paperclip
-            className={compact ? 'h-3.5 w-3.5 text-primary' : 'h-4 w-4 text-primary'}
-            aria-hidden="true"
-          />
-          {title}
-        </h2>
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setListOpen((open) => !open)}
-            aria-label={`${title} 목록 ${listOpen ? '닫기' : '열기'}`}
-            aria-controls={listId}
-            aria-expanded={listOpen}
-            title={listOpen ? '파일 목록 닫기' : '파일 목록 열기'}
-            className={
-              compact
-                ? 'inline-flex h-7 w-7 items-center justify-center rounded-sm border border-hairline bg-canvas text-muted hover:bg-surface-soft hover:text-ink'
-                : 'inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink'
-            }
-            data-testid="trip-attachment-toggle"
-          >
-            {listOpen ? (
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            )}
-          </button>
-          <label
-            aria-label={`${title} 올리기`}
-            title="파일 올리기"
-            className={
-              compact
-                ? 'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm bg-cta text-on-primary hover:bg-cta-hover'
-                : 'inline-flex size-11 cursor-pointer items-center justify-center rounded-sm bg-cta text-on-primary hover:bg-cta-hover'
-            }
-          >
-            {uploading ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Upload className="h-4 w-4" aria-hidden="true" />
-            )}
-            <input
-              ref={inputRef}
-              type="file"
-              accept={ATTACHMENT_ACCEPT}
-              className="sr-only"
-              data-testid="attachment-input"
-              disabled={uploading}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void onPick(file);
-              }}
-            />
-          </label>
-        </div>
-      </div>
+      <TripAttachmentsSection0_0Part0 viewModel={viewModel} />
 
       {error && (
         <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
@@ -247,74 +219,149 @@ export function TripAttachments({
         </p>
       )}
 
-      {listOpen && (
-        <div id={listId}>
-          {loading ? (
-            <div
-              className={
-                compact
-                  ? 'flex min-h-11 items-center justify-center text-xs text-muted'
-                  : 'flex h-16 items-center justify-center text-sm text-muted'
-              }
-            >
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-              불러오는 중…
-            </div>
-          ) : items.length === 0 ? (
-            <p
-              className={
-                compact
-                  ? 'px-1 text-xs text-muted'
-                  : 'rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted'
-              }
-            >
-              파일 없음
-            </p>
-          ) : (
-            <ul className="space-y-1" data-testid="trip-attachment-list">
-              {items.map((item) => (
-                <li
-                  key={item.attachment_id}
-                  className={
-                    compact
-                      ? 'flex flex-wrap items-center justify-between gap-2 rounded-sm bg-canvas px-2 py-1.5 text-xs'
-                      : 'flex flex-wrap items-center justify-between gap-2 rounded-sm border border-hairline px-3 py-2 text-sm'
-                  }
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium text-ink">
-                      {item.original_filename}
-                    </span>
-                    <span className="text-xs text-muted">
-                      {item.content_type} · {formatBytes(item.byte_size)}
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => void download(item.attachment_id)}
-                      disabled={busyId === item.attachment_id}
-                      aria-label="다운로드"
-                      className="rounded-sm p-1.5 text-muted hover:bg-surface-soft hover:text-ink disabled:opacity-50"
-                    >
-                      <Download className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void remove(item.attachment_id)}
-                      disabled={busyId === item.attachment_id}
-                      aria-label="삭제"
-                      className="rounded-sm p-1.5 text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {listOpen && <TripAttachmentsSection0_0Part1 viewModel={viewModel} />}
     </section>
+  );
+}
+
+function TripAttachmentsSection0_0Part0({ viewModel }: { viewModel: TripAttachmentsView0Model }) {
+  const { compact, title, setListOpen, listOpen, listId, uploading, inputRef, onPick } = viewModel;
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <h2
+        className={
+          compact
+            ? 'flex items-center gap-1.5 text-xs font-bold text-ink'
+            : 'flex items-center gap-2 text-sm font-bold text-ink'
+        }
+      >
+        <Paperclip
+          className={compact ? 'h-3.5 w-3.5 text-primary' : 'h-4 w-4 text-primary'}
+          aria-hidden="true"
+        />
+        {title}
+      </h2>
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setListOpen((open) => !open)}
+          aria-label={`${title} 목록 ${listOpen ? '닫기' : '열기'}`}
+          aria-controls={listId}
+          aria-expanded={listOpen}
+          title={listOpen ? '파일 목록 닫기' : '파일 목록 열기'}
+          className={
+            compact
+              ? 'inline-flex h-7 w-7 items-center justify-center rounded-sm border border-hairline bg-canvas text-muted hover:bg-surface-soft hover:text-ink'
+              : 'inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink'
+          }
+          data-testid="trip-attachment-toggle"
+        >
+          {listOpen ? (
+            <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          )}
+        </button>
+        <label
+          aria-label={`${title} 올리기`}
+          title="파일 올리기"
+          className={
+            compact
+              ? 'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm bg-cta text-on-primary hover:bg-cta-hover'
+              : 'inline-flex size-11 cursor-pointer items-center justify-center rounded-sm bg-cta text-on-primary hover:bg-cta-hover'
+          }
+        >
+          {uploading ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Upload className="h-4 w-4" aria-hidden="true" />
+          )}
+          <input
+            ref={inputRef}
+            type="file"
+            accept={ATTACHMENT_ACCEPT}
+            className="sr-only"
+            data-testid="attachment-input"
+            disabled={uploading}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void onPick(file);
+            }}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function TripAttachmentsSection0_0Part1({ viewModel }: { viewModel: TripAttachmentsView0Model }) {
+  const { listId, loading, compact, items, download, busyId, remove } = viewModel;
+  return (
+    <div id={listId}>
+      {loading ? (
+        <div
+          className={
+            compact
+              ? 'flex min-h-11 items-center justify-center text-xs text-muted'
+              : 'flex h-16 items-center justify-center text-sm text-muted'
+          }
+        >
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+          불러오는 중…
+        </div>
+      ) : items.length === 0 ? (
+        <p
+          className={
+            compact
+              ? 'px-1 text-xs text-muted'
+              : 'rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted'
+          }
+        >
+          파일 없음
+        </p>
+      ) : (
+        <ul className="space-y-1" data-testid="trip-attachment-list">
+          {items.map((item) => (
+            <li
+              key={item.attachment_id}
+              className={
+                compact
+                  ? 'flex flex-wrap items-center justify-between gap-2 rounded-sm bg-canvas px-2 py-1.5 text-xs'
+                  : 'flex flex-wrap items-center justify-between gap-2 rounded-sm border border-hairline px-3 py-2 text-sm'
+              }
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-medium text-ink">
+                  {item.original_filename}
+                </span>
+                <span className="text-xs text-muted">
+                  {item.content_type} · {formatBytes(item.byte_size)}
+                </span>
+              </span>
+              <span className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => void download(item.attachment_id)}
+                  disabled={busyId === item.attachment_id}
+                  aria-label="다운로드"
+                  className="rounded-sm p-1.5 text-muted hover:bg-surface-soft hover:text-ink disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void remove(item.attachment_id)}
+                  disabled={busyId === item.attachment_id}
+                  aria-label="삭제"
+                  className="rounded-sm p-1.5 text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

@@ -1,6 +1,7 @@
-import { notFound } from 'next/navigation';
-import type { Metadata } from 'next';
+import { withOccurrenceKeys } from '@/lib/occurrenceKeys';
 import { getLegalDoc, LEGAL_SLUGS } from '@/lib/legalDocs';
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Long Document(콘텐츠) · design-system: DESIGN.md
  * measure 65ch · 좌정렬 문단 · 카드/그림자 없음 · chrome은 app/legal/layout.tsx의 N1 masthead + Ft2 colophon
@@ -53,11 +54,13 @@ export default async function LegalDocPage({ params }: { params: Promise<{ slug:
         {doc.sections.map((section) => (
           <section key={section.heading}>
             <h2 className="text-lg font-semibold text-ink">{section.heading}</h2>
-            {section.paragraphs.map((p, i) => (
-              <p key={i} className="mt-2 text-base leading-relaxed text-body">
-                {p}
-              </p>
-            ))}
+            {withOccurrenceKeys(section.paragraphs, (paragraph) => paragraph).map(
+              ({ item: p, key }) => (
+                <p key={key} className="mt-2 text-base leading-relaxed text-body">
+                  {p}
+                </p>
+              ),
+            )}
           </section>
         ))}
       </div>

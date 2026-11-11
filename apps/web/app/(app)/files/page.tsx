@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Download, Trash2 } from 'lucide-react';
+import { ButtonLink } from '@/components/ui/Button';
+import { buttonClassName } from '@/components/ui/button-styles';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { apiClient } from '@/lib/api';
 import { ApiError, authApi } from '@pinvi/api-client';
 import type { AttachmentLibraryItem } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { ButtonLink, buttonClassName } from '@/components/ui/Button';
+import { Download, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -107,7 +108,9 @@ export default function MyFilesPage() {
             ? ` · 최근 ${items.length.toLocaleString('ko-KR')}개 표시`
             : ''}
         </p>
-        <p className="mt-1 text-sm text-muted">삭제한 여행·장소·첨부도 보존 중에는 저장 용량에 포함됩니다.</p>
+        <p className="mt-1 text-sm text-muted">
+          삭제한 여행·장소·첨부도 보존 중에는 저장 용량에 포함됩니다.
+        </p>
       </div>
 
       {error && (

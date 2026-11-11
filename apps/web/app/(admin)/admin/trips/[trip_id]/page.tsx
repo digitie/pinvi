@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { Button } from '@/components/admin/ui/button';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
 import { resolveMarkerStyle } from '@pinvi/domain';
 import type {
@@ -19,9 +19,9 @@ import type {
   TripStatus,
 } from '@pinvi/schemas';
 import { Copy, Download, ExternalLink, MapPin, MoveRight, Search, Trash2, X } from 'lucide-react';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { Button } from '@/components/admin/ui/button';
+import Link from 'next/link';
+import { redirect, useParams, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 // KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 이 페이지의 세 모달이 손으로
 // 들고 있던 scrim/`role="dialog"`/`aria-modal`을 base-ui가 대신한다.
 import {
@@ -53,12 +53,7 @@ const STATUSES: { value: TripStatus; label: string }[] = [
 ];
 
 type TripOperationMode =
-  | 'trip_copy'
-  | 'trip_move'
-  | 'trip_delete'
-  | 'day_copy'
-  | 'day_move'
-  | 'day_delete';
+  'trip_copy' | 'trip_move' | 'trip_delete' | 'day_copy' | 'day_move' | 'day_delete';
 
 const TRIP_OPERATION_LABELS: Record<TripOperationMode, string> = {
   trip_copy: '여행 복사',
@@ -79,13 +74,18 @@ const OPERATION_MODES: { value: TripOperationMode; label: string }[] = [
 ];
 
 const formatDate = (value: string | null) =>
-  value ? new Date(value).toLocaleDateString('ko-KR') : '—';
+  value ? new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '—';
 
 const formatDateTime = (value: string | null) =>
-  value ? new Date(value).toLocaleString('ko-KR') : '—';
+  value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '—';
 
 const formatTime = (value: string | null) =>
-  value ? new Date(value).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '—';
+  value
+    ? new Date(value).toLocaleTimeString('ko-KR', {
+        timeZone: 'Asia/Seoul',
+        ...{ hour: '2-digit', minute: '2-digit' },
+      })
+    : '—';
 
 const formatAmount = (value: string | null, currency: string) =>
   value === null ? '—' : `${value} ${currency}`;
@@ -568,13 +568,26 @@ function OperationImpactPanel({ impact }: { impact: AdminOperationImpact | null 
   );
 }
 
-export default function AdminTripDetailPage() {
+export default function AdminTripDetailPage(
+  ...args: Parameters<typeof useAdminTripDetailPageModel>
+) {
+  const viewModel = useAdminTripDetailPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminTripDetailPageView0 viewModel={viewModel} />;
+  if (viewModel.renderBranch === 'render1') return <AdminTripDetailPageView1 />;
+  if (viewModel.renderBranch === 'render2')
+    return <AdminTripDetailPageView2 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminTripDetailPageModel() {
   const router = useRouter();
   const params = useParams<{ trip_id: string }>();
   const tripId = params.trip_id;
   const [trip, setTrip] = useState<AdminTripDetail | null>(null);
   const [statusDraft, setStatusDraft] = useState<TripStatus>('draft');
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
   const [reason, setReason] = useState('');
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [acting, setActing] = useState(false);
@@ -609,7 +622,7 @@ export default function AdminTripDetailPage() {
       .catch((err) => {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 404) {
-          router.replace('/admin/trips');
+          setMissing(true);
           return;
         }
         setError(err instanceof ApiError ? err.message : '조회 실패');
@@ -768,7 +781,7 @@ export default function AdminTripDetailPage() {
       }
       setOperationResult(result);
       if (operationMode === 'trip_delete') {
-        router.replace('/admin/trips');
+        setMissing(true);
         return;
       }
       await refreshTrip();
@@ -781,19 +794,12 @@ export default function AdminTripDetailPage() {
   };
 
   if (error) {
-    return (
-      <AdminPage title="여행 상세">
-        <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
-      </AdminPage>
-    );
+    if (missing) redirect('/admin/trips');
+    return { renderBranch: 'render0' as const, error };
   }
 
   if (!trip) {
-    return (
-      <AdminPage title="여행 상세">
-        <p className="text-sm text-muted">불러오는 중…</p>
-      </AdminPage>
-    );
+    return { renderBranch: 'render1' as const };
   }
 
   const period =
@@ -810,6 +816,96 @@ export default function AdminTripDetailPage() {
     (operationNeedsTargetDay && targetDayIndex < 1) ||
     (operationNeedsOwner && !targetOwnerUserId);
 
+  return {
+    renderBranch: 'render2' as const,
+    acting,
+    childMovePolicy,
+    includeAttachments,
+    includePois,
+    onOperationSave,
+    onStatusSave,
+    openOperationDialog,
+    operationConfirmDisabled,
+    operationDayIndex,
+    operationError,
+    operationImpact,
+    operationMode,
+    operationNeedsTargetDay,
+    operationNeedsTargetTrip,
+    operationReason,
+    operationResult,
+    period,
+    reason,
+    selectedPoi,
+    setChildMovePolicy,
+    setIncludeAttachments,
+    setIncludePois,
+    setOperationDayIndex,
+    setOperationError,
+    setOperationImpact,
+    setOperationMode,
+    setOperationReason,
+    setOperationResult,
+    setReason,
+    setSelectedPoi,
+    setShowOperationDialog,
+    setShowStatusDialog,
+    setStatusDraft,
+    setTargetDayIndex,
+    setTargetOwnerUserId,
+    setTargetTripId,
+    setTargetTripQuery,
+    setTripDeleteChildPolicy,
+    showOperationDialog,
+    showStatusDialog,
+    statusDraft,
+    targetDayIndex,
+    targetOwnerUserId,
+    targetTripId,
+    targetTripQuery,
+    targetTrips,
+    trip,
+    tripDeleteChildPolicy,
+  };
+}
+
+type AdminTripDetailPageView0Model = Extract<
+  ReturnType<typeof useAdminTripDetailPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminTripDetailPageView0({ viewModel }: { viewModel: AdminTripDetailPageView0Model }) {
+  const { error } = viewModel;
+  return (
+    <AdminPage title="여행 상세">
+      <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
+    </AdminPage>
+  );
+}
+function AdminTripDetailPageView1() {
+  return (
+    <AdminPage title="여행 상세">
+      <p className="text-sm text-muted">불러오는 중…</p>
+    </AdminPage>
+  );
+}
+
+type AdminTripDetailPageView2Model = Extract<
+  ReturnType<typeof useAdminTripDetailPageModel>,
+  { renderBranch: 'render2' }
+>;
+function AdminTripDetailPageView2({ viewModel }: { viewModel: AdminTripDetailPageView2Model }) {
+  const {
+    acting,
+    onOperationSave,
+    operationConfirmDisabled,
+    operationMode,
+    selectedPoi,
+    setSelectedPoi,
+    setShowOperationDialog,
+    showOperationDialog,
+    showStatusDialog,
+    trip,
+  } = viewModel;
   return (
     <AdminPage
       title={trip.title}
@@ -820,131 +916,9 @@ export default function AdminTripDetailPage() {
         </Link>
       }
     >
-      <Section title="기본 정보">
-        <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2" data-testid="admin-trip-info">
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">소유자</dt>
-            <dd>
-              <Link href={`/admin/users/${trip.owner_user_id}`} className="text-primary underline">
-                {trip.owner_email_masked}
-              </Link>
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">owner_user_id</dt>
-            <dd className="font-mono text-xs">{trip.owner_user_id}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">상태</dt>
-            <dd className="mt-1 flex flex-wrap items-center gap-2">
-              <select
-                value={statusDraft}
-                onChange={(e) => setStatusDraft(e.target.value as TripStatus)}
-                className="rounded-sm border border-hairline px-2 py-1 text-sm"
-                data-testid="admin-trip-status-select"
-              >
-                {STATUSES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={statusDraft === trip.status}
-                onClick={() => setShowStatusDialog(true)}
-                className="rounded-sm border border-primary px-3 py-1 text-sm text-primary disabled:opacity-50"
-                data-testid="admin-trip-status-save"
-              >
-                저장
-              </button>
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">공개</dt>
-            <dd>{trip.visibility}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">지역</dt>
-            <dd>{trip.region_hint ?? trip.primary_region_code ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">기간</dt>
-            <dd>{period}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">구성</dt>
-            <dd>
-              days {trip.day_count} / POI {trip.poi_count} / companions {trip.companion_count} /
-              shares {trip.share_link_count}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">version</dt>
-            <dd>{trip.version}</dd>
-          </div>
-        </dl>
-        {trip.description && <p className="mt-4 text-sm text-ink">{trip.description}</p>}
-      </Section>
+      <AdminTripDetailPageSection2_0 viewModel={viewModel} />
 
-      <Section title="운영 작업">
-        <div className="flex flex-wrap gap-2" data-testid="admin-trip-operations">
-          <button
-            type="button"
-            onClick={() => openOperationDialog('trip_copy')}
-            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
-            data-testid="admin-trip-copy-open"
-          >
-            <Copy className="h-4 w-4" aria-hidden="true" />
-            여행 복사
-          </button>
-          <button
-            type="button"
-            onClick={() => openOperationDialog('trip_move')}
-            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
-            data-testid="admin-trip-move-open"
-          >
-            <MoveRight className="h-4 w-4" aria-hidden="true" />
-            소유자 이전
-          </button>
-          <button
-            type="button"
-            onClick={() => openOperationDialog('trip_delete')}
-            className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm text-error-text hover:bg-error-bg"
-            data-testid="admin-trip-delete-open"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-            여행 삭제
-          </button>
-          <button
-            type="button"
-            onClick={() => openOperationDialog('day_copy')}
-            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
-            data-testid="admin-day-copy-open"
-          >
-            <Copy className="h-4 w-4" aria-hidden="true" />
-            날짜 복사
-          </button>
-          <button
-            type="button"
-            onClick={() => openOperationDialog('day_move')}
-            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
-            data-testid="admin-day-move-open"
-          >
-            <MoveRight className="h-4 w-4" aria-hidden="true" />
-            날짜 이동
-          </button>
-          <button
-            type="button"
-            onClick={() => openOperationDialog('day_delete')}
-            className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm text-error-text hover:bg-error-bg"
-            data-testid="admin-day-delete-open"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-            날짜 삭제
-          </button>
-        </div>
-      </Section>
+      <AdminTripDetailPageSection2_1 viewModel={viewModel} />
 
       <Section title="동반자">
         <div data-testid="admin-trip-companions">
@@ -1015,58 +989,7 @@ export default function AdminTripDetailPage() {
         </div>
       </Section>
 
-      {showStatusDialog && (
-        <Dialog
-          open
-          onOpenChange={(open) => {
-            // Escape·scrim도 취소 버튼과 같은 정리 경로를 탄다(사유 입력값을 남기지 않는다).
-            if (!open) {
-              setShowStatusDialog(false);
-              setReason('');
-            }
-          }}
-        >
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>여행 상태 변경</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-4 p-4">
-              <p className="text-xs text-muted">
-                {trip.status} → {statusDraft}
-              </p>
-              <FormTextArea
-                id="admin-trip-action-reason"
-                label="사유"
-                hint="감사 로그에 기록됩니다."
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                rows={3}
-                data-testid="admin-trip-action-reason"
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setShowStatusDialog(false);
-                  setReason('');
-                }}
-              >
-                취소
-              </Button>
-              <Button
-                type="button"
-                disabled={acting || reason.trim().length < 1}
-                onClick={onStatusSave}
-                data-testid="admin-trip-action-confirm"
-              >
-                {acting ? '처리 중…' : '확인'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+      {showStatusDialog && <AdminTripDetailPageSection2_2 viewModel={viewModel} />}
       {showOperationDialog && (
         <Dialog
           // 미저장 폼 입력 보호 — Escape/바깥클릭 닫기를 막는다(전환 전 수제 모달에는
@@ -1094,216 +1017,7 @@ export default function AdminTripDetailPage() {
               </Button>
             </DialogHeader>
 
-            <div className="p-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-1 text-sm">
-                  <span className="block text-xs uppercase tracking-wide text-muted">작업</span>
-                  <select
-                    value={operationMode}
-                    onChange={(e) => {
-                      setOperationMode(e.target.value as TripOperationMode);
-                      setOperationResult(null);
-                      setOperationError(null);
-                      setOperationImpact(null);
-                    }}
-                    className="w-full rounded-sm border border-hairline px-3 py-2"
-                    data-testid="admin-trip-operation-mode"
-                  >
-                    {OPERATION_MODES.map((mode) => (
-                      <option key={mode.value} value={mode.value}>
-                        {mode.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {operationMode.startsWith('day_') && (
-                  <label className="space-y-1 text-sm">
-                    <span className="block text-xs uppercase tracking-wide text-muted">
-                      원본 날짜
-                    </span>
-                    <select
-                      value={operationDayIndex}
-                      onChange={(e) => {
-                        setOperationDayIndex(Number(e.target.value));
-                        setOperationResult(null);
-                        setOperationImpact(null);
-                      }}
-                      className="w-full rounded-sm border border-hairline px-3 py-2"
-                      data-testid="admin-trip-operation-source-day"
-                    >
-                      {trip.days.map((day) => (
-                        <option key={day.day_index} value={day.day_index}>
-                          {formatDayLabel(day.day_index, day.date, day.title)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-
-                {(operationMode === 'trip_copy' || operationNeedsTargetTrip) && (
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="space-y-1 text-sm">
-                      <span className="block text-xs uppercase tracking-wide text-muted">
-                        대상 여행 검색
-                      </span>
-                      <span className="flex items-center gap-2 rounded-sm border border-hairline px-3 py-2">
-                        <Search className="h-4 w-4 text-muted" aria-hidden="true" />
-                        <input
-                          value={targetTripQuery}
-                          onChange={(e) => setTargetTripQuery(e.target.value)}
-                          className="min-w-0 flex-1 bg-transparent text-sm outline-hidden"
-                          placeholder="여행 제목 또는 owner 검색"
-                          data-testid="admin-operation-target-search"
-                        />
-                      </span>
-                    </label>
-                    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_8rem]">
-                      <label className="space-y-1 text-sm">
-                        <span className="block text-xs uppercase tracking-wide text-muted">
-                          대상 여행
-                        </span>
-                        <select
-                          value={targetTripId}
-                          onChange={(e) => setTargetTripId(e.target.value)}
-                          className="w-full rounded-sm border border-hairline px-3 py-2"
-                          data-testid="admin-operation-target-trip"
-                        >
-                          {operationMode === 'trip_copy' && <option value="">새 여행 생성</option>}
-                          {targetTrips.map((item) => (
-                            <option key={item.trip_id} value={item.trip_id}>
-                              {item.title} · {item.owner_email_masked}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {operationNeedsTargetDay && (
-                        <label className="space-y-1 text-sm">
-                          <span className="block text-xs uppercase tracking-wide text-muted">
-                            대상 일차
-                          </span>
-                          <input
-                            type="number"
-                            min={1}
-                            value={targetDayIndex}
-                            onChange={(e) => setTargetDayIndex(Number(e.target.value))}
-                            className="w-full rounded-sm border border-hairline px-3 py-2"
-                            data-testid="admin-operation-target-day"
-                          />
-                        </label>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {operationMode === 'trip_move' && (
-                  <label className="space-y-1 text-sm md:col-span-2">
-                    <span className="block text-xs uppercase tracking-wide text-muted">
-                      새 owner_user_id
-                    </span>
-                    <input
-                      value={targetOwnerUserId}
-                      onChange={(e) => setTargetOwnerUserId(e.target.value)}
-                      className="w-full rounded-sm border border-hairline px-3 py-2 font-mono text-sm"
-                      placeholder="UUID"
-                      data-testid="admin-operation-owner-id"
-                    />
-                  </label>
-                )}
-
-                {operationMode === 'trip_delete' && (
-                  <label className="space-y-1 text-sm">
-                    <span className="block text-xs uppercase tracking-wide text-muted">
-                      하위 항목
-                    </span>
-                    <select
-                      value={tripDeleteChildPolicy}
-                      onChange={(e) =>
-                        setTripDeleteChildPolicy(e.target.value as 'keep' | 'delete')
-                      }
-                      className="w-full rounded-sm border border-hairline px-3 py-2"
-                      data-testid="admin-operation-child-policy"
-                    >
-                      <option value="keep">유지</option>
-                      <option value="delete">함께 삭제</option>
-                    </select>
-                  </label>
-                )}
-
-                {operationMode === 'day_move' && (
-                  <label className="space-y-1 text-sm">
-                    <span className="block text-xs uppercase tracking-wide text-muted">
-                      하위 POI/파일/댓글
-                    </span>
-                    <select
-                      value={childMovePolicy}
-                      onChange={(e) => setChildMovePolicy(e.target.value as 'move' | 'delete')}
-                      className="w-full rounded-sm border border-hairline px-3 py-2"
-                      data-testid="admin-operation-move-policy"
-                    >
-                      <option value="move">대상으로 이동</option>
-                      <option value="delete">함께 삭제</option>
-                    </select>
-                  </label>
-                )}
-
-                {operationMode === 'day_copy' && (
-                  <div className="grid gap-2 text-sm">
-                    <label className="inline-flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={includePois}
-                        onChange={(e) => setIncludePois(e.target.checked)}
-                        data-testid="admin-operation-include-pois"
-                      />
-                      POI 포함
-                    </label>
-                    <label className="inline-flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={includeAttachments}
-                        onChange={(e) => setIncludeAttachments(e.target.checked)}
-                        data-testid="admin-operation-include-attachments"
-                      />
-                      파일 포함
-                    </label>
-                  </div>
-                )}
-
-                <div className="md:col-span-2">
-                  <FormTextArea
-                    id="admin-trip-operation-reason"
-                    label="사유"
-                    hint="감사 로그에 기록됩니다."
-                    value={operationReason}
-                    onChange={(e) => setOperationReason(e.target.value)}
-                    rows={3}
-                    data-testid="admin-trip-operation-reason"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <OperationImpactPanel impact={operationImpact} />
-              </div>
-
-              {operationError && (
-                <p
-                  className="mt-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
-                  data-testid="admin-trip-operation-error"
-                >
-                  {operationError}
-                </p>
-              )}
-              {operationResult && (
-                <p
-                  className="mt-4 rounded-sm bg-success-bg p-3 text-sm text-success-text"
-                  data-testid="admin-trip-operation-result"
-                >
-                  {operationResult.action} 완료 · {formatAffected(operationResult.affected)}
-                </p>
-              )}
-            </div>
+            <TripOperationPanel viewModel={viewModel} />
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowOperationDialog(false)}>
@@ -1323,5 +1037,460 @@ export default function AdminTripDetailPage() {
       )}
       {selectedPoi && <AdminTripPoiDialog poi={selectedPoi} onClose={() => setSelectedPoi(null)} />}
     </AdminPage>
+  );
+}
+
+function AdminTripDetailPageSection2_0({
+  viewModel,
+}: {
+  viewModel: AdminTripDetailPageView2Model;
+}) {
+  const { period, setShowStatusDialog, setStatusDraft, statusDraft, trip } = viewModel;
+  return (
+    <Section title="기본 정보">
+      <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2" data-testid="admin-trip-info">
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">소유자</dt>
+          <dd>
+            <Link href={`/admin/users/${trip.owner_user_id}`} className="text-primary underline">
+              {trip.owner_email_masked}
+            </Link>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">owner_user_id</dt>
+          <dd className="font-mono text-xs">{trip.owner_user_id}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">상태</dt>
+          <dd className="mt-1 flex flex-wrap items-center gap-2">
+            <select
+              value={statusDraft}
+              onChange={(e) => setStatusDraft(e.target.value as TripStatus)}
+              className="rounded-sm border border-hairline px-2 py-1 text-sm"
+              aria-label="여행 상태"
+              data-testid="admin-trip-status-select"
+            >
+              {STATUSES.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={statusDraft === trip.status}
+              onClick={() => setShowStatusDialog(true)}
+              className="rounded-sm border border-primary px-3 py-1 text-sm text-primary disabled:opacity-50"
+              data-testid="admin-trip-status-save"
+            >
+              저장
+            </button>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">공개</dt>
+          <dd>{trip.visibility}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">지역</dt>
+          <dd>{trip.region_hint ?? trip.primary_region_code ?? '—'}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">기간</dt>
+          <dd>{period}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">구성</dt>
+          <dd>
+            days {trip.day_count} / POI {trip.poi_count} / companions {trip.companion_count} /
+            shares {trip.share_link_count}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">version</dt>
+          <dd>{trip.version}</dd>
+        </div>
+      </dl>
+      {trip.description && <p className="mt-4 text-sm text-ink">{trip.description}</p>}
+    </Section>
+  );
+}
+
+function AdminTripDetailPageSection2_1({
+  viewModel,
+}: {
+  viewModel: AdminTripDetailPageView2Model;
+}) {
+  const { openOperationDialog } = viewModel;
+  return (
+    <Section title="운영 작업">
+      <div className="flex flex-wrap gap-2" data-testid="admin-trip-operations">
+        <button
+          type="button"
+          onClick={() => openOperationDialog('trip_copy')}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
+          data-testid="admin-trip-copy-open"
+        >
+          <Copy className="h-4 w-4" aria-hidden="true" />
+          여행 복사
+        </button>
+        <button
+          type="button"
+          onClick={() => openOperationDialog('trip_move')}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
+          data-testid="admin-trip-move-open"
+        >
+          <MoveRight className="h-4 w-4" aria-hidden="true" />
+          소유자 이전
+        </button>
+        <button
+          type="button"
+          onClick={() => openOperationDialog('trip_delete')}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm text-error-text hover:bg-error-bg"
+          data-testid="admin-trip-delete-open"
+        >
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+          여행 삭제
+        </button>
+        <button
+          type="button"
+          onClick={() => openOperationDialog('day_copy')}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
+          data-testid="admin-day-copy-open"
+        >
+          <Copy className="h-4 w-4" aria-hidden="true" />
+          날짜 복사
+        </button>
+        <button
+          type="button"
+          onClick={() => openOperationDialog('day_move')}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
+          data-testid="admin-day-move-open"
+        >
+          <MoveRight className="h-4 w-4" aria-hidden="true" />
+          날짜 이동
+        </button>
+        <button
+          type="button"
+          onClick={() => openOperationDialog('day_delete')}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm text-error-text hover:bg-error-bg"
+          data-testid="admin-day-delete-open"
+        >
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+          날짜 삭제
+        </button>
+      </div>
+    </Section>
+  );
+}
+
+function AdminTripDetailPageSection2_2({
+  viewModel,
+}: {
+  viewModel: AdminTripDetailPageView2Model;
+}) {
+  const { acting, onStatusSave, reason, setReason, setShowStatusDialog, statusDraft, trip } =
+    viewModel;
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        // Escape·scrim도 취소 버튼과 같은 정리 경로를 탄다(사유 입력값을 남기지 않는다).
+        if (!open) {
+          setShowStatusDialog(false);
+          setReason('');
+        }
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>여행 상태 변경</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4 p-4">
+          <p className="text-xs text-muted">
+            {trip.status} → {statusDraft}
+          </p>
+          <FormTextArea
+            id="admin-trip-action-reason"
+            label="사유"
+            hint="감사 로그에 기록됩니다."
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            data-testid="admin-trip-action-reason"
+          />
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setShowStatusDialog(false);
+              setReason('');
+            }}
+          >
+            취소
+          </Button>
+          <Button
+            type="button"
+            disabled={acting || reason.trim().length < 1}
+            onClick={onStatusSave}
+            data-testid="admin-trip-action-confirm"
+          >
+            {acting ? '처리 중…' : '확인'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TripOperationTarget({ viewModel }: { viewModel: AdminTripDetailPageView2Model }) {
+  const {
+    targetTripQuery,
+    setTargetTripQuery,
+    targetTripId,
+    setTargetTripId,
+    operationMode,
+    targetTrips,
+    operationNeedsTargetDay,
+    targetDayIndex,
+    setTargetDayIndex,
+  } = viewModel;
+  return (
+    <div className="space-y-2 md:col-span-2">
+      <label className="space-y-1 text-sm">
+        <span className="block text-xs uppercase tracking-wide text-muted">대상 여행 검색</span>
+        <span className="flex items-center gap-2 rounded-sm border border-hairline px-3 py-2">
+          <Search className="h-4 w-4 text-muted" aria-hidden="true" />
+          <input
+            value={targetTripQuery}
+            onChange={(e) => setTargetTripQuery(e.target.value)}
+            className="min-w-0 flex-1 bg-transparent text-sm outline-hidden"
+            placeholder="여행 제목 또는 owner 검색"
+            data-testid="admin-operation-target-search"
+          />
+        </span>
+      </label>
+      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_8rem]">
+        <label className="space-y-1 text-sm">
+          <span className="block text-xs uppercase tracking-wide text-muted">대상 여행</span>
+          <select
+            value={targetTripId}
+            onChange={(e) => setTargetTripId(e.target.value)}
+            className="w-full rounded-sm border border-hairline px-3 py-2"
+            data-testid="admin-operation-target-trip"
+          >
+            {operationMode === 'trip_copy' && <option value="">새 여행 생성</option>}
+            {targetTrips.map((item) => (
+              <option key={item.trip_id} value={item.trip_id}>
+                {item.title} · {item.owner_email_masked}
+              </option>
+            ))}
+          </select>
+        </label>
+        {operationNeedsTargetDay && (
+          <label className="space-y-1 text-sm">
+            <span className="block text-xs uppercase tracking-wide text-muted">대상 일차</span>
+            <input
+              type="number"
+              min={1}
+              value={targetDayIndex}
+              onChange={(e) => {
+                const day = e.currentTarget.valueAsNumber;
+                if (Number.isSafeInteger(day) && day >= 1) setTargetDayIndex(day);
+              }}
+              className="w-full rounded-sm border border-hairline px-3 py-2"
+              data-testid="admin-operation-target-day"
+            />
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TripOperationPanel({ viewModel }: { viewModel: AdminTripDetailPageView2Model }) {
+  const {
+    operationMode,
+    setOperationMode,
+    setOperationResult,
+    setOperationError,
+    setOperationImpact,
+    operationDayIndex,
+    setOperationDayIndex,
+    trip,
+    operationNeedsTargetTrip,
+    targetOwnerUserId,
+    setTargetOwnerUserId,
+    tripDeleteChildPolicy,
+    setTripDeleteChildPolicy,
+    childMovePolicy,
+    setChildMovePolicy,
+    includePois,
+    setIncludePois,
+    includeAttachments,
+    setIncludeAttachments,
+    operationReason,
+    setOperationReason,
+    operationImpact,
+    operationError,
+    operationResult,
+  } = viewModel;
+  return (
+    <div className="p-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="space-y-1 text-sm">
+          <span className="block text-xs uppercase tracking-wide text-muted">작업</span>
+          <select
+            value={operationMode}
+            onChange={(e) => {
+              setOperationMode(e.target.value as TripOperationMode);
+              setOperationResult(null);
+              setOperationError(null);
+              setOperationImpact(null);
+            }}
+            className="w-full rounded-sm border border-hairline px-3 py-2"
+            data-testid="admin-trip-operation-mode"
+          >
+            {OPERATION_MODES.map((mode) => (
+              <option key={mode.value} value={mode.value}>
+                {mode.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {operationMode.startsWith('day_') && (
+          <label className="space-y-1 text-sm">
+            <span className="block text-xs uppercase tracking-wide text-muted">원본 날짜</span>
+            <select
+              value={operationDayIndex}
+              onChange={(e) => {
+                setOperationDayIndex(Number(e.target.value));
+                setOperationResult(null);
+                setOperationImpact(null);
+              }}
+              className="w-full rounded-sm border border-hairline px-3 py-2"
+              data-testid="admin-trip-operation-source-day"
+            >
+              {trip.days.map((day) => (
+                <option key={day.day_index} value={day.day_index}>
+                  {formatDayLabel(day.day_index, day.date, day.title)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {(operationMode === 'trip_copy' || operationNeedsTargetTrip) && (
+          <TripOperationTarget viewModel={viewModel} />
+        )}
+
+        {operationMode === 'trip_move' && (
+          <label className="space-y-1 text-sm md:col-span-2">
+            <span className="block text-xs uppercase tracking-wide text-muted">
+              새 owner_user_id
+            </span>
+            <input
+              value={targetOwnerUserId}
+              onChange={(e) => setTargetOwnerUserId(e.target.value)}
+              className="w-full rounded-sm border border-hairline px-3 py-2 font-mono text-sm"
+              placeholder="UUID"
+              data-testid="admin-operation-owner-id"
+            />
+          </label>
+        )}
+
+        {operationMode === 'trip_delete' && (
+          <label className="space-y-1 text-sm">
+            <span className="block text-xs uppercase tracking-wide text-muted">하위 항목</span>
+            <select
+              value={tripDeleteChildPolicy}
+              onChange={(e) => setTripDeleteChildPolicy(e.target.value as 'keep' | 'delete')}
+              className="w-full rounded-sm border border-hairline px-3 py-2"
+              data-testid="admin-operation-child-policy"
+            >
+              <option value="keep">유지</option>
+              <option value="delete">함께 삭제</option>
+            </select>
+          </label>
+        )}
+
+        {operationMode === 'day_move' && (
+          <label className="space-y-1 text-sm">
+            <span className="block text-xs uppercase tracking-wide text-muted">
+              하위 POI/파일/댓글
+            </span>
+            <select
+              value={childMovePolicy}
+              onChange={(e) => setChildMovePolicy(e.target.value as 'move' | 'delete')}
+              className="w-full rounded-sm border border-hairline px-3 py-2"
+              data-testid="admin-operation-move-policy"
+            >
+              <option value="move">대상으로 이동</option>
+              <option value="delete">함께 삭제</option>
+            </select>
+          </label>
+        )}
+
+        {operationMode === 'day_copy' && (
+          <div className="grid gap-2 text-sm">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={includePois}
+                onChange={(e) => setIncludePois(e.target.checked)}
+                data-testid="admin-operation-include-pois"
+              />
+              POI 포함
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={includeAttachments}
+                onChange={(e) => setIncludeAttachments(e.target.checked)}
+                data-testid="admin-operation-include-attachments"
+              />
+              파일 포함
+            </label>
+          </div>
+        )}
+
+        <div className="md:col-span-2">
+          <FormTextArea
+            id="admin-trip-operation-reason"
+            label="사유"
+            hint="감사 로그에 기록됩니다."
+            value={operationReason}
+            onChange={(e) => setOperationReason(e.target.value)}
+            rows={3}
+            data-testid="admin-trip-operation-reason"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <OperationImpactPanel impact={operationImpact} />
+      </div>
+
+      {operationError && (
+        <p
+          className="mt-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
+          data-testid="admin-trip-operation-error"
+        >
+          {operationError}
+        </p>
+      )}
+      {operationResult && (
+        <p
+          className="mt-4 rounded-sm bg-success-bg p-3 text-sm text-success-text"
+          data-testid="admin-trip-operation-result"
+        >
+          {operationResult.action} 완료 · {formatAffected(operationResult.affected)}
+        </p>
+      )}
+    </div>
   );
 }

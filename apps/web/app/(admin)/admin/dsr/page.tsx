@@ -1,6 +1,13 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
+import { apiClient } from '@/lib/api';
+import { ApiError, adminApi, queryKeys, type AdminDsrRequestListParams } from '@pinvi/api-client';
+import type { AdminDsrRequestRecord } from '@pinvi/schemas';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2,
@@ -11,14 +18,7 @@ import {
   Send,
   XCircle,
 } from 'lucide-react';
-import { ApiError, adminApi, queryKeys, type AdminDsrRequestListParams } from '@pinvi/api-client';
-import type { AdminDsrRequestRecord } from '@pinvi/schemas';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FilterBar, FilterField } from '@/components/admin/filter-bar';
-import { NativeSelect } from '@/components/admin/ui/native-select';
-import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
-import { apiClient } from '@/lib/api';
+import { useMemo, useState, type FormEvent } from 'react';
 
 const STATUS_OPTIONS = [
   { value: '', label: '상태 전체' },
@@ -95,7 +95,13 @@ function parseJsonObject(value: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-export default function AdminDsrPage() {
+export default function AdminDsrPage(...args: Parameters<typeof useAdminDsrPageModel>) {
+  const viewModel = useAdminDsrPageModel(...args);
+  if (viewModel.renderBranch === 'render0') return <AdminDsrPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminDsrPageModel() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_OPTIONS)[number]['value']>('');
   const [typeFilter, setTypeFilter] = useState<(typeof TYPE_OPTIONS)[number]['value']>('');
@@ -296,6 +302,61 @@ export default function AdminDsrPage() {
     actionMutation.mutate();
   };
 
+  return {
+    renderBranch: 'render0' as const,
+    accessReason,
+    actionMutation,
+    columns,
+    dsrQuery,
+    error,
+    exportManifest,
+    identityNote,
+    identityVerified,
+    notice,
+    overdueFilter,
+    partialResponse,
+    processingNote,
+    rejectionReason,
+    resultSummary,
+    selectedAction,
+    selectedRequest,
+    setAccessReason,
+    setExportManifest,
+    setIdentityNote,
+    setIdentityVerified,
+    setOverdueFilter,
+    setPartialResponse,
+    setProcessingNote,
+    setRejectionReason,
+    setResultSummary,
+    setSelectedAction,
+    setSelectedRequest,
+    setStatusFilter,
+    setTypeFilter,
+    statusFilter,
+    submitAction,
+    typeFilter,
+  };
+}
+
+type AdminDsrPageView0Model = Extract<
+  ReturnType<typeof useAdminDsrPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminDsrPageView0({ viewModel }: { viewModel: AdminDsrPageView0Model }) {
+  const {
+    columns,
+    dsrQuery,
+    error,
+    notice,
+    overdueFilter,
+    selectedRequest,
+    setOverdueFilter,
+    setStatusFilter,
+    setTypeFilter,
+    statusFilter,
+    typeFilter,
+  } = viewModel;
   return (
     <AdminPage
       title="DSR"
@@ -377,135 +438,164 @@ export default function AdminDsrPage() {
           rowTestId={(row) => `admin-dsr-row-${row.request_id}`}
         />
 
-        {selectedRequest && (
-          <Section title="상태 조치">
-            <form className="grid gap-3" onSubmit={submitAction}>
-              <div className="font-mono text-xs text-muted">{selectedRequest.request_id}</div>
-              <label className="grid gap-1 text-sm font-semibold text-ink">
-                Action
-                <select
-                  value={selectedAction}
-                  onChange={(event) => setSelectedAction(event.target.value as DsrAction)}
-                  className={inputClass}
-                >
-                  {actionsForRequest(selectedRequest).map((action) => (
-                    <option key={action} value={action}>
-                      {ACTION_LABEL[action]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {selectedAction === 'identity_check' && (
-                <>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-                    <input
-                      type="checkbox"
-                      checked={identityVerified}
-                      onChange={(event) => setIdentityVerified(event.target.checked)}
-                    />
-                    본인 확인 완료
-                  </label>
-                  <label className="grid gap-1 text-sm font-semibold text-ink">
-                    확인 메모
-                    <textarea
-                      value={identityNote}
-                      onChange={(event) => setIdentityNote(event.target.value)}
-                      className={textareaClass}
-                      maxLength={1000}
-                    />
-                  </label>
-                </>
-              )}
-              {selectedAction === 'process' && (
-                <label className="grid gap-1 text-sm font-semibold text-ink">
-                  처리 메모
-                  <textarea
-                    value={processingNote}
-                    onChange={(event) => setProcessingNote(event.target.value)}
-                    className={textareaClass}
-                    maxLength={1000}
-                  />
-                </label>
-              )}
-              {selectedAction === 'complete' && (
-                <>
-                  <label className="grid gap-1 text-sm font-semibold text-ink">
-                    결과 요약
-                    <textarea
-                      value={resultSummary}
-                      onChange={(event) => setResultSummary(event.target.value)}
-                      className={textareaClass}
-                      maxLength={4000}
-                      required
-                    />
-                  </label>
-                  <label className="grid gap-1 text-sm font-semibold text-ink">
-                    Export manifest
-                    <textarea
-                      value={exportManifest}
-                      onChange={(event) => setExportManifest(event.target.value)}
-                      className={textareaClass}
-                      required
-                    />
-                  </label>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-                    <input
-                      type="checkbox"
-                      checked={partialResponse}
-                      onChange={(event) => setPartialResponse(event.target.checked)}
-                    />
-                    부분 제공
-                  </label>
-                </>
-              )}
-              {selectedAction === 'reject' && (
-                <label className="grid gap-1 text-sm font-semibold text-ink">
-                  거절 사유
-                  <textarea
-                    value={rejectionReason}
-                    onChange={(event) => setRejectionReason(event.target.value)}
-                    className={textareaClass}
-                    maxLength={4000}
-                    required
-                  />
-                </label>
-              )}
-              <label className="grid gap-1 text-sm font-semibold text-ink">
-                사유
-                <textarea
-                  value={accessReason}
-                  onChange={(event) => setAccessReason(event.target.value)}
-                  className={textareaClass}
-                  maxLength={500}
-                  required
-                />
-              </label>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={actionMutation.isPending}
-                  className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
-                  data-testid="admin-dsr-action-submit"
-                >
-                  {actionMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Send className="h-4 w-4" aria-hidden="true" />
-                  )}
-                  적용
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedRequest(null)}
-                  className="h-10 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-                >
-                  취소
-                </button>
-              </div>
-            </form>
-          </Section>
-        )}
+        {selectedRequest && <AdminDsrPageSection0_0 viewModel={viewModel} />}
       </div>
     </AdminPage>
+  );
+}
+
+function AdminDsrPageSection0_0({ viewModel }: { viewModel: AdminDsrPageView0Model }) {
+  const {
+    accessReason,
+    actionMutation,
+    exportManifest,
+    identityNote,
+    identityVerified,
+    partialResponse,
+    processingNote,
+    rejectionReason,
+    resultSummary,
+    selectedAction,
+    selectedRequest,
+    setAccessReason,
+    setExportManifest,
+    setIdentityNote,
+    setIdentityVerified,
+    setPartialResponse,
+    setProcessingNote,
+    setRejectionReason,
+    setResultSummary,
+    setSelectedAction,
+    setSelectedRequest,
+    submitAction,
+  } = viewModel;
+  if (selectedRequest == null) return null;
+  return (
+    <Section title="상태 조치">
+      <form className="grid gap-3" onSubmit={submitAction}>
+        <div className="font-mono text-xs text-muted">{selectedRequest.request_id}</div>
+        <label className="grid gap-1 text-sm font-semibold text-ink">
+          Action
+          <select
+            value={selectedAction}
+            onChange={(event) => setSelectedAction(event.target.value as DsrAction)}
+            className={inputClass}
+          >
+            {actionsForRequest(selectedRequest).map((action) => (
+              <option key={action} value={action}>
+                {ACTION_LABEL[action]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedAction === 'identity_check' && (
+          <>
+            <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <input
+                type="checkbox"
+                checked={identityVerified}
+                onChange={(event) => setIdentityVerified(event.target.checked)}
+              />
+              본인 확인 완료
+            </label>
+            <label className="grid gap-1 text-sm font-semibold text-ink">
+              확인 메모
+              <textarea
+                value={identityNote}
+                onChange={(event) => setIdentityNote(event.target.value)}
+                className={textareaClass}
+                maxLength={1000}
+              />
+            </label>
+          </>
+        )}
+        {selectedAction === 'process' && (
+          <label className="grid gap-1 text-sm font-semibold text-ink">
+            처리 메모
+            <textarea
+              value={processingNote}
+              onChange={(event) => setProcessingNote(event.target.value)}
+              className={textareaClass}
+              maxLength={1000}
+            />
+          </label>
+        )}
+        {selectedAction === 'complete' && (
+          <>
+            <label className="grid gap-1 text-sm font-semibold text-ink">
+              결과 요약
+              <textarea
+                value={resultSummary}
+                onChange={(event) => setResultSummary(event.target.value)}
+                className={textareaClass}
+                maxLength={4000}
+                required
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-semibold text-ink">
+              Export manifest
+              <textarea
+                value={exportManifest}
+                onChange={(event) => setExportManifest(event.target.value)}
+                className={textareaClass}
+                required
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <input
+                type="checkbox"
+                checked={partialResponse}
+                onChange={(event) => setPartialResponse(event.target.checked)}
+              />
+              부분 제공
+            </label>
+          </>
+        )}
+        {selectedAction === 'reject' && (
+          <label className="grid gap-1 text-sm font-semibold text-ink">
+            거절 사유
+            <textarea
+              value={rejectionReason}
+              onChange={(event) => setRejectionReason(event.target.value)}
+              className={textareaClass}
+              maxLength={4000}
+              required
+            />
+          </label>
+        )}
+        <label className="grid gap-1 text-sm font-semibold text-ink">
+          사유
+          <textarea
+            value={accessReason}
+            onChange={(event) => setAccessReason(event.target.value)}
+            className={textareaClass}
+            maxLength={500}
+            required
+          />
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={actionMutation.isPending}
+            className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-4 text-sm font-semibold text-on-primary disabled:opacity-50"
+            data-testid="admin-dsr-action-submit"
+          >
+            {actionMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Send className="h-4 w-4" aria-hidden="true" />
+            )}
+            적용
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedRequest(null)}
+            className="h-10 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+          >
+            취소
+          </button>
+        </div>
+      </form>
+    </Section>
   );
 }

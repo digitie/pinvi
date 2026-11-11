@@ -1,14 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { BadgeCheck, Loader2, Send, Star, Trash2 } from 'lucide-react';
-import { ApiError, telegramApi } from '@pinvi/api-client';
-import type { TelegramTarget } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
 import { SettingsList, SettingsSection } from '@/components/app/SettingsSurface';
 import { FormField } from '@/components/forms/FormField';
 import { TelegramNotificationPreferences } from '@/components/trips/TelegramNotificationPreferences';
-import { buttonClassName } from '@/components/ui/Button';
+import { buttonClassName } from '@/components/ui/button-styles';
+import { apiClient } from '@/lib/api';
+import { ApiError, telegramApi } from '@pinvi/api-client';
+import type { TelegramTarget } from '@pinvi/schemas';
+import { BadgeCheck, Loader2, Send, Star, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 
 function targetStatus(target: TelegramTarget): string {
   if (!target.is_enabled) return '비활성';

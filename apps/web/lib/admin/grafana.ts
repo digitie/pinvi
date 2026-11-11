@@ -84,3 +84,9 @@ export function buildGrafanaHealthUrlFromEnv(publicGrafanaUrl: string): string {
     return buildGrafanaHealthUrl(publicGrafanaUrl);
   }
 }
+
+/** 동일 origin 프레임에는 스크립트와 same-origin 권한을 함께 주지 않는다. */
+export function grafanaEmbedSandbox(parentOrigin: string, targetOrigin: string): string {
+  const base = 'allow-popups allow-forms';
+  return parentOrigin !== targetOrigin ? `${base} allow-same-origin allow-scripts` : base;
+}

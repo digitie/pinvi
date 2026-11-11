@@ -1,14 +1,12 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
-import {
-  keepPreviousData,
-  useMutation,
-  useQueries,
-  useQuery,
-  useQueryClient,
-  type Query,
-} from '@tanstack/react-query';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import {
   ApiClient,
   ApiError,
@@ -19,14 +17,16 @@ import {
   type AdminProviderSyncListParams,
 } from '@pinvi/api-client';
 import type { AdminProviderDatasetSummary, AdminProviderImportJobRecord } from '@pinvi/schemas';
+import {
+  keepPreviousData,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type Query,
+} from '@tanstack/react-query';
 import { Ban, RefreshCw, Search, X } from 'lucide-react';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
-import { Button } from '@/components/admin/ui/button';
-import { Input } from '@/components/admin/ui/input';
-import { NativeSelect } from '@/components/admin/ui/native-select';
-import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
+import { useMemo, useState, type FormEvent } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -156,7 +156,16 @@ function ErrorBox({ message }: { message: string }) {
   );
 }
 
-export default function AdminProviderSyncPage() {
+export default function AdminProviderSyncPage(
+  ...args: Parameters<typeof useAdminProviderSyncPageModel>
+) {
+  const viewModel = useAdminProviderSyncPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminProviderSyncPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminProviderSyncPageModel() {
   const queryClient = useQueryClient();
   const [keyInput, setKeyInput] = useState('');
   const [submittedKey, setSubmittedKey] = useState('');
@@ -503,6 +512,67 @@ export default function AdminProviderSyncPage() {
     cancelMutation.mutate({ item: cancelJob });
   };
 
+  return {
+    renderBranch: 'render0' as const,
+    cancelJob,
+    cancelMapReason,
+    cancelMutation,
+    cancelReason,
+    importJobs,
+    jobColumns,
+    jobCursor,
+    jobCursorHistory,
+    jobPaginationLocked,
+    jobStatus,
+    jobsError,
+    jobsQuery,
+    keyInput,
+    mutationError,
+    onSearch,
+    providerColumns,
+    providerError,
+    providers,
+    providersQuery,
+    reconciliationByJobId,
+    reconciliationJobIds,
+    reconciliationMessages,
+    setCancelJobId,
+    setCancelMapReason,
+    setCancelReason,
+    setJobCursor,
+    setJobCursorHistory,
+    setJobStatus,
+    setKeyInput,
+    submitCancel,
+  };
+}
+
+type AdminProviderSyncPageView0Model = Extract<
+  ReturnType<typeof useAdminProviderSyncPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminProviderSyncPageView0({ viewModel }: { viewModel: AdminProviderSyncPageView0Model }) {
+  const {
+    cancelJob,
+    jobStatus,
+    jobsError,
+    jobsQuery,
+    keyInput,
+    mutationError,
+    onSearch,
+    providerColumns,
+    providerError,
+    providers,
+    providersQuery,
+    reconciliationByJobId,
+    reconciliationJobIds,
+    reconciliationMessages,
+    setCancelJobId,
+    setJobCursor,
+    setJobCursorHistory,
+    setJobStatus,
+    setKeyInput,
+  } = viewModel;
   return (
     <AdminPage
       title="Provider sync"
@@ -639,127 +709,168 @@ export default function AdminProviderSyncPage() {
           </div>
         ))}
 
-      <Section title="Import jobs">
-        <AdminTable
-          columns={jobColumns}
-          rows={importJobs}
-          loading={jobsQuery.isLoading}
-          rowKey={(item) => item.job_id}
-          rowTestId={(item) => `admin-provider-job-row-${item.job_id}`}
-          empty="조회된 import job이 없습니다."
-        />
-        <div className="flex items-center justify-end gap-2 text-xs text-muted">
+      <AdminProviderSyncPageSection0_0 viewModel={viewModel} />
+
+      {cancelJob && <AdminProviderSyncPageSection0_1 viewModel={viewModel} />}
+    </AdminPage>
+  );
+}
+
+function AdminProviderSyncPageSection0_0({
+  viewModel,
+}: {
+  viewModel: AdminProviderSyncPageView0Model;
+}) {
+  const {
+    importJobs,
+    jobColumns,
+    jobCursor,
+    jobCursorHistory,
+    jobPaginationLocked,
+    jobsQuery,
+    setCancelJobId,
+    setJobCursor,
+    setJobCursorHistory,
+  } = viewModel;
+  return (
+    <Section title="Import jobs">
+      <AdminTable
+        columns={jobColumns}
+        rows={importJobs}
+        loading={jobsQuery.isLoading}
+        rowKey={(item) => item.job_id}
+        rowTestId={(item) => `admin-provider-job-row-${item.job_id}`}
+        empty="조회된 import job이 없습니다."
+      />
+      <div className="flex items-center justify-end gap-2 text-xs text-muted">
+        <button
+          type="button"
+          disabled={jobPaginationLocked || jobCursorHistory.length === 0}
+          onClick={() => {
+            if (jobPaginationLocked || jobCursorHistory.length === 0) return;
+            const previousCursor = jobCursorHistory[jobCursorHistory.length - 1] ?? null;
+            setJobCursorHistory(jobCursorHistory.slice(0, -1));
+            setJobCursor(previousCursor);
+            setCancelJobId(null);
+          }}
+          className="rounded-sm border border-hairline px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+          data-testid="admin-provider-jobs-prev"
+        >
+          이전
+        </button>
+        <span data-testid="admin-provider-jobs-page">{jobCursorHistory.length + 1} 페이지</span>
+        <button
+          type="button"
+          disabled={jobPaginationLocked || !jobsQuery.data?.next_cursor}
+          onClick={() => {
+            const nextCursor = jobsQuery.data?.next_cursor;
+            if (jobPaginationLocked || !nextCursor || nextCursor === jobCursor) return;
+            setJobCursorHistory([...jobCursorHistory, jobCursor]);
+            setJobCursor(nextCursor);
+            setCancelJobId(null);
+          }}
+          className="rounded-sm border border-hairline px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+          data-testid="admin-provider-jobs-next"
+        >
+          다음
+        </button>
+      </div>
+    </Section>
+  );
+}
+
+function AdminProviderSyncPageSection0_1({
+  viewModel,
+}: {
+  viewModel: AdminProviderSyncPageView0Model;
+}) {
+  const {
+    cancelJob,
+    cancelMapReason,
+    cancelMutation,
+    cancelReason,
+    jobPaginationLocked,
+    setCancelJobId,
+    setCancelMapReason,
+    setCancelReason,
+    submitCancel,
+  } = viewModel;
+  if (cancelJob == null) return null;
+  return (
+    <section
+      className="space-y-3 rounded-sm border border-hairline bg-canvas p-4 text-sm"
+      data-testid="admin-provider-job-cancel-panel"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-ink">Import job 취소</h2>
+          <p className="break-all font-mono text-xs text-muted">{cancelJob.job_id}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCancelJobId(null)}
+          className="rounded-sm border border-hairline p-1 text-muted hover:text-ink"
+          aria-label="닫기"
+          data-testid="admin-provider-job-cancel-close"
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+      <form className="space-y-3" onSubmit={submitCancel}>
+        <label className="block text-xs text-muted">
+          운영 사유 (Pinvi audit)
+          <textarea
+            value={cancelReason}
+            onChange={(event) => setCancelReason(event.target.value)}
+            className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+            rows={2}
+            maxLength={CANCEL_REASON_MAX_LENGTH}
+            data-testid="admin-provider-job-cancel-reason"
+          />
+          <span
+            className="mt-1 block text-right text-xs"
+            data-testid="admin-provider-job-cancel-reason-count"
+          >
+            {cancelReason.length}/{CANCEL_REASON_MAX_LENGTH}
+          </span>
+        </label>
+        <label className="block text-xs text-muted">
+          kor_travel_map 전달 사유
+          <textarea
+            value={cancelMapReason}
+            onChange={(event) => setCancelMapReason(event.target.value)}
+            className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+            rows={2}
+            maxLength={CANCEL_REASON_MAX_LENGTH}
+            data-testid="admin-provider-job-cancel-map-reason"
+          />
+          <span
+            className="mt-1 block text-right text-xs"
+            data-testid="admin-provider-job-cancel-map-reason-count"
+          >
+            {cancelMapReason.length}/{CANCEL_REASON_MAX_LENGTH}
+          </span>
+        </label>
+        <div className="flex items-center justify-end gap-2 border-t border-hairline pt-3">
           <button
             type="button"
-            disabled={jobPaginationLocked || jobCursorHistory.length === 0}
-            onClick={() => {
-              if (jobPaginationLocked || jobCursorHistory.length === 0) return;
-              const previousCursor = jobCursorHistory[jobCursorHistory.length - 1] ?? null;
-              setJobCursorHistory(jobCursorHistory.slice(0, -1));
-              setJobCursor(previousCursor);
-              setCancelJobId(null);
-            }}
-            className="rounded-sm border border-hairline px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-            data-testid="admin-provider-jobs-prev"
+            onClick={() => setCancelJobId(null)}
+            className="rounded-sm border border-hairline px-3 py-1 text-sm"
+            data-testid="admin-provider-job-cancel-abort"
           >
-            이전
+            닫기
           </button>
-          <span data-testid="admin-provider-jobs-page">{jobCursorHistory.length + 1} 페이지</span>
           <button
-            type="button"
-            disabled={jobPaginationLocked || !jobsQuery.data?.next_cursor}
-            onClick={() => {
-              const nextCursor = jobsQuery.data?.next_cursor;
-              if (jobPaginationLocked || !nextCursor || nextCursor === jobCursor) return;
-              setJobCursorHistory([...jobCursorHistory, jobCursor]);
-              setJobCursor(nextCursor);
-              setCancelJobId(null);
-            }}
-            className="rounded-sm border border-hairline px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-            data-testid="admin-provider-jobs-next"
+            type="submit"
+            disabled={cancelMutation.isPending || jobPaginationLocked}
+            className="inline-flex items-center gap-1 rounded-sm border border-ink bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
+            data-testid="admin-provider-job-cancel-submit"
           >
-            다음
+            <Ban className="h-3.5 w-3.5" aria-hidden="true" />
+            취소 요청
           </button>
         </div>
-      </Section>
-
-      {cancelJob && (
-        <section
-          className="space-y-3 rounded-sm border border-hairline bg-canvas p-4 text-sm"
-          data-testid="admin-provider-job-cancel-panel"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-ink">Import job 취소</h2>
-              <p className="break-all font-mono text-xs text-muted">{cancelJob.job_id}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setCancelJobId(null)}
-              className="rounded-sm border border-hairline p-1 text-muted hover:text-ink"
-              aria-label="닫기"
-              data-testid="admin-provider-job-cancel-close"
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </div>
-          <form className="space-y-3" onSubmit={submitCancel}>
-            <label className="block text-xs text-muted">
-              운영 사유 (Pinvi audit)
-              <textarea
-                value={cancelReason}
-                onChange={(event) => setCancelReason(event.target.value)}
-                className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
-                rows={2}
-                maxLength={CANCEL_REASON_MAX_LENGTH}
-                data-testid="admin-provider-job-cancel-reason"
-              />
-              <span
-                className="mt-1 block text-right text-xs"
-                data-testid="admin-provider-job-cancel-reason-count"
-              >
-                {cancelReason.length}/{CANCEL_REASON_MAX_LENGTH}
-              </span>
-            </label>
-            <label className="block text-xs text-muted">
-              kor_travel_map 전달 사유
-              <textarea
-                value={cancelMapReason}
-                onChange={(event) => setCancelMapReason(event.target.value)}
-                className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
-                rows={2}
-                maxLength={CANCEL_REASON_MAX_LENGTH}
-                data-testid="admin-provider-job-cancel-map-reason"
-              />
-              <span
-                className="mt-1 block text-right text-xs"
-                data-testid="admin-provider-job-cancel-map-reason-count"
-              >
-                {cancelMapReason.length}/{CANCEL_REASON_MAX_LENGTH}
-              </span>
-            </label>
-            <div className="flex items-center justify-end gap-2 border-t border-hairline pt-3">
-              <button
-                type="button"
-                onClick={() => setCancelJobId(null)}
-                className="rounded-sm border border-hairline px-3 py-1 text-sm"
-                data-testid="admin-provider-job-cancel-abort"
-              >
-                닫기
-              </button>
-              <button
-                type="submit"
-                disabled={cancelMutation.isPending || jobPaginationLocked}
-                className="inline-flex items-center gap-1 rounded-sm border border-ink bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
-                data-testid="admin-provider-job-cancel-submit"
-              >
-                <Ban className="h-3.5 w-3.5" aria-hidden="true" />
-                취소 요청
-              </button>
-            </div>
-          </form>
-        </section>
-      )}
-    </AdminPage>
+      </form>
+    </section>
   );
 }

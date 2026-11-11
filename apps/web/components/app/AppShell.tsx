@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { SkipToContentLink } from '@/components/app/SkipToContentLink';
+import { Wordmark } from '@/components/app/Wordmark';
+import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import {
   CalendarDays,
   LayoutDashboard,
@@ -13,9 +13,9 @@ import {
   Settings,
   UserCircle,
 } from 'lucide-react';
-import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
-import { SkipToContentLink } from '@/components/app/SkipToContentLink';
-import { Wordmark } from '@/components/app/Wordmark';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench(app) · design-system: DESIGN.md · designed-as-app
  * nav: 데스크톱 = ink 밑줄 탭(활성 1개) · 모바일 = 하단 탭바 4 + 더보기 시트 · footer: 없음(앱 셸)
@@ -63,7 +63,13 @@ function navTestId(href: string): string {
   return `app-nav-${href.replace(/[^a-z0-9]+/gi, '-')}`;
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell(...args: Parameters<typeof useAppShellModel>) {
+  const viewModel = useAppShellModel(...args);
+  if (viewModel.renderBranch === 'render0') return <AppShellView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAppShellModel({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const mobileWebLayout = useMobileWebLayout();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -73,7 +79,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const tripDetailRoute =
     pathParts.length === 2 &&
     pathParts[0] === 'trips' &&
-    pathParts[1] !== 'map-shell' && pathParts[1] !== 'trash';
+    pathParts[1] !== 'map-shell' &&
+    pathParts[1] !== 'trash';
   const mobileTripDetail = mobileWebLayout && tripDetailRoute;
   // 데스크톱 여행 상세는 창 높이에 고정한다 — 셸이 min-h-dvh로 자라면 왼쪽 패널 내용만큼 지도 열도
   // 자라 900px 창에서 지도가 ~1590px가 되고 핀이 fold 아래에 그려졌다(#704). 패널은 안에서 스크롤한다.
@@ -111,6 +118,35 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [moreOpen]);
 
+  return {
+    renderBranch: 'render0' as const,
+    children,
+    desktopTripDetail,
+    mobileTripDetail,
+    mobileWebLayout,
+    moreOpen,
+    moreRef,
+    moreSheetId,
+    pathname,
+    secondaryActive,
+    setMoreOpen,
+  };
+}
+
+type AppShellView0Model = Extract<ReturnType<typeof useAppShellModel>, { renderBranch: 'render0' }>;
+function AppShellView0({ viewModel }: { viewModel: AppShellView0Model }) {
+  const {
+    children,
+    desktopTripDetail,
+    mobileTripDetail,
+    mobileWebLayout,
+    moreOpen,
+    moreRef,
+    moreSheetId,
+    pathname,
+    secondaryActive,
+    setMoreOpen,
+  } = viewModel;
   return (
     <div
       className={
@@ -157,7 +193,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
       )}
 
-      <main id="main" tabIndex={-1}
+      <main
+        id="main"
+        tabIndex={-1}
         className={
           mobileTripDetail
             ? 'flex min-h-0 w-full flex-1 flex-col'

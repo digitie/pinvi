@@ -1,23 +1,26 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DatabaseBackup, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
-import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import type { AdminBackupRestoreRun, AdminBackupSnapshot } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { RestoreHotswapDialog } from '@/components/admin/RestoreHotswapDialog';
 import { apiClient } from '@/lib/api';
+import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import type { AdminBackupRestoreRun, AdminBackupSnapshot } from '@pinvi/schemas';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { DatabaseBackup, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
+import { useMemo, useState } from 'react';
+
+const displayFormatter1 = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
 
 const restoreHotswapUiEnabled = process.env.NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED === '1';
 const snapshotListLimit = 50;
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
+  return displayFormatter1.format(new Date(value));
 }
 
 function formatBytes(value: number) {

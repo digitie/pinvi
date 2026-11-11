@@ -43,9 +43,16 @@
 // `첫 페이지`/`다음`), option 텍스트·value, 로컬 `formatDateTime`(ko-KR `toLocaleString` —
 // `@/lib/admin/format`의 것으로 바꾸면 표시 포맷이 달라진다).
 
-import Link from 'next/link';
-import { useMemo, useState, type FormEvent } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { AdminPage } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { JsonViewer } from '@/components/admin/json-viewer';
+import { CursorPager } from '@/components/admin/pagination-bar';
+import { StatusBadge } from '@/components/admin/status-badge';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import {
   ApiClient,
   ApiError,
@@ -62,17 +69,10 @@ import type {
   AdminFeatureSortOrder,
   AdminFeatureSummary,
 } from '@pinvi/schemas';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Eye, RefreshCw, Search } from 'lucide-react';
-import { AdminPage } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
-import { CursorPager } from '@/components/admin/pagination-bar';
-import { Button } from '@/components/admin/ui/button';
-import { Input } from '@/components/admin/ui/input';
-import { NativeSelect } from '@/components/admin/ui/native-select';
-import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
-import { JsonViewer } from '@/components/admin/json-viewer';
-import { StatusBadge } from '@/components/admin/status-badge';
+import Link from 'next/link';
+import { useMemo, useState, type FormEvent } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -131,7 +131,7 @@ function valuesFromCsv(value: string): string[] | undefined {
 }
 
 function formatDateTime(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString('ko-KR') : '—';
+  return value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '—';
 }
 
 function coordLabel(feature: Pick<AdminFeatureSummary, 'lon' | 'lat'>) {
@@ -187,7 +187,14 @@ function CountLine({ detail }: { detail: AdminFeatureDetail }) {
   );
 }
 
-function DetailInspector({ featureId }: { featureId: string | null }) {
+function DetailInspector(...args: Parameters<typeof useDetailInspectorModel>) {
+  const viewModel = useDetailInspectorModel(...args);
+  if (viewModel.renderBranch === 'render0') return <DetailInspectorView0 />;
+  if (viewModel.renderBranch === 'render1') return <DetailInspectorView1 viewModel={viewModel} />;
+  return null;
+}
+
+function useDetailInspectorModel({ featureId }: { featureId: string | null }) {
   const detailQuery = useQuery({
     queryKey: featureId ? queryKeys.admin.feature(featureId) : ['admin', 'feature', null],
     queryFn: () => adminApi(apiClient).getFeature(featureId as string),
@@ -195,14 +202,7 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
   });
 
   if (!featureId) {
-    return (
-      <section
-        className="rounded-sm border border-hairline bg-canvas p-4 text-sm text-muted"
-        data-testid="admin-features-detail-empty"
-      >
-        목록에서 feature를 선택하면 상세 정보가 표시됩니다.
-      </section>
-    );
+    return { renderBranch: 'render0' as const };
   }
 
   const detail = detailQuery.data ?? null;
@@ -212,6 +212,29 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
       : '상세 조회 실패'
     : null;
 
+  return { renderBranch: 'render1' as const, detail, detailQuery, error, featureId };
+}
+function DetailInspectorView0() {
+  return (
+    <section
+      className="rounded-sm border border-hairline bg-canvas p-4 text-sm text-muted"
+      data-testid="admin-features-detail-empty"
+    >
+      목록에서 feature를 선택하면 상세 정보가 표시됩니다.
+    </section>
+  );
+}
+
+type DetailInspectorView1Model = Extract<
+  ReturnType<typeof useDetailInspectorModel>,
+  { renderBranch: 'render1' }
+>;
+function DetailInspectorView1({ viewModel }: { viewModel: DetailInspectorView1Model }) {
+  return <DetailInspectorSection1_0 viewModel={viewModel} />;
+}
+
+function DetailInspectorSection1_0({ viewModel }: { viewModel: DetailInspectorView1Model }) {
+  const { detail, detailQuery, error, featureId } = viewModel;
   return (
     <section
       className="space-y-4 rounded-sm border border-hairline bg-canvas p-4"
@@ -344,7 +367,16 @@ function DetailInspector({ featureId }: { featureId: string | null }) {
   );
 }
 
-export default function AdminFeaturesClient({
+export default function AdminFeaturesClient(
+  ...args: Parameters<typeof useAdminFeaturesClientModel>
+) {
+  const viewModel = useAdminFeaturesClientModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminFeaturesClientView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminFeaturesClientModel({
   initialFeatureId,
   initialQuery = '',
 }: {
@@ -512,6 +544,73 @@ export default function AdminFeaturesClient({
     },
   ];
 
+  return {
+    renderBranch: 'render0' as const,
+    categoryInput,
+    columns,
+    cursorStack,
+    data,
+    error,
+    featuresQuery,
+    issue,
+    kind,
+    lifecycle,
+    nextCursor,
+    onSearch,
+    order,
+    pageIndex,
+    pageSize,
+    providerDatasetInput,
+    publication,
+    quality,
+    queryInput,
+    resetCursor,
+    selectedFeatureId,
+    setCategoryInput,
+    setCursorStack,
+    setIssue,
+    setKind,
+    setLifecycle,
+    setOrder,
+    setPageSize,
+    setProviderDatasetInput,
+    setPublication,
+    setQuality,
+    setQueryInput,
+    setSelectedFeatureId,
+    setSort,
+    sort,
+  };
+}
+
+type AdminFeaturesClientView0Model = Extract<
+  ReturnType<typeof useAdminFeaturesClientModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminFeaturesClientView0({ viewModel }: { viewModel: AdminFeaturesClientView0Model }) {
+  const {
+    data,
+    error,
+    featuresQuery,
+    issue,
+    kind,
+    lifecycle,
+    order,
+    pageIndex,
+    pageSize,
+    publication,
+    quality,
+    resetCursor,
+    setIssue,
+    setKind,
+    setLifecycle,
+    setOrder,
+    setPageSize,
+    setPublication,
+    setQuality,
+    setSort,
+    sort,
+  } = viewModel;
   return (
     <AdminPage
       title="Features"
@@ -521,52 +620,7 @@ export default function AdminFeaturesClient({
       <div className="space-y-3">
         {/* 텍스트 3종만 제출로 적용된다(전환 전과 동일) — select는 form 밖에 두어 Firefox에서
             select 위 Enter가 폼을 제출하는 일이 없게 한다. */}
-        <form onSubmit={onSearch}>
-          <FilterBar>
-            <FilterField className="w-56" htmlFor="admin-features-search" label="검색">
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
-                  aria-hidden="true"
-                />
-                <Input
-                  id="admin-features-search"
-                  type="search"
-                  value={queryInput}
-                  onChange={(event) => setQueryInput(event.target.value)}
-                  className="pl-9"
-                  placeholder="name, address, feature_id"
-                  data-testid="admin-features-search"
-                />
-              </div>
-            </FilterField>
-            <FilterField className="w-36" hint="정수 1 이상" label="provider dataset ID">
-              <Input
-                type="number"
-                min={1}
-                step={1}
-                value={providerDatasetInput}
-                onChange={(event) => setProviderDatasetInput(event.target.value)}
-                placeholder="provider_dataset_id"
-                data-testid="admin-features-provider-dataset-filter"
-              />
-            </FilterField>
-            <FilterField className="w-36" hint="쉼표로 여러 개" label="category">
-              <Input
-                type="text"
-                value={categoryInput}
-                onChange={(event) => setCategoryInput(event.target.value)}
-                placeholder="category"
-                data-testid="admin-features-category-filter"
-              />
-            </FilterField>
-            <FilterActions>
-              <Button type="submit" variant="outline" data-testid="admin-features-search-submit">
-                조회
-              </Button>
-            </FilterActions>
-          </FilterBar>
-        </form>
+        <AdminFeaturesClientSection0_0 viewModel={viewModel} />
 
         <FilterBar>
           <FilterField label="kind">
@@ -738,58 +792,148 @@ export default function AdminFeaturesClient({
         </p>
       )}
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
-        <div className="min-w-0 space-y-3">
-          <AdminTable
-            columns={columns}
-            rows={data?.items ?? []}
-            loading={featuresQuery.isLoading}
-            rowKey={(feature) => feature.feature_id}
-            rowTestId={(feature) => `admin-features-row-${feature.feature_id}`}
-            onRowClick={(feature) => setSelectedFeatureId(feature.feature_id)}
-            empty="feature가 없습니다."
-            ariaLabel="Feature 목록"
-            // 헤더 클릭이 툴바 select와 **같은 서버 상태**를 움직인다. 예전에는 헤더가 현재
-            // 페이지 안에서만 도는 클라이언트 정렬이라, 사용자에게는 전체가 정렬된 것처럼
-            // 보이지만 실제로는 한 페이지 창만 뒤집혔다.
-            serverSort={{
-              key: sort,
-              order,
-              onChange: (nextSort, nextOrder) => {
-                if (!isFeatureSort(nextSort)) {
-                  // 서버가 모르는 키다. 정렬을 바꾸지 않는 편이 잘못된 목록을 보여주는 것보다 낫다.
-                  console.warn(`[admin/features] 알 수 없는 정렬 키: ${nextSort}`);
-                  return;
-                }
-                setSort(nextSort);
-                setOrder(nextOrder);
-                resetCursor();
-              },
-            }}
-          />
+      <AdminFeaturesClientSection0_1 viewModel={viewModel} />
+    </AdminPage>
+  );
+}
 
-          {/*
+function AdminFeaturesClientSection0_0({
+  viewModel,
+}: {
+  viewModel: AdminFeaturesClientView0Model;
+}) {
+  const {
+    categoryInput,
+    onSearch,
+    providerDatasetInput,
+    queryInput,
+    setCategoryInput,
+    setProviderDatasetInput,
+    setQueryInput,
+  } = viewModel;
+  return (
+    <form onSubmit={onSearch}>
+      <FilterBar>
+        <FilterField className="w-56" htmlFor="admin-features-search" label="검색">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+              aria-hidden="true"
+            />
+            <Input
+              id="admin-features-search"
+              type="search"
+              value={queryInput}
+              onChange={(event) => setQueryInput(event.target.value)}
+              className="pl-9"
+              placeholder="name, address, feature_id"
+              data-testid="admin-features-search"
+            />
+          </div>
+        </FilterField>
+        <FilterField className="w-36" hint="정수 1 이상" label="provider dataset ID">
+          <Input
+            type="number"
+            min={1}
+            step={1}
+            value={providerDatasetInput}
+            onChange={(event) => setProviderDatasetInput(event.target.value)}
+            placeholder="provider_dataset_id"
+            data-testid="admin-features-provider-dataset-filter"
+          />
+        </FilterField>
+        <FilterField className="w-36" hint="쉼표로 여러 개" label="category">
+          <Input
+            type="text"
+            value={categoryInput}
+            onChange={(event) => setCategoryInput(event.target.value)}
+            placeholder="category"
+            data-testid="admin-features-category-filter"
+          />
+        </FilterField>
+        <FilterActions>
+          <Button type="submit" variant="outline" data-testid="admin-features-search-submit">
+            조회
+          </Button>
+        </FilterActions>
+      </FilterBar>
+    </form>
+  );
+}
+
+function AdminFeaturesClientSection0_1({
+  viewModel,
+}: {
+  viewModel: AdminFeaturesClientView0Model;
+}) {
+  const {
+    order,
+    columns,
+    cursorStack,
+    data,
+    featuresQuery,
+    nextCursor,
+    pageIndex,
+    resetCursor,
+    selectedFeatureId,
+    setCursorStack,
+    setOrder,
+    setSelectedFeatureId,
+    setSort,
+    sort,
+  } = viewModel;
+  return (
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
+      <div className="min-w-0 space-y-3">
+        <AdminTable
+          columns={columns}
+          rows={data?.items ?? []}
+          loading={featuresQuery.isLoading}
+          rowKey={(feature) => feature.feature_id}
+          rowTestId={(feature) => `admin-features-row-${feature.feature_id}`}
+          onRowClick={(feature) => setSelectedFeatureId(feature.feature_id)}
+          empty="feature가 없습니다."
+          ariaLabel="Feature 목록"
+          // 헤더 클릭이 툴바 select와 **같은 서버 상태**를 움직인다. 예전에는 헤더가 현재
+          // 페이지 안에서만 도는 클라이언트 정렬이라, 사용자에게는 전체가 정렬된 것처럼
+          // 보이지만 실제로는 한 페이지 창만 뒤집혔다.
+          serverSort={{
+            key: sort,
+            order,
+            onChange: (nextSort, nextOrder) => {
+              if (!isFeatureSort(nextSort)) {
+                // 서버가 모르는 키다. 정렬을 바꾸지 않는 편이 잘못된 목록을 보여주는 것보다 낫다.
+                console.warn(`[admin/features] 알 수 없는 정렬 키: ${nextSort}`);
+                return;
+              }
+              setSort(nextSort);
+              setOrder(nextOrder);
+              resetCursor();
+            },
+          }}
+        />
+
+        {/*
             cursor 스택을 들고 있지만 `previous`는 넘기지 않는다 — 전환 전에도 `이전`은 없었고
             (첫 페이지 / 다음 두 개뿐) 여기서 켜면 요청 밖의 동작 변경이 된다. 필요해지면
             `previous={{ available: cursorStack.length > 0, onActivate: pop }}` 한 줄이면 된다.
           */}
-          <CursorPager
-            hasNext={Boolean(nextCursor)}
-            isFetching={featuresQuery.isFetching}
-            isFirst={cursorStack.length === 0}
-            placement="bottom"
-            summary={<>페이지 {pageIndex}</>}
-            onFirst={resetCursor}
-            onNext={() => {
-              if (!nextCursor) return;
-              setCursorStack((stack) => [...stack, nextCursor]);
-              setSelectedFeatureId(null);
-            }}
-          />
-        </div>
+        <CursorPager
+          hasNext={Boolean(nextCursor)}
+          isFetching={featuresQuery.isFetching}
+          isFirst={cursorStack.length === 0}
+          placement="bottom"
+          summary={<>페이지 {pageIndex}</>}
+          onFirst={resetCursor}
+          onNext={() => {
+            if (!nextCursor) return;
+            setCursorStack((stack) => [...stack, nextCursor]);
+            setSelectedFeatureId(null);
+          }}
+        />
+      </div>
 
-        <DetailInspector featureId={selectedFeatureId} />
-      </section>
-    </AdminPage>
+      <DetailInspector featureId={selectedFeatureId} />
+    </section>
   );
 }

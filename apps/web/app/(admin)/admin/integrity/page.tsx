@@ -1,22 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
 import {
   ApiClient,
   ApiError,
   adminApi,
   queryKeys,
-  type AdminIntegrityIssueActionBody,
   type AdminConsistencyReportListParams,
+  type AdminIntegrityIssueActionBody,
   type AdminIntegrityIssueListParams,
 } from '@pinvi/api-client';
 import type { AdminConsistencyReportRecord, AdminIntegrityIssueRecord } from '@pinvi/schemas';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, CheckCircle2, ChevronRight, RefreshCw, RotateCcw, X } from 'lucide-react';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FilterBar, FilterField } from '@/components/admin/filter-bar';
-import { Button } from '@/components/admin/ui/button';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 // KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356). 이 페이지의 손수 만든
 // `role="dialog"` + scrim + Escape/Tab 트랩은 base-ui가 대신한다.
 import {
@@ -101,7 +101,14 @@ function IssueActionIcon({ action }: { action: IssueAction }) {
   return <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />;
 }
 
-export default function AdminIntegrityPage() {
+export default function AdminIntegrityPage(...args: Parameters<typeof useAdminIntegrityPageModel>) {
+  const viewModel = useAdminIntegrityPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminIntegrityPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminIntegrityPageModel() {
   const queryClient = useQueryClient();
   const [issueSource, setIssueSource] =
     useState<(typeof ISSUE_SOURCE_OPTIONS)[number]['value']>('all');
@@ -361,6 +368,68 @@ export default function AdminIntegrityPage() {
 
   const resetIssueCursor = () => setIssueCursor(null);
 
+  return {
+    renderBranch: 'render0' as const,
+    accessReason,
+    accessReasonRef,
+    actionMutation,
+    closeIssueActionDialog,
+    issueColumns,
+    issueCursor,
+    issueSource,
+    issueStatus,
+    issuesError,
+    issuesQuery,
+    mapReason,
+    mutationError,
+    mutationNotice,
+    provider,
+    reportColumns,
+    reportSeverity,
+    reportsError,
+    reportsQuery,
+    resetIssueCursor,
+    selectedAction,
+    selectedIssue,
+    setAccessReason,
+    setIssueCursor,
+    setIssueSource,
+    setIssueStatus,
+    setMapReason,
+    setProvider,
+    setReportSeverity,
+    setSeverity,
+    severity,
+    submitIssueAction,
+  };
+}
+
+type AdminIntegrityPageView0Model = Extract<
+  ReturnType<typeof useAdminIntegrityPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminIntegrityPageView0({ viewModel }: { viewModel: AdminIntegrityPageView0Model }) {
+  const {
+    issueSource,
+    issueStatus,
+    issuesError,
+    issuesQuery,
+    mutationError,
+    mutationNotice,
+    provider,
+    reportColumns,
+    reportSeverity,
+    reportsError,
+    reportsQuery,
+    resetIssueCursor,
+    selectedIssue,
+    setIssueSource,
+    setIssueStatus,
+    setProvider,
+    setReportSeverity,
+    setSeverity,
+    severity,
+  } = viewModel;
   return (
     <AdminPage
       title="정합성"
@@ -484,42 +553,7 @@ export default function AdminIntegrityPage() {
         </p>
       )}
 
-      <Section
-        title="Issues"
-        actions={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={resetIssueCursor}
-              disabled={!issueCursor}
-              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-xs disabled:opacity-50"
-              data-testid="admin-integrity-issues-first"
-            >
-              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-              처음
-            </button>
-            <button
-              type="button"
-              onClick={() => setIssueCursor(issuesQuery.data?.next_cursor ?? null)}
-              disabled={!issuesQuery.data?.next_cursor}
-              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-xs disabled:opacity-50"
-              data-testid="admin-integrity-issues-next"
-            >
-              다음
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          </div>
-        }
-      >
-        <AdminTable
-          columns={issueColumns}
-          rows={issuesQuery.data?.items ?? []}
-          loading={issuesQuery.isLoading}
-          rowKey={(item) => item.issue_id}
-          rowTestId={(item) => `admin-integrity-issue-row-${item.issue_id}`}
-          empty="정합성 issue가 없습니다."
-        />
-      </Section>
+      <AdminIntegrityPageSection0_0 viewModel={viewModel} />
 
       {reportsError && <ErrorBox message={reportsError} />}
 
@@ -537,96 +571,152 @@ export default function AdminIntegrityPage() {
       {/* 다이얼로그를 조건부로 **마운트**한다(`open`은 상수 true) — `selectedIssue`가 null이 되는
           즉시 사라지던 기존 동작·상태를 그대로 유지하기 위해서다(닫힘 트랜지션 동안 본문이
           selectedIssue를 잃고 깨지는 문제도 함께 없앤다). */}
-      {selectedIssue && (
-        <Dialog
-          // 을 쓰지 않는다 — 이 모달은 **전환 전에도** Escape로 닫혔고
-          // (), 이 그 동작을
-          // 단언한다. 여기에 보호를 걸면 그게 오히려 새 회귀다.
-          open
-          onOpenChange={(open) => {
-            // Escape·scrim 클릭·닫기 버튼 전부 이 한 경로로 모인다(기존 closeIssueActionDialog 그대로).
-            if (!open) closeIssueActionDialog();
-          }}
-        >
-          <DialogContent
-            data-testid="admin-integrity-action-dialog"
-            initialFocus={accessReasonRef}
-            viewportProps={{ 'data-testid': 'admin-integrity-action-overlay' }}
-          >
-            <form onSubmit={submitIssueAction}>
-              <DialogHeader>
-                <div className="min-w-0">
-                  <DialogTitle>정합성 issue {ACTION_LABEL[selectedAction]}</DialogTitle>
-                  <p className="font-mono text-xs text-muted">{selectedIssue.issue_id}</p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={closeIssueActionDialog}
-                  aria-label="닫기"
-                  data-testid="admin-integrity-action-close"
-                >
-                  <X aria-hidden="true" />
-                </Button>
-              </DialogHeader>
-              <div className="flex flex-col gap-3 p-4">
-                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
-                  <dt className="text-muted">status</dt>
-                  <dd>{selectedIssue.status}</dd>
-                  <dt className="text-muted">type</dt>
-                  <dd>{selectedIssue.violation_type}</dd>
-                  <dt className="text-muted">target</dt>
-                  <dd className="break-all font-mono text-xs">
-                    {selectedIssue.feature_id ?? selectedIssue.source_record_key ?? '—'}
-                  </dd>
-                  <dt className="text-muted">message</dt>
-                  <dd>{selectedIssue.message}</dd>
-                </dl>
-                <label className="block text-xs text-muted">
-                  운영 사유 (Pinvi audit)
-                  <textarea
-                    ref={accessReasonRef}
-                    value={accessReason}
-                    onChange={(event) => setAccessReason(event.target.value)}
-                    className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
-                    rows={2}
-                    data-testid="admin-integrity-action-access-reason"
-                  />
-                </label>
-                <label className="block text-xs text-muted">
-                  kor_travel_map 전달 사유
-                  <textarea
-                    value={mapReason}
-                    onChange={(event) => setMapReason(event.target.value)}
-                    className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
-                    rows={2}
-                    data-testid="admin-integrity-action-map-reason"
-                  />
-                </label>
-              </div>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={closeIssueActionDialog}
-                  data-testid="admin-integrity-action-cancel"
-                >
-                  취소
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={actionMutation.isPending}
-                  data-testid="admin-integrity-action-submit"
-                >
-                  <IssueActionIcon action={selectedAction} />
-                  반영
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      )}
+      {selectedIssue && <AdminIntegrityPageSection0_1 viewModel={viewModel} />}
     </AdminPage>
+  );
+}
+
+function AdminIntegrityPageSection0_0({ viewModel }: { viewModel: AdminIntegrityPageView0Model }) {
+  const { issueColumns, issueCursor, issuesQuery, resetIssueCursor, setIssueCursor } = viewModel;
+  return (
+    <Section
+      title="Issues"
+      actions={
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={resetIssueCursor}
+            disabled={!issueCursor}
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-xs disabled:opacity-50"
+            data-testid="admin-integrity-issues-first"
+          >
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+            처음
+          </button>
+          <button
+            type="button"
+            onClick={() => setIssueCursor(issuesQuery.data?.next_cursor ?? null)}
+            disabled={!issuesQuery.data?.next_cursor}
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-xs disabled:opacity-50"
+            data-testid="admin-integrity-issues-next"
+          >
+            다음
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      }
+    >
+      <AdminTable
+        columns={issueColumns}
+        rows={issuesQuery.data?.items ?? []}
+        loading={issuesQuery.isLoading}
+        rowKey={(item) => item.issue_id}
+        rowTestId={(item) => `admin-integrity-issue-row-${item.issue_id}`}
+        empty="정합성 issue가 없습니다."
+      />
+    </Section>
+  );
+}
+
+function AdminIntegrityPageSection0_1({ viewModel }: { viewModel: AdminIntegrityPageView0Model }) {
+  const {
+    accessReason,
+    accessReasonRef,
+    actionMutation,
+    closeIssueActionDialog,
+    mapReason,
+    selectedAction,
+    selectedIssue,
+    setAccessReason,
+    setMapReason,
+    submitIssueAction,
+  } = viewModel;
+
+  if (selectedIssue == null) return null;
+  return (
+    <Dialog
+      // 을 쓰지 않는다 — 이 모달은 **전환 전에도** Escape로 닫혔고
+      // (), 이 그 동작을
+      // 단언한다. 여기에 보호를 걸면 그게 오히려 새 회귀다.
+      open
+      onOpenChange={(open) => {
+        // Escape·scrim 클릭·닫기 버튼 전부 이 한 경로로 모인다(기존 closeIssueActionDialog 그대로).
+        if (!open) closeIssueActionDialog();
+      }}
+    >
+      <DialogContent data-testid="admin-integrity-action-dialog" initialFocus={accessReasonRef}>
+        <form onSubmit={submitIssueAction}>
+          <DialogHeader>
+            <div className="min-w-0">
+              <DialogTitle>정합성 issue {ACTION_LABEL[selectedAction]}</DialogTitle>
+              <p className="font-mono text-xs text-muted">{selectedIssue.issue_id}</p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={closeIssueActionDialog}
+              aria-label="닫기"
+              data-testid="admin-integrity-action-close"
+            >
+              <X aria-hidden="true" />
+            </Button>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 p-4">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
+              <dt className="text-muted">status</dt>
+              <dd>{selectedIssue.status}</dd>
+              <dt className="text-muted">type</dt>
+              <dd>{selectedIssue.violation_type}</dd>
+              <dt className="text-muted">target</dt>
+              <dd className="break-all font-mono text-xs">
+                {selectedIssue.feature_id ?? selectedIssue.source_record_key ?? '—'}
+              </dd>
+              <dt className="text-muted">message</dt>
+              <dd>{selectedIssue.message}</dd>
+            </dl>
+            <label className="block text-xs text-muted">
+              운영 사유 (Pinvi audit)
+              <textarea
+                ref={accessReasonRef}
+                value={accessReason}
+                onChange={(event) => setAccessReason(event.target.value)}
+                className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+                rows={2}
+                data-testid="admin-integrity-action-access-reason"
+              />
+            </label>
+            <label className="block text-xs text-muted">
+              kor_travel_map 전달 사유
+              <textarea
+                value={mapReason}
+                onChange={(event) => setMapReason(event.target.value)}
+                className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+                rows={2}
+                data-testid="admin-integrity-action-map-reason"
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeIssueActionDialog}
+              data-testid="admin-integrity-action-cancel"
+            >
+              취소
+            </Button>
+            <Button
+              type="submit"
+              disabled={actionMutation.isPending}
+              data-testid="admin-integrity-action-submit"
+            >
+              <IssueActionIcon action={selectedAction} />
+              반영
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

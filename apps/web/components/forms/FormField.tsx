@@ -1,3 +1,4 @@
+import { inputClassName } from '@/components/forms/input-styles';
 import type { InputHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 
@@ -11,22 +12,6 @@ export interface FormFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   hint?: string;
   /** label 클래스 override (다이얼로그의 굵은 라벨 등) */
   labelClassName?: string;
-}
-
-/**
- * 입력 프리미티브 클래스 — FormField/FormSelect/FormTextArea가 공유한다(DESIGN.md "Hallmark 잠금 시스템").
- * 44px(min-h-11)·16px(iOS 자동 확대 방지)·focus-visible outline·aria-invalid 테두리·색만 200ms.
- */
-export function inputClassName({ error, className }: { error?: boolean; className?: string } = {}) {
-  return [
-    'focus-ring w-full min-h-11 rounded-sm border bg-canvas px-3 py-2 text-base text-ink placeholder:text-muted',
-    'transition-colors duration-normal ease-pinvi',
-    'hover:border-border-strong disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted',
-    error ? 'border-error-text' : 'border-hairline',
-    className ?? '',
-  ]
-    .filter(Boolean)
-    .join(' ');
 }
 
 /**

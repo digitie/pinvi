@@ -1,13 +1,13 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
-import { MARKER_PALETTE, type MarkerColorKey, paletteHex } from '@pinvi/domain';
-import type { DayUpdateResult } from '@/components/trips/TripDetail';
-import { FormTextArea } from '@/components/forms/FormTextArea';
 import { FormField } from '@/components/forms/FormField';
+import { FormTextArea } from '@/components/forms/FormTextArea';
+import type { DayUpdateResult } from '@/components/trips/TripDetail';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+import { MARKER_PALETTE, type MarkerColorKey, paletteHex } from '@pinvi/domain';
+import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
 
 const PALETTE_KEYS = Object.keys(MARKER_PALETTE) as MarkerColorKey[];
 const DIALOG_LABEL = 'block text-sm font-semibold text-ink';
@@ -44,7 +44,25 @@ export interface TripDayControlsProps {
   onCancelBusy?: () => void;
 }
 
-export function TripDayControls({
+function dayDraft(day: TripDayControlsProps['selectedDay']) {
+  return {
+    title: day?.title ?? '',
+    note: day?.note ?? '',
+    date: day?.date ?? '',
+    color: day?.marker_color ?? null,
+  };
+}
+function sameDayDraft(a: ReturnType<typeof dayDraft>, b: ReturnType<typeof dayDraft>) {
+  return a.title === b.title && a.note === b.note && a.date === b.date && a.color === b.color;
+}
+
+export function TripDayControls(...args: Parameters<typeof useTripDayControlsModel>) {
+  const viewModel = useTripDayControlsModel(...args);
+  if (viewModel.renderBranch === 'render0') return <TripDayControlsView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useTripDayControlsModel({
   selectedDay,
   onAdd,
   onUpdate,
@@ -55,10 +73,11 @@ export function TripDayControls({
   busy = false,
   onCancelBusy,
 }: TripDayControlsProps) {
-  const [title, setTitle] = useState(selectedDay?.title ?? '');
-  const [note, setNote] = useState(selectedDay?.note ?? '');
-  const [date, setDate] = useState(selectedDay?.date ?? '');
-  const [color, setColor] = useState<string | null>(selectedDay?.marker_color ?? null);
+  const serverDraft = dayDraft(selectedDay);
+  const [title, setTitle] = useState(serverDraft.title);
+  const [note, setNote] = useState(serverDraft.note);
+  const [date, setDate] = useState(serverDraft.date);
+  const [color, setColor] = useState<string | null>(serverDraft.color);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // 오류는 **이 다이얼로그 세션**이 소유한다 — 전역 오류를 그대로 넘기면 아무것도 하지 않은
   // 새 다이얼로그가 이전(또는 무관한) 실패를 띄운다(T-315 5차 리뷰).
@@ -72,31 +91,13 @@ export function TripDayControls({
   // (인스턴스는 일자마다 key={day_index}로 분리돼 있어 '다른 일자로 전환' 분기는 필요 없다.)
   // useEffect 대신 "렌더 중 prop 변화에 맞춰 state 조정" 패턴을 쓴다 — 마지막으로 동기화한
   // 값을 별도 state로 추적해, 바뀌었을 때만 렌더 본문에서 바로 setState한다.
-  const [syncedDay, setSyncedDay] = useState({
-    title: selectedDay?.title ?? null,
-    date: selectedDay?.date ?? null,
-    color: selectedDay?.marker_color ?? null,
-    note: selectedDay?.note ?? null,
-  });
-  if (!settingsOpen) {
-    const nextSyncedDay = {
-      title: selectedDay?.title ?? null,
-      date: selectedDay?.date ?? null,
-      color: selectedDay?.marker_color ?? null,
-      note: selectedDay?.note ?? null,
-    };
-    if (
-      nextSyncedDay.title !== syncedDay.title ||
-      nextSyncedDay.date !== syncedDay.date ||
-      nextSyncedDay.color !== syncedDay.color ||
-      nextSyncedDay.note !== syncedDay.note
-    ) {
-      setSyncedDay(nextSyncedDay);
-      setTitle(nextSyncedDay.title ?? '');
-      setDate(nextSyncedDay.date ?? '');
-      setColor(nextSyncedDay.color);
-      setNote(nextSyncedDay.note ?? '');
-    }
+  const [syncedDay, setSyncedDay] = useState(serverDraft);
+  if (!settingsOpen && !sameDayDraft(serverDraft, syncedDay)) {
+    setSyncedDay(serverDraft);
+    setTitle(serverDraft.title);
+    setDate(serverDraft.date);
+    setColor(serverDraft.color);
+    setNote(serverDraft.note);
   }
 
   const openSettings = () => {
@@ -126,13 +127,69 @@ export function TripDayControls({
   };
   const closeSettings = () => {
     setSaveError(null);
-    setTitle(selectedDay?.title ?? '');
-    setNote(selectedDay?.note ?? '');
-    setDate(selectedDay?.date ?? '');
-    setColor(selectedDay?.marker_color ?? null);
+    setTitle(serverDraft.title);
+    setNote(serverDraft.note);
+    setDate(serverDraft.date);
+    setColor(serverDraft.color);
     setSettingsOpen(false);
   };
 
+  return {
+    renderBranch: 'render0' as const,
+    addDisabled,
+    addDisabledReason,
+    busy,
+    closeSettings,
+    color,
+    date,
+    note,
+    onAdd,
+    onCancelBusy,
+    onDelete,
+    openSettings,
+    saveError,
+    saveSettings,
+    selectedDay,
+    setColor,
+    setDate,
+    setNote,
+    setSaveError,
+    setTitle,
+    settingsOpen,
+    showAdd,
+    title,
+  };
+}
+
+type TripDayControlsView0Model = Extract<
+  ReturnType<typeof useTripDayControlsModel>,
+  { renderBranch: 'render0' }
+>;
+function TripDayControlsView0({ viewModel }: { viewModel: TripDayControlsView0Model }) {
+  const {
+    addDisabled,
+    addDisabledReason,
+    busy,
+    closeSettings,
+    color,
+    date,
+    note,
+    onAdd,
+    onCancelBusy,
+    onDelete,
+    openSettings,
+    saveError,
+    saveSettings,
+    selectedDay,
+    setColor,
+    setDate,
+    setNote,
+    setSaveError,
+    setTitle,
+    settingsOpen,
+    showAdd,
+    title,
+  } = viewModel;
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="trip-day-controls">
       {showAdd && (
@@ -318,8 +375,16 @@ function DaySettingsDialog({
           maxLength={200}
           placeholder={`${dayIndex}일차`}
         />
-        <FormTextArea id="trip-day-note-input" label="일자 메모" labelClassName={DIALOG_LABEL}
-          value={note} onChange={(event) => onNoteChange(event.target.value)} disabled={busy} rows={3} maxLength={2000} />
+        <FormTextArea
+          id="trip-day-note-input"
+          label="일자 메모"
+          labelClassName={DIALOG_LABEL}
+          value={note}
+          onChange={(event) => onNoteChange(event.target.value)}
+          disabled={busy}
+          rows={3}
+          maxLength={2000}
+        />
         <FormField
           id="trip-day-date-input"
           label="날짜"

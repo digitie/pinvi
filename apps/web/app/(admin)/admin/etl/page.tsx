@@ -1,7 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
+import { DagsterOperations, type DagsterSnapshot } from '@kor-travel/ui';
 import {
   ApiClient,
   ApiError,
@@ -9,29 +13,25 @@ import {
   queryKeys,
   type AdminProviderImportJobListParams,
 } from '@pinvi/api-client';
-import { DagsterOperations, type DagsterSnapshot } from '@kor-travel/ui';
 import type {
   AdminDagsterRunSummary,
   AdminEmailOutboxTemplateSummary,
   AdminProviderImportJobRecord,
   AdminTelegramOutboxCategorySummary,
 } from '@pinvi/schemas';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   Archive,
   Bell,
   Database,
-  RefreshCw,
   GitBranch,
+  RefreshCw,
   ScrollText,
   ShieldCheck,
   Workflow,
 } from 'lucide-react';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FilterBar, FilterField } from '@/components/admin/filter-bar';
-import { NativeSelect } from '@/components/admin/ui/native-select';
-import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
+import { useEffect, useMemo, useState } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -61,11 +61,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function formatDateTime(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString('ko-KR') : '—';
-}
-
-function formatUnixTime(value: number | null | undefined) {
-  return typeof value === 'number' ? new Date(value * 1000).toLocaleString('ko-KR') : '—';
+  return value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '—';
 }
 
 function statusLabel(value: string | null | undefined) {
@@ -135,7 +131,13 @@ function runRuntimeLimit(run: AdminDagsterRunSummary): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-export default function AdminEtlPage() {
+export default function AdminEtlPage(...args: Parameters<typeof useAdminEtlPageModel>) {
+  const viewModel = useAdminEtlPageModel(...args);
+  if (viewModel.renderBranch === 'render0') return <AdminEtlPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminEtlPageModel() {
   const [statusFilter, setStatusFilter] =
     useState<(typeof IMPORT_JOB_STATUS_OPTIONS)[number]['value']>('running');
 
@@ -329,6 +331,50 @@ export default function AdminEtlPage() {
     },
   ];
 
+  return {
+    renderBranch: 'render0' as const,
+    auditRetention,
+    columns,
+    emailOutbox,
+    importJobs,
+    jobsError,
+    jobsQuery,
+    latestRunByJobName,
+    liveJobNames,
+    liveScheduleByJobName,
+    locationArchive,
+    piiRetention,
+    setStatusFilter,
+    snapshotQuery,
+    statusFilter,
+    summary,
+    summaryError,
+    summaryQuery,
+    telegramOutbox,
+  };
+}
+
+type AdminEtlPageView0Model = Extract<
+  ReturnType<typeof useAdminEtlPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminEtlPageView0({ viewModel }: { viewModel: AdminEtlPageView0Model }) {
+  const {
+    auditRetention,
+    columns,
+    emailOutbox,
+    importJobs,
+    jobsError,
+    jobsQuery,
+    locationArchive,
+    piiRetention,
+    setStatusFilter,
+    statusFilter,
+    summary,
+    summaryError,
+    summaryQuery,
+    telegramOutbox,
+  } = viewModel;
   return (
     <AdminPage
       title="ETL"
@@ -395,90 +441,8 @@ export default function AdminEtlPage() {
               <div className="font-semibold">{formatMetric(summary?.pinvi.schedule_count)}</div>
             </div>
           </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            <div>
-              <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
-                <Database className="h-3.5 w-3.5" aria-hidden="true" />
-                Assets
-              </h3>
-              <ul className="space-y-2 text-sm">
-                {(summary?.pinvi.assets ?? []).map((asset) => (
-                  <li key={asset.key} className="rounded-sm bg-surface-soft p-2">
-                    <div className="font-mono text-xs">{asset.key}</div>
-                    <div className="text-xs text-muted">{asset.description ?? '—'}</div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
-                <Workflow className="h-3.5 w-3.5" aria-hidden="true" />
-                Jobs
-              </h3>
-              <ul className="space-y-2 text-sm">
-                {(summary?.pinvi.jobs ?? []).map((job) => (
-                  <li
-                    key={job.name}
-                    className="rounded-sm bg-surface-soft p-2"
-                    data-testid={`admin-etl-job-${job.name}`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-mono text-xs">{job.name}</span>
-                      <span
-                        className="text-xs text-muted"
-                        data-testid={`admin-etl-job-${job.name}-live`}
-                      >
-                        {liveJobNames.has(job.name) ? 'live' : 'registry'}
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted">
-                      {job.trigger} / {job.description ?? '—'}
-                    </div>
-                    <div className="mt-2 grid gap-2 text-xs text-muted sm:grid-cols-3">
-                      <span>
-                        schedule{' '}
-                        {liveScheduleByJobName.get(job.name)?.cron_schedule ??
-                          summary?.pinvi.schedules.find((item) => item.job_name === job.name)
-                            ?.cron_schedule ??
-                          '—'}
-                      </span>
-                      <span data-testid={`admin-etl-job-${job.name}-timezone`}>
-                        {liveScheduleByJobName.get(job.name)?.execution_timezone ??
-                          summary?.pinvi.schedules.find((item) => item.job_name === job.name)
-                            ?.execution_timezone ??
-                          '—'}
-                      </span>
-                      <span data-testid={`admin-etl-job-${job.name}-latest-run`}>
-                        {statusLabel(latestRunByJobName.get(job.name)?.status)}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          <div className="mt-4" data-testid="admin-etl-pinvi-live-runs">
-            <DagsterOperations
-              snapshot={snapshotQuery.data ?? null}
-              showRunDetails
-              showRepositories
-              error={
-                summaryError ??
-                (summary?.pinvi.status !== 'ok'
-                  ? (summary?.pinvi.message ?? 'Dagster 상태를 확인하지 못했습니다.')
-                  : '')
-              }
-              loading={summaryQuery.isFetching}
-              onRefresh={() => void summaryQuery.refetch()}
-              runUrl={(id) =>
-                `${process.env.NEXT_PUBLIC_PINVI_DAGSTER_URL ?? 'http://localhost:12802'}/runs/${encodeURIComponent(id)}`
-              }
-              scheduleUrl={(name, repo) =>
-                `${process.env.NEXT_PUBLIC_PINVI_DAGSTER_URL ?? 'http://localhost:12802'}/locations/${encodeURIComponent(`${repo.name}@${repo.locationName}`)}/schedules/${encodeURIComponent(name)}`
-              }
-              testId="admin-common-dagster"
-            />
-          </div>
+          <AdminEtlPageView0Part0 viewModel={viewModel} />
+          <AdminEtlPageView0Part1 viewModel={viewModel} />
           {emailOutbox ? (
             <div
               className="mt-4 rounded-sm border border-hairline p-3"
@@ -651,198 +615,11 @@ export default function AdminEtlPage() {
               </div>
             </div>
           ) : null}
-          {locationArchive ? (
-            <div
-              className="mt-4 rounded-sm border border-hairline p-3"
-              data-testid="admin-etl-location-archive"
-            >
-              <h3 className="mb-3 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
-                <Archive className="h-3.5 w-3.5" aria-hidden="true" />
-                Location log archive
-              </h3>
-              <div className="grid gap-3 text-sm sm:grid-cols-4">
-                <div data-testid="admin-etl-location-archive-total">
-                  <div className="text-xs text-muted">candidates</div>
-                  <div className="font-semibold">
-                    {formatMetric(locationArchive.total_candidates)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted">active rows</div>
-                  <div className="font-semibold">
-                    {formatMetric(locationArchive.active_rows_after_cutoff)}
-                  </div>
-                </div>
-                <div data-testid="admin-etl-location-archive-pending">
-                  <div className="text-xs text-muted">pending outbox</div>
-                  <div className="font-semibold">
-                    {formatMetric(locationArchive.pending_outbox_before_cutoff)} /{' '}
-                    {formatMetric(locationArchive.pending_outbox_total)}
-                  </div>
-                </div>
-                <div data-testid="admin-etl-location-archive-bridge">
-                  <div className="text-xs text-muted">chain bridge</div>
-                  <div className="font-semibold">
-                    {locationArchive.chain_bridge_required
-                      ? locationArchive.bridge_anchor_matches
-                        ? '일치'
-                        : '불일치'
-                      : '불필요'}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-3 grid gap-3 text-xs text-muted sm:grid-cols-3">
-                <div>cutoff {formatDateTime(locationArchive.archive_cutoff)}</div>
-                <div>tail {locationArchive.archive_tail_log_id ?? '—'}</div>
-                <div>head {locationArchive.active_head_log_id ?? '—'}</div>
-              </div>
-              {locationArchive.purpose_stats.length ? (
-                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {locationArchive.purpose_stats.map((item) => (
-                    <li
-                      key={item.purpose}
-                      className="rounded-sm bg-surface-soft p-2 text-xs"
-                      data-testid={`admin-etl-location-purpose-${item.purpose}`}
-                    >
-                      <span className="font-mono">{item.purpose}</span>
-                      <span className="ml-2 text-muted">{formatMetric(item.total)}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              <div className="mt-2 text-xs text-muted">
-                dry-run / retention {locationArchive.location_retention_months}mo / blocked{' '}
-                {locationArchive.archive_blocked_by_pending_outbox ? 'yes' : 'no'}
-              </div>
-            </div>
-          ) : null}
-          <div className="mt-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase text-muted">Schedules</h3>
-            <ul className="space-y-2 text-sm">
-              {(summary?.pinvi.schedules ?? []).map((schedule) => (
-                <li key={schedule.name} className="rounded-sm bg-surface-soft p-2">
-                  <span className="font-mono text-xs">{schedule.name}</span>
-                  <span className="ml-2 text-xs text-muted">
-                    {schedule.cron_schedule} / {schedule.execution_timezone ?? '—'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {locationArchive ? <AdminEtlPageView0Part2 viewModel={viewModel} /> : null}
+          <AdminEtlPageView0Part3 viewModel={viewModel} />
         </Section>
 
-        <Section title="kor-travel-map Dagster">
-          <div className="grid gap-3 text-sm sm:grid-cols-6">
-            <div data-testid="admin-etl-kmap-dagster-status">
-              <div className="text-xs text-muted">Dagster</div>
-              <div className="font-semibold">
-                {statusLabel(summary?.kor_travel_map.dagster_status)}
-              </div>
-              <div className="text-xs text-muted">
-                {statusLabel(summary?.kor_travel_map.status)}
-              </div>
-            </div>
-            <div data-testid="admin-etl-kmap-features">
-              <div className="text-xs text-muted">features</div>
-              <div className="font-semibold">
-                {formatMetric(summary?.kor_travel_map.features_total)}
-              </div>
-            </div>
-            <div data-testid="admin-etl-kmap-source-records">
-              <div className="text-xs text-muted">source records</div>
-              <div className="font-semibold">
-                {formatMetric(summary?.kor_travel_map.source_records_total)}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-muted">providers</div>
-              <div className="font-semibold">
-                {formatMetric(summary?.kor_travel_map.provider_dataset_count)}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-muted">active operations</div>
-              <div className="font-semibold">
-                {formatMetric(summary?.kor_travel_map.active_operations)}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-muted">failed 24h</div>
-              <div className="font-semibold">
-                {formatMetric(summary?.kor_travel_map.failed_operations_24h)}
-              </div>
-            </div>
-          </div>
-          {Object.keys(summary?.kor_travel_map.operations_by_status ?? {}).length ? (
-            <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted">
-              {Object.entries(summary?.kor_travel_map.operations_by_status ?? {}).map(
-                ([status, count]) => (
-                  <span key={status} className="rounded-sm bg-surface-soft px-2 py-1">
-                    {statusLabel(status)} {formatMetric(count)}
-                  </span>
-                ),
-              )}
-            </div>
-          ) : null}
-          {summary?.kor_travel_map.dagster_errors.length ? (
-            <ul className="mt-4 space-y-1 text-xs text-error-text">
-              {summary.kor_travel_map.dagster_errors.map((error) => (
-                <li key={`dagster-${error}`}>Dagster: {error}</li>
-              ))}
-            </ul>
-          ) : null}
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-5">
-            <div data-testid="admin-etl-kmap-repositories">
-              <div className="text-xs text-muted">repositories</div>
-              <div className="font-semibold">
-                {formatMetric(summary?.kor_travel_map.repository_count)}
-              </div>
-            </div>
-            <div data-testid="admin-etl-kmap-jobs">
-              <div className="text-xs text-muted">jobs</div>
-              <div className="font-semibold">{formatMetric(summary?.kor_travel_map.job_count)}</div>
-            </div>
-            <div data-testid="admin-etl-kmap-assets">
-              <div className="text-xs text-muted">assets</div>
-              <div className="font-semibold">
-                {formatMetric(summary?.kor_travel_map.asset_count)}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-muted">schedules</div>
-              <div className="font-semibold">
-                {formatMetric(summary?.kor_travel_map.schedule_count)}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-muted">failures</div>
-              <div className="font-semibold">
-                {formatMetric(summary?.kor_travel_map.provider_failure_count)}
-              </div>
-            </div>
-          </div>
-          {summary?.kor_travel_map.errors.length ? (
-            <ul className="mt-4 space-y-1 text-xs text-error-text">
-              {summary.kor_travel_map.errors.map((error) => (
-                <li key={error}>{error}</li>
-              ))}
-            </ul>
-          ) : null}
-          <div className="mt-4">
-            <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
-              <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
-              Recent runs
-            </h3>
-            <ul className="space-y-2 text-sm">
-              {(summary?.kor_travel_map.recent_runs ?? []).slice(0, 5).map((run) => (
-                <li key={run.run_id} className="rounded-sm bg-surface-soft p-2">
-                  <div className="font-mono text-xs">{run.job_name ?? run.run_id}</div>
-                  <div className="text-xs text-muted">{statusLabel(run.status)}</div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </Section>
+        <AdminEtlPageSection0_0 viewModel={viewModel} />
       </div>
 
       {jobsError && <ErrorBox message={jobsError} />}
@@ -865,5 +642,297 @@ export default function AdminEtlPage() {
         />
       </Section>
     </AdminPage>
+  );
+}
+
+function AdminEtlPageSection0_0({ viewModel }: { viewModel: AdminEtlPageView0Model }) {
+  const { summary } = viewModel;
+  return (
+    <Section title="kor-travel-map Dagster">
+      <div className="grid gap-3 text-sm sm:grid-cols-6">
+        <div data-testid="admin-etl-kmap-dagster-status">
+          <div className="text-xs text-muted">Dagster</div>
+          <div className="font-semibold">{statusLabel(summary?.kor_travel_map.dagster_status)}</div>
+          <div className="text-xs text-muted">{statusLabel(summary?.kor_travel_map.status)}</div>
+        </div>
+        <div data-testid="admin-etl-kmap-features">
+          <div className="text-xs text-muted">features</div>
+          <div className="font-semibold">
+            {formatMetric(summary?.kor_travel_map.features_total)}
+          </div>
+        </div>
+        <div data-testid="admin-etl-kmap-source-records">
+          <div className="text-xs text-muted">source records</div>
+          <div className="font-semibold">
+            {formatMetric(summary?.kor_travel_map.source_records_total)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-muted">providers</div>
+          <div className="font-semibold">
+            {formatMetric(summary?.kor_travel_map.provider_dataset_count)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-muted">active operations</div>
+          <div className="font-semibold">
+            {formatMetric(summary?.kor_travel_map.active_operations)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-muted">failed 24h</div>
+          <div className="font-semibold">
+            {formatMetric(summary?.kor_travel_map.failed_operations_24h)}
+          </div>
+        </div>
+      </div>
+      {Object.keys(summary?.kor_travel_map.operations_by_status ?? {}).length ? (
+        <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted">
+          {Object.entries(summary?.kor_travel_map.operations_by_status ?? {}).map(
+            ([status, count]) => (
+              <span key={status} className="rounded-sm bg-surface-soft px-2 py-1">
+                {statusLabel(status)} {formatMetric(count)}
+              </span>
+            ),
+          )}
+        </div>
+      ) : null}
+      {summary?.kor_travel_map.dagster_errors.length ? (
+        <ul className="mt-4 space-y-1 text-xs text-error-text">
+          {summary.kor_travel_map.dagster_errors.map((error) => (
+            <li key={`dagster-${error}`}>Dagster: {error}</li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-5">
+        <div data-testid="admin-etl-kmap-repositories">
+          <div className="text-xs text-muted">repositories</div>
+          <div className="font-semibold">
+            {formatMetric(summary?.kor_travel_map.repository_count)}
+          </div>
+        </div>
+        <div data-testid="admin-etl-kmap-jobs">
+          <div className="text-xs text-muted">jobs</div>
+          <div className="font-semibold">{formatMetric(summary?.kor_travel_map.job_count)}</div>
+        </div>
+        <div data-testid="admin-etl-kmap-assets">
+          <div className="text-xs text-muted">assets</div>
+          <div className="font-semibold">{formatMetric(summary?.kor_travel_map.asset_count)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted">schedules</div>
+          <div className="font-semibold">
+            {formatMetric(summary?.kor_travel_map.schedule_count)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-muted">failures</div>
+          <div className="font-semibold">
+            {formatMetric(summary?.kor_travel_map.provider_failure_count)}
+          </div>
+        </div>
+      </div>
+      {summary?.kor_travel_map.errors.length ? (
+        <ul className="mt-4 space-y-1 text-xs text-error-text">
+          {summary.kor_travel_map.errors.map((error) => (
+            <li key={error}>{error}</li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="mt-4">
+        <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
+          <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
+          Recent runs
+        </h3>
+        <ul className="space-y-2 text-sm">
+          {(summary?.kor_travel_map.recent_runs ?? []).slice(0, 5).map((run) => (
+            <li key={run.run_id} className="rounded-sm bg-surface-soft p-2">
+              <div className="font-mono text-xs">{run.job_name ?? run.run_id}</div>
+              <div className="text-xs text-muted">{statusLabel(run.status)}</div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Section>
+  );
+}
+
+function AdminEtlPageView0Part0({ viewModel }: { viewModel: AdminEtlPageView0Model }) {
+  const { summary, liveJobNames, liveScheduleByJobName, latestRunByJobName } = viewModel;
+  return (
+    <div className="mt-4 grid gap-3 lg:grid-cols-2">
+      <div>
+        <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
+          <Database className="h-3.5 w-3.5" aria-hidden="true" />
+          Assets
+        </h3>
+        <ul className="space-y-2 text-sm">
+          {(summary?.pinvi.assets ?? []).map((asset) => (
+            <li key={asset.key} className="rounded-sm bg-surface-soft p-2">
+              <div className="font-mono text-xs">{asset.key}</div>
+              <div className="text-xs text-muted">{asset.description ?? '—'}</div>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div>
+        <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
+          <Workflow className="h-3.5 w-3.5" aria-hidden="true" />
+          Jobs
+        </h3>
+        <ul className="space-y-2 text-sm">
+          {(summary?.pinvi.jobs ?? []).map((job) => (
+            <li
+              key={job.name}
+              className="rounded-sm bg-surface-soft p-2"
+              data-testid={`admin-etl-job-${job.name}`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-mono text-xs">{job.name}</span>
+                <span className="text-xs text-muted" data-testid={`admin-etl-job-${job.name}-live`}>
+                  {liveJobNames.has(job.name) ? 'live' : 'registry'}
+                </span>
+              </div>
+              <div className="text-xs text-muted">
+                {job.trigger} / {job.description ?? '—'}
+              </div>
+              <div className="mt-2 grid gap-2 text-xs text-muted sm:grid-cols-3">
+                <span>
+                  schedule{' '}
+                  {liveScheduleByJobName.get(job.name)?.cron_schedule ??
+                    summary?.pinvi.schedules.find((item) => item.job_name === job.name)
+                      ?.cron_schedule ??
+                    '—'}
+                </span>
+                <span data-testid={`admin-etl-job-${job.name}-timezone`}>
+                  {liveScheduleByJobName.get(job.name)?.execution_timezone ??
+                    summary?.pinvi.schedules.find((item) => item.job_name === job.name)
+                      ?.execution_timezone ??
+                    '—'}
+                </span>
+                <span data-testid={`admin-etl-job-${job.name}-latest-run`}>
+                  {statusLabel(latestRunByJobName.get(job.name)?.status)}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function AdminEtlPageView0Part1({ viewModel }: { viewModel: AdminEtlPageView0Model }) {
+  const { snapshotQuery, summaryError, summary, summaryQuery } = viewModel;
+  return (
+    <div className="mt-4" data-testid="admin-etl-pinvi-live-runs">
+      <DagsterOperations
+        snapshot={snapshotQuery.data ?? null}
+        showRunDetails
+        showRepositories
+        error={
+          summaryError ??
+          (summary?.pinvi.status !== 'ok'
+            ? (summary?.pinvi.message ?? 'Dagster 상태를 확인하지 못했습니다.')
+            : '')
+        }
+        loading={summaryQuery.isFetching}
+        onRefresh={() => void summaryQuery.refetch()}
+        runUrl={(id) =>
+          `${process.env.NEXT_PUBLIC_PINVI_DAGSTER_URL ?? 'http://localhost:12802'}/runs/${encodeURIComponent(id)}`
+        }
+        scheduleUrl={(name, repo) =>
+          `${process.env.NEXT_PUBLIC_PINVI_DAGSTER_URL ?? 'http://localhost:12802'}/locations/${encodeURIComponent(`${repo.name}@${repo.locationName}`)}/schedules/${encodeURIComponent(name)}`
+        }
+        testId="admin-common-dagster"
+      />
+    </div>
+  );
+}
+
+function AdminEtlPageView0Part2({ viewModel }: { viewModel: AdminEtlPageView0Model }) {
+  const { locationArchive } = viewModel;
+  if (locationArchive == null) return null;
+  return (
+    <div
+      className="mt-4 rounded-sm border border-hairline p-3"
+      data-testid="admin-etl-location-archive"
+    >
+      <h3 className="mb-3 flex items-center gap-1 text-xs font-semibold uppercase text-muted">
+        <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+        Location log archive
+      </h3>
+      <div className="grid gap-3 text-sm sm:grid-cols-4">
+        <div data-testid="admin-etl-location-archive-total">
+          <div className="text-xs text-muted">candidates</div>
+          <div className="font-semibold">{formatMetric(locationArchive.total_candidates)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted">active rows</div>
+          <div className="font-semibold">
+            {formatMetric(locationArchive.active_rows_after_cutoff)}
+          </div>
+        </div>
+        <div data-testid="admin-etl-location-archive-pending">
+          <div className="text-xs text-muted">pending outbox</div>
+          <div className="font-semibold">
+            {formatMetric(locationArchive.pending_outbox_before_cutoff)} /{' '}
+            {formatMetric(locationArchive.pending_outbox_total)}
+          </div>
+        </div>
+        <div data-testid="admin-etl-location-archive-bridge">
+          <div className="text-xs text-muted">chain bridge</div>
+          <div className="font-semibold">
+            {locationArchive.chain_bridge_required
+              ? locationArchive.bridge_anchor_matches
+                ? '일치'
+                : '불일치'
+              : '불필요'}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-3 text-xs text-muted sm:grid-cols-3">
+        <div>cutoff {formatDateTime(locationArchive.archive_cutoff)}</div>
+        <div>tail {locationArchive.archive_tail_log_id ?? '—'}</div>
+        <div>head {locationArchive.active_head_log_id ?? '—'}</div>
+      </div>
+      {locationArchive.purpose_stats.length ? (
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+          {locationArchive.purpose_stats.map((item) => (
+            <li
+              key={item.purpose}
+              className="rounded-sm bg-surface-soft p-2 text-xs"
+              data-testid={`admin-etl-location-purpose-${item.purpose}`}
+            >
+              <span className="font-mono">{item.purpose}</span>
+              <span className="ml-2 text-muted">{formatMetric(item.total)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="mt-2 text-xs text-muted">
+        dry-run / retention {locationArchive.location_retention_months}mo / blocked{' '}
+        {locationArchive.archive_blocked_by_pending_outbox ? 'yes' : 'no'}
+      </div>
+    </div>
+  );
+}
+
+function AdminEtlPageView0Part3({ viewModel }: { viewModel: AdminEtlPageView0Model }) {
+  const { summary } = viewModel;
+  return (
+    <div className="mt-4">
+      <h3 className="mb-2 text-xs font-semibold uppercase text-muted">Schedules</h3>
+      <ul className="space-y-2 text-sm">
+        {(summary?.pinvi.schedules ?? []).map((schedule) => (
+          <li key={schedule.name} className="rounded-sm bg-surface-soft p-2">
+            <span className="font-mono text-xs">{schedule.name}</span>
+            <span className="ml-2 text-xs text-muted">
+              {schedule.cron_schedule} / {schedule.execution_timezone ?? '—'}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

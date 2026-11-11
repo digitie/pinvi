@@ -2,10 +2,9 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { ImageIcon, Link2, Loader2, Trash2, Unlink, Upload } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import type { AuthUser, OAuthProvider } from '@pinvi/schemas';
+import { LogoutButton } from '@/components/app/LogoutButton';
+import { buttonClassName } from '@/components/ui/button-styles';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 import {
   IMAGE_UPLOAD_CONTENT_TYPES,
@@ -14,9 +13,16 @@ import {
   isAllowedUploadContentType,
   putToPresigned,
 } from '@pinvi/domain';
-import { buttonClassName } from '@/components/ui/Button';
-import { LogoutButton } from '@/components/app/LogoutButton';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import type { AuthUser, OAuthProvider } from '@pinvi/schemas';
+import { ImageIcon, Link2, Loader2, Trash2, Unlink, Upload } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { type ChangeEvent, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+
+const displayFormatter1 = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -26,10 +32,7 @@ function formatDateTime(value: string | null) {
   if (!value) {
     return '기록 없음';
   }
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
+  return displayFormatter1.format(new Date(value));
 }
 
 type OAuthProviderName = OAuthProvider['provider'];
@@ -91,7 +94,14 @@ function formatBytes(value: number | null | undefined) {
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export default function ProfilePage() {
+export default function ProfilePage(...args: Parameters<typeof useProfilePageModel>) {
+  const viewModel = useProfilePageModel(...args);
+  if (viewModel.renderBranch === 'render0') return <ProfilePageView0 />;
+  if (viewModel.renderBranch === 'render1') return <ProfilePageView1 viewModel={viewModel} />;
+  return null;
+}
+
+function useProfilePageModel() {
   const router = useRouter();
   const [me, setMe] = useState<AuthUser | null>(null);
   const [providers, setProviders] = useState<OAuthProvider[]>([]);
@@ -165,11 +175,11 @@ export default function ProfilePage() {
     }
   };
 
+  const reloadLatest = useEffectEvent(reload);
   useEffect(() => {
     void (async () => {
-      await reload();
+      await reloadLatest();
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -287,21 +297,69 @@ export default function ProfilePage() {
     } finally {
       setAvatarAction(null);
       // 삭제 성공 시 트리거(삭제 버튼)가 disabled로 바뀐다 — 포커스는 섹션이 받는다.
-      if (!confirmTriggerRef.current?.isConnected) confirmTriggerRef.current = accountSectionRef.current;
+      if (!confirmTriggerRef.current?.isConnected)
+        confirmTriggerRef.current = accountSectionRef.current;
       // 요청이 끝난 뒤 닫는다 — busy 표시와 포커스 복원을 살리기 위해(T-315 5차 리뷰 패턴).
       setPendingConfirm(null);
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex min-h-40 items-center justify-center text-sm text-muted">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-        불러오는 중…
-      </div>
-    );
+    return { renderBranch: 'render0' as const };
   }
 
+  return {
+    renderBranch: 'render1' as const,
+    accountSectionRef,
+    action,
+    avatarAction,
+    avatarSrc,
+    confirmTriggerRef,
+    enabledProviders,
+    error,
+    me,
+    message,
+    oauthIdentities,
+    onAvatarFile,
+    onDeleteAvatar,
+    onLinkProvider,
+    onUnlinkProvider,
+    pendingConfirm,
+    requestDeleteAvatar,
+    requestUnlink,
+    setPendingConfirm,
+  };
+}
+function ProfilePageView0() {
+  return (
+    <div className="flex min-h-40 items-center justify-center text-sm text-muted">
+      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+      불러오는 중…
+    </div>
+  );
+}
+
+type ProfilePageView1Model = Extract<
+  ReturnType<typeof useProfilePageModel>,
+  { renderBranch: 'render1' }
+>;
+function ProfilePageView1({ viewModel }: { viewModel: ProfilePageView1Model }) {
+  const {
+    action,
+    avatarAction,
+    confirmTriggerRef,
+    enabledProviders,
+    error,
+    me,
+    message,
+    oauthIdentities,
+    onDeleteAvatar,
+    onLinkProvider,
+    onUnlinkProvider,
+    pendingConfirm,
+    requestUnlink,
+    setPendingConfirm,
+  } = viewModel;
   return (
     <div className="space-y-6">
       <header className="space-y-2">
@@ -325,73 +383,7 @@ export default function ProfilePage() {
         </p>
       )}
 
-      <section
-        className="space-y-3 rounded-sm border border-hairline bg-canvas p-4"
-        data-testid="profile-avatar-section"
-      >
-        {/* 삭제 성공 후 트리거가 사라지거나 비활성이면 포커스가 이 컨테이너로 돌아온다. */}
-        <div
-          ref={accountSectionRef}
-          tabIndex={-1}
-          className="flex flex-col gap-4 outline-hidden sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="flex items-center gap-3">
-            {avatarSrc ? (
-              <img
-                src={avatarSrc}
-                alt=""
-                className="h-16 w-16 rounded-full border border-hairline object-cover"
-                data-testid="profile-avatar-image"
-              />
-            ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-hairline bg-surface-soft text-muted">
-                <ImageIcon className="h-6 w-6" aria-hidden="true" />
-              </div>
-            )}
-            <div>
-              <h2 className="text-sm font-semibold text-ink">아바타</h2>
-              <p className="mt-1 text-xs text-muted" data-testid="profile-avatar-meta">
-                {me?.has_avatar
-                  ? `${me.avatar_content_type ?? 'image'} · ${formatBytes(me.avatar_byte_size)}`
-                  : '등록된 이미지 없음'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm bg-cta px-3 py-2 text-sm font-semibold text-on-primary hover:bg-cta-hover">
-              {avatarAction === 'upload' ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Upload className="h-4 w-4" aria-hidden="true" />
-              )}
-              {me?.has_avatar ? '교체' : '업로드'}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="sr-only"
-                disabled={avatarAction !== null}
-                onChange={onAvatarFile}
-                data-testid="profile-avatar-input"
-              />
-            </label>
-            <button
-              type="button"
-              disabled={!me?.has_avatar || avatarAction !== null}
-              onClick={(event) => requestDeleteAvatar(event.currentTarget)}
-              className="inline-flex items-center gap-2 rounded-sm border border-error-text px-3 py-2 text-sm font-semibold text-error-text disabled:opacity-50"
-              data-testid="profile-avatar-delete"
-            >
-              {avatarAction === 'delete' ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              )}
-              삭제
-            </button>
-          </div>
-        </div>
-      </section>
+      <ProfilePageSection1_0 viewModel={viewModel} />
 
       {OAUTH_PROVIDER_NAMES.map((provider) => {
         const label = OAUTH_PROVIDER_LABELS[provider];
@@ -485,5 +477,79 @@ export default function ProfilePage() {
       />
       <LogoutButton />
     </div>
+  );
+}
+
+function ProfilePageSection1_0({ viewModel }: { viewModel: ProfilePageView1Model }) {
+  const { accountSectionRef, avatarAction, avatarSrc, me, onAvatarFile, requestDeleteAvatar } =
+    viewModel;
+  return (
+    <section
+      className="space-y-3 rounded-sm border border-hairline bg-canvas p-4"
+      data-testid="profile-avatar-section"
+    >
+      {/* 삭제 성공 후 트리거가 사라지거나 비활성이면 포커스가 이 컨테이너로 돌아온다. */}
+      <div
+        ref={accountSectionRef}
+        tabIndex={-1}
+        className="flex flex-col gap-4 outline-hidden sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="flex items-center gap-3">
+          {avatarSrc ? (
+            <img
+              src={avatarSrc}
+              alt=""
+              className="h-16 w-16 rounded-full border border-hairline object-cover"
+              data-testid="profile-avatar-image"
+            />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-hairline bg-surface-soft text-muted">
+              <ImageIcon className="h-6 w-6" aria-hidden="true" />
+            </div>
+          )}
+          <div>
+            <h2 className="text-sm font-semibold text-ink">아바타</h2>
+            <p className="mt-1 text-xs text-muted" data-testid="profile-avatar-meta">
+              {me?.has_avatar
+                ? `${me.avatar_content_type ?? 'image'} · ${formatBytes(me.avatar_byte_size)}`
+                : '등록된 이미지 없음'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm bg-cta px-3 py-2 text-sm font-semibold text-on-primary hover:bg-cta-hover">
+            {avatarAction === 'upload' ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Upload className="h-4 w-4" aria-hidden="true" />
+            )}
+            {me?.has_avatar ? '교체' : '업로드'}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="sr-only"
+              disabled={avatarAction !== null}
+              onChange={onAvatarFile}
+              data-testid="profile-avatar-input"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={!me?.has_avatar || avatarAction !== null}
+            onClick={(event) => requestDeleteAvatar(event.currentTarget)}
+            className="inline-flex items-center gap-2 rounded-sm border border-error-text px-3 py-2 text-sm font-semibold text-error-text disabled:opacity-50"
+            data-testid="profile-avatar-delete"
+          >
+            {avatarAction === 'delete' ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            )}
+            삭제
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }

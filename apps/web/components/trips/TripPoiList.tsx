@@ -1,17 +1,17 @@
 'use client';
 
-import { useState } from 'react';
-import { AlertTriangle, CloudOff, EyeOff, GripVertical, Pencil, Trash2 } from 'lucide-react';
+import { PoiEditor } from '@/components/trips/PoiEditor';
+import { TripAttachments } from '@/components/trips/TripAttachments';
+import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
+import { arrayMove, featureResolutionNotice, formatKstTime, paletteHex } from '@pinvi/domain';
 import type {
   PoiUpdate,
   TripViewPoi,
   TripWeatherCard,
   TripWeatherResolution,
 } from '@pinvi/schemas';
-import { arrayMove, featureResolutionNotice, formatKstTime, paletteHex } from '@pinvi/domain';
-import { PoiEditor } from '@/components/trips/PoiEditor';
-import { TripAttachments } from '@/components/trips/TripAttachments';
-import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
+import { AlertTriangle, CloudOff, EyeOff, GripVertical, Pencil, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 
 function formatTime(value: string | null): string | null {
   return value ? formatKstTime(value) : null;
@@ -41,6 +41,9 @@ export interface TripPoiListProps {
   onEditToggle?: (poiId: string | null) => void;
 }
 
+const EMPTY_WEATHER_CARDS = {};
+const EMPTY_WEATHER_BY_FEATURE = {};
+
 export function TripPoiList({
   pois,
   dayIndex,
@@ -49,8 +52,8 @@ export function TripPoiList({
   onSelectPoi,
   tripId,
   dayDate = null,
-  weatherCards = {},
-  weatherByFeatureId = {},
+  weatherCards = EMPTY_WEATHER_CARDS,
+  weatherByFeatureId = EMPTY_WEATHER_BY_FEATURE,
   showInlineAttachments = false,
   showWeather = false,
   compact = false,

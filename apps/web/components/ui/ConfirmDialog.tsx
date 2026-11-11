@@ -1,10 +1,10 @@
 'use client';
 
-import { createPortal } from 'react-dom';
-import { useRef, type ReactNode, type RefObject } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { buttonClassName } from '@/components/ui/button-styles';
 import { useModalDialog } from '@/lib/useModalDialog';
-import { buttonClassName } from '@/components/ui/Button';
+import { AlertTriangle, Loader2 } from 'lucide-react';
+import { useRef, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * 제네릭 확인 다이얼로그(TDR, ADR-056).

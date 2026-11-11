@@ -1,4 +1,5 @@
 'use client';
+import { createStore, useStore } from 'zustand';
 // T-356 배선 단계 — 이 화면의 **수제 상태 배지**와 **수제 JSON `<pre>`**를 KTM admin idiom으로
 // 갈아끼웠다. (KTM `src/components/status-badge.tsx` / `src/components/json-viewer.tsx` 이식본 소비처)
 //
@@ -22,6 +23,22 @@
 // 보존한 것(계약): 모든 `data-testid`, `STATUS_LABEL` 문자열, `STATUS_FILTERS` option 텍스트·value,
 // status 컬럼의 `sortValue`(라벨 기준 정렬), 나머지 문구·role.
 
+import { AdminPage } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
+import { FormField } from '@/components/forms/FormField';
+import { FormTextArea } from '@/components/forms/FormTextArea';
+import { Button, ButtonLink } from '@/components/ui/Button';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import {
+  AdminFeatureRequestApproveSchema,
+  AdminFeatureRequestReconcileSchema,
+  type AdminFeatureRequestReconcile,
+  type AdminFeatureRequestSummary,
+} from '@pinvi/schemas';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useCallback,
   useEffect,
@@ -31,22 +48,10 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import { AdminFeatureRequestApproveSchema, AdminFeatureRequestReconcileSchema, type AdminFeatureRequestReconcile, type AdminFeatureRequestSummary } from '@pinvi/schemas';
-import { AdminPage } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FilterBar, FilterField } from '@/components/admin/filter-bar';
-import { NativeSelect } from '@/components/admin/ui/native-select';
-import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
-import { FormField } from '@/components/forms/FormField';
-import { FormTextArea } from '@/components/forms/FormTextArea';
-import { Button, ButtonLink } from '@/components/ui/Button';
 // T-356: 검토 모달을 사용자 표면 `components/ui/Dialog`/`ConfirmDialog`(useModalDialog)에서
 // admin base-ui 프리미티브로 옮겼다. 되돌릴 수 없는 **거절 확정**은 KTM 규약대로
 // `AlertDialog`다(scrim 클릭으로는 닫히지 않는다 — base-ui가 alertdialog에서 강제로 끈다).
 // 본문의 `Button`(앱 공용)은 이번 범위가 아니라 그대로 두고, 닫기 버튼만 admin `Button` 별칭.
-import { Button as AdminButton } from '@/components/admin/ui/button';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -54,6 +59,7 @@ import {
   AlertDialogFooter,
   AlertDialogTitle,
 } from '@/components/admin/ui/alert-dialog';
+import { Button as AdminButton } from '@/components/admin/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -64,7 +70,6 @@ import {
 } from '@/components/admin/ui/dialog';
 // `isRestorableFocusTarget`은 모달 프리미티브가 아니라 순수 DOM 판별 헬퍼다 — breakpoint가
 // 바뀐 뒤 "지금 보이는 트리거"로 포커스를 되돌리는 이 페이지 로직이 계속 쓴다.
-import { isRestorableFocusTarget } from '@/lib/focusTarget';
 import { JsonViewer } from '@/components/admin/json-viewer';
 import { StatusBadge as AdminStatusBadge } from '@/components/admin/status-badge';
 import {
@@ -72,6 +77,7 @@ import {
   toneFor,
   type StatusTone,
 } from '@/lib/admin/status-label';
+import { isRestorableFocusTarget } from '@/lib/focusTarget';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -135,7 +141,7 @@ const MAP_REF_FIELD_SET = new Set<string>(MAP_REF_FIELDS);
 const DIALOG_LABEL_CLASS = 'block text-sm font-semibold text-ink';
 
 const formatDateTime = (value: string | null | undefined) =>
-  value ? new Date(value).toLocaleString('ko-KR') : '—';
+  value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '—';
 
 const formatCoord = (coord: AdminFeatureRequestSummary['coord']) =>
   `${coord.lon.toFixed(5)}, ${coord.lat.toFixed(5)}`;
@@ -322,23 +328,18 @@ function FeatureRequestMobileCard({
   );
 }
 
-function ReviewDialog({
-  request,
-  onClose,
-  onDone,
-  returnFocusRef,
-}: {
-  request: AdminFeatureRequestSummary;
-  onClose: () => void;
-  onDone: (message: string) => void;
-  returnFocusRef: RefObject<HTMLElement | null>;
-}) {
-  const queryClient = useQueryClient();
-  const isPending = request.status === 'pending';
-  const canDelete = ['rejected', 'added', 'duplicate'].includes(request.status);
+function ReviewDialog(...args: Parameters<typeof useReviewDialogModel>) {
+  const viewModel = useReviewDialogModel(...args);
+  if (viewModel.renderBranch === 'render0') return <ReviewDialogView0 viewModel={viewModel} />;
+  return null;
+}
+
+function reviewCommandState(request: AdminFeatureRequestSummary) {
   const dispatch = request.kor_travel_map_ref?.dispatch;
   const expectedCommandKey =
-    dispatch && typeof dispatch === 'object' && 'command_key' in dispatch &&
+    dispatch &&
+    typeof dispatch === 'object' &&
+    'command_key' in dispatch &&
     typeof dispatch.command_key === 'string'
       ? dispatch.command_key
       : typeof request.kor_travel_map_ref?.next_command_key === 'string'
@@ -352,6 +353,80 @@ function ReviewDialog({
     typeof dispatch.input === 'object'
       ? (dispatch.input as Record<string, unknown>)
       : {};
+  const hasSavedActor =
+    dispatch &&
+    typeof dispatch === 'object' &&
+    'actor' in dispatch &&
+    typeof dispatch.actor === 'string' &&
+    dispatch.actor.trim().length > 0;
+  return { dispatch, expectedCommandKey, savedInput, hasSavedActor };
+}
+
+function featureRequestDetails(request: AdminFeatureRequestSummary) {
+  return [
+    { label: '유형', value: TYPE_LABEL[request.type] ?? request.type },
+    { label: '종류', value: KIND_LABEL[request.kind] ?? request.kind },
+    {
+      label: '좌표',
+      value: <span className="font-mono text-xs">{formatCoord(request.coord)}</span>,
+    },
+    { label: '제안 카테고리', value: request.categories.join(', ') || '—' },
+    { label: '대상 Feature', value: request.target_feature_id ?? '—' },
+    { label: '요청자', value: request.requester_email_masked ?? '—' },
+    { label: '상태', value: <StatusBadge status={request.status} /> },
+    { label: '메모', value: request.note ?? '—' },
+  ];
+}
+
+type FeatureRequestDryRunResult = Awaited<
+  ReturnType<ReturnType<typeof adminApi>['approveFeatureRequest']>
+>;
+/** 형식 검증은 서버 상태를 쓰지 않는다. 요청 인스턴스의 진행 상태만 보관한다. */
+function useFeatureRequestDryRun({
+  operation,
+  onSuccess,
+  onError,
+}: {
+  operation: () => Promise<FeatureRequestDryRunResult>;
+  onSuccess: (result: FeatureRequestDryRunResult) => void;
+  onError: (error: unknown) => void;
+}) {
+  const [store] = useState(() => createStore(() => ({ isPending: false })));
+  const isPending = useStore(store, (state) => state.isPending);
+  async function run() {
+    if (store.getState().isPending) return;
+    store.setState({ isPending: true });
+    try {
+      onSuccess(await operation());
+    } catch (error) {
+      onError(error);
+    } finally {
+      store.setState({ isPending: false });
+    }
+  }
+  return {
+    isPending,
+    mutate: () => {
+      void run();
+    },
+  };
+}
+
+function useReviewDialogModel({
+  request,
+  onClose,
+  onDone,
+  returnFocusRef,
+}: {
+  request: AdminFeatureRequestSummary;
+  onClose: () => void;
+  onDone: (message: string) => void;
+  returnFocusRef: RefObject<HTMLElement | null>;
+}) {
+  const queryClient = useQueryClient();
+  const isPending = request.status === 'pending';
+  const canDelete = ['rejected', 'added', 'duplicate'].includes(request.status);
+  const { dispatch, expectedCommandKey, savedInput, hasSavedActor } = reviewCommandState(request);
   const savedText = (key: string) =>
     typeof savedInput[key] === 'string' ? (savedInput[key] as string) : '';
   const [commandPending, setCommandPending] = useState(Boolean(dispatch));
@@ -362,9 +437,6 @@ function ReviewDialog({
   const [resolutionNotice, setResolutionNotice] = useState<string | null>(null);
   const reconcileButtonRef = useRef<HTMLButtonElement | null>(null);
   const reconcileCancelRef = useRef<HTMLButtonElement | null>(null);
-  const hasSavedActor =
-    dispatch && typeof dispatch === 'object' && 'actor' in dispatch &&
-    typeof dispatch.actor === 'string' && dispatch.actor.trim().length > 0;
   const [dryRunNotice, setDryRunNotice] = useState<string | null>(null);
   const isNewPlace = request.type === 'new_place';
   const isCorrection = request.type === 'correction';
@@ -406,7 +478,8 @@ function ReviewDialog({
   }, [err]);
 
   const approvalBody = () => {
-    const stored = commandPending && dispatch ? AdminFeatureRequestApproveSchema.safeParse(savedInput) : null;
+    const stored =
+      commandPending && dispatch ? AdminFeatureRequestApproveSchema.safeParse(savedInput) : null;
     return stored?.success ? stored.data : editedApprovalBody();
   };
   const editedApprovalBody = () => ({
@@ -424,10 +497,11 @@ function ReviewDialog({
       : {}),
   });
   const approveMutation = useMutation({
-    mutationFn: () => adminApi(apiClient).approveFeatureRequest(request.request_id, {
-      ...approvalBody(),
-      ...(!isNewPlace ? { expected_command_key: expectedCommandKey } : {}),
-    }),
+    mutationFn: () =>
+      adminApi(apiClient).approveFeatureRequest(request.request_id, {
+        ...approvalBody(),
+        ...(!isNewPlace ? { expected_command_key: expectedCommandKey } : {}),
+      }),
     onSuccess: () =>
       onDone(
         isNewPlace
@@ -481,7 +555,11 @@ function ReviewDialog({
       setReconcileConfirmOpen(false);
       setResolutionNotice(null);
       setCommandPending(true);
-      setErr(error instanceof ApiError ? error.message : 'Map 처리 결과를 확인하지 못했습니다. 대기 상태를 유지합니다.');
+      setErr(
+        error instanceof ApiError
+          ? error.message
+          : 'Map 처리 결과를 확인하지 못했습니다. 대기 상태를 유지합니다.',
+      );
       void queryClient.invalidateQueries({ queryKey: queryKeys.admin.featureRequestsAll() });
     },
   });
@@ -498,8 +576,8 @@ function ReviewDialog({
     },
   });
 
-  const dryRunMutation = useMutation({
-    mutationFn: () =>
+  const dryRunMutation = useFeatureRequestDryRun({
+    operation: () =>
       adminApi(apiClient).approveFeatureRequest(request.request_id, approvalBody(), {
         dryRun: true,
       }),
@@ -595,19 +673,7 @@ function ReviewDialog({
     rejectMutation.mutate();
   };
 
-  const detailItems = [
-    { label: '유형', value: TYPE_LABEL[request.type] ?? request.type },
-    { label: '종류', value: KIND_LABEL[request.kind] ?? request.kind },
-    {
-      label: '좌표',
-      value: <span className="font-mono text-xs">{formatCoord(request.coord)}</span>,
-    },
-    { label: '제안 카테고리', value: request.categories.join(', ') || '—' },
-    { label: '대상 Feature', value: request.target_feature_id ?? '—' },
-    { label: '요청자', value: request.requester_email_masked ?? '—' },
-    { label: '상태', value: <StatusBadge status={request.status} /> },
-    { label: '메모', value: request.note ?? '—' },
-  ];
+  const detailItems = featureRequestDetails(request);
 
   const footer = !isPending ? (
     <>
@@ -676,6 +742,87 @@ function ReviewDialog({
     </>
   );
 
+  return {
+    renderBranch: 'render0' as const,
+    accessReason,
+    approve,
+    busy,
+    canDelete,
+    category,
+    commandPending,
+    confirmReject,
+    deleteConfirmOpen,
+    deleteMutation,
+    detailItems,
+    dryRunNotice,
+    err,
+    expectedCommandKey,
+    footer,
+    formId,
+    hasSavedActor,
+    isCorrection,
+    isNewPlace,
+    isPending,
+    markerColor,
+    markerIcon,
+    name,
+    onClose,
+    panelErrorRef,
+    reasonError,
+    reasonRef,
+    reconcileButtonRef,
+    reconcileCancelRef,
+    reconcileConfirmOpen,
+    reconcileIntent,
+    reconcileMutation,
+    rejectButtonRef,
+    rejectCancelRef,
+    rejectConfirmOpen,
+    rejectMutation,
+    request,
+    resolutionNotice,
+    resolutionReason,
+    returnFocusRef,
+    setAccessReason,
+    setCategory,
+    setDeleteConfirmOpen,
+    setDryRunNotice,
+    setErr,
+    setMarkerColor,
+    setMarkerIcon,
+    setName,
+    setReasonError,
+    setReconcileConfirmOpen,
+    setReconcileIntent,
+    setRejectConfirmOpen,
+    setResolutionNotice,
+    setResolutionReason,
+  };
+}
+
+type ReviewDialogView0Model = Extract<
+  ReturnType<typeof useReviewDialogModel>,
+  { renderBranch: 'render0' }
+>;
+function ReviewDialogView0({ viewModel }: { viewModel: ReviewDialogView0Model }) {
+  const {
+    accessReason,
+    busy,
+    canDelete,
+    detailItems,
+    err,
+    footer,
+    isPending,
+    onClose,
+    panelErrorRef,
+    reasonError,
+    reasonRef,
+    rejectConfirmOpen,
+    request,
+    returnFocusRef,
+    setAccessReason,
+    setReasonError,
+  } = viewModel;
   return (
     // `open`은 상수 true — 열림/닫힘은 계속 호출부의 `selected`가 소유한다.
     <Dialog
@@ -758,307 +905,388 @@ function ReviewDialog({
               )}
             </div>
           ) : (
-            <form id={formId} onSubmit={approve} className="space-y-4">
-              {commandPending && (
-                <div className="space-y-3 rounded-sm border border-hairline bg-surface-soft p-3 text-sm">
-                  <p role="status">
-                    Map 처리 결과가 미확정입니다. 저장된 입력으로 재시도하거나 실행 기록을 확인하세요.
-                    확인 전에는 내용을 바꾸거나 거절할 수 없습니다.
-                  </p>
-                  {!hasSavedActor && (
-                    <p data-testid="admin-fr-reconcile-legacy">
-                      이 명령에는 원래 실행 계정 정보가 없어 안전하게 확인할 수 없습니다.
-                      운영 검토가 필요하며 대기 상태를 유지합니다.
-                    </p>
-                  )}
-                  <FormTextArea
-                    id="admin-fr-resolution-reason"
-                    label="실행 기록 확인 사유 (감사 기록)"
-                    value={resolutionReason}
-                    onChange={(event) => {
-                      setResolutionReason(event.target.value);
-                      setResolutionNotice(null);
-                    }}
-                    disabled={busy || !hasSavedActor}
-                    rows={2}
-                    maxLength={500}
-                    hint="5~500자로 입력하세요. 원래 승인 내용과 별도로 기록됩니다."
-                    data-testid="admin-fr-resolution-reason"
-                  />
-                  <Button
-                    ref={reconcileButtonRef}
-                    type="button"
-                    variant="secondary"
-                    disabled={busy || !hasSavedActor}
-                    data-testid="admin-fr-reconcile-command"
-                    onClick={() => {
-                      const parsed = AdminFeatureRequestReconcileSchema.safeParse({
-                        access_reason: resolutionReason, expected_command_key: expectedCommandKey,
-                      });
-                      if (!parsed.success) {
-                        setErr('실행 기록 확인 사유는 5~500자로 입력하세요.');
-                        return;
-                      }
-                      setErr(null);
-                      // 확인창을 연 시점의 사유·명령 키를 보존한다. 재조회가 대상을 바꾸지 않는다.
-                      setReconcileIntent(parsed.data);
-                      setReconcileConfirmOpen(true);
-                    }}
-                  >
-                    Map 실행 기록 확인
-                  </Button>
-                  {resolutionNotice && (
-                    <p role="status" data-testid="admin-fr-reconcile-notice">{resolutionNotice}</p>
-                  )}
-                </div>
-              )}
-              {dryRunNotice && (
-                <p role="status" data-testid="admin-fr-dry-run-notice">
-                  {dryRunNotice}
-                </p>
-              )}
-              {isNewPlace && (
-                <p
-                  className="rounded-sm border border-hairline bg-surface-soft p-3 text-sm text-body"
-                  data-testid="admin-fr-queue-payload-notice"
-                >
-                  저장된 제안 내용 그대로 Map Feature 요청 큐에 제출합니다. 최종 분류와 마커는 Map
-                  검토자가 결정합니다.
-                </p>
-              )}
-
-              {isCorrection && (
-                <fieldset
-                  disabled={busy || commandPending}
-                  className="space-y-3 rounded-sm border border-hairline p-3"
-                >
-                  <legend className="px-1 text-sm font-semibold text-ink">수정 반영 필드</legend>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <FormField
-                      id="admin-fr-name"
-                      label="이름"
-                      value={name}
-                      onChange={(event) => {
-                        setName(event.target.value);
-                        setDryRunNotice(null);
-                      }}
-                      placeholder={request.name}
-                      labelClassName={DIALOG_LABEL_CLASS}
-                      data-testid="admin-fr-name"
-                    />
-                    <FormField
-                      id="admin-fr-category"
-                      label="카테고리 코드"
-                      value={category}
-                      onChange={(event) => {
-                        setCategory(event.target.value);
-                        setDryRunNotice(null);
-                      }}
-                      placeholder="01070100"
-                      labelClassName={DIALOG_LABEL_CLASS}
-                      data-testid="admin-fr-category"
-                    />
-                    <FormField
-                      id="admin-fr-marker-color"
-                      label="마커 색"
-                      value={markerColor}
-                      onChange={(event) => {
-                        setMarkerColor(event.target.value);
-                        setDryRunNotice(null);
-                      }}
-                      placeholder="P-07"
-                      labelClassName={DIALOG_LABEL_CLASS}
-                      data-testid="admin-fr-marker-color"
-                    />
-                    <FormField
-                      id="admin-fr-marker-icon"
-                      label="마커 아이콘"
-                      value={markerIcon}
-                      onChange={(event) => {
-                        setMarkerIcon(event.target.value);
-                        setDryRunNotice(null);
-                      }}
-                      placeholder="cafe"
-                      labelClassName={DIALOG_LABEL_CLASS}
-                      data-testid="admin-fr-marker-icon"
-                    />
-                  </div>
-                </fieldset>
-              )}
-
-              <FormTextArea
-                ref={reasonRef}
-                readOnly={commandPending}
-                disabled={busy}
-                id="admin-fr-reason"
-                label="검토 사유 (감사 기록)"
-                value={accessReason}
-                onChange={(event) => {
-                  setAccessReason(event.target.value);
-                  setDryRunNotice(null);
-                  setRejectConfirmOpen(false);
-                  if (reasonError) setReasonError(null);
-                }}
-                rows={3}
-                maxLength={500}
-                error={reasonError ?? undefined}
-                hint="승인/거절 모두 사유가 감사 기록에 남습니다."
-                labelClassName={DIALOG_LABEL_CLASS}
-                data-testid="admin-fr-reason"
-              />
-
-              {err && (
-                <p
-                  ref={panelErrorRef}
-                  role="alert"
-                  tabIndex={-1}
-                  className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
-                  data-testid="admin-fr-panel-error"
-                >
-                  {err}
-                </p>
-              )}
-            </form>
+            <ReviewDialogSection0_0 viewModel={viewModel} />
           )}
         </section>
         <DialogFooter>{footer}</DialogFooter>
       </DialogContent>
-      <AlertDialog
-        open={reconcileConfirmOpen}
-        onOpenChange={(open) => {
-          if (!reconcileMutation.isPending) setReconcileConfirmOpen(open);
-        }}
-      >
-        <AlertDialogContent
-          data-testid="admin-fr-reconcile-confirm"
-          initialFocus={reconcileCancelRef}
-          finalFocus={reconcileButtonRef}
-        >
-          <AlertDialogTitle>Map 실행 기록을 확인할까요?</AlertDialogTitle>
-          <AlertDialogDescription>
-            실행 완료는 제안에 반영하고, 미실행이 확인되면 기존 명령을 영구 봉인해 새 검토를 허용합니다.
-            처리 중이거나 확인에 실패하면 대기 상태를 유지합니다.
-          </AlertDialogDescription>
-          <p className="mt-4 whitespace-pre-wrap text-sm text-ink [overflow-wrap:anywhere]">
-            {reconcileIntent?.access_reason}
-          </p>
-          <AlertDialogFooter>
-            <AdminButton
-              ref={reconcileCancelRef}
-              type="button"
-              variant="outline"
-              disabled={busy}
-              data-testid="admin-fr-reconcile-confirm-cancel"
-              onClick={() => setReconcileConfirmOpen(false)}
-            >
-              계속 검토
-            </AdminButton>
-            <AdminButton
-              type="button"
-              disabled={busy}
-              data-testid="admin-fr-reconcile-confirm-confirm"
-              onClick={() => { if (reconcileIntent) reconcileMutation.mutate(reconcileIntent); }}
-            >
-              실행 기록 확인
-            </AdminButton>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog
-        open={deleteConfirmOpen}
-        onOpenChange={(open) => {
-          if (!deleteMutation.isPending) setDeleteConfirmOpen(open);
-        }}
-      >
-        <AlertDialogContent initialFocus={rejectCancelRef}>
-          <AlertDialogTitle>처리 완료 제안을 삭제할까요?</AlertDialogTitle>
-          <AlertDialogDescription>
-            이 제안 행은 되돌릴 수 없습니다. 감사 기록과 Map·여행 데이터는 보존됩니다.
-          </AlertDialogDescription>
-          <AlertDialogFooter>
-            <Button
-              ref={rejectCancelRef}
-              type="button"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => setDeleteConfirmOpen(false)}
-            >
-              취소
-            </Button>
-            <Button
-              type="button"
-              disabled={busy}
-              loading={deleteMutation.isPending}
-              data-testid="admin-fr-delete-confirm"
-              onClick={() => deleteMutation.mutate()}
-            >
-              삭제
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ReviewDialogSection0_1 viewModel={viewModel} />
+      <ReviewDialogSection0_2 viewModel={viewModel} />
       {/* 되돌릴 수 없는 거절 확정 — KTM 규약대로 AlertDialog(role=alertdialog). base-ui가
           alertdialog에서 scrim 클릭 닫기를 강제로 끄므로, 오조작으로 확인창이 사라지지 않는다.
           검토 Dialog 안에 중첩해 두어 base-ui가 두 모달의 스택 관계를 알게 한다. */}
-      {rejectConfirmOpen && (
-        <AlertDialog
-          open
-          onOpenChange={(open) => {
-            if (!open && !rejectMutation.isPending) setRejectConfirmOpen(false);
-          }}
-        >
-          <AlertDialogContent
-            data-testid="admin-fr-reject-confirm"
-            initialFocus={rejectCancelRef}
-            finalFocus={rejectButtonRef}
-          >
-            <AlertDialogTitle>Feature 제안을 거절할까요?</AlertDialogTitle>
-            <AlertDialogDescription>
-              거절하면 이 제안은 처리 완료 상태가 되고, 입력한 사유가 감사 기록에 남습니다.
-            </AlertDialogDescription>
-            <div
-              className="mt-4 space-y-3 text-sm text-ink"
-              data-testid="admin-fr-reject-confirmation"
-            >
-              <p>“{request.name}” 제안을 거절합니다. 확정 전 검토 사유를 한 번 더 확인하세요.</p>
-              <div className="rounded-sm border border-hairline bg-surface-soft p-3">
-                <p className="text-xs font-semibold text-muted">거절 사유</p>
-                <p
-                  className="mt-1 whitespace-pre-wrap text-sm text-ink [overflow-wrap:anywhere]"
-                  data-testid="admin-fr-reject-reason-preview"
-                >
-                  {accessReason.trim()}
-                </p>
-              </div>
-            </div>
-            <AlertDialogFooter>
-              <AdminButton
-                ref={rejectCancelRef}
-                type="button"
-                variant="outline"
-                disabled={rejectMutation.isPending}
-                onClick={() => {
-                  if (!rejectMutation.isPending) setRejectConfirmOpen(false);
-                }}
-                data-testid="admin-fr-reject-confirm-cancel"
-              >
-                계속 검토
-              </AdminButton>
-              {/* design.md §CTA voice: destructive fill은 confirm dialog 안에서만 쓴다. */}
-              <AdminButton
-                type="button"
-                variant="destructive-solid"
-                disabled={rejectMutation.isPending}
-                onClick={confirmReject}
-                data-testid="admin-fr-reject-confirm-confirm"
-              >
-                거절 확정
-              </AdminButton>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
+      {rejectConfirmOpen && <ReviewDialogSection0_3 viewModel={viewModel} />}
     </Dialog>
+  );
+}
+
+function ReviewDialogSection0_0({ viewModel }: { viewModel: ReviewDialogView0Model }) {
+  const {
+    accessReason,
+    approve,
+    busy,
+    category,
+    commandPending,
+    dryRunNotice,
+    err,
+    expectedCommandKey,
+    formId,
+    hasSavedActor,
+    isCorrection,
+    isNewPlace,
+    markerColor,
+    markerIcon,
+    name,
+    panelErrorRef,
+    reasonError,
+    reasonRef,
+    reconcileButtonRef,
+    request,
+    resolutionNotice,
+    resolutionReason,
+    setAccessReason,
+    setCategory,
+    setDryRunNotice,
+    setErr,
+    setMarkerColor,
+    setMarkerIcon,
+    setName,
+    setReasonError,
+    setReconcileConfirmOpen,
+    setReconcileIntent,
+    setRejectConfirmOpen,
+    setResolutionNotice,
+    setResolutionReason,
+  } = viewModel;
+  return (
+    <form id={formId} onSubmit={approve} className="space-y-4">
+      {commandPending && (
+        <div className="space-y-3 rounded-sm border border-hairline bg-surface-soft p-3 text-sm">
+          <p role="status">
+            Map 처리 결과가 미확정입니다. 저장된 입력으로 재시도하거나 실행 기록을 확인하세요. 확인
+            전에는 내용을 바꾸거나 거절할 수 없습니다.
+          </p>
+          {!hasSavedActor && (
+            <p data-testid="admin-fr-reconcile-legacy">
+              이 명령에는 원래 실행 계정 정보가 없어 안전하게 확인할 수 없습니다. 운영 검토가
+              필요하며 대기 상태를 유지합니다.
+            </p>
+          )}
+          <FormTextArea
+            id="admin-fr-resolution-reason"
+            label="실행 기록 확인 사유 (감사 기록)"
+            value={resolutionReason}
+            onChange={(event) => {
+              setResolutionReason(event.target.value);
+              setResolutionNotice(null);
+            }}
+            disabled={busy || !hasSavedActor}
+            rows={2}
+            maxLength={500}
+            hint="5~500자로 입력하세요. 원래 승인 내용과 별도로 기록됩니다."
+            data-testid="admin-fr-resolution-reason"
+          />
+          <Button
+            ref={reconcileButtonRef}
+            type="button"
+            variant="secondary"
+            disabled={busy || !hasSavedActor}
+            data-testid="admin-fr-reconcile-command"
+            onClick={() => {
+              const parsed = AdminFeatureRequestReconcileSchema.safeParse({
+                access_reason: resolutionReason,
+                expected_command_key: expectedCommandKey,
+              });
+              if (!parsed.success) {
+                setErr('실행 기록 확인 사유는 5~500자로 입력하세요.');
+                return;
+              }
+              setErr(null);
+              // 확인창을 연 시점의 사유·명령 키를 보존한다. 재조회가 대상을 바꾸지 않는다.
+              setReconcileIntent(parsed.data);
+              setReconcileConfirmOpen(true);
+            }}
+          >
+            Map 실행 기록 확인
+          </Button>
+          {resolutionNotice && (
+            <p role="status" data-testid="admin-fr-reconcile-notice">
+              {resolutionNotice}
+            </p>
+          )}
+        </div>
+      )}
+      {dryRunNotice && (
+        <p role="status" data-testid="admin-fr-dry-run-notice">
+          {dryRunNotice}
+        </p>
+      )}
+      {isNewPlace && (
+        <p
+          className="rounded-sm border border-hairline bg-surface-soft p-3 text-sm text-body"
+          data-testid="admin-fr-queue-payload-notice"
+        >
+          저장된 제안 내용 그대로 Map Feature 요청 큐에 제출합니다. 최종 분류와 마커는 Map 검토자가
+          결정합니다.
+        </p>
+      )}
+
+      {isCorrection && (
+        <fieldset
+          disabled={busy || commandPending}
+          className="space-y-3 rounded-sm border border-hairline p-3"
+        >
+          <legend className="px-1 text-sm font-semibold text-ink">수정 반영 필드</legend>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormField
+              id="admin-fr-name"
+              label="이름"
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value);
+                setDryRunNotice(null);
+              }}
+              placeholder={request.name}
+              labelClassName={DIALOG_LABEL_CLASS}
+              data-testid="admin-fr-name"
+            />
+            <FormField
+              id="admin-fr-category"
+              label="카테고리 코드"
+              value={category}
+              onChange={(event) => {
+                setCategory(event.target.value);
+                setDryRunNotice(null);
+              }}
+              placeholder="01070100"
+              labelClassName={DIALOG_LABEL_CLASS}
+              data-testid="admin-fr-category"
+            />
+            <FormField
+              id="admin-fr-marker-color"
+              label="마커 색"
+              value={markerColor}
+              onChange={(event) => {
+                setMarkerColor(event.target.value);
+                setDryRunNotice(null);
+              }}
+              placeholder="P-07"
+              labelClassName={DIALOG_LABEL_CLASS}
+              data-testid="admin-fr-marker-color"
+            />
+            <FormField
+              id="admin-fr-marker-icon"
+              label="마커 아이콘"
+              value={markerIcon}
+              onChange={(event) => {
+                setMarkerIcon(event.target.value);
+                setDryRunNotice(null);
+              }}
+              placeholder="cafe"
+              labelClassName={DIALOG_LABEL_CLASS}
+              data-testid="admin-fr-marker-icon"
+            />
+          </div>
+        </fieldset>
+      )}
+
+      <FormTextArea
+        ref={reasonRef}
+        readOnly={commandPending}
+        disabled={busy}
+        id="admin-fr-reason"
+        label="검토 사유 (감사 기록)"
+        value={accessReason}
+        onChange={(event) => {
+          setAccessReason(event.target.value);
+          setDryRunNotice(null);
+          setRejectConfirmOpen(false);
+          if (reasonError) setReasonError(null);
+        }}
+        rows={3}
+        maxLength={500}
+        error={reasonError ?? undefined}
+        hint="승인/거절 모두 사유가 감사 기록에 남습니다."
+        labelClassName={DIALOG_LABEL_CLASS}
+        data-testid="admin-fr-reason"
+      />
+
+      {err && (
+        <p
+          ref={panelErrorRef}
+          role="alert"
+          tabIndex={-1}
+          className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
+          data-testid="admin-fr-panel-error"
+        >
+          {err}
+        </p>
+      )}
+    </form>
+  );
+}
+
+function ReviewDialogSection0_1({ viewModel }: { viewModel: ReviewDialogView0Model }) {
+  const {
+    busy,
+    reconcileButtonRef,
+    reconcileCancelRef,
+    reconcileConfirmOpen,
+    reconcileIntent,
+    reconcileMutation,
+    setReconcileConfirmOpen,
+  } = viewModel;
+  return (
+    <AlertDialog
+      open={reconcileConfirmOpen}
+      onOpenChange={(open) => {
+        if (!reconcileMutation.isPending) setReconcileConfirmOpen(open);
+      }}
+    >
+      <AlertDialogContent
+        data-testid="admin-fr-reconcile-confirm"
+        initialFocus={reconcileCancelRef}
+        finalFocus={reconcileButtonRef}
+      >
+        <AlertDialogTitle>Map 실행 기록을 확인할까요?</AlertDialogTitle>
+        <AlertDialogDescription>
+          실행 완료는 제안에 반영하고, 미실행이 확인되면 기존 명령을 영구 봉인해 새 검토를
+          허용합니다. 처리 중이거나 확인에 실패하면 대기 상태를 유지합니다.
+        </AlertDialogDescription>
+        <p className="mt-4 whitespace-pre-wrap text-sm text-ink [overflow-wrap:anywhere]">
+          {reconcileIntent?.access_reason}
+        </p>
+        <AlertDialogFooter>
+          <AdminButton
+            ref={reconcileCancelRef}
+            type="button"
+            variant="outline"
+            disabled={busy}
+            data-testid="admin-fr-reconcile-confirm-cancel"
+            onClick={() => setReconcileConfirmOpen(false)}
+          >
+            계속 검토
+          </AdminButton>
+          <AdminButton
+            type="button"
+            disabled={busy}
+            data-testid="admin-fr-reconcile-confirm-confirm"
+            onClick={() => {
+              if (reconcileIntent) reconcileMutation.mutate(reconcileIntent);
+            }}
+          >
+            실행 기록 확인
+          </AdminButton>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function ReviewDialogSection0_2({ viewModel }: { viewModel: ReviewDialogView0Model }) {
+  const { busy, deleteConfirmOpen, deleteMutation, rejectCancelRef, setDeleteConfirmOpen } =
+    viewModel;
+  return (
+    <AlertDialog
+      open={deleteConfirmOpen}
+      onOpenChange={(open) => {
+        if (!deleteMutation.isPending) setDeleteConfirmOpen(open);
+      }}
+    >
+      <AlertDialogContent initialFocus={rejectCancelRef}>
+        <AlertDialogTitle>처리 완료 제안을 삭제할까요?</AlertDialogTitle>
+        <AlertDialogDescription>
+          이 제안 행은 되돌릴 수 없습니다. 감사 기록과 Map·여행 데이터는 보존됩니다.
+        </AlertDialogDescription>
+        <AlertDialogFooter>
+          <Button
+            ref={rejectCancelRef}
+            type="button"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => setDeleteConfirmOpen(false)}
+          >
+            취소
+          </Button>
+          <Button
+            type="button"
+            disabled={busy}
+            loading={deleteMutation.isPending}
+            data-testid="admin-fr-delete-confirm"
+            onClick={() => deleteMutation.mutate()}
+          >
+            삭제
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function ReviewDialogSection0_3({ viewModel }: { viewModel: ReviewDialogView0Model }) {
+  const {
+    accessReason,
+    confirmReject,
+    rejectButtonRef,
+    rejectCancelRef,
+    rejectMutation,
+    request,
+    setRejectConfirmOpen,
+  } = viewModel;
+  return (
+    <AlertDialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !rejectMutation.isPending) setRejectConfirmOpen(false);
+      }}
+    >
+      <AlertDialogContent
+        data-testid="admin-fr-reject-confirm"
+        initialFocus={rejectCancelRef}
+        finalFocus={rejectButtonRef}
+      >
+        <AlertDialogTitle>Feature 제안을 거절할까요?</AlertDialogTitle>
+        <AlertDialogDescription>
+          거절하면 이 제안은 처리 완료 상태가 되고, 입력한 사유가 감사 기록에 남습니다.
+        </AlertDialogDescription>
+        <div className="mt-4 space-y-3 text-sm text-ink" data-testid="admin-fr-reject-confirmation">
+          <p>“{request.name}” 제안을 거절합니다. 확정 전 검토 사유를 한 번 더 확인하세요.</p>
+          <div className="rounded-sm border border-hairline bg-surface-soft p-3">
+            <p className="text-xs font-semibold text-muted">거절 사유</p>
+            <p
+              className="mt-1 whitespace-pre-wrap text-sm text-ink [overflow-wrap:anywhere]"
+              data-testid="admin-fr-reject-reason-preview"
+            >
+              {accessReason.trim()}
+            </p>
+          </div>
+        </div>
+        <AlertDialogFooter>
+          <AdminButton
+            ref={rejectCancelRef}
+            type="button"
+            variant="outline"
+            disabled={rejectMutation.isPending}
+            onClick={() => {
+              if (!rejectMutation.isPending) setRejectConfirmOpen(false);
+            }}
+            data-testid="admin-fr-reject-confirm-cancel"
+          >
+            계속 검토
+          </AdminButton>
+          {/* design.md §CTA voice: destructive fill은 confirm dialog 안에서만 쓴다. */}
+          <AdminButton
+            type="button"
+            variant="destructive-solid"
+            disabled={rejectMutation.isPending}
+            onClick={confirmReject}
+            data-testid="admin-fr-reject-confirm-confirm"
+          >
+            거절 확정
+          </AdminButton>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

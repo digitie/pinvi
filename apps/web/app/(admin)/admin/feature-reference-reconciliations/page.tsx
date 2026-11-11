@@ -20,6 +20,15 @@
 // 보존한 것(계약): 모든 `data-testid`, '반영 완료'/'차단됨' 문구, 배지가 놓인 4곳
 // (결론 헤더 · attempt 목록 · 모바일 카드 · 테이블 status 컬럼)과 그 순서·정렬 키.
 
+import { AdminPage } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import type {
+  AdminFeatureReferenceReconciliationDetail,
+  AdminFeatureReferenceReconciliationSummary,
+} from '@pinvi/schemas';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   useCallback,
   useEffect,
@@ -29,15 +38,6 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import type {
-  AdminFeatureReferenceReconciliationDetail,
-  AdminFeatureReferenceReconciliationSummary,
-} from '@pinvi/schemas';
-import { AdminPage } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FilterBar, FilterField } from '@/components/admin/filter-bar';
 // T-356: 상세 모달을 사용자 표면 `components/ui/Dialog`(useModalDialog)에서 admin base-ui
 // `Dialog`로 옮겼다. admin 화면에서는 두 모달 스택을 섞지 않는다. 본문의 `Button`(앱 공용)은
 // 이번 작업 범위가 아니라 그대로 두고, 다이얼로그 닫기 버튼만 admin `Button`을 별칭으로 쓴다.
@@ -54,9 +54,9 @@ import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { Button } from '@/components/ui/Button';
 // `isRestorableFocusTarget`은 모달 프리미티브가 아니라 순수 DOM 판별 헬퍼다 —
 // 이 페이지가 breakpoint 전환 뒤 "지금 보이는 트리거"로 포커스를 되돌릴 때 계속 쓴다.
-import { isRestorableFocusTarget } from '@/lib/focusTarget';
 import { StatusBadge as AdminStatusBadge } from '@/components/admin/status-badge';
 import { statusLabel as sharedStatusLabel } from '@/lib/admin/status-label';
+import { isRestorableFocusTarget } from '@/lib/focusTarget';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -91,7 +91,7 @@ const TARGET_RELATION_LABELS: Record<string, string> = {
 };
 
 const formatDateTime = (value: string | null | undefined) =>
-  value ? new Date(value).toLocaleString('ko-KR') : '—';
+  value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '—';
 
 const statusLabel = (status: string) => STATUS_LABELS[status] ?? sharedStatusLabel(status);
 const actionLabel = (action: string) => ACTION_LABELS[action] ?? action;
@@ -543,7 +543,16 @@ function MobileEvidenceCard({
   );
 }
 
-export default function AdminFeatureReferenceReconciliationsPage() {
+export default function AdminFeatureReferenceReconciliationsPage(
+  ...args: Parameters<typeof useAdminFeatureReferenceReconciliationsPageModel>
+) {
+  const viewModel = useAdminFeatureReferenceReconciliationsPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminFeatureReferenceReconciliationsPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminFeatureReferenceReconciliationsPageModel() {
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]['value']>('all');
   const [page, setPage] = useState(1);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -672,6 +681,51 @@ export default function AdminFeatureReferenceReconciliationsPage() {
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / 50));
 
+  return {
+    renderBranch: 'render0' as const,
+    closeDetail,
+    columns,
+    detailInitialFocusRef,
+    detailQuery,
+    error,
+    listQuery,
+    openDetail,
+    page,
+    rows,
+    selectedEventId,
+    setPage,
+    setSelectedEventId,
+    setStatusFilter,
+    statusFilter,
+    total,
+    totalPages,
+  };
+}
+
+type AdminFeatureReferenceReconciliationsPageView0Model = Extract<
+  ReturnType<typeof useAdminFeatureReferenceReconciliationsPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminFeatureReferenceReconciliationsPageView0({
+  viewModel,
+}: {
+  viewModel: AdminFeatureReferenceReconciliationsPageView0Model;
+}) {
+  const {
+    columns,
+    error,
+    listQuery,
+    openDetail,
+    page,
+    rows,
+    selectedEventId,
+    setPage,
+    setSelectedEventId,
+    setStatusFilter,
+    statusFilter,
+    total,
+    totalPages,
+  } = viewModel;
   return (
     <AdminPage
       title="Feature 참조 조정 증거"
@@ -774,46 +828,57 @@ export default function AdminFeatureReferenceReconciliationsPage() {
           동안 `detailQuery.data`가 사라져 본문이 빈칸으로 깜빡이는 것도 함께 막는다.
           접근성 이름은 `DialogTitle` 텍스트가 준다(e2e의 getByRole('dialog', { name: … })). */}
       {selectedEventId !== null && (
-        <Dialog
-          open
-          onOpenChange={(open) => {
-            if (!open) closeDetail();
-          }}
-        >
-          <DialogContent
-            className="max-w-3xl"
-            data-testid="admin-frr-detail-dialog"
-            initialFocus={detailInitialFocusRef}
-          >
-            <DialogHeader>
-              <div className="min-w-0">
-                <DialogTitle>Feature 참조 조정 증거 상세</DialogTitle>
-                <DialogDescription className="mt-1">
-                  Receipt, 관측, 영향 행을 확인하는 읽기 전용 M05 상세입니다.
-                </DialogDescription>
-              </div>
-              <AdminButton
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={closeDetail}
-                data-testid="admin-frr-detail-dialog-close"
-              >
-                닫기
-              </AdminButton>
-            </DialogHeader>
-            <div className="p-4">
-              {detailQuery.isLoading ? (
-                <LoadingState label="증거 상세를 불러오는 중입니다." />
-              ) : detailQuery.isError ? (
-                <DetailError onRetry={() => void detailQuery.refetch()} />
-              ) : detailQuery.data ? (
-                <EvidenceDetail detail={detailQuery.data} boundaryRef={detailInitialFocusRef} />
-              ) : null}
-            </div>
-          </DialogContent>
-        </Dialog>
+        <AdminFeatureReferenceReconciliationsPageSection0_0 viewModel={viewModel} />
       )}
     </AdminPage>
+  );
+}
+
+function AdminFeatureReferenceReconciliationsPageSection0_0({
+  viewModel,
+}: {
+  viewModel: AdminFeatureReferenceReconciliationsPageView0Model;
+}) {
+  const { closeDetail, detailInitialFocusRef, detailQuery } = viewModel;
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) closeDetail();
+      }}
+    >
+      <DialogContent
+        className="max-w-3xl"
+        data-testid="admin-frr-detail-dialog"
+        initialFocus={detailInitialFocusRef}
+      >
+        <DialogHeader>
+          <div className="min-w-0">
+            <DialogTitle>Feature 참조 조정 증거 상세</DialogTitle>
+            <DialogDescription className="mt-1">
+              Receipt, 관측, 영향 행을 확인하는 읽기 전용 M05 상세입니다.
+            </DialogDescription>
+          </div>
+          <AdminButton
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={closeDetail}
+            data-testid="admin-frr-detail-dialog-close"
+          >
+            닫기
+          </AdminButton>
+        </DialogHeader>
+        <div className="p-4">
+          {detailQuery.isLoading ? (
+            <LoadingState label="증거 상세를 불러오는 중입니다." />
+          ) : detailQuery.isError ? (
+            <DetailError onRetry={() => void detailQuery.refetch()} />
+          ) : detailQuery.data ? (
+            <EvidenceDetail detail={detailQuery.data} boundaryRef={detailInitialFocusRef} />
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

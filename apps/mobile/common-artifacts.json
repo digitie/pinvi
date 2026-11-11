@@ -1,0 +1,41 @@
+{
+  "status": "CANDIDATE_NOT_RELEASED",
+  "packages": {
+    "vworld-map-core": {
+      "version": "1.0.1",
+      "filename": "vworld-map-core-1.0.1.tgz",
+      "integrity": "sha512-Djm14Arr7U0r7Sabj6P0V57CdzWIGaJmecklmY1hwrq1QUZJjMUFgkZfGRFalUo6AFzHEwwzOEzbJPMifGhINw==",
+      "file": "file:../web/vendor/vworld-map-core-1.0.1.tgz"
+    },
+    "@kor-travel/tokens": {
+      "version": "0.1.1",
+      "filename": "kor-travel-tokens-0.1.1.tgz",
+      "integrity": "sha512-95d/E3rHhORo8etrQear9Phtj9PYgoek5yRueAEGFZkXxMGbfrywyH7hjYKVnDRgJak4rotJ653MOWTyKTY+sQ==",
+      "file": "file:../web/vendor/kor-travel-tokens-0.1.1.tgz"
+    },
+    "vworld-map-web": {
+      "version": "1.0.3",
+      "filename": "vworld-map-web-1.0.3.tgz",
+      "integrity": "sha512-HPXZcz/wP6tFsCZqlAbansWNICcZPubC+/V7rDWXYTQVlOBLl9cZQ1HSMJd25c2CZoMNreVFTQA0vzkVglkS1w==",
+      "file": "file:../web/vendor/vworld-map-web-1.0.3.tgz"
+    },
+    "vworld-map-rn": {
+      "version": "1.0.1",
+      "filename": "vworld-map-rn-1.0.1.tgz",
+      "integrity": "sha512-lgDBasKIEG2ElQ9jnHDB9pA+x04Xge9yzBb1NPPw1auyvlkQvxsq4NfRPIrw1VWiutcGiIefySLiVaZDUkO69Q==",
+      "file": "file:../web/vendor/vworld-map-rn-1.0.1.tgz"
+    },
+    "lightningcss": {
+      "version": "1.33.0+nativecss.fix.3",
+      "filename": "lightningcss-1.33.0+nativecss.fix.3.tgz",
+      "integrity": "sha512-Q6DDVLGjtJ2zcOkvV2+bKcTAb8dB+HJXgDYAm9mrGL2Og2HBMCRzMaeOpGB8IgAxu11if506Wm6X3Dd+Rk+T7A==",
+      "file": "file:../web/vendor/lightningcss-1.33.0+nativecss.fix.3.tgz"
+    }
+  },
+  "candidate": "integration-5-review",
+  "sources": {
+    "common": "789e6d2e179a055b3cd793fb886083543244089c",
+    "maplibre-vworld-react": "9a7a348b02d61969b394c681b024d5851eef836b",
+    "lightningcss": "684c528b2d16c581c99cf829f9a4988985488d5f"
+  }
+}

@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, adminApi, isRequestTimeoutError, queryKeys } from '@pinvi/api-client';
 import type { KorTravelMapCurationCutoverBackfillResponse } from '@pinvi/schemas';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, ShieldCheck } from 'lucide-react';
+import { useState, type FormEvent } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -41,7 +41,16 @@ function backfillErrorMessage(error: unknown): string {
   return error.message;
 }
 
-export function KorTravelMapCurationCutoverBackfillPanel() {
+export function KorTravelMapCurationCutoverBackfillPanel(
+  ...args: Parameters<typeof useKorTravelMapCurationCutoverBackfillPanelModel>
+) {
+  const viewModel = useKorTravelMapCurationCutoverBackfillPanelModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <KorTravelMapCurationCutoverBackfillPanelView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useKorTravelMapCurationCutoverBackfillPanelModel() {
   const queryClient = useQueryClient();
   const [noticePlanId, setNoticePlanId] = useState('');
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
@@ -123,6 +132,41 @@ export function KorTravelMapCurationCutoverBackfillPanel() {
   const preflight = preflightQuery.data;
   const ready = preflight?.ready === true;
 
+  return {
+    renderBranch: 'render0' as const,
+    backfillMutation,
+    canRetrySameCommand,
+    error,
+    idempotencyKey,
+    noticePlanId,
+    preflight,
+    preflightQuery,
+    ready,
+    resetForChangedInput,
+    result,
+    setNoticePlanId,
+    submit,
+  };
+}
+
+type KorTravelMapCurationCutoverBackfillPanelView0Model = Extract<
+  ReturnType<typeof useKorTravelMapCurationCutoverBackfillPanelModel>,
+  { renderBranch: 'render0' }
+>;
+function KorTravelMapCurationCutoverBackfillPanelView0({
+  viewModel,
+}: {
+  viewModel: KorTravelMapCurationCutoverBackfillPanelView0Model;
+}) {
+  return <KorTravelMapCurationCutoverBackfillPanelSection0_0 viewModel={viewModel} />;
+}
+
+function KorTravelMapCurationCutoverBackfillPanelSection0_0({
+  viewModel,
+}: {
+  viewModel: KorTravelMapCurationCutoverBackfillPanelView0Model;
+}) {
+  const { error, preflight, preflightQuery, result } = viewModel;
   return (
     <section
       className="rounded-sm border border-hairline bg-surface-soft p-4"
@@ -157,76 +201,10 @@ export function KorTravelMapCurationCutoverBackfillPanel() {
         </p>
       )}
       {preflight && (
-        <div
-          className={`mb-3 rounded-sm px-3 py-2 text-sm ${
-            ready ? 'bg-success-bg text-success-text' : 'bg-error-bg text-error-text'
-          }`}
-          data-testid="admin-notice-cutover-preflight-result"
-        >
-          <p className="inline-flex items-center gap-1 font-semibold">
-            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            {ready
-              ? 'sealed mapping과 legacy provenance가 backfill 준비 상태입니다.'
-              : 'backfill이 차단돼 있습니다.'}
-          </p>
-          <p className="mt-1">
-            legacy plan {preflight.legacy_plan_count}개, source POI{' '}
-            {preflight.legacy_source_poi_count}개, manual POI {preflight.manual_poi_count}개,
-            backfillable plan {preflight.backfillable_plan_count}개.
-          </p>
-          {!ready && preflight.issues.length > 0 && (
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              {preflight.issues.slice(0, 5).map((issue) => (
-                <li
-                  key={`${issue.code}:${issue.notice_plan_id ?? ''}:${issue.notice_poi_id ?? ''}`}
-                >
-                  {issue.code}: {issue.detail}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <KorTravelMapCurationCutoverBackfillPanelSection0_0Part0 viewModel={viewModel} />
       )}
 
-      <form className="grid gap-3 md:grid-cols-3" onSubmit={submit}>
-        <label className="grid gap-1 text-sm md:col-span-2">
-          <span>legacy notice plan UUID</span>
-          <input
-            className={inputClass}
-            value={noticePlanId}
-            onChange={(event) => {
-              setNoticePlanId(event.target.value);
-              resetForChangedInput();
-            }}
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            inputMode="text"
-            data-testid="admin-notice-cutover-backfill-plan-id"
-          />
-        </label>
-        <div className="flex items-end gap-2">
-          <button
-            type="submit"
-            disabled={backfillMutation.isPending || !ready}
-            className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-60"
-            data-testid="admin-notice-cutover-backfill-submit"
-          >
-            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            {backfillMutation.isPending ? '전환 중…' : 'canonical backfill'}
-          </button>
-          {canRetrySameCommand && (
-            <button
-              type="button"
-              className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm font-semibold"
-              onClick={() => backfillMutation.mutate({ commandKey: idempotencyKey })}
-              disabled={backfillMutation.isPending}
-              data-testid="admin-notice-cutover-backfill-retry"
-            >
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              같은 요청 재시도
-            </button>
-          )}
-        </div>
-      </form>
+      <KorTravelMapCurationCutoverBackfillPanelSection0_0Part1 viewModel={viewModel} />
 
       {error && (
         <p
@@ -251,5 +229,101 @@ export function KorTravelMapCurationCutoverBackfillPanel() {
         </p>
       )}
     </section>
+  );
+}
+
+function KorTravelMapCurationCutoverBackfillPanelSection0_0Part0({
+  viewModel,
+}: {
+  viewModel: KorTravelMapCurationCutoverBackfillPanelView0Model;
+}) {
+  const { ready, preflight } = viewModel;
+  if (!preflight) return null;
+  return (
+    <div
+      className={`mb-3 rounded-sm px-3 py-2 text-sm ${
+        ready ? 'bg-success-bg text-success-text' : 'bg-error-bg text-error-text'
+      }`}
+      data-testid="admin-notice-cutover-preflight-result"
+    >
+      <p className="inline-flex items-center gap-1 font-semibold">
+        <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+        {ready
+          ? 'sealed mapping과 legacy provenance가 backfill 준비 상태입니다.'
+          : 'backfill이 차단돼 있습니다.'}
+      </p>
+      <p className="mt-1">
+        legacy plan {preflight.legacy_plan_count}개, source POI {preflight.legacy_source_poi_count}
+        개, manual POI {preflight.manual_poi_count}개, backfillable plan{' '}
+        {preflight.backfillable_plan_count}개.
+      </p>
+      {!ready && preflight.issues.length > 0 && (
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          {preflight.issues.slice(0, 5).map((issue) => (
+            <li key={`${issue.code}:${issue.notice_plan_id ?? ''}:${issue.notice_poi_id ?? ''}`}>
+              {issue.code}: {issue.detail}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function KorTravelMapCurationCutoverBackfillPanelSection0_0Part1({
+  viewModel,
+}: {
+  viewModel: KorTravelMapCurationCutoverBackfillPanelView0Model;
+}) {
+  const {
+    submit,
+    noticePlanId,
+    setNoticePlanId,
+    resetForChangedInput,
+    backfillMutation,
+    ready,
+    canRetrySameCommand,
+    idempotencyKey,
+  } = viewModel;
+  return (
+    <form className="grid gap-3 md:grid-cols-3" onSubmit={submit}>
+      <label className="grid gap-1 text-sm md:col-span-2">
+        <span>legacy notice plan UUID</span>
+        <input
+          className={inputClass}
+          value={noticePlanId}
+          onChange={(event) => {
+            setNoticePlanId(event.target.value);
+            resetForChangedInput();
+          }}
+          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+          inputMode="text"
+          data-testid="admin-notice-cutover-backfill-plan-id"
+        />
+      </label>
+      <div className="flex items-end gap-2">
+        <button
+          type="submit"
+          disabled={backfillMutation.isPending || !ready}
+          className="inline-flex h-9 items-center gap-1 rounded-sm bg-cta px-3 text-sm font-semibold text-on-primary hover:bg-cta-hover disabled:opacity-60"
+          data-testid="admin-notice-cutover-backfill-submit"
+        >
+          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+          {backfillMutation.isPending ? '전환 중…' : 'canonical backfill'}
+        </button>
+        {canRetrySameCommand && idempotencyKey !== null && (
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm font-semibold"
+            onClick={() => backfillMutation.mutate({ commandKey: idempotencyKey })}
+            disabled={backfillMutation.isPending}
+            data-testid="admin-notice-cutover-backfill-retry"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            같은 요청 재시도
+          </button>
+        )}
+      </div>
+    </form>
   );
 }

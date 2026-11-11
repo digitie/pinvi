@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, RefreshCw } from 'lucide-react';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import {
   DEFAULT_GRAFANA_DASHBOARD_PATH,
   GRAFANA_DASHBOARDS,
   buildGrafanaEmbedUrl,
   getGrafanaOrigin,
+  grafanaEmbedSandbox,
 } from '@/lib/admin/grafana';
+import { ExternalLink, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 
 type GrafanaHealthStatus = 'checking' | 'ok' | 'degraded';
 
@@ -31,9 +32,19 @@ const healthLabel: Record<GrafanaHealthStatus, string> = {
   degraded: '강등',
 };
 
+function subscribeOrigin() {
+  return () => undefined;
+}
+function browserOrigin() {
+  return window.location.origin;
+}
+function serverOrigin() {
+  return null;
+}
+
 export default function AdminGrafanaPage() {
   const [dashboardPath, setDashboardPath] = useState(
-    process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH?.trim() || DEFAULT_GRAFANA_DASHBOARD_PATH,
+    () => process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH?.trim() || DEFAULT_GRAFANA_DASHBOARD_PATH,
   );
   const grafanaUrl = useMemo(
     () =>
@@ -44,6 +55,8 @@ export default function AdminGrafanaPage() {
     [dashboardPath],
   );
   const grafanaOrigin = useMemo(() => getGrafanaOrigin(grafanaUrl), [grafanaUrl]);
+  const embeddingOrigin = useSyncExternalStore(subscribeOrigin, browserOrigin, serverOrigin);
+  const sameOrigin = embeddingOrigin === grafanaOrigin;
   const [frameKey, setFrameKey] = useState(0);
   const [health, setHealth] = useState<GrafanaHealthPayload | null>(null);
   const [healthStatus, setHealthStatus] = useState<GrafanaHealthStatus>('checking');
@@ -52,6 +65,7 @@ export default function AdminGrafanaPage() {
     let cancelled = false;
     fetch('/admin/grafana/health', { cache: 'no-store' })
       .then(async (response) => {
+        if (!response.ok) throw new Error('Grafana health HTTP failure');
         const payload = (await response.json()) as GrafanaHealthPayload;
         if (cancelled) return;
         setHealth(payload);
@@ -144,15 +158,26 @@ export default function AdminGrafanaPage() {
       </Section>
 
       <section className="h-[calc(100dvh-220px)] min-h-[560px] overflow-hidden rounded-sm border border-hairline bg-canvas">
-        <iframe
-          key={frameKey}
-          src={grafanaUrl}
-          title="Pinvi Grafana"
-          className="h-full w-full border-0"
-          sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-          referrerPolicy="no-referrer"
-          data-testid="admin-grafana-frame"
-        />
+        {sameOrigin && (
+          <p role="alert" className="p-4 text-sm text-error-text">
+            Grafana는 별도 origin으로 설정해 주세요. 같은 origin에서는 대시보드 스크립트를
+            제한합니다.{' '}
+            <a href={grafanaUrl} target="_blank" rel="noopener noreferrer" className="underline">
+              새 탭에서 열기
+            </a>
+          </p>
+        )}
+        {embeddingOrigin && (
+          <iframe
+            key={frameKey}
+            src={grafanaUrl}
+            title="Pinvi Grafana"
+            className="h-full w-full border-0"
+            sandbox={grafanaEmbedSandbox(embeddingOrigin, grafanaOrigin)}
+            referrerPolicy="no-referrer"
+            data-testid="admin-grafana-frame"
+          />
+        )}
       </section>
 
       <Section title="Embed">

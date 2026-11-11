@@ -1,0 +1,21 @@
+{
+  "status": "CANDIDATE_NOT_RELEASED",
+  "packages": {
+    "lightningcss": {
+      "version": "1.33.0+nativecss.fix.3",
+      "filename": "lightningcss-1.33.0+nativecss.fix.3.tgz",
+      "integrity": "sha512-Q6DDVLGjtJ2zcOkvV2+bKcTAb8dB+HJXgDYAm9mrGL2Og2HBMCRzMaeOpGB8IgAxu11if506Wm6X3Dd+Rk+T7A==",
+      "file": "file:apps/web/vendor/lightningcss-1.33.0+nativecss.fix.3.tgz"
+    },
+    "vworld-map-core": {
+      "version": "1.0.1",
+      "filename": "vworld-map-core-1.0.1.tgz",
+      "integrity": "sha512-Djm14Arr7U0r7Sabj6P0V57CdzWIGaJmecklmY1hwrq1QUZJjMUFgkZfGRFalUo6AFzHEwwzOEzbJPMifGhINw==",
+      "file": "file:apps/web/vendor/vworld-map-core-1.0.1.tgz"
+    }
+  },
+  "sources": {
+    "lightningcss": "684c528b2d16c581c99cf829f9a4988985488d5f",
+    "maplibre-vworld-react": "9a7a348b02d61969b394c681b024d5851eef836b"
+  }
+}

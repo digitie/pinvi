@@ -1,6 +1,6 @@
 import type { TextareaHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
-import { inputClassName } from './FormField';
+import { inputClassName } from './input-styles';
 
 export interface FormTextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   /** label·textarea·error를 잇는 고유 id (필수) */

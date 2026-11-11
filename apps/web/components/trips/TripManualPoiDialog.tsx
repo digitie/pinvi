@@ -1,16 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { ApiError, geoApi } from '@pinvi/api-client';
-import { apiClient } from '@/lib/api';
-import { isAbortError } from '@/lib/abort';
 import { FormField } from '@/components/forms/FormField';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+import { isAbortError } from '@/lib/abort';
+import { apiClient } from '@/lib/api';
+import { type GeoCandidate, geoCandidateAddressLabel } from '@/lib/geoCandidateAddressLabel';
+import { ApiError, geoApi } from '@pinvi/api-client';
+import { useEffect, useRef, useState } from 'react';
 
 const DIALOG_LABEL = 'block text-sm font-semibold text-ink';
-
-export type GeoCandidate = Record<string, unknown>;
 
 export interface ManualPoiCreateInput {
   title: string;
@@ -26,67 +25,6 @@ export interface TripManualPoiDialogProps {
   error?: string | null;
   onClose: () => void;
   onCreate: (input: ManualPoiCreateInput) => Promise<boolean>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function cleanText(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
-}
-
-function firstText(source: Record<string, unknown>, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = cleanText(source[key]);
-    if (value) return value;
-  }
-  return null;
-}
-
-function nestedAddressLabel(value: unknown): string | null {
-  if (typeof value === 'string') return cleanText(value);
-  if (!isRecord(value)) return null;
-  return firstText(value, [
-    'label',
-    'full',
-    'full_address',
-    'road',
-    'road_address',
-    'jibun',
-    'jibun_address',
-    'addr',
-    'name',
-  ]);
-}
-
-function regionLabel(value: unknown): string | null {
-  if (!isRecord(value)) return null;
-  const direct = firstText(value, ['label', 'full_name', 'name', 'legal_dong_name', 'emd_name']);
-  if (direct) return direct;
-  const joined = [value.sido_name, value.sigungu_name, value.emd_name]
-    .map(cleanText)
-    .filter(Boolean)
-    .join(' ');
-  return joined || null;
-}
-
-export function geoCandidateAddressLabel(candidate: GeoCandidate | null): string | null {
-  if (!candidate) return null;
-  return (
-    firstText(candidate, [
-      'address_label',
-      'road_address',
-      'jibun_address',
-      'full_address',
-      'address_name',
-      'addr',
-    ]) ??
-    nestedAddressLabel(candidate.address) ??
-    regionLabel(candidate.region) ??
-    cleanText(candidate.name) ??
-    null
-  );
 }
 
 export function TripManualPoiDialog({
@@ -119,6 +57,7 @@ export function TripManualPoiDialog({
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
 
     void (async () => {
       try {
@@ -127,20 +66,25 @@ export function TripManualPoiDialog({
           { lon: coord.lon, lat: coord.lat, radiusM: 200, coordSource: 'map_pick' },
           { signal: controller.signal },
         );
+        if (!active) return;
         const first = res.candidates[0] ?? null;
         const label = geoCandidateAddressLabel(first);
         setCandidate(first);
         setAddressLabel(label);
         if (label && !titleTouchedRef.current) setTitle(label);
       } catch (err) {
+        if (!active) return;
         if (isAbortError(err)) return;
         setGeoError(err instanceof ApiError ? err.message : '주소를 확인하지 못했습니다.');
       } finally {
-        if (!controller.signal.aborted) setGeoLoading(false);
+        if (active) setGeoLoading(false);
       }
     })();
 
-    return () => controller.abort();
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [coord.lat, coord.lon]);
 
   const submit = async () => {

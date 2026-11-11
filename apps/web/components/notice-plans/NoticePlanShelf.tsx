@@ -1,12 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { CopyPlus, Loader2, MapPin, RefreshCw } from 'lucide-react';
+import { NoticePlanCopyDialog } from '@/components/notice-plans/NoticePlanCopyDialog';
+import { buttonClassName } from '@/components/ui/button-styles';
+import { apiClient } from '@/lib/api';
 import { ApiError, noticePlanApi } from '@pinvi/api-client';
 import type { NoticePlan } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
-import { NoticePlanCopyDialog } from '@/components/notice-plans/NoticePlanCopyDialog';
-import { buttonClassName } from '@/components/ui/Button';
+import { CopyPlus, Loader2, MapPin, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+const displayFormatter1 = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+});
 
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench(app) · design-system: DESIGN.md
  * state: 로딩=카드 skeleton · 빈 상태=분류별 문구 + 회복 행동 · filter: role=group + aria-pressed + 44px(/trips와 동일 계약)
@@ -25,14 +32,16 @@ function formatDate(value: string | null): string {
   if (!value) {
     return '미정';
   }
-  return new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(value));
+  return displayFormatter1.format(new Date(value));
 }
 
-export function NoticePlanShelf() {
+export function NoticePlanShelf(...args: Parameters<typeof useNoticePlanShelfModel>) {
+  const viewModel = useNoticePlanShelfModel(...args);
+  if (viewModel.renderBranch === 'render0') return <NoticePlanShelfView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useNoticePlanShelfModel() {
   const [plans, setPlans] = useState<NoticePlan[]>([]);
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [loading, setLoading] = useState(true);
@@ -50,29 +59,73 @@ export function NoticePlanShelf() {
   }
 
   const activeCategory = category === 'all' ? undefined : category;
-  const visiblePlans = useMemo(() => plans, [plans]);
+  const visiblePlans = plans;
 
-  const loadPlans = async () => {
+  const requestSequence = useRef(0);
+  const loadPlans = useCallback(async () => {
+    const request = ++requestSequence.current;
     try {
       const items = await noticePlanApi(apiClient).list({
         category: activeCategory,
         limit: 30,
       });
+      if (request !== requestSequence.current) return;
       setPlans(items);
     } catch (err) {
+      if (request !== requestSequence.current) return;
       setError(err instanceof ApiError ? err.message : '추천 여행을 불러오지 못했습니다.');
     } finally {
-      setLoading(false);
+      setLoading((current) => (request === requestSequence.current ? false : current));
     }
-  };
+  }, [activeCategory]);
 
   useEffect(() => {
-    void (async () => {
-      await loadPlans();
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category]);
+    let active = true;
+    queueMicrotask(() => {
+      if (active) void loadPlans();
+    });
+    return () => {
+      active = false;
+      requestSequence.current += 1;
+    };
+  }, [loadPlans]);
 
+  return {
+    renderBranch: 'render0' as const,
+    category,
+    copyPlan,
+    error,
+    loadPlans,
+    loading,
+    message,
+    setCategory,
+    setCopyPlan,
+    setError,
+    setLoading,
+    setMessage,
+    visiblePlans,
+  };
+}
+
+type NoticePlanShelfView0Model = Extract<
+  ReturnType<typeof useNoticePlanShelfModel>,
+  { renderBranch: 'render0' }
+>;
+function NoticePlanShelfView0({ viewModel }: { viewModel: NoticePlanShelfView0Model }) {
+  const {
+    category,
+    copyPlan,
+    error,
+    loadPlans,
+    loading,
+    message,
+    setCategory,
+    setCopyPlan,
+    setError,
+    setLoading,
+    setMessage,
+    visiblePlans,
+  } = viewModel;
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-3 border-b border-hairline pb-5 md:flex-row md:items-end md:justify-between">
@@ -155,69 +208,9 @@ export function NoticePlanShelf() {
           ))}
         </div>
       ) : visiblePlans.length === 0 ? (
-        <div className="rounded-sm border border-hairline bg-canvas p-6">
-          <p className="text-sm font-semibold text-ink">
-            {category === 'all'
-              ? '표시할 추천 여행이 없습니다.'
-              : '이 분류에 해당하는 추천 여행이 없습니다.'}
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            {category === 'all'
-              ? '공개된 추천 여행이 생기면 이곳에 나타납니다.'
-              : '전체 분류로 돌아가면 다른 추천 여행을 볼 수 있습니다.'}
-          </p>
-          {category !== 'all' ? (
-            <button
-              type="button"
-              onClick={() => setCategory('all')}
-              className={buttonClassName({ variant: 'secondary', className: 'mt-4' })}
-            >
-              전체 보기
-            </button>
-          ) : null}
-        </div>
+        <NoticePlanShelfView0Part0 viewModel={viewModel} />
       ) : (
-        <div
-          className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
-          data-testid="notice-plan-list"
-        >
-          {visiblePlans.map((plan) => (
-            <article
-              key={plan.notice_plan_id}
-              className="rounded-sm border border-hairline bg-canvas p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="truncate text-lg font-bold text-ink">{plan.title}</h2>
-                  <p className="mt-1 flex items-center gap-1 text-sm text-muted">
-                    <MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span className="truncate">{plan.destination ?? '목적지 미정'}</span>
-                  </p>
-                </div>
-                <span className="shrink-0 rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
-                  {plan.category}
-                </span>
-              </div>
-              {plan.summary && (
-                <p className="mt-3 line-clamp-3 text-sm text-body">{plan.summary}</p>
-              )}
-              <div className="mt-4 flex items-center justify-between gap-3 text-sm text-muted">
-                <span>
-                  {formatDate(plan.starts_on)} - {formatDate(plan.ends_on)}
-                </span>
-                <span>{plan.source_name ?? '출처 미정'}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCopyPlan(plan)}
-                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover"
-                data-testid={`notice-plan-copy-${plan.notice_plan_id}`}
-              >
-                <CopyPlus className="h-4 w-4" aria-hidden="true" />내 여행으로 가져오기
-              </button>
-            </article>
-          ))}
-        </div>
+        <NoticePlanShelfView0Part1 viewModel={viewModel} />
       )}
 
       {copyPlan && (
@@ -239,6 +232,78 @@ export function NoticePlanShelf() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function NoticePlanShelfView0Part0({ viewModel }: { viewModel: NoticePlanShelfView0Model }) {
+  const { category, setCategory } = viewModel;
+  return (
+    <div className="rounded-sm border border-hairline bg-canvas p-6">
+      <p className="text-sm font-semibold text-ink">
+        {category === 'all'
+          ? '표시할 추천 여행이 없습니다.'
+          : '이 분류에 해당하는 추천 여행이 없습니다.'}
+      </p>
+      <p className="mt-1 text-sm text-muted">
+        {category === 'all'
+          ? '공개된 추천 여행이 생기면 이곳에 나타납니다.'
+          : '전체 분류로 돌아가면 다른 추천 여행을 볼 수 있습니다.'}
+      </p>
+      {category !== 'all' ? (
+        <button
+          type="button"
+          onClick={() => setCategory('all')}
+          className={buttonClassName({ variant: 'secondary', className: 'mt-4' })}
+        >
+          전체 보기
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function NoticePlanShelfView0Part1({ viewModel }: { viewModel: NoticePlanShelfView0Model }) {
+  const { visiblePlans, setCopyPlan } = viewModel;
+  return (
+    <div
+      className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
+      data-testid="notice-plan-list"
+    >
+      {visiblePlans.map((plan) => (
+        <article
+          key={plan.notice_plan_id}
+          className="rounded-sm border border-hairline bg-canvas p-4"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-bold text-ink">{plan.title}</h2>
+              <p className="mt-1 flex items-center gap-1 text-sm text-muted">
+                <MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="truncate">{plan.destination ?? '목적지 미정'}</span>
+              </p>
+            </div>
+            <span className="shrink-0 rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
+              {plan.category}
+            </span>
+          </div>
+          {plan.summary && <p className="mt-3 line-clamp-3 text-sm text-body">{plan.summary}</p>}
+          <div className="mt-4 flex items-center justify-between gap-3 text-sm text-muted">
+            <span>
+              {formatDate(plan.starts_on)} - {formatDate(plan.ends_on)}
+            </span>
+            <span>{plan.source_name ?? '출처 미정'}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCopyPlan(plan)}
+            className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-sm bg-cta px-4 text-sm font-semibold text-on-primary hover:bg-cta-hover"
+            data-testid={`notice-plan-copy-${plan.notice_plan_id}`}
+          >
+            <CopyPlus className="h-4 w-4" aria-hidden="true" />내 여행으로 가져오기
+          </button>
+        </article>
+      ))}
     </div>
   );
 }
