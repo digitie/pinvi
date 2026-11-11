@@ -148,7 +148,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     # T-323: aggregate-ci.yml waits for this exact GitHub Actions check on Web changes.
     steps:
@@ -190,6 +190,12 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:13805
         run: npx playwright test
+
+      - name: Run VWorld canvas with local tile and icon fixtures
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:13805
+        run: npm run test:e2e:map-canvas
 
       - name: Upload e2e traces
         if: failure()

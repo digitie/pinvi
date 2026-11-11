@@ -265,3 +265,5 @@ ADR-078은 여행 휴지통30일·보존 첨부 과금·영속 업로드/GC와 �
 ## 2026-11-11 공통 UI·모바일 스타일 이관
 
 사용자 승인으로 관리자 표/Radix 프리미티브는 @kor-travel/ui0.2.0을 소비한다. 모바일은 NativeWind5.0.0-rc.1/react-native-css3.1.0-rc.1 및 웹과 동일 Tailwind/PostCSS4.3.5로 이관한다(ADR-079). 실제 검증과 한계는 docs/reports/mobile-nativewind5-20261111.md에 기록한다.
+
+지도3종은 apps/web/vendor의 core1.0.1/web1.0.3/RN1.0.1 동일 tgz와 source9a7a348b02d61969b394c681b024d5851eef836b를 공유한다(GPL-3.0-only 고지·src 포함). 모바일의 .native는 RN, .web은 SSR 이후 public web 어댑터를 사용한다. 실제 상대file/SHA512는 각 common-artifacts.json과 lock을 따른다.

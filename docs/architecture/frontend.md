@@ -10,7 +10,7 @@
 | -------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
 | 언어                 | TypeScript (strict)                                                                  | `tsconfig.json` `strict: true` + `noUncheckedIndexedAccess`                                                                 |
 | 프레임워크 (웹)      | **Next.js 15** (App Router) + **React 19**                                           | RSC + Server Actions 일부 사용                                                                                              |
-| 프레임워크 (모바일)  | **Expo SDK 56+ Dev Client** (React Native + Expo Router)                             | Expo Go 미사용, `apps/mobile` 활성 Sprint M-1 track. `v1.0.0` Web/API/Admin release blocker에서는 제외(T-284) — ADR-041/043 |
+| 프레임워크 (모바일)  | **Expo SDK58 Dev Client** (React Native + Expo Router)                               | Expo Go 미사용, `apps/mobile` 활성 Sprint M-1 track. `v1.0.0` Web/API/Admin release blocker에서는 제외(T-284) — ADR-041/043 |
 | UI 컴포넌트 (웹)     | **shadcn/ui** + Radix Primitives                                                     | Tailwind 기반, copy-paste vendoring                                                                                         |
 | UI 컴포넌트 (모바일) | **NativeWind5 RC1** + React Native                                                   | ADR-079 확정                                                                                                                |
 | 스타일 (웹)          | **Tailwind CSS 4.3.5**                                                               | `tailwind.config.ts`에서 디자인 토큰 import                                                                                 |
@@ -684,7 +684,7 @@ Print route는 `GET /trips/{trip_id}/exports/print-data` 응답을 렌더링하�
 순서:
 
 1. `apps/mobile/` Expo Router 초기화 + `package.json` workspaces 등록
-2. Linux worktree에서 `npm install` + `expo install --check`로 Expo SDK 56 호환 버전 정합
+2. Linux worktree에서 `npm install` + `expo install --check`로 Expo SDK58 호환 버전 정합
 3. EAS `development` profile로 Dev Client build 생성 (`developmentClient: true`)
 4. `expo start --dev-client`로 Metro 연결. Expo Go QR 실행 경로는 만들지 않음
 5. 공용 패키지 import 검증 (`packages/schemas`, `packages/api-client` 등)

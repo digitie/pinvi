@@ -37,7 +37,7 @@ Pinvi 관리자 로그인은 common LoginForm을 사용한다. 모바일 로그�
 | 웹 unit             | 493PASS/1FAIL(494): c5 공통 LoginForm의 change 이벤트 없는 DOM 자동완성. 부모 현재 소스는 수정됐으며 최종 pack 수신 대기 |
 | shared unit         | domain138/schema24 모두PASS                                                                                              |
 | 웹 lint·타입        | ESLint 오류0/기존 인증 hard-navigation 경고1; TypeScript PASS                                                            |
-| 웹 production build | ff80323d N150 clean npm ci 뒤 production buildPASS; 전체 E2E 진행 중                                                     |
+| 웹 production build | ff80323d N150 clean npm ci 뒤 production buildPASS; 전체 E2E203PASS/6FAIL/4SKIP                                          |
 | 웹 Doctor           | full/warning/no-cache 482files, 오류0/경고0                                                                              |
 | 모바일 Expo58       | 타입/lint/스타일 계약PASS; Doctor45files 오류0/경고0                                                                     |
 | 모바일 bundle       | 실제 fix.3 + 지도 RN1.0.1로 Android/iOS Hermes exportPASS; 양쪽 Pretendard OTF4종 포함                                   |
@@ -63,4 +63,12 @@ React Doctor0.9.22의 js-set-map-lookups는 string.includes도 배열 검색으�
 
 참고: [Next public plugin 직접 구성](https://nextjs.org/docs/app/api-reference/config/eslint), [ESLint10 이관](https://eslint.org/docs/latest/use/migrate-to-10.0.0), [React ESLint10 지원](https://eslint-react.xyz/docs/getting-started/typescript).
 
-N150 checkpoint E2E는 공식 Playwright1.65.0 이미지의 Node26.13.0에서 실행 중이다(앱 engines 지원 범위). 로컬 WSL 타입·단위·Expo export는 Node22.22.2이다. Node22.23.1 정본 Docker 이미지 빌드/CI를 이 검사로 대체하지 않는다. 현재 긴 공통 Dialog가 viewport 밖으로 헤더 닫기를 밀어내는 회귀2건을 포착하여 부모에 공통 높이/스크롤 수정을 요청했다. 전체 최종 결과는 아직 확정하지 않는다.
+N150 checkpoint E2E는 공식 Playwright1.65.0 이미지의 Node26.13.0에서 실행 중이다(앱 engines 지원 범위). 로컬 WSL 타입·단위·Expo export는 Node22.22.2이다. Node22.23.1 정본 Docker 이미지 빌드/CI를 이 검사로 대체하지 않는다. 긴 공통 Dialog가 viewport 밖으로 닫기/제출 버튼을 밀어내는 회귀6건을 포착하여 부모에 공통 높이/스크롤 수정을 요청했다. skip4건은 복원 UI flag2건과 실제canvas 모드2건이다.
+
+## 실제 지도 canvas 격리 검증
+
+기본 키 없음 suite를 유지하면서 test:e2e:map-canvas를 별도로 추가했다. 테스트용 dummy key만 빌드에 넣고 그 WMTS URL과 고정버전 Maki SVG만 로컬 응답한다. 운영 키·실제 타일망·임의 외부 요청을 허용하지 않는다. 기존 network fence는 그대로 유지한다.
+
+N150 새 clean npm12 ci로 ESLint10 전이 통일까지 설치하고 실제 MapLibre canvas·worker가 로드되는 빌드를 확인했다. 지도 shell, canvas의 장소 표시/좌표 우클릭→주소 포함 POI 생성, 교통 응답 뒤 카메라/조회 안정성3cases 모두PASS다. 최초 실행은 미등록 Maki SVG 요청을 fence가 탐지해1FAIL이었고, 고정 URL의 SVG mock을 추가한 뒤 같은 production build에서 세 cases를 재검증했다. 이 전용 모드도 web CI e2e job의 필수 step이다. 기존 기본 suite의 restoreflag2건은 여전히 별도 미실행으로 구분한다.
+
+추가 Linux iOS 강제WASM export는 별도 빈 TMPDIR에서 PASS다. native/WASM 산출물의 전체 HBC bytes 동일성은 주장하지 않으며, 같은 입력의 compiler IR 동등성은 원본 worker 보고서의 검증 결과를 따른다.

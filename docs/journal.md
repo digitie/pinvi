@@ -1,6 +1,6 @@
 ## 2026-11-11 — 공통 VirtualTable/Radix·NativeWind5RC·Expo58 통합 후보
 
-2026-11-11 공통 이관 checkpoint: 지도 source9a의 core1.0.1/web1.0.3/RN1.0.1과 Lightning CSS1.33.0+nativecss.fix.3 동일 tgz 실제 설치·lock/원장 SHA512 일치. 웹/모바일 타입·lint 및 Doctor482/45files 진단0. Android/iOS/Web export와 SDK58 N150375/1280px 로그인·글꼴 스모크PASS. 웹 unit493PASS/1FAIL은 최종 common LoginForm 자동완성 수정 pack 대기. 최종 common 정책·clean ci/build/e2e·독립2리뷰 미완료이며 push/배포 대기. 상세는 docs/reports/common-unification-20261111.md.
+2026-11-11 공통 이관 checkpoint: 지도 source9a의 core1.0.1/web1.0.3/RN1.0.1과 Lightning CSS1.33.0+nativecss.fix.3 동일 tgz 실제 설치·lock/원장 SHA512 일치. 웹/모바일 타입·lint 및 Doctor482/45files 진단0. Android/iOS/Web export와 SDK58 N150375/1280px 로그인·글꼴 스모크PASS. 웹 unit493PASS/1FAIL은 최종 common LoginForm 자동완성 수정 pack 대기. 최종 common 정책·clean ci/build/e2e·독립2리뷰 미완료이며 push/배포 대기. 후속 N150 production buildPASS/E2E203PASS6FAIL(긴 공통Dialog)4SKIP, 별도 실제 canvas3casesPASS. ESLint도 전이까지10.14.0 하나로 정리했다. 상세는 docs/reports/common-unification-20261111.md.
 
 관리자 표를 common VirtualTable로 연결하고 Radix 프리미티브·LoginForm/RHF/Zod·인스턴스별 Zustand 상태·Pretendard를 실제 사용한다. 모바일은 사용자 추가 승인에 따라 NativeWind5RC1/engine3.1RC1/Tailwind4.3.5와 Expo58.0.23/RN0.88.1로 이동한다. 기존 보안/세션/위치 동의 순서와 사용자 화면 토큰을 유지한다.
 

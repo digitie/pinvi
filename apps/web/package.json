@@ -24,7 +24,8 @@
     "check:dependencies": "node ../../node_modules/@kor-travel/ui/check-dependencies.mjs --lock ../../package-lock.json --workspace apps/web --artifacts common-artifacts.json --source \"app/(admin)\" --source components/admin && node scripts/check-common-ui.mjs",
     "doctor": "react-doctor . --yes --scope full --blocking warning --no-score --no-supply-chain --no-parallel --no-cache",
     "predoctor": "node ./scripts/copy-maplibre-worker.mjs",
-    "check:maplibre-worker": "node ./scripts/copy-maplibre-worker.mjs --check"
+    "check:maplibre-worker": "node ./scripts/copy-maplibre-worker.mjs --check",
+    "test:e2e:map-canvas": "PINVI_E2E_EXPECT_VWORLD_CANVAS=1 playwright test map-shell.e2e.ts trip-detail.e2e.ts --grep '지도 shell|여행 지도는 feature|교통 결과가 와도'"
   },
   "dependencies": {
     "@hookform/resolvers": "7.0.5",

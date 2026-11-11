@@ -62,3 +62,5 @@ Linux GNU native와 기타 호스트의 수정 WASM을 같은 tarball에 넣었�
 vworld-map-rn은 native-only 어댑터다. Expo web 정적 경로 수집에서 앱이 이를 eager import하면 MapLibreRN의 codegenNativeComponent를 ReactNativeWeb에서 실행해 실패했다. 이 문제를 라이브러리 웹지원 회귀로 분류하지 않는다. Pinvi의 VWorldMap.native는 RN public wrapper, VWorldMap.web은 public vworld-map-web lazy wrapper를 사용하며 SSR에서는 엔진을 평가하지 않는다. 별도의 지도 엔진이나 node_modules 수정은 없다.
 
 웹 어댑터는 앱에서 쓰는 카메라 ref, bounds의 lon/lat 순서, marker 선택 callback과 접근성/적층을 연결한다. 위치 동의 정책을 보존하도록 wrapper의 추가 geolocate/navigation/scale UI는 끈다. 기존 native 원형 마커 표현을 유지한다. SSR sentinel와 카메라·마커3개 회귀 테스트 및 실제 Expo 웹 export로 검증했다.
+
+별도빈 TMPDIR와 LIGHTNINGCSS_FORCE_WASM=1로 실제 iOS Hermes export도 PASS했다. 이는 Linux 강제WASM 검증이며 macOS 자동선택/EAS/실기기 검증을 대신하지 않는다.
