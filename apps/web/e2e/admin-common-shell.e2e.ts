@@ -107,7 +107,9 @@ test('공통 Admin 메뉴·PinVi 색상·접힘·반응형', async ({ page }) =>
     },
   );
   await page.getByRole('button', { name: '로그아웃', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('로그아웃하지 못했습니다.');
+  await expect(page.getByTestId('admin-sidebar').getByRole('alert')).toContainText(
+    '로그아웃하지 못했습니다.',
+  );
   await expect(page).toHaveURL(/\/admin\/trips/);
   await page.getByRole('button', { name: '로그아웃', exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/login/);
