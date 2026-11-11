@@ -140,3 +140,11 @@ checker 변경 때문에 모바일 export/build를 재실행하지 않는다. �
 - 기존 두 독립 리뷰는3626 및00bd수정재확인 범위로만 기록한다. 최종 Mill/Epicurus 리뷰와 원본 FocusScope 차단 해소, CI, 병합·배포 판단은 부모 통합 단계다. 이 PR은 draft이며 전체PASS/배포가능으로 표시하지 않는다.
 
 최종 runtime 증거는 공유 root의 consumer-tools/pinvi-c9-evidence/n150-final 및 PINVI-FINAL-HANDOFF.md, 입력·raw리뷰 증거는 PINVI-REVIEW-AUDIT.md와 내용 주소 manifest에 보존했다. 공개 Git에는 원본 trace나 로컬 운영노트를 추가하지 않는다.
+
+## integration-10 고정 engine 반영
+
+공통 producer55a921b55d248106cbe320e7f5305f3d3cdb60fe의 동일7종산출물을 root/web/mobile원장과 vendor에 반영했다. 웹과root만 @radix-ui/react-focus-scope의직접runtime file의존성을가지며root $@radix-ui/react-focus-scope override로도달사본을고정한다. 모바일에는DOM engine을직접추가하지않았다. 실제설치7종297파일은동결tgz와일치하고웹·모바일installed/externalcanonical guard를통과했다.
+
+engine은공식radix-ui/primitives eb3a2b7091293e27df8f9ba906632d8daa3d81a3의원본조건분기를수정한1.3.1+kortravel.fix.1이다. producer706e27aaf87bda2df7bbb9da60cc01cebc9ff064의31,214bytes/SHA256 f97c1dd4851fd1dc7b75bfbe9ce7e2d68bbd32e225b9ff52954c683fd4c7081d를유지한다. source최종fork cc66292dd12f11bf083173f00d8dab9e9c4541df의후속은패킹/CI절차뿐이며runtime소스는같다. [원본forkPR](https://github.com/digitie/radix-primitives/pull/1)의전체unit1206PASS/2SKIP/7TODO·전체E2E117PASS·집중E2E9PASS및두독립리뷰재확인을완료했다. 기존상속disabledfieldset후보선별한계는새회귀와구분해남겼다.
+
+기존c9의520/1·207/2/4는해당입력의실패기록으로보존한다. c10은실제engine이바뀌므로새웹build와원래unit/전체E2E를검증하며아직이단락에서는소비자PASS로표시하지않는다. 관리자30초case는원래assertion/timeout으로worker2·1각14PASS를반복확인했으며trace상과거Axe평가시간이예산소진의주요구간이었다. 시스템경합을확정원인으로주장하지않는다. 모바일token의runtime/CSS는c9와동일한115파일증명이있어기존fix4 native4export증거를유지한다.
