@@ -17,3 +17,9 @@ PinVi 기준 cc3489a0, map 기준 32668d003. 이미 vendored common UI dev.9의 
 ## 검증 기록
 
 진행 중. CodeGraph MCP는 WSL SQLite 잠금으로 실패하여 Linux native codegraph impact/context로 AdminGuard→AdminLayout 영향 범위를 확인했다. 원 trunk와 손상된 기존 Codex 폴더는 보존하고 /home/digitie/pinvi-codex 고정 worktree에서 작업한다.
+
+## 독립 리뷰 기준선
+
+공통 manifest: PinVi cc3489a0 → 후보7b874bbae02c102aff6420e00fe3b1c36e727d98(tree4259b5b475ef5ba336bba07b0b2f7889672f5ee3),8개 파일 전체, map32668d003 기준. 두 전문 reviewer는 Git object-only로 독립 검토했다. 원본은 [UI](../reviews/2026-11-11-pinvi-admin-common-ui.md)·[인증](../reviews/2026-11-11-pinvi-admin-common-auth.md)에 보존한다.
+
+두 reviewer가 각각 UI-01/AUTH-01 P2로 모바일 로그아웃36px를 지적했다. 수정은 모바일44px·PC36px 분리이며, e2e의 버튼 높이·키보드 메뉴 끝 스크롤·skip focus·로그아웃 실패/재시도 검사도 보강했다. 후속 immutable commit의 독립 재검토와 N150 실측 전 완료로 표시하지 않는다.

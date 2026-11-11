@@ -237,7 +237,7 @@ body {
   }
 }
 
-/* 공통 UI의 모든 역할을 PinVi 팔레트에 매핑한다. 사용자 표면에는 전파하지 않는다. */
+/* 공통 로그인·메뉴의 색상 역할을 PinVi 팔레트에 매핑한다. 사용자 표면에는 전파하지 않는다. */
 [data-pv-surface='admin'] {
   --kt-font-sans: var(--font-sans);
   --kt-brand: var(--color-cta);

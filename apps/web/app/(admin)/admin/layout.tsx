@@ -286,7 +286,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
             disabled={loggingOut}
             aria-label="로그아웃"
             title="로그아웃"
-            className="flex min-h-9 items-center gap-2 rounded-control px-3 text-xs text-muted hover:bg-admin-subtle hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait"
+            className="flex min-h-11 items-center gap-2 rounded-control lg:min-h-9 px-3 text-xs text-muted hover:bg-admin-subtle hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait"
           >
             <LogOut className="size-4 shrink-0" aria-hidden="true" />
             <span className={sidebarCollapsed ? 'lg:sr-only' : ''}>
