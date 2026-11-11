@@ -275,21 +275,21 @@
   notes: ""
 
 - id: TRS-GS-015
-  title: "신라문화제 경주 1박2일"
+  title: "경주 대릉원돌담길 축제 1박2일"
   style: festival
   days: 2
   start_offset_days: 3
   priority: P2
   tags: [festival, lodging, heritage, cafe]
   places:
-    - {day: 1, query: "신라문화제", expect_name_contains: "신라문화제", family: festival, source: feature}
+    - {day: 1, query: "경주 대릉원돌담길 축제", expect_name_contains: "대릉원돌담길 축제", family: festival, source: feature}
     - {day: 1, query: "황남채", expect_name_contains: "황남채", family: lodging, source: feature}
     - {day: 1, query: "첨성대", expect_name_contains: "첨성대", family: heritage, source: feature}
     - {day: 2, query: "대릉원", expect_name_contains: "대릉원", family: heritage, source: feature}
     - {day: 2, query: "경주황남빵", expect_name_contains: "경주황남빵", family: cafe, source: feature}
   checks:
     - share_readonly
-  notes: "신라문화제는 통상 10월 — 축제 feature 존재 확인용, 기간 밖일 수 있음"
+  notes: "TourAPI 경주 대릉원돌담길 축제(2026-04-03~05) — 기간 밖일 수 있음(기간 단언 금지). 신라문화제(data.go.kr)는 Map #1482로 퇴역"
 
 - id: TRS-GS-016
   title: "경주 KTX 당일 — 신경주역 출발"
@@ -377,7 +377,7 @@
   priority: P2
   tags: [nature, culture, museum, food, park, beach, market, transport, mobile]
   places:
-    - {day: 1, query: "호미곶", expect_name_contains: "호미곶해맞이광장", family: nature, source: feature}
+    - {day: 1, query: "호미곶 해맞이광장", expect_name_contains: "해맞이광장", family: nature, source: feature}
     - {day: 1, query: "구룡포 일본인가옥거리", expect_name_contains: "구룡포 일본인가옥거리", family: culture, source: feature}
     - {day: 1, query: "구룡포 과메기", expect_name_contains: "구룡포과메기문화관", family: museum, source: feature}
     - {day: 1, query: "엄마손과메기", expect_name_contains: "엄마손과메기", family: food, source: feature}

@@ -111,8 +111,11 @@ test.describe('SRCH sources by category family (/map)', () => {
 
   test('SRCH-033 공항', async ({ page }, ti) => {
     desktopOnly();
-    // Map search has no airport feature for 김포공항 (airports come from the transport layer, NEAR-*);
-    // only airport-named rows count — tenants like '롯데마트 김포공항점' are not airports.
+    // Only airport-named rows count — tenants like '롯데마트 김포공항점' are not airports. Since 2026-11-11
+    // the first '…공항' row is the MCST 영상 촬영지 duplicate '김포국제공항'(관광, 01000000), ahead of the
+    // transport airport row(06050000): ADR-120 ranks 관광 first among equal name matches and the MCST row is
+    // not folded into the airport until ADR-121 (kor-travel-map#1468 A) runs on prod.
+    test.fail(true, 'kor-travel-map#1468 A: MCST 촬영지 중복 행(관광)이 공항 행보다 먼저 — 정리되면 이 표식을 지운다');
     const card = await familyCase(page, ti, 'SRCH-033', '김포공항', /공항|교통/, /공항$/);
     test.skip(card == null, 'data absent: Map 검색에 공항 feature 없음(교통 레이어가 담당)');
   });

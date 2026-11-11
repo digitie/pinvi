@@ -14,6 +14,7 @@
  *  - apps/api/app/middleware/api_call_logging.py (provider=telegram, token masked)
  */
 import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { apiErrorCode, apiErrorMessage, type ApiErrorBody } from './apiError';
 import { apiBaseURL, e2ePrefix, isMobile, withRateLimitRetry } from './live';
 
 export const TARGETS_PATH = '/users/me/telegram-targets';
@@ -139,17 +140,12 @@ export async function registerTargetViaForm(
     page.getByTestId('telegram-create').click(),
   ]);
   const status = res.status();
-  const json = (await res.json().catch(() => ({}))) as {
-    data?: TelegramTargetDto;
-    detail?: { code?: string; message?: string };
-    code?: string;
-    message?: string;
-  };
+  const json = (await res.json().catch(() => ({}))) as { data?: TelegramTargetDto } & ApiErrorBody;
   return {
     status,
     data: json.data,
-    code: json.detail?.code ?? json.code,
-    message: json.detail?.message ?? json.message,
+    code: apiErrorCode(json),
+    message: apiErrorMessage(json),
   };
 }
 

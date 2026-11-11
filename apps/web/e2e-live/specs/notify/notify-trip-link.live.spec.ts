@@ -20,6 +20,7 @@ import {
   tripTitle,
   skipIfRealDefaultTarget,
 } from '../../helpers/notify';
+import { apiErrorCode } from '../../helpers/apiError';
 
 const section = (page: import('@playwright/test').Page) => page.getByTestId('trip-telegram-targets');
 
@@ -132,8 +133,7 @@ test.describe('NTF trip link — 공유 탭 Telegram 알림 대상', () => {
     // Server-side guard independent of the UI: 4th link → 422 MAX_TARGETS_REACHED.
     const res = await page.request.post(`${apiBase}/trips/${tripId}/telegram-targets`, { data: { telegram_target_id: ids[3] } });
     expect(res.status()).toBe(422);
-    const body = (await res.json()) as { detail?: { code?: string; reason?: string }; code?: string };
-    expect(body.detail?.code ?? body.code).toBe('MAX_TARGETS_REACHED');
+    expect(apiErrorCode(await res.json())).toBe('MAX_TARGETS_REACHED');
   });
 
   test('NTF-011 설정에서 대상을 삭제하면 여행의 연결 목록에서도 사라진다', async ({ page }, info) => {

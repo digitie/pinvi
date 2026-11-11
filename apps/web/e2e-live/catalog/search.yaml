@@ -445,7 +445,7 @@
   cleanup: [읽기 전용]
   automation: scripted
   spec: specs/search/search-sources.live.spec.ts#SRCH-033
-  notes: 'Map 검색에 공항 feature 가 없다(공항은 교통 레이어) — 공항 이름 행이 없으면 skip(data absent).'
+  notes: '공항 이름 행이 없으면 skip(data absent). 2026-11-11부터 첫 공항 이름 행이 MCST 영상 촬영지 중복(관광)이라 test.fail — kor-travel-map#1468 A(ADR-121) 정리 뒤 해제.'
 
 - id: SRCH-034
   title: 카카오/네이버 fallback — 희소 질의에 외부 행 + back-link

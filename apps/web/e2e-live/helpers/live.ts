@@ -716,24 +716,43 @@ export function featureMarkerButtons(page: Page): Locator {
 }
 
 /**
+ * Keyboard pans (MapLibre: 100 px per arrow press) walked as a widening spiral around the start —
+ * right, down, left×2, up×2, right×3 … — so every block near the default centre is tried once.
+ */
+const FEATURE_PAN_SPIRAL = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowLeft', 'ArrowUp', 'ArrowUp', 'ArrowRight', 'ArrowRight', 'ArrowRight'] as const;
+
+/**
  * Explore map: zooms in (keyboard `=` on the canvas, ≤ `maxSteps`) until at least `min` individual
- * feature markers are rendered — the default Seoul viewport is often all clusters.
+ * feature markers are rendered — the default Seoul viewport is often all clusters. If zooming alone
+ * does not get there, pans the map (≤ `FEATURE_PAN_SPIRAL.length` moves of 300 px) until `min`
+ * individual pins are clickable.
+ *
+ * Why the pan: since the 2026-11-11 MOIS 인허가 load, a single building address carries dozens of
+ * features at one coordinate (서울역 31, 광화문 SFC 27). Such a stack stays an "N개 위치 묶음" bubble at
+ * every zoom, and the narrow mobile viewport around 시청 can hold nothing else (CORE-013/019/023 mobile).
  */
 export async function ensureFeatureMarkers(page: Page, min = 1, maxSteps = 5): Promise<Locator> {
   // Server clusters of one are labelled with the place name (not "N개 위치 묶음") but are still
   // clusters — clicking one zooms. The explore legend is the ground truth: data-kind="feature".
   const legend = page.locator('[data-testid="feature-map-marker-style"][data-kind="feature"]');
+  const canvas = page.locator('.maplibregl-canvas').first();
   for (let step = 0; step <= maxSteps; step += 1) {
     try {
       await expect.poll(() => legend.count(), { timeout: 8_000 }).toBeGreaterThanOrEqual(min);
       break;
     } catch {
       if (step === maxSteps) break;
-      const canvas = page.locator('.maplibregl-canvas').first();
       await canvas.focus();
       await page.keyboard.press('=');
       await page.waitForTimeout(600);
     }
+  }
+  for (const key of FEATURE_PAN_SPIRAL) {
+    if ((await clickableFeatureMarkers(page, min)).length >= min) break;
+    await canvas.focus();
+    for (let i = 0; i < 3; i += 1) await page.keyboard.press(key);
+    // in-bounds re-query after moveend; a settled marker set is what clickableFeatureMarkers reads.
+    await waitForFeatureMarkersSettled(page, 1_000, 10_000).catch(() => undefined);
   }
   return featureMarkerButtons(page);
 }

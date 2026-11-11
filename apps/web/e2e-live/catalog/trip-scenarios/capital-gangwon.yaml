@@ -129,14 +129,14 @@
   priority: P2
   tags: [trail, food, heritage]
   places:
-    - {day: 1, query: "북한산 둘레길", expect_name_contains: "북한산_백운대", family: trail, source: feature}
+    - {day: 1, query: "북한산 백운대", expect_name_contains: "북한산 백운대", family: trail, source: feature}
     - {day: 1, query: "인왕산", expect_name_contains: "인왕산", family: trail, source: feature}
     - {day: 1, query: "토속촌 삼계탕", expect_name_contains: "토속촌 삼계탕", family: food, source: feature}
     - {day: 1, query: "경복궁", expect_name_contains: "경복궁", family: heritage, source: feature}
   checks:
     - optimize_day: 1
     - weather_day: 1
-  notes: "등산로(트레킹) 피처"
+  notes: "등산로(트레킹) 피처 — 2026-11-11 KNPS 등산로 재적재 후 '북한산 둘레길' 질의 상위가 둘레길 구간만 남아 이름 그대로 '북한산 백운대'로 질의"
 
 - id: TRS-CG-008
   title: "서울 가족 1박2일 — 롯데월드·서울대공원"
@@ -159,20 +159,20 @@
   notes: ""
 
 - id: TRS-CG-009
-  title: "안양천 빛축제 당일"
+  title: "서울빛초롱축제 당일 — 서울식물원·여의도"
   style: festival
   days: 1
-  start_offset_days: 25
+  start_offset_days: 30
   priority: P2
   tags: [festival, park, food]
   places:
-    - {day: 1, query: "안양천 빛축제", expect_name_contains: "안양천 빛축제", family: festival, source: feature}
+    - {day: 1, query: "서울빛초롱축제", expect_name_contains: "서울빛초롱축제", family: festival, source: feature}
     - {day: 1, query: "서울식물원", expect_name_contains: "서울식물원", family: park, source: feature}
     - {day: 1, query: "여의도한강공원", expect_name_contains: "여의도한강공원", family: park, source: feature}
     - {day: 1, query: "순희네빈대떡", expect_name_contains: "순희네", family: food, source: feature}
   checks:
     - weather_day: 1
-  notes: "축제 기간 여행 — 이벤트 피처 기간은 Map event 데이터 기준(기간 내 단언 금지)"
+  notes: "축제 기간 여행 — 2026-11-11 data.go.kr 축제 퇴역(Map #1482)으로 안양천 빛축제 대신 TourAPI 서울빛초롱축제(2026-12-11~2027-01-31). 기간 단언 금지"
 
 - id: TRS-CG-010
   title: "서울 그랜드 4박5일 — 김포 도착부터 서울역까지"
@@ -235,7 +235,7 @@
     - {day: 1, query: "광성보", expect_name_contains: "강화 광성보", family: heritage, source: feature}
     - {day: 1, query: "초지진", expect_name_contains: "강화 초지진", family: heritage, source: feature}
     - {day: 1, query: "초지진", expect_name_contains: "초지진주차장", family: parking, source: feature}
-    - {day: 1, query: "강화 펜션", expect_name_contains: "강화 팽나무 펜션", family: lodging, source: feature}
+    - {day: 1, query: "강화 팽나무 펜션", expect_name_contains: "강화 팽나무 펜션", family: lodging, source: feature}
     - {day: 2, query: "전등사", expect_name_contains: "전등사", family: religious, source: feature}
     - {day: 2, query: "동막해변", expect_name_contains: "동막해변", family: beach, source: feature}
     - {day: 2, query: "마니산", expect_name_contains: "마니산", family: trail, source: feature}
@@ -291,7 +291,7 @@
   places:
     - {day: 1, query: "인천국제공항", expect_name_contains: "인천국제공항", family: transport, source: feature}
     - {day: 1, query: "을왕리해수욕장", expect_name_contains: "을왕리해수욕장", family: beach, source: feature}
-    - {day: 1, query: "을왕리 펜션", expect_name_contains: "을왕리 에버뷰 펜션", family: lodging, source: feature}
+    - {day: 1, query: "을왕리 에버뷰 펜션", expect_name_contains: "을왕리 에버뷰 펜션", family: lodging, source: feature}
     - {day: 2, query: "마시안해변", expect_name_contains: "마시안해변", family: beach, source: feature}
     - {day: 2, query: "무의도", expect_name_contains: "무의도", family: nature, source: feature}
     - {day: 2, query: "소무의도", expect_name_contains: "소무의도", family: nature, source: feature}
@@ -302,7 +302,7 @@
   notes: ""
 
 - id: TRS-CG-016
-  title: "영종 빛축제 + 파라다이스시티 1박2일"
+  title: "영종 왕가의 산책 + 파라다이스시티 1박2일"
   style: festival
   days: 2
   start_offset_days: 18
@@ -311,13 +311,13 @@
   places:
     - {day: 1, query: "인천국제공항", expect_name_contains: "인천국제공항", family: transport, source: feature}
     - {day: 1, query: "파라다이스시티", expect_name_contains: "파라다이스시티", family: lodging, source: feature}
-    - {day: 1, query: "영종국제도시 빛축제", expect_name_contains: "영종국제도시 빛축제", family: festival, source: feature}
+    - {day: 1, query: "왕가의 산책", expect_name_contains: "왕가의 산책", family: festival, source: feature}
     - {day: 2, query: "인천 차이나타운", expect_name_contains: "인천 차이나타운", family: culture, source: feature}
     - {day: 2, query: "공화춘", expect_name_contains: "공화춘", family: food, source: feature}
     - {day: 2, query: "C27 인천차이나타운점", expect_name_contains: "C27 인천차이나타운점", family: cafe, source: feature}
   checks:
     - share_readonly
-  notes: "축제 기간 여행"
+  notes: "영종 TourAPI 행사 왕가의 산책(2026 연중, 영종구 공항로). data.go.kr 영종국제도시 빛축제는 Map #1482로 퇴역"
 
 - id: TRS-CG-017
   title: "무의도 휴양림 1박2일"
@@ -494,11 +494,11 @@
   tags: [nature, festival, food]
   places:
     - {day: 1, query: "광명동굴", expect_name_contains: "광명동굴", family: nature, source: feature}
-    - {day: 1, query: "광명동굴빛축제", expect_name_contains: "광명동굴빛축제", family: festival, source: feature}
+    - {day: 1, query: "광명동굴 빛 축제", expect_name_contains: "광명동굴 빛 축제", family: festival, source: feature}
     - {day: 1, query: "하동관", expect_name_contains: "하동관 명동본점", family: food, source: feature}
   checks:
     - weather_day: 1
-  notes: "축제 기간 여행"
+  notes: "TourAPI 광명동굴 빛 축제(2026-10-16~17) — 기간 밖 날짜로 담기(기간 단언 금지). data.go.kr 광명동굴빛축제는 Map #1482로 퇴역"
 
 - id: TRS-CG-027
   title: "포천 산정호수 1박2일 — 수목원·휴양림"
@@ -526,7 +526,7 @@
   priority: P2
   tags: [religious, spa, camping, park, heritage, food]
   places:
-    - {day: 1, query: "신륵사", expect_name_contains: "신륵사관광지", family: religious, source: feature}
+    - {day: 1, query: "여주 신륵사", expect_name_contains: "신륵사(여주)", family: religious, source: feature}
     - {day: 1, query: "테르메덴", expect_name_contains: "이천 테르메덴", family: spa, source: feature}
     - {day: 1, query: "테르메덴", expect_name_contains: "테르메덴 카라반", family: camping, source: feature}
     - {day: 2, query: "화담숲", expect_name_contains: "곤지암화담숲", family: park, source: feature}
@@ -554,20 +554,20 @@
   notes: ""
 
 - id: TRS-CG-030
-  title: "의왕 겨울축제 + 서울대공원 당일"
+  title: "광화문 마켓 + 서울대공원 당일"
   style: festival
   days: 1
   start_offset_days: 38
   priority: P2
   tags: [festival, leisure, trail, food]
   places:
-    - {day: 1, query: "의왕왕송호수 겨울축제", expect_name_contains: "의왕왕송호수 겨울축제", family: festival, source: feature}
+    - {day: 1, query: "광화문 마켓", expect_name_contains: "광화문 마켓", family: festival, source: feature}
     - {day: 1, query: "서울대공원", expect_name_contains: "서울대공원", family: leisure, source: feature}
     - {day: 1, query: "청계산", expect_name_contains: "청계산", family: trail, source: feature}
     - {day: 1, query: "가보정", expect_name_contains: "가보정", family: food, source: feature}
   checks:
     - weather_day: 1
-  notes: "날짜미정 축제 이벤트 피처"
+  notes: "TourAPI 광화문 마켓(2026-12-11~2027-01-10). data.go.kr 의왕왕송호수 겨울축제(날짜미정)는 Map #1482로 퇴역"
 
 - id: TRS-CG-031
   title: "수도권 순환 드라이브 3박4일"
@@ -735,7 +735,7 @@
   tags: [beach, cafe, parking, lodging, heritage, religious]
   places:
     - {day: 1, query: "서피비치", expect_name_contains: "서피비치", family: beach, source: feature}
-    - {day: 1, query: "양양 서프 카페", expect_name_contains: "서프쉑 카페", family: cafe, source: feature}
+    - {day: 1, query: "서프쉑 카페", expect_name_contains: "서프쉑 카페", family: cafe, source: feature}
     - {day: 1, query: "죽도해변", expect_name_contains: "죽도해변 주차장", family: parking, source: feature}
     - {day: 1, query: "쏠비치 양양", expect_name_contains: "쏠비치 양양", family: lodging, source: feature}
     - {day: 2, query: "하조대", expect_name_contains: "하조대", family: heritage, source: feature}
@@ -879,7 +879,7 @@
   tags: [food, camping, spa, lodging]
   places:
     - {day: 1, query: "샘밭막국수", expect_name_contains: "샘밭막국수", family: food, source: feature}
-    - {day: 1, query: "홍천 캠핑장", expect_name_contains: "안단테 홍천캠핑장", family: camping, source: feature}
+    - {day: 1, query: "안단테 홍천캠핑장", expect_name_contains: "안단테 홍천캠핑장", family: camping, source: feature}
     - {day: 2, query: "오션월드", expect_name_contains: "오션월드", family: spa, source: feature}
     - {day: 2, query: "소노벨 비발디파크", expect_name_contains: "소노벨 비발디파크", family: lodging, source: feature}
     - {day: 3, query: "소노벨 비발디파크", expect_name_contains: "소노벨 비발디파크", family: lodging, source: feature}
@@ -933,7 +933,7 @@
   priority: P2
   tags: [festival, food, lodging, leisure, cafe]
   places:
-    - {day: 1, query: "얼음나라 화천 산천어축제", expect_name_contains: "2026 얼음나라 화천 산천어축제", family: festival, source: feature}
+    - {day: 1, query: "얼음나라화천 산천어축제", expect_name_contains: "얼음나라화천 산천어축제", family: festival, source: feature}
     - {day: 1, query: "명동 닭갈비 골목", expect_name_contains: "명동 닭갈비 골목", family: food, source: feature}
     - {day: 1, query: "레고랜드", expect_name_contains: "레고랜드코리아리조트", family: lodging, source: feature}
     - {day: 2, query: "의암호 스카이워크", expect_name_contains: "의암호스카이워크", family: leisure, source: feature}
@@ -941,7 +941,7 @@
   checks:
     - weather_day: 1
     - share_readonly
-  notes: "1월 축제 이벤트 피처 — 기간 밖 날짜로 담기(기간 단언 금지)"
+  notes: "1월 축제 이벤트 피처(TourAPI 얼음나라화천 산천어축제 2027-01-09~01-31) — 기간 밖 날짜로 담기(기간 단언 금지)"
 
 - id: TRS-CG-049
   title: "서울→강릉 횡단 6박7일"

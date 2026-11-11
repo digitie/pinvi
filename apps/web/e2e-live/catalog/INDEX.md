@@ -392,14 +392,14 @@ Spec files: 58.
 | TRS-CG-006 | trs | 한강 난지캠핑장 1박2일 | P2 | park, camping, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-007 | trs | 서울 산행 당일 — 북한산·인왕산 | P2 | trail, food, heritage | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-008 | trs | 서울 가족 1박2일 — 롯데월드·서울대공원 | P2 | leisure, park, food, lodging, trail | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-CG-009 | trs | 안양천 빛축제 당일 | P2 | festival, park, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-CG-009 | trs | 서울빛초롱축제 당일 — 서울식물원·여의도 | P2 | festival, park, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-010 | trs | 서울 그랜드 4박5일 — 김포 도착부터 서울역까지 | P2 | transport, lodging, culture, heritage, food, religious, museum, park, leisure, shopping, market | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-011 | trs | 인천 차이나타운 당일 — 짜장면·월미도 | P2 | culture, food, museum, cafe, leisure, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-012 | trs | 강화도 역사 1박2일 — 고려궁지·광성보·전등사 | P1 | heritage, parking, lodging, religious, beach, trail | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-013 | trs | 석모도 1박2일 — 보문사·수목원·휴양림 | P2 | religious, park, parking, lodging, camping, culture, market | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-014 | trs | 교동도 당일 드라이브 — 평화전망대·대룡시장 | P2 | parking, culture, market, trail | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-015 | trs | 영종도 바다 1박2일 — 을왕리·무의도 | P2 | transport, beach, lodging, nature, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-CG-016 | trs | 영종 빛축제 + 파라다이스시티 1박2일 | P2 | transport, lodging, festival, culture, food, cafe | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-CG-016 | trs | 영종 왕가의 산책 + 파라다이스시티 1박2일 | P2 | transport, lodging, festival, culture, food, cafe | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-017 | trs | 무의도 휴양림 1박2일 | P2 | nature, lodging, beach, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-018 | trs | 옹진 덕적도 2박3일 — 선착장·섬 펜션 | P2 | transport, lodging, trail, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-019 | trs | 송도·소래 1박2일 — 센트럴파크·스파 | P2 | park, lodging, market, spa, food, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
@@ -413,7 +413,7 @@ Spec files: 58.
 | TRS-CG-027 | trs | 포천 산정호수 1박2일 — 수목원·휴양림 | P2 | park, lodging, nature, trail, food, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-028 | trs | 이천·여주 온천 1박2일 | P2 | religious, spa, camping, park, heritage, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-029 | trs | 남한산성·화담숲·하남 당일 | P2 | heritage, park, shopping, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-CG-030 | trs | 의왕 겨울축제 + 서울대공원 당일 | P2 | festival, leisure, trail, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-CG-030 | trs | 광화문 마켓 + 서울대공원 당일 | P2 | festival, leisure, trail, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-031 | trs | 수도권 순환 드라이브 3박4일 | P2 | transport, culture, cafe, rest_area, nature, lodging, religious, spa, heritage, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-032 | trs | 강릉 바다 1박2일 — 호텔·순두부·카페 | P1 | transport, food, beach, lodging, parking, cafe | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-033 | trs | 강릉 커피 투어 당일 | P2 | cafe, beach, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
@@ -436,7 +436,7 @@ Spec files: 58.
 | TRS-CG-050 | trs | 인천공항→속초 하루 극단 거리 | P2 | transport, food, beach | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-001 | trs | 공주·부여 백제 2박3일 — 한옥마을·박물관·연잎밥 | P1 | heritage, museum, lodging, food, park, transport | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-002 | trs | 단양 패러글라이딩·도담삼봉 1박2일 — 휴양림 숙박 | P2 | nature, leisure, cafe, food, lodging | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-CJ-003 | trs | 보령 머드·대천 해변 2박3일 — 휴양림·조개구이 | P2 | beach, food, lodging, festival, museum, culture, transport, parking | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-CJ-003 | trs | 보령 머드·대천 해변 2박3일 — 휴양림·수산시장 | P2 | beach, food, lodging, festival, museum, culture, transport, parking | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-004 | trs | 태안 해변 캠핑 2박3일 — 학암포·몽산포 야영 | P2 | camping, lodging, beach, nature, food, religious | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-005 | trs | 대전 성심당 빵지순례 당일 | P1 | cafe, food, park, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-006 | trs | 유성온천 족욕·계족산 황톳길 1박2일 | P2 | trail, spa, food, lodging, museum, leisure, cafe | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
@@ -463,14 +463,14 @@ Spec files: 58.
 | TRS-CJ-027 | trs | 순천만 습지·국가정원 1박2일 — 펜션·한정식 | P2 | park, nature, food, lodging, heritage, religious, cafe | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-028 | trs | 여수 밤바다 2박3일 — 케이블카·낭만포차·게스트하우스 | P1 | nature, leisure, food, lodging, religious, park, culture, heritage | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-029 | trs | 목포 근대·유달산·케이블카 → 신안 증도 1박2일 | P2 | transport, museum, nature, leisure, food, lodging, beach | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-CJ-030 | trs | 신안 섬 수선화 축제·증도 2박3일 — 섬 리조트 | P2 | festival, transport, lodging, nature, beach, museum, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-CJ-030 | trs | 신안 분재정원·증도 2박3일 — 섬 리조트 | P2 | park, transport, lodging, nature, beach, museum, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-031 | trs | 완도 청산도 슬로길 섬 1박2일 — 여객선터미널 | P2 | transport, nature, festival, culture, lodging, museum, beach | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-032 | trs | 해남 땅끝·보길도 윤선도 원림 당일 | P2 | nature, religious, heritage | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-033 | trs | 진도 운림산방·신비의 바닷길 → 장흥 우드랜드 1박2일 | P2 | culture, heritage, museum, lodging, nature | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-034 | trs | 보성 녹차밭·율포 → 강진 다산초당 1박2일 | P2 | cafe, beach, parking, lodging, heritage, rest_area | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-035 | trs | 광주 아시아문화전당·양림동 당일 | P2 | culture, cafe, shopping, market, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-036 | trs | 광주김치축제·무등산·화순 고인돌 1박2일 | P2 | festival, museum, food, lodging, leisure, heritage | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-CJ-037 | trs | 나주 곰탕·영산포 홍어 → 영암 월출산 야영 1박2일 | P2 | food, festival, museum, camping, lodging, nature, heritage, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-CJ-037 | trs | 나주 곰탕·영산포 홍어 → 영암 월출산 야영 1박2일 | P2 | food, culture, museum, camping, lodging, nature, heritage, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-038 | trs | 영광 백수해안도로·고창 선운사 드라이브 1박2일 | P2 | religious, parking, food, lodging, heritage, museum, festival | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-039 | trs | 부안 변산 채석강·내소사 해변 야영 1박2일 | P2 | nature, beach, camping, lodging, religious, museum | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CJ-040 | trs | 무주 덕유산 리조트·반딧불 1박2일 → 진안 마이산 | P2 | lodging, festival, heritage, trail, nature | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
@@ -493,7 +493,7 @@ Spec files: 58.
 | TRS-GS-012 | trs | 경주 보문 가족 2박3일 — 리조트·경주월드 | P2 | lodging, leisure, cafe, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-GS-013 | trs | 경주 당일 빵투어 — 황남빵·찰보리빵·카페 | P2 | cafe, food, parking | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-GS-014 | trs | 경주 양동마을·골굴사 1박2일 — 한옥스테이 | P2 | lodging, heritage, religious, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-GS-015 | trs | 신라문화제 경주 1박2일 | P2 | festival, lodging, heritage, cafe | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-GS-015 | trs | 경주 대릉원돌담길 축제 1박2일 | P2 | festival, lodging, heritage, cafe | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-GS-016 | trs | 경주 KTX 당일 — 신경주역 출발 | P2 | parking, religious, heritage, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-GS-017 | trs | 안동 하회마을·도산서원 1박2일 — 고택 리조트 | P2 | heritage, lodging, food, culture | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-GS-018 | trs | 영주 소수서원·부석사 1박2일 — 선비촌 숙박 | P2 | heritage, lodging, culture, religious | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
@@ -560,13 +560,13 @@ Spec files: 58.
 | TRS-JT-029 | trs | 덕산 온천 1박2일 — 리솜·수덕사·해미읍성 | P2 | lodging, spa, food, religious, heritage | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-JT-030 | trs | 부곡 온천 당일 — 온천특구·우포늪 | P2 | spa, nature, trail | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-JT-031 | trs | 유성·수안보 온천 1박2일 — 족욕·성심당·충주호 | P2 | food, spa, park, camping, leisure, heritage | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-JT-032 | trs | 서산국화축제 1박2일 — 해미읍성 캠핑·간월암 | P2 | festival, heritage, camping, religious, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-JT-032 | trs | 서산해미읍성축제 1박2일 — 해미읍성 캠핑·간월암 | P2 | festival, heritage, camping, religious, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-JT-033 | trs | 포항국제불빛축제 1박2일 — 영일대·과메기·호미곶 | P2 | festival, beach, food, nature, museum | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-JT-034 | trs | 김천 김장양념축제 당일 — 황금시장·직지사 | P2 | festival, parking, religious, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-JT-035 | trs | 송도 크리스마스 문화축제 1박2일 — 센트럴파크 호텔 | P2 | festival, park, lodging | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-JT-036 | trs | 광주 양림 크리스마스 + 함평 겨울빛축제 1박2일 | P2 | festival, culture, food, market, park | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-JT-034 | trs | 김천김밥축제 당일 — 황금시장·직지사 | P2 | festival, parking, religious, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-JT-035 | trs | 인천 빈티지 크리스마스 마켓 1박2일 — 송도 센트럴파크 호텔 | P2 | festival, park, lodging | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-JT-036 | trs | 곡성 도깨비페스타 산타 + 광주 양림·함평 겨울빛축제 1박2일 | P2 | festival, culture, food, market, park | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-JT-037 | trs | 논산 양촌곶감축제 당일 — 탑정호 글램핑 | P2 | festival, park, camping, leisure, heritage | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
-| TRS-JT-038 | trs | 분천 산타마을 1박2일 — 부석사·소백산 야영 | P2 | religious, park, camping, festival, parking | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
+| TRS-JT-038 | trs | 분천 산타마을 1박2일 — 부석사·소백산 야영 | P2 | religious, park, camping, culture, parking | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-JT-039 | trs | 서울 박물관·미술관 1박2일 | P2 | museum, lodging, food | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-JT-040 | trs | 지방 국립박물관 2박3일 — 공주·부여·광주·경주 | P2 | museum, food, cafe, culture, market, lodging | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-JT-041 | trs | 캠핑장 순례 2박3일 — 난지·자라섬·몽산포·덕유대 | P2 | camping, food, rest_area, beach, park | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
