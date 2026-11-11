@@ -11,8 +11,7 @@ import type {
 import { CheckCircle2, Loader2, RotateCcw, ShieldAlert, X, XCircle } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-// T-356: 사용자 표면 `components/ui/Dialog`(useModalDialog) → admin base-ui `Dialog`.
-// admin 화면에서는 두 모달 스택을 섞지 않는다. 사용자 표면은 계속 useModalDialog를 쓴다.
+// T-356: 복원 도메인은 관리자 디자인 어댑터를 사용한다. 공개 UI와 엔진은 common Radix로 동일하다.
 import {
   Dialog,
   DialogContent,
@@ -58,7 +57,7 @@ function phaseIcon(phase: AdminBackupRestorePhase) {
 
 /* Hallmark · component: dialog(admin, destructive) · design-system: design.md(KTM admin)
  * admin 프리미티브(`components/admin/ui/dialog`, base-ui)로 뜬다 — T-356에서 사용자 표면
- * `components/ui/Dialog`(useModalDialog)에서 옮겼다. 포털·배경 inert·Tab 트랩·Escape·포커스
+ * 공개 디자인 셸에서 관리자 어댑터로 옮겼다. 포털·배경 inert·Tab 트랩·Escape·포커스
  * 복원은 base-ui가 담당한다.
  *
  * 파괴적 흐름이므로 `restoring` 동안 닫기 경로는 잠긴 채 유지한다: Escape/scrim은

@@ -1,10 +1,14 @@
 'use client';
-
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from '@kor-travel/ui/alert-dialog';
 import { buttonClassName } from '@/components/ui/button-styles';
-import { useModalDialog } from '@/lib/useModalDialog';
+import { useDialogFocus } from '@/lib/dialogFocus';
 import { AlertTriangle, Loader2 } from 'lucide-react';
-import { useRef, type ReactNode, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
+import { useId, useRef, type MouseEvent, type ReactNode, type RefObject } from 'react';
 
 /**
  * 제네릭 확인 다이얼로그(TDR, ADR-056).
@@ -51,38 +55,42 @@ export function ConfirmDialog({
   returnFocusRef,
   testId = 'confirm-dialog',
 }: ConfirmDialogProps) {
-  const descriptionId = `${testId}-description`;
-  const cancelRef = useRef<HTMLButtonElement | null>(null);
-  const { titleId, portalContainer, backdropProps, dialogProps } = useModalDialog({
-    onClose: onCancel,
-    active: open,
-    // 파괴적 확인은 취소 버튼에 기본 포커스를 둬 실수로 Enter를 눌러도 안전하게.
-    initialFocusRef: cancelRef,
+  const titleId = useId();
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const { contentRef, onOpenAutoFocus, onCloseAutoFocus } = useDialogFocus(
+    cancelRef,
     returnFocusRef,
-    // Dialog 프리미티브와 같은 계약 — 진행 중에는 Escape/backdrop도 잠근다
-    // (버튼만 잠그고 Escape는 열려 있으면 '취소는 못 누르는데 Escape는 먹는' 모순).
-    closeOnEscape: !busy,
-    closeOnBackdrop: !busy,
-    ariaDescribedBy: description != null ? descriptionId : undefined,
-  });
-
-  if (!open) return null;
-  // portal 컨테이너는 마운트 effect에서 생긴다 — 생기기 전에는 렌더하지 않는다
-  // (앱 트리 안에서 잠깐 떴다가 옮겨지면 배경 inert가 자기 자신을 잠근다).
-  if (!portalContainer) return null;
-
+  );
   const isDanger = tone === 'danger';
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-modal flex items-center justify-center bg-scrim/50 p-4"
-      data-testid={`${testId}-backdrop`}
-      {...backdropProps}
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && !busy) onCancel();
+      }}
     >
-      <div
-        {...dialogProps}
+      <AlertDialogContent
+        unstyled
+        ref={contentRef}
+        onOpenAutoFocus={onOpenAutoFocus}
+        onCloseAutoFocus={onCloseAutoFocus}
+        onEscapeKeyDown={(event) => {
+          if (busy) event.preventDefault();
+        }}
+        aria-modal="true"
+        aria-labelledby={titleId}
+        {...(description == null ? { 'aria-describedby': undefined } : {})}
+        tabIndex={-1}
         data-testid={testId}
-        className="w-full max-w-md space-y-4 rounded-md border border-hairline bg-canvas p-5 shadow-overlay outline-hidden"
+        overlayProps={{
+          'data-testid': testId + '-backdrop',
+          className: 'fixed inset-0 z-modal bg-scrim/50',
+          // AlertDialog은 outside dismiss를 막는다. 기존 scrim 클릭은 명시적 취소 의도로 연결한다.
+          onClick: (event: MouseEvent<HTMLDivElement>) => {
+            if (!busy && event.target === event.currentTarget) onCancel();
+          },
+        }}
+        className="fixed left-1/2 top-1/2 z-modal max-h-[88dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-md border border-hairline bg-canvas p-5 shadow-overlay outline-hidden"
       >
         <div className="flex items-start gap-3">
           {isDanger && (
@@ -91,30 +99,28 @@ export function ConfirmDialog({
             </span>
           )}
           <div className="min-w-0">
-            <h2
+            <AlertDialogTitle
               id={titleId}
               className="text-base font-bold text-ink"
-              data-testid={`${testId}-title`}
+              data-testid={testId + '-title'}
             >
               {title}
-            </h2>
+            </AlertDialogTitle>
             {description != null && (
-              <p id={descriptionId} className="mt-1 text-sm text-muted">
+              <AlertDialogDescription className="mt-1 text-sm text-muted">
                 {description}
-              </p>
+              </AlertDialogDescription>
             )}
           </div>
         </div>
-
         {children != null && <div className="text-sm text-ink">{children}</div>}
-
         <div className="flex flex-wrap justify-end gap-2">
           <button
             ref={cancelRef}
             type="button"
             onClick={onCancel}
             disabled={busy}
-            data-testid={`${testId}-cancel`}
+            data-testid={testId + '-cancel'}
             className={buttonClassName({ variant: 'secondary', size: 'sm' })}
           >
             {cancelLabel}
@@ -123,15 +129,14 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            data-testid={`${testId}-confirm`}
+            data-testid={testId + '-confirm'}
             className={buttonClassName({ variant: isDanger ? 'danger' : 'primary', size: 'sm' })}
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             {confirmLabel}
           </button>
         </div>
-      </div>
-    </div>,
-    portalContainer,
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

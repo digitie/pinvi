@@ -1,5 +1,7 @@
 ## 2026-11-11 — 공통 UI·모바일 통합 후보 진행
 
+2026-11-12 공개 UI 공통화 후속: Dialog/ConfirmDialog 자체 모달 엔진을 공통 Radix 어댑터로 이관하고 useModalDialog를 정리했다. 기존14행동cases와 추가회귀 유지, AppShell 더보기 common Popover6casesPASS. 새공통overlayProps/unstyled pack 대기 및 실제브라우저 initial-panel ShiftTab 회귀1건이 남는다. 과거전체493/1·203/6/4는 최종PASS가 아니며 새pack후전체재검증필수. 상세 docs/reports/common-unification-20261111.md.
+
 2026-11-11 공통 이관 checkpoint: 지도 source9a의 core1.0.1/web1.0.3/RN1.0.1과 Lightning CSS1.33.0+nativecss.fix.3 동일 tgz 실제 설치·lock/원장 SHA512 일치. 웹/모바일 타입·lint 및 Doctor482/45files 진단0. Android/iOS/Web export와 SDK58 N150375/1280px 로그인·글꼴 스모크PASS. 웹 unit493PASS/1FAIL은 최종 common LoginForm 자동완성 수정 pack 대기. 최종 common 정책·clean ci/build/e2e·독립2리뷰 미완료이며 push/배포 대기. 후속 N150 production buildPASS/E2E203PASS6FAIL(긴 공통Dialog)4SKIP, 별도 실제 canvas3casesPASS. ESLint도 전이까지10.14.0 하나로 정리했다. 상세는 docs/reports/common-unification-20261111.md.
 
 Pinvi 소유 branch는 agent/codex-common-unification-20261111, 기준선 d42ac953이다. Concierge는 별도 전담이며 수정하지 않는다. 관리자 VirtualTable/Radix, 공통 로그인과 직접 RHF/Zod 폼, Zustand/Pretendard 실제 사용, NativeWind5RC/Tailwind4·Expo58/RN0.88 이관을 구현했다. 현재 후보는 완료/배포 상태가 아니다.

@@ -1,4 +1,5 @@
 // 공통 구현 우회가 다시 유입되면 CI에서 실패한다.
+import ts from 'typescript';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 const roots = ['components/admin', 'app/(admin)'];
@@ -31,7 +32,52 @@ for (const pattern of [
 const fontSource = readFileSync('app/globals.css', 'utf8');
 if (!fontSource.includes('@kor-travel/tokens/font.css'))
   errors.push('공통 Pretendard CSS 사용 필요');
+const overlayEvents = new Set(['focusin', 'focusout', 'keydown', 'pointerdown']);
+
+// 공개 Dialog/Popover에서도 공통 엔진을 우회하는 portal·전역 dismiss/focus engine을 막는다.
+for (const path of ['components/ui', 'components/app', 'lib'].flatMap(files)) {
+  const source = ts.createSourceFile(
+    path,
+    readFileSync(path, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+    path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const portalNames = new Set();
+  function visit(node) {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const importPath = node.moduleSpecifier.text;
+      if (importPath.endsWith('/useModalDialog'))
+        errors.push(path + ': 자체 modal engine 재도입 금지');
+      const bindings = node.importClause?.namedBindings;
+      if (importPath === 'react-dom' && bindings && ts.isNamedImports(bindings))
+        for (const specifier of bindings.elements)
+          if ((specifier.propertyName ?? specifier.name).text === 'createPortal')
+            portalNames.add(specifier.name.text);
+    }
+    if (ts.isCallExpression(node)) {
+      const expr = node.expression;
+      if (
+        (ts.isIdentifier(expr) && portalNames.has(expr.text)) ||
+        (ts.isPropertyAccessExpression(expr) && expr.name.text === 'createPortal')
+      )
+        errors.push(path + ': 공통 Portal을 사용하세요');
+      if (
+        ts.isPropertyAccessExpression(expr) &&
+        expr.name.text === 'addEventListener' &&
+        ts.isIdentifier(expr.expression) &&
+        expr.expression.text === 'document' &&
+        node.arguments[0] &&
+        ts.isStringLiteral(node.arguments[0]) &&
+        overlayEvents.has(node.arguments[0].text)
+      )
+        errors.push(path + ': 전역 overlay 이벤트 대신 공통 Radix lifecycle 사용 필요');
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+}
 if (errors.length) {
   console.error(errors.join('\n'));
   process.exitCode = 1;
-} else console.log('공통 UI 소비 경계 일치');
+} else console.log('관리자/공개 공통 UI·단일 overlay 엔진 경계 일치');

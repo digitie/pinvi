@@ -1,5 +1,6 @@
 'use client';
 
+import { Popover, PopoverContent, PopoverTrigger } from '@kor-travel/ui/popover';
 import { SkipToContentLink } from '@/components/app/SkipToContentLink';
 import { Wordmark } from '@/components/app/Wordmark';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
@@ -15,7 +16,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench(app) · design-system: DESIGN.md · designed-as-app
  * nav: 데스크톱 = ink 밑줄 탭(활성 1개) · 모바일 = 하단 탭바 4 + 더보기 시트 · footer: 없음(앱 셸)
@@ -73,7 +74,6 @@ function useAppShellModel({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const mobileWebLayout = useMobileWebLayout();
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLLIElement>(null);
   const moreSheetId = useId();
   const pathParts = pathname.split('/').filter(Boolean);
   const tripDetailRoute =
@@ -97,27 +97,6 @@ function useAppShellModel({ children }: { children: ReactNode }) {
     setMoreOpen(false);
   }
 
-  // 바깥 포인터·포커스 이탈·Escape로도 닫는다(브라우저 기본 동작에 기대지 않는다).
-  useEffect(() => {
-    if (!moreOpen) return;
-    const closeIfOutside = (event: Event) => {
-      const target = event.target;
-      if (target instanceof Node && moreRef.current?.contains(target)) return;
-      setMoreOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMoreOpen(false);
-    };
-    document.addEventListener('pointerdown', closeIfOutside);
-    document.addEventListener('focusin', closeIfOutside);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', closeIfOutside);
-      document.removeEventListener('focusin', closeIfOutside);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [moreOpen]);
-
   return {
     renderBranch: 'render0' as const,
     children,
@@ -125,7 +104,6 @@ function useAppShellModel({ children }: { children: ReactNode }) {
     mobileTripDetail,
     mobileWebLayout,
     moreOpen,
-    moreRef,
     moreSheetId,
     pathname,
     secondaryActive,
@@ -141,7 +119,6 @@ function AppShellView0({ viewModel }: { viewModel: AppShellView0Model }) {
     mobileTripDetail,
     mobileWebLayout,
     moreOpen,
-    moreRef,
     moreSheetId,
     pathname,
     secondaryActive,
@@ -237,58 +214,69 @@ function AppShellView0({ viewModel }: { viewModel: AppShellView0Model }) {
                 </li>
               );
             })}
-            <li className="relative" ref={moreRef} data-testid="app-nav-more">
-              {/* details/summary는 display:flex를 주면 Blink가 disclosure 시맨틱을 잃는다 —
+            <li className="relative" data-testid="app-nav-more">
+              <Popover open={moreOpen && mobileWebLayout} onOpenChange={setMoreOpen}>
+                <PopoverTrigger asChild>
+                  {/* details/summary는 display:flex를 주면 Blink가 disclosure 시맨틱을 잃는다 —
                   button + aria-expanded/aria-controls로 상태를 직접 노출한다(T-314 리뷰 P2). */}
-              <button
-                type="button"
-                aria-expanded={moreOpen}
-                aria-controls={moreSheetId}
-                onClick={() => setMoreOpen((open) => !open)}
-                className={`focus-ring flex min-h-14 w-full flex-col items-center justify-center gap-1 px-1 text-xs font-semibold ${
-                  secondaryActive ? 'text-ink' : 'text-muted hover:text-ink'
-                }`}
-                data-testid="app-nav-more-toggle"
-              >
-                <MoreHorizontal className="size-5" aria-hidden="true" />
-                <span>
-                  더보기
-                  {secondaryActive ? <span className="sr-only"> (현재 위치 포함)</span> : null}
-                </span>
-                <span
-                  aria-hidden="true"
-                  className={`h-0.5 w-6 rounded-full ${secondaryActive ? 'bg-ink' : 'bg-transparent'}`}
-                />
-              </button>
-              {moreOpen && (
-                <ul
+                  <button
+                    type="button"
+                    aria-expanded={moreOpen}
+                    aria-controls={moreSheetId}
+                    className={`focus-ring flex min-h-14 w-full flex-col items-center justify-center gap-1 px-1 text-xs font-semibold ${
+                      secondaryActive ? 'text-ink' : 'text-muted hover:text-ink'
+                    }`}
+                    data-testid="app-nav-more-toggle"
+                  >
+                    <MoreHorizontal className="size-5" aria-hidden="true" />
+                    <span>
+                      더보기
+                      {secondaryActive ? <span className="sr-only"> (현재 위치 포함)</span> : null}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={`h-0.5 w-6 rounded-full ${secondaryActive ? 'bg-ink' : 'bg-transparent'}`}
+                    />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
                   id={moreSheetId}
-                  className="absolute bottom-full right-2 m-0 mb-2 w-48 list-none rounded-md border border-hairline bg-canvas p-1 shadow-overlay"
+                  aria-label="더보기 메뉴"
+                  side="top"
+                  align="end"
+                  alignOffset={8}
+                  sideOffset={8}
+                  onOpenAutoFocus={(event) => event.preventDefault()}
+                  className="z-panel block w-48 rounded-md border border-hairline bg-canvas p-1 text-ink shadow-overlay ring-0"
                 >
-                  {MOBILE_SECONDARY.map((item) => {
-                    const active = isActivePath(pathname, item.href);
-                    const Icon = item.icon;
-                    const leaves = LEAVES_APP_SHELL.includes(item.href);
-                    return (
-                      <li key={item.href}>
-                        <Link
-                          href={item.href}
-                          aria-current={active ? 'page' : undefined}
-                          onClick={() => setMoreOpen(false)}
-                          className={`focus-ring flex min-h-11 items-center gap-2 rounded-sm px-3 text-sm font-semibold ${
-                            active ? 'text-ink' : 'text-muted hover:bg-surface-soft hover:text-ink'
-                          }`}
-                          data-testid={`${navTestId(item.href)}-mobile`}
-                        >
-                          <Icon className="size-4" aria-hidden="true" />
-                          {item.label}
-                          {leaves ? <span className="sr-only">(앱 메뉴 밖으로 이동)</span> : null}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+                  <ul className="m-0 list-none p-0">
+                    {MOBILE_SECONDARY.map((item) => {
+                      const active = isActivePath(pathname, item.href);
+                      const Icon = item.icon;
+                      const leaves = LEAVES_APP_SHELL.includes(item.href);
+                      return (
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            aria-current={active ? 'page' : undefined}
+                            onClick={() => setMoreOpen(false)}
+                            className={`focus-ring flex min-h-11 items-center gap-2 rounded-sm px-3 text-sm font-semibold ${
+                              active
+                                ? 'text-ink'
+                                : 'text-muted hover:bg-surface-soft hover:text-ink'
+                            }`}
+                            data-testid={`${navTestId(item.href)}-mobile`}
+                          >
+                            <Icon className="size-4" aria-hidden="true" />
+                            {item.label}
+                            {leaves ? <span className="sr-only">(앱 메뉴 밖으로 이동)</span> : null}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </PopoverContent>
+              </Popover>
             </li>
           </ul>
         </nav>

@@ -50,9 +50,7 @@ export function ConflictDialog({
   };
 
   return (
-    // 중첩(편집 다이얼로그 위에 뜨는 충돌 해결) 시 최상단만 Escape/Tab을 처리하도록
-    // 프리미티브(useModalDialog의 modalStack)를 통해 뜬다 — 손수 만든 셸은 스택에 참여하지 못해
-    // 아래 다이얼로그의 focus trap이 이 다이얼로그를 키보드로 도달 불가능하게 만들었다.
+    // 편집 위의 충돌 창도 동일 common Radix 스택에 참여해 최상단만 키보드를 처리한다.
     <Dialog
       open
       onClose={onKeepEditing}

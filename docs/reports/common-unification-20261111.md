@@ -72,3 +72,19 @@ N150 checkpoint E2E는 공식 Playwright1.65.0 이미지의 Node26.13.0에서 �
 N150 새 clean npm12 ci로 ESLint10 전이 통일까지 설치하고 실제 MapLibre canvas·worker가 로드되는 빌드를 확인했다. 지도 shell, canvas의 장소 표시/좌표 우클릭→주소 포함 POI 생성, 교통 응답 뒤 카메라/조회 안정성3cases 모두PASS다. 최초 실행은 미등록 Maki SVG 요청을 fence가 탐지해1FAIL이었고, 고정 URL의 SVG mock을 추가한 뒤 같은 production build에서 세 cases를 재검증했다. 이 전용 모드도 web CI e2e job의 필수 step이다. 기존 기본 suite의 restoreflag2건은 여전히 별도 미실행으로 구분한다.
 
 추가 Linux iOS 강제WASM export는 별도 빈 TMPDIR에서 PASS다. native/WASM 산출물의 전체 HBC bytes 동일성은 주장하지 않으며, 같은 입력의 compiler IR 동등성은 원본 worker 보고서의 검증 결과를 따른다.
+
+## 2026-11-12 공개 overlay 후속 이관
+
+사용자 추가 지시로 공개 components/ui/Dialog·ConfirmDialog의 createPortal/useModalDialog 엔진도 제거했다. 두 어댑터는 common Dialog/AlertDialog의 overlayProps+unstyled 계약을 사용하고, 공통 담당자가 소유한 소스에만 새 API를 추가한다. 공개 center/sheet·기존 size 폭·88dvh 본문스크롤·scrim·busy 취소 요청 수명은 소비자가 표현/도메인 정책으로 유지한다. Confirm의 확인은 자동 닫지 않고 기존 호출부가 성공/실패를 처리한다.
+
+기존 훅 행동14cases를 publicDialog.test.tsx의 실제 컴포넌트 계약으로 모두 옮겼고 busy/onCancelBusy/명시입력/복귀/중첩 우선순위/양방향 drag 검증을 추가했다. useModalDialog.ts는 실제 호출자가 없어 삭제했다. 새 dialogFocus는 Radix onOpen/CloseAutoFocus의 대상 선택만 하며 전역 이벤트·포털·trap·scroll·inert 구현은 없다. AST 기반 소스 guard가 자체 portal/전역 overlay 리스너 재도입을 CI에서 차단한다.
+
+공개 floating inventory에서 AppShell 더보기에 실제 document pointerdown/focusin/keydown 엔진도 확인해 common nonmodal Popover로 바꿨다. 기존 위치(top/end offset8)·폭192·경로 변경/데스크톱 전환 닫기·포커스를 유지한다. 관련6단위 모두PASS. 다른 공개 custom Dialog/Popover 엔진은 소스 AST/rg 조사에서 찾지 못했다. 지도 좌표/맞춤 계산은 floating 엔진이 아니며 MapLibre Popup 자체는 upstream 공개 패키지가 소유한다.
+
+현재 설치는 여전히 c5라 새 overlayProps/unstyled가 없어 타입2계약 오류와 관련 overlay 테스트 실패가 남는다. 공통 코드를 앱별로 복사하거나 node_modules를 수정하지 않는다. 기존 전체 기준선493PASS1FAIL 및 E2E203PASS6FAIL4SKIP은 그대로 보존하며 새 변경의 전체PASS로 표현하지 않는다. 최종 단일 pack 후 전체unit/E2E를 다시 실행해야 한다.
+
+추가 실회귀: 패널 자체에 초기 포커스를 둔 상태의 Shift+Tab이 마지막 항목으로 가지 않고 패널에 머문다. 기존 기대를 유지한 unit와 N150 Chromium 실제probe 둘 다 실패했다. probe 결과 initial=probe, afterShiftTab=probe, afterTab=first, Escape closed=true이다. 공통 담당자에게 정확히 전달했으며 Radix 원본 FocusScope의 초기 reverse-entry 보완이 정합 위치다. 앱에서 Tabtrap을 복사하거나 테스트를 낮추지 않았다. 증거는 root PINVI-BLOCKERS.md와 /tmp/pinvi-public-overlay-probe-harvey(N150), /tmp/pinvi-public-overlay-tests-c5-2.log(WSL)에 보존한다.
+
+후속 소스의 실제 c5 전체unit은 **501PASS/9FAIL(510)**이다. 기존LoginForm1, 새overlayProps/unstyled 미반영7, 실제initial-panel ShiftTab1로 구분한다. 전체lint 오류0/기존인증경고1, Doctor full483files 진단0, 자체엔진 AST guardPASS. TypeScript는 새공통 API 미반영2곳에서만 실패한다. 추가unit/브라우저증거는 API를 fake/mock하거나 node_modules를 수정하지 않고 현재 실제c5를 사용했다.
+
+Radix 원본은 [고정 source eb3a2b7의 FocusScope](https://github.com/radix-ui/primitives/blob/eb3a2b7091293e27df8f9ba906632d8daa3d81a3/packages/react/focus-scope/src/focus-scope.tsx)에서 같은 경계 처리를 확인했다. npm 실제 설치/registry latest 모두 @radix-ui/react-focus-scope1.3.1이므로 단순 버전 상향으로 해결되지 않는다. 체크포인트 검증로그는 저장소 밖 consumer-tools/pinvi-public-overlay-checkpoint에 hash 원장과 함께 보존했다. 부모 common670a753의 최종 pack은 별도 통지 전까지 설치하지 않는다.

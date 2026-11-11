@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -89,5 +90,43 @@ describe('ConfirmDialog', () => {
     );
     expect(screen.getByTestId('day-delete-confirm')).toBeInTheDocument();
     expect(screen.getByTestId('day-delete-confirm-confirm')).toBeInTheDocument();
+  });
+});
+
+describe('공통 AlertDialog 취소 정책', () => {
+  it('초기 포커스는 취소 버튼에 있고 Escape는 취소만 호출한다', async () => {
+    const cancel = vi.fn(),
+      confirm = vi.fn();
+    render(<ConfirmDialog open title="삭제" onCancel={cancel} onConfirm={confirm} />);
+    expect(screen.getByTestId('confirm-dialog-cancel')).toHaveFocus();
+    await userEvent.setup().keyboard('{Escape}');
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+  it('바깥 scrim 클릭은 취소로 연결되고 busy이면 막는다', async () => {
+    const cancel = vi.fn(),
+      user = userEvent.setup();
+    const { rerender } = render(
+      <ConfirmDialog open title="삭제" onCancel={cancel} onConfirm={() => {}} />,
+    );
+    await user.click(screen.getByTestId('confirm-dialog-backdrop'));
+    expect(cancel).toHaveBeenCalledTimes(1);
+    rerender(<ConfirmDialog open busy title="삭제" onCancel={cancel} onConfirm={() => {}} />);
+    await user.click(screen.getByTestId('confirm-dialog-backdrop'));
+    await user.keyboard('{Escape}');
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+  it('패널에서 시작해 scrim으로 놓는 drag는 취소하지 않는다', async () => {
+    const cancel = vi.fn(),
+      user = userEvent.setup();
+    render(<ConfirmDialog open title="삭제" onCancel={cancel} onConfirm={() => {}} />);
+    const panel = screen.getByTestId('confirm-dialog'),
+      overlay = screen.getByTestId('confirm-dialog-backdrop');
+    await user.pointer([
+      { keys: '[MouseLeft>]', target: panel },
+      { target: overlay },
+      { keys: '[/MouseLeft]', target: overlay },
+    ]);
+    expect(cancel).not.toHaveBeenCalled();
   });
 });
