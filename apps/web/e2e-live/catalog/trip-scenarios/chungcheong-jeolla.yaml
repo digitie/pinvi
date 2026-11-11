@@ -54,7 +54,7 @@
   notes: "카페 산 = 단양 양방산 활공장 옆 카페. Map has no 소노문 단양/대명리조트 단양 feature (rejected), so 국립 소선암자연휴양림 is the lodging."
 
 - id: TRS-CJ-003
-  title: "보령 머드·대천 해변 2박3일 — 휴양림·조개구이"
+  title: "보령 머드·대천 해변 2박3일 — 휴양림·수산시장"
   style: sea
   days: 3
   start_offset_days: 14
@@ -62,7 +62,7 @@
   tags: [beach, food, lodging, festival, museum, culture, transport, parking]
   places:
     - {day: 1, query: "대천해수욕장", expect_name_contains: "대천해수욕장", family: beach, source: feature}
-    - {day: 1, query: "조개구이 한마당", expect_name_contains: "조개구이 한마당", family: food, source: feature}
+    - {day: 1, query: "대천항 수산시장", expect_name_contains: "대천항수산시장", family: market, source: feature}
     - {day: 1, query: "성주산자연휴양림", expect_name_contains: "성주산자연휴양림", family: lodging, source: feature}
     - {day: 2, query: "보령머드축제", expect_name_contains: "보령머드축제", family: festival, source: feature}
     - {day: 2, query: "보령석탄박물관", expect_name_contains: "보령석탄박물관", family: museum, source: feature}
@@ -74,7 +74,7 @@
     - weather_day: 1
     - optimize_day: 2
     - date_shift: 2
-  notes: "보령머드축제 is a summer festival feature; trip date is off-season — exercises festival feature pick outside its period."
+  notes: "보령머드축제 is a summer festival feature; trip date is off-season — exercises festival feature pick outside its period. 조개구이 한마당(data.go.kr 축제)은 Map #1482로 퇴역 → 대천항수산시장."
 
 - id: TRS-CJ-004
   title: "태안 해변 캠핑 2박3일 — 학암포·몽산포 야영"
@@ -169,7 +169,7 @@
     - {day: 1, query: "장태산자연휴양림", expect_name_contains: "장태산", family: lodging, source: feature}
     - {day: 2, query: "베어트리파크", expect_name_contains: "베어트리파크", family: leisure, source: feature}
     - {day: 2, query: "독립기념관", expect_name_contains: "독립기념관", family: museum, source: feature}
-    - {day: 2, query: "천안삼거리", expect_name_contains: "천안삼거리(서울)", family: rest_area, source: feature}
+    - {day: 2, query: "천안삼거리휴게소", expect_name_contains: "천안삼거리휴게소(서울방향)", family: rest_area, source: feature}
   checks:
     - weather_day: 2
     - delete_day: 2
@@ -268,7 +268,7 @@
     - {day: 1, query: "외암마을민박", expect_name_contains: "외암마을민박", family: lodging, source: feature}
     - {day: 2, query: "천안옛날호두과자", expect_name_contains: "천안옛날호두과자", family: cafe, source: feature}
     - {day: 2, query: "독립기념관", expect_name_contains: "독립기념관", family: museum, source: feature}
-    - {day: 2, query: "천안삼거리", expect_name_contains: "천안삼거리(서울)", family: rest_area, source: feature}
+    - {day: 2, query: "천안삼거리휴게소", expect_name_contains: "천안삼거리휴게소(서울방향)", family: rest_area, source: feature}
   checks:
     - optimize_day: 1
     - share_readonly
@@ -607,15 +607,15 @@
   notes: "No 목포 hotel feature (현대호텔 목포, 샹그리아비치 rejected); 신안 증도 엘도라도리조트 [종합휴양업] used."
 
 - id: TRS-CJ-030
-  title: "신안 섬 수선화 축제·증도 2박3일 — 섬 리조트"
+  title: "신안 분재정원·증도 2박3일 — 섬 리조트"
   style: island
   days: 3
   start_offset_days: 33
   priority: P2
-  tags: [festival, transport, lodging, nature, beach, museum, mobile]
+  tags: [park, transport, lodging, nature, beach, museum, mobile]
   places:
     - {day: 1, query: "목포역", expect_name_contains: "목포역", family: transport, source: feature}
-    - {day: 1, query: "신안 섬 수선화 축제", expect_name_contains: "수선화 축제", family: festival, source: feature}
+    - {day: 1, query: "1004섬 분재정원", expect_name_contains: "1004섬 분재정원", family: park, source: feature}
     - {day: 1, query: "엘도라도리조트", expect_name_contains: "엘도라도리조트", family: lodging, source: feature}
     - {day: 2, query: "태평염전", expect_name_contains: "태평염전", family: nature, source: feature}
     - {day: 2, query: "짱뚱어해수욕장", expect_name_contains: "짱뚱어해수욕장", family: beach, source: feature}
@@ -625,7 +625,7 @@
   checks:
     - optimize_day: 1
     - delete_day: 3
-  notes: "Day 1 수선화 축제(선도) ↔ 엘도라도(증도) are far apart across bridges/ferry — far-apart optimize. 퍼플섬 rejected: no feature, and 퍼플교주차장1~3 rows have no coordinate."
+  notes: "Day 1 분재정원(압해도) ↔ 엘도라도(증도) are far apart across bridges — far-apart optimize. 선도 수선화 축제는 data.go.kr 퇴역(Map #1482)·TourAPI에 없음. 퍼플섬 rejected: no feature, and 퍼플교주차장1~3 rows have no coordinate."
 
 - id: TRS-CJ-031
   title: "완도 청산도 슬로길 섬 1박2일 — 여객선터미널"
@@ -637,7 +637,7 @@
   places:
     - {day: 1, query: "완도연안여객선터미널", expect_name_contains: "완도연안여객선터미널", family: transport, source: feature}
     - {day: 1, query: "슬로시티청산도", expect_name_contains: "청산도", family: nature, source: feature}
-    - {day: 1, query: "청산도슬로걷기축제", expect_name_contains: "청산도슬로걷기축제", family: festival, source: feature}
+    - {day: 1, query: "청산도슬로걷기 축제", expect_name_contains: "청산도슬로걷기 축제", family: festival, source: feature}
     - {day: 1, query: "완도연안여객선터미널", expect_name_contains: "완도연안여객선터미널", family: transport, source: feature}
     - {day: 1, query: "완도 리베라펜션", expect_name_contains: "리베라펜션", family: lodging, source: feature}
     - {day: 2, query: "장보고기념관", expect_name_contains: "장보고기념관", family: museum, source: feature}
@@ -752,19 +752,19 @@
   days: 2
   start_offset_days: 12
   priority: P2
-  tags: [food, festival, museum, camping, lodging, nature, heritage, mobile]
+  tags: [food, culture, museum, camping, lodging, nature, heritage, mobile]
   places:
     - {day: 1, query: "나주곰탕하얀집", expect_name_contains: "나주곰탕하얀집", family: food, source: feature}
     - {day: 1, query: "나주목문화관", expect_name_contains: "나주목문화관", family: museum, source: feature}
     - {day: 1, query: "홍어1번지", expect_name_contains: "홍어1번지", family: food, source: feature}
-    - {day: 1, query: "영산포 홍어", expect_name_contains: "홍어·한우 축제", family: festival, source: feature}
+    - {day: 1, query: "영산포 홍어거리", expect_name_contains: "영산포 홍어거리", family: culture, source: feature}
     - {day: 1, query: "천황야영장", expect_name_contains: "천황야영장", family: camping, source: feature}
     - {day: 2, query: "월출산 국립공원", expect_name_contains: "월출산", family: nature, source: feature}
     - {day: 2, query: "왕인박사유적지", expect_name_contains: "왕인박사유적지", family: heritage, source: feature}
   checks:
     - optimize_day: 1
     - weather_day: 2
-  notes: ""
+  notes: "홍어·한우 축제(data.go.kr)는 Map #1482로 퇴역 → 영산포 홍어거리(TourAPI 관광지)"
 
 - id: TRS-CJ-038
   title: "영광 백수해안도로·고창 선운사 드라이브 1박2일"
@@ -895,7 +895,7 @@
     - {day: 4, query: "꽃지해수욕장", expect_name_contains: "꽃지해수욕장", family: beach, source: feature}
     - {day: 4, query: "안면도자연휴양림", expect_name_contains: "안면도자연휴양림", family: lodging, source: feature}
     - {day: 5, query: "대천해수욕장", expect_name_contains: "대천해수욕장", family: beach, source: feature}
-    - {day: 5, query: "조개구이 한마당", expect_name_contains: "조개구이 한마당", family: food, source: feature}
+    - {day: 5, query: "대천항 수산시장", expect_name_contains: "대천항수산시장", family: market, source: feature}
     - {day: 5, query: "성주산자연휴양림", expect_name_contains: "성주산자연휴양림", family: lodging, source: feature}
     - {day: 6, query: "서천 국립생태원", expect_name_contains: "국립생태원", family: museum, source: feature}
     - {day: 6, query: "희리산해송자연휴양림 자동차야영장", expect_name_contains: "희리산해송자연휴양림 자동차야영장", family: camping, source: feature}

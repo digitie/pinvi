@@ -619,7 +619,7 @@
     - {day: 1, query: "성심당", expect_name_contains: "성심당 본점", family: food, source: feature}
     - {day: 1, query: "유성온천공원 족욕체험장", expect_name_contains: "족욕체험장", family: spa, source: feature}
     - {day: 1, query: "엑스포과학공원", expect_name_contains: "엑스포과학공원", family: park, source: feature}
-    - {day: 1, query: "충주호", expect_name_contains: "충주호캠핑월드", family: camping, source: feature}
+    - {day: 1, query: "충주호캠핑월드", expect_name_contains: "충주호캠핑월드", family: camping, source: feature}
     - {day: 2, query: "수안보 족욕체험장", expect_name_contains: "수안보 족욕체험장", family: spa, source: feature}
     - {day: 2, query: "충주호", expect_name_contains: "충주호유람선", family: leisure, source: feature}
     - {day: 2, query: "충주 탄금대", expect_name_contains: "탄금대", family: heritage, source: feature}
@@ -629,14 +629,14 @@
   notes: "수안보 족욕체험장은 '온천·스파 > 온천 > 온천시설' 분류. '수안보온천'·'수안보 상록호텔'은 무관 결과만."
 
 - id: TRS-JT-032
-  title: "서산국화축제 1박2일 — 해미읍성 캠핑·간월암"
+  title: "서산해미읍성축제 1박2일 — 해미읍성 캠핑·간월암"
   style: festival
   days: 2
   start_offset_days: 2
   priority: P2
   tags: [festival, heritage, camping, religious, food]
   places:
-    - {day: 1, query: "서산국화축제", expect_name_contains: "서산국화축제", family: festival, source: feature}
+    - {day: 1, query: "서산해미읍성축제", expect_name_contains: "서산해미읍성축제", family: festival, source: feature}
     - {day: 1, query: "해미읍성", expect_name_contains: "서산 해미읍성", family: heritage, source: feature}
     - {day: 1, query: "해미읍성역사캠핑장", expect_name_contains: "해미읍성역사캠핑장", family: camping, source: feature}
     - {day: 2, query: "간월암", expect_name_contains: "간월암", family: religious, source: feature}
@@ -644,7 +644,7 @@
   checks:
     - weather_day: 1
     - share_readonly
-  notes: "event 서산국화축제 2026-11-06~11-15(서산시) — trip 11-10~11-11."
+  notes: "TourAPI 서산해미읍성축제(2026-10-09~11) — 기간 밖(기간 단언 금지). 서산국화축제(data.go.kr)는 Map #1482로 퇴역"
 
 - id: TRS-JT-033
   title: "포항국제불빛축제 1박2일 — 영일대·과메기·호미곶"
@@ -665,46 +665,46 @@
   notes: "event 포항국제불빛축제 2026-11-20~11-22(포항 북구) — trip 11-20~11-21. 포항 호텔은 Map에 숙소 feature가 안 잡혀(라한호텔 포항 → 체육시설) 숙소 없이 구성."
 
 - id: TRS-JT-034
-  title: "김천 김장양념축제 당일 — 황금시장·직지사"
+  title: "김천김밥축제 당일 — 황금시장·직지사"
   style: festival
   days: 1
   start_offset_days: 20
   priority: P2
   tags: [festival, parking, religious, mobile]
   places:
-    - {day: 1, query: "김천황금시장 김장양념축제", expect_name_contains: "김장양념축제", family: festival, source: feature}
+    - {day: 1, query: "김천김밥축제", expect_name_contains: "김천김밥축제", family: festival, source: feature}
     - {day: 1, query: "황금시장 주차장", expect_name_contains: "황금시장 주차장", family: parking, source: feature}
     - {day: 1, query: "김천 직지사", expect_name_contains: "직지사 대웅전", family: religious, source: feature}
   checks:
     - reorder_day: 1
-  notes: "event 김천황금시장 김장양념축제 2026-11-28~11-29 — trip 11-28."
+  notes: "TourAPI 김천김밥축제(2026-10-23~25, 직지사길) — 기간 밖(기간 단언 금지). 김천황금시장 김장양념축제(data.go.kr)는 Map #1482로 퇴역"
 
 - id: TRS-JT-035
-  title: "송도 크리스마스 문화축제 1박2일 — 센트럴파크 호텔"
+  title: "인천 빈티지 크리스마스 마켓 1박2일 — 송도 센트럴파크 호텔"
   style: festival
   days: 2
-  start_offset_days: 19
+  start_offset_days: 23
   priority: P2
   tags: [festival, park, lodging]
   places:
-    - {day: 1, query: "크리스마스 문화축제", expect_name_contains: "크리스마스 문화축제", family: festival, source: feature}
+    - {day: 1, query: "오슬로우 빈티지 크리스마스 마켓", expect_name_contains: "빈티지 크리스마스 마켓", family: festival, source: feature}
     - {day: 1, query: "송도 센트럴파크", expect_name_contains: "송도센트럴파크", family: park, source: feature}
     - {day: 1, query: "송도센트럴파크호텔", expect_name_contains: "송도센트럴파크호텔", family: lodging, source: feature}
     - {day: 2, query: "송도 센트럴파크", expect_name_contains: "송도센트럴파크", family: park, source: feature}
   checks:
     - weather_day: 1
     - delete_day: 2
-  notes: "event 크리스마스 문화축제 2026-11-27~2027-01-20(인천 연수구) — trip 11-27~11-28. 같은 질의의 1위(인천)와 2위(광주 '양림 크리스마스 문화축제')가 모두 substring을 포함하므로 1위를 고르는지 확인."
+  notes: "TourAPI 오슬로우 빈티지 크리스마스 마켓 2026-12-04~12-20(인천 월미) — offset 23 → trip 12-04~12-05. 송도 크리스마스 문화축제(data.go.kr)는 Map #1482로 퇴역"
 
 - id: TRS-JT-036
-  title: "광주 양림 크리스마스 + 함평 겨울빛축제 1박2일"
+  title: "곡성 도깨비페스타 산타 + 광주 양림·함평 겨울빛축제 1박2일"
   style: festival
   days: 2
-  start_offset_days: 25
+  start_offset_days: 31
   priority: P2
   tags: [festival, culture, food, market, park]
   places:
-    - {day: 1, query: "양림 크리스마스", expect_name_contains: "양림 크리스마스 문화축제", family: festival, source: feature}
+    - {day: 1, query: "도깨비페스타", expect_name_contains: "도깨비페스타", family: festival, source: feature}
     - {day: 1, query: "양림동 펭귄마을", expect_name_contains: "펭귄마을", family: culture, source: feature}
     - {day: 1, query: "국립아시아문화전당", expect_name_contains: "국립아시아문화전당", family: culture, source: feature}
     - {day: 1, query: "1913송정역시장", expect_name_contains: "1913 송정역 시장", family: market, source: feature}
@@ -714,7 +714,7 @@
   checks:
     - optimize_day: 1
     - share_readonly
-  notes: "events: 양림 크리스마스 문화축제 2026-12-01~12-31(광주 남구), 겨울빛축제 2026-12-01~2027-01-01(함평) — trip 12-03~12-04."
+  notes: "events: 제8회 마천목장군 도깨비페스타_산타를 만나다 2026-12-12~13(곡성, TourAPI) — offset 31 → trip 12-12~12-13; 함평 겨울빛축제는 TourAPI 기간(2025-11-28~2026-01-11) 기준. 양림 크리스마스 문화축제(data.go.kr)는 Map #1482로 퇴역"
 
 - id: TRS-JT-037
   title: "논산 양촌곶감축제 당일 — 탑정호 글램핑"
@@ -724,14 +724,14 @@
   priority: P2
   tags: [festival, park, camping, leisure, heritage]
   places:
-    - {day: 1, query: "곶감축제", expect_name_contains: "양촌곶감축제", family: festival, source: feature}
+    - {day: 1, query: "양촌곶감축제", expect_name_contains: "양촌곶감축제", family: festival, source: feature}
     - {day: 1, query: "논산 탑정호", expect_name_contains: "탑정호 수변생태공원", family: park, source: feature}
-    - {day: 1, query: "논산 탑정호", expect_name_contains: "탑정호글램핑", family: camping, source: feature}
+    - {day: 1, query: "논산 탑정호글램핑", expect_name_contains: "탑정호글램핑", family: camping, source: feature}
     - {day: 1, query: "선샤인랜드", expect_name_contains: "선샤인랜드", family: leisure, source: feature}
-    - {day: 1, query: "논산 탑정호", expect_name_contains: "돈암서원", family: heritage, source: feature}
+    - {day: 1, query: "논산 돈암서원", expect_name_contains: "돈암서원", family: heritage, source: feature}
   checks:
     - optimize_day: 1
-  notes: "event 2026 양촌곶감축제 2026-12-11~12-13(논산) — trip 12-12. 같은 질의 '논산 탑정호'에서 1·2·3위를 각각 고르는 케이스."
+  notes: "event 논산양촌곶감축제(TourAPI, 2025-12-11~12-14 기준) — 기간 단언 금지. 탑정호·돈암서원은 이름 그대로 질의(공용 질의 '논산 탑정호'의 2·3위는 2026-11-11 적재 뒤 상위 8행 밖)"
 
 - id: TRS-JT-038
   title: "분천 산타마을 1박2일 — 부석사·소백산 야영"
@@ -739,17 +739,17 @@
   days: 2
   start_offset_days: 40
   priority: P2
-  tags: [religious, park, camping, festival, parking]
+  tags: [religious, park, camping, culture, parking]
   places:
     - {day: 1, query: "부석사", expect_name_contains: "부석사", family: religious, source: feature}
     - {day: 1, query: "소백산 국립공원", expect_name_contains: "소백산 국립공원", family: park, source: feature}
-    - {day: 1, query: "소백산 국립공원", expect_name_contains: "남천야영장", family: camping, source: feature}
-    - {day: 2, query: "분천역 산타마을", expect_name_contains: "분천 산타마을 축제", family: festival, source: feature}
-    - {day: 2, query: "분천역 산타마을", expect_name_contains: "분천역 주변 주차장", family: parking, source: feature}
+    - {day: 1, query: "남천야영장", expect_name_contains: "남천야영장", family: camping, source: feature}
+    - {day: 2, query: "분천 산타마을", expect_name_contains: "분천 산타마을", family: culture, source: feature}
+    - {day: 2, query: "분천역 주변 주차장", expect_name_contains: "분천역 주변 주차장", family: parking, source: feature}
   checks:
     - weather_day: 2
     - date_shift: -1
-  notes: "event 한겨울 분천 산타마을 축제 2026-12-19~2027-02-14(봉화) — offset 40(최대) → day1 12-18, day2 12-19 축제 첫날. date_shift -1 후엔 축제일이 기간 밖이 되는 edge."
+  notes: "분천 산타마을(TourAPI 관광지). 한겨울 분천 산타마을 축제(data.go.kr)는 Map #1482로 퇴역 — offset 40(최대) → day1 12-18, day2 12-19; date_shift -1 edge 유지"
 
 - id: TRS-JT-039
   title: "서울 박물관·미술관 1박2일"
