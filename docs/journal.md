@@ -4,6 +4,10 @@
 - #721: flush가 2s timeout 한 번에 batch 전체를 버렸다. commit 전 실패는 backoff(0.5s) 뒤 1회 재시도(`pinvi_api_call_log_flush_retries_total`), commit 도중 실패는 서버가 이미 commit했을 수 있어 중복을 피하려고 재시도하지 않는다. 리뷰 반영: 재시도는 일시 오류(timeout·OSError·OperationalError·InterfaceError·연결 무효화)만, 종료 drain 중엔 재시도하지 않고(shutdown_timeout 3s 보호), commit 뒤 session 정리 실패는 persisted로 센다. 메모리는 capacity + batch_size 그대로다. 실패 로그에 `attempts`·`during_commit`·`elapsed_ms`. worker task를 빈 `contextvars.Context()`로 만들어 처음 submit한 요청의 path(`/admin/etl/summary`)·request_id를 물려받지 않게 했다.
 - 실패 먼저: 실제 starlette `WebSocket` 위에서 prod 순서(RATE_LIMITED → 이탈 → broadcast 실패 → grace 끝 close)를 재현, outbox는 timeout 재시도·이중 실패 로그·commit timeout 비재시도·빈 context. OpenAPI 변경 없음. 배포 없음(6번째 회전에 탄다).
 
+## 2026-11-11 — PinVi Admin 공통 UI·map 셸 정렬
+
+최신 PinVi는 common LoginForm/AppMenu dev.9를 이미 소비한다. 관리자 의미 색상 매핑 누락을 보완하고 map 기준 rail·밀도·접힘·사용자/로그아웃 footer를 정리했다. 메뉴30개·권한·document navigation을 보존한다. 검증과 범위는 [실행 계획](execplan/pinvi-admin-common-map-shell.md)을 따른다. 원 trunk·기존 dirty worktree는 수정하지 않았다.
+
 ## 2026-11-10 — Map ADR-121 user·admin 스펙 재vendor(d8253e85)
 
 - Map #1480(ADR-121 장소 속성)이 user·admin 스펙에 `attribute` query(feature 목록·검색·in-bounds·nearby)·`attribute_codes`·상세 `attributes`·`/v1/place-attributes`·`/v1/admin/theme-attach-decisions`를 더했다. service 스펙은 바이트 그대로다.
