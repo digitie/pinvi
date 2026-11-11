@@ -1,5 +1,30 @@
 # 공통 관리자 UI 이관 (2026-11-11)
 
+## 2026-11-12 — SDK4 patch·필수 진단·main 동기화
+
+registry latest exact/peer를 확인하여 Expo58.0.24·Constants58.0.16·Linking58.0.17·Router58.0.31을 적용했다.
+Router의 Constants^58.0.16/Linking^58.0.17 및 Node22.23.1 범위를 충족한다. root Expo/Router도 같은 버전이다.
+이4종은 공통 managed axes가 아니다. Expo59로 이동하지 않으며 C11 7종 tgz·원장·Scope2는 그대로다.
+strict 설치 뒤 실제7종297파일이328의 최초릴리스 bytes와 같고 guard·lock·mobile type/lint·React Doctor0이 PASS다.
+
+328 mobile workflow SUCCESS 안의 Expo Doctor informational19/20 FAIL을 별도로 보존한다.
+새 물리 apps/mobile 경로를 명시한 Expo Doctor1.20.2는20/20 PASS였고 exclude를 추가하지 않았다.
+continue-on-error를 제거하고 mobile-doctor를 aggregate 필수 검사에 연결했다.
+네트워크 장애도 원문으로 구분하며 검사 우회로 숨기지 않는다.
+
+API CI2258PASS/1FAIL은 web.yml의 존재하지 않는 apps/mobile/vendor/** trigger였다.
+깨끗한 tracked328 archive에서1FAIL/3PASS를 재현하고 PR/push/aggregate의 낡은 경로를 제거한 뒤4PASS했다.
+공유 vendor는 기존 apps/web/**가 감시한다. backend logic은 변경하지 않았다.
+
+328과 CI synthetic2ce8198은 전체tree가 다르다. main476의 지도/교통 source·test5파일을 먼저 병합한 cad9e6b의
+tree가 기존2ce8198과 같음을 확인한 뒤 보존한 SDK WIP를 복원했다. 5파일 병합 결과 blob도 기존 synthetic CI와 같다.
+기존328 batch2 리뷰·C11 성공은 그대로 보존하며 main 유입5파일·SDK4·CI 변경은 bounded supplement에 명시한다.
+새 SDK exports/WebSSR/font/smoke/macOSWASM 및 main 병합 뒤 web 전체는 새 exact HEAD hosted CI에서 검증한다.
+기존 성공을 새 SDK 실행으로 대신하지 않는다. 이 작업의 N150 heavy job은0이다.
+
+[SDK·peer·실제 설치·tree 대조 기록](pinvi-expo-sdk-patches-20261112.json)을 따른다.
+커밋 뒤 CI 결과는 tested source head를 바꾸지 않고 PR732와 root 최종 인계에 추가한다. merge/deploy는 부모 gate 이후다.
+
 ## 2026-11-12 최우선 현재 상태 — C11 격리 최종 검증 완료
 
 Harvey의 소유권 이전 ACK와 부모 지시로 f3d4ddd87c5b7fed557112e2e3b9564628a77805(C10)를 보존하고 이어받았다.

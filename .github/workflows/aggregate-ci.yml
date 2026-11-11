@@ -121,7 +121,6 @@ jobs:
               // 이미지 deps 스테이지의 입력. web.yml의 paths와 같은 집합이어야
               // 한다 — 갈라지면 이미지 입력이 바뀌어도 게이트가 서지 않는다.
               equals("apps/mobile/package.json"),
-              startsWith("apps/mobile/vendor/"),
               equals(".dockerignore"),
               equals(".github/workflows/aggregate-ci.yml"),
             ])) {
@@ -150,6 +149,7 @@ jobs:
               requiredChecks.push("mobile-lint");
               requiredChecks.push("mobile-export");
               requiredChecks.push("mobile-wasm-macos");
+              requiredChecks.push("mobile-doctor");
             }
             if (hasAny([
               // etl.yml의 `on.pull_request.paths`를 전부 덮어야 한다 — 덮지 않은 경로만

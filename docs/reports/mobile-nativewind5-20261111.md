@@ -1,5 +1,12 @@
 # 모바일 NativeWind5 RC · Tailwind4 이관
 
+## 2026-11-12 현재 SDK patch
+
+Expo58.0.24·Constants58.0.16·Linking58.0.17·Router58.0.31의 registry exact/peer·물리 설치를 확인했다.
+실제 SDK Doctor20/20·mobile type/lint·React Doctor0 PASS다. 진단을 informational에서 필수 gate로 승격했다.
+공통 C11 immutable7종·NativeWind/RN/CSSfix4는 유지한다. 기존328 export와 새 SDK hosted export는 구분한다.
+[SDK·CI 기록](pinvi-expo-sdk-patches-20261112.json)을 따르며 아래 이전 버전 기록은 역사로 보존한다.
+
 사용자가 2026-11-11 NativeWind5 RC 이관과 관리자 웹·common까지 Tailwind4.3.5 exact 통일을 승인했다. 기존 설정은 Git 기준선 d42ac953에 보존되어 있다. 원본 checkout은 변경하지 않는다.
 
 ## 실제 RC 계약

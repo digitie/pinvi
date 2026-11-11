@@ -11,7 +11,7 @@ React Native 앱이다.
 
 ## 현재 의존성 기준 (SDK58)
 
-현재 manifest/root Expo는58.0.23, RN0.88.1이다. NativeWind5.0.0-rc.1/react-native-css3.1.0-rc.1과 Tailwind/PostCSS4.3.5, 원본 수정 Lightning CSS1.33.0+nativecss.fix.4을 exact 사용한다. root/web/mobile이 apps/web/vendor의 동일 tgz를 공유하며 원장·lock SHA512를 검사한다. 지도 core1.0.1/web1.0.3/RN1.0.1은 같은 GitHub source9a 산출물이다. .native는 RN public adapter, .web은 SSR 이후 web public adapter를 선택한다.
+현재 manifest/root Expo는58.0.24, RN0.88.1이다. NativeWind5.0.0-rc.1/react-native-css3.1.0-rc.1과 Tailwind/PostCSS4.3.5, 원본 수정 Lightning CSS1.33.0+nativecss.fix.4을 exact 사용한다. root/web/mobile이 apps/web/vendor의 동일 tgz를 공유하며 원장·lock SHA512를 검사한다. 지도 core1.0.1/web1.0.3/RN1.0.1은 같은 GitHub source9a 산출물이다. .native는 RN public adapter, .web은 SSR 이후 web public adapter를 선택한다.
 
 저장소 지정 Node22.23.1/npm12.0.1에서 root npm ci --no-audit --no-fund로 설치한다. Babel7.29.7은 SDK58 공식 preset의 Babel7 peer 때문에 유지한다. 상세 peer 근거와 실제 검증은 [이관 보고서](../../docs/reports/mobile-nativewind5-20261111.md)를 따른다.
 
@@ -157,3 +157,11 @@ API(`12801`)는 WSL에서 `127.0.0.1`(IPv4)로 바인딩되므로 `10.0.2.2:1280
 ## NativeWind5 RC 이관
 
 NativeWind5.0.0-rc.1/react-native-css3.1.0-rc.1, Tailwind/PostCSS4.3.5 exact를 사용한다. [이관·검증 기록](../../docs/reports/mobile-nativewind5-20261111.md)을 참고한다. `npm run check:styling`·`npm run doctor`·`npm run export:web`·`npm run export:android`·`npm run export:ios`로 검사한다. c8/fix.4로 Android/iOS/Web SSR 및 별도 빈 cache의 Linux 강제WASM iOS export가 통과했다. N150 SDK58 웹375/1280px 스모크PASS이며 macOS/EAS/네이티브 실기기는 미실행이다.
+
+## SDK patch 진단 gate — 2026-11-12
+
+Expo58.0.24·Constants58.0.16·Linking58.0.17·Router58.0.31 exact를 사용하고 C11은 유지한다.
+React Doctor는 doctor script의 React 코드 검사다. 별도 SDK 진단은 apps/mobile에서
+npx --yes expo-doctor@1.20.2 "$PWD"를 실행한다. 실제20/20 확인 후 mobile-doctor를 aggregate 필수 검사로 승격했다.
+새 SDK export·font·375/1280px smoke·macOS 강제WASM과 새 main web 전체는 hosted CI 증거로 확인한다.
+[현재 SDK 기록](../../docs/reports/pinvi-expo-sdk-patches-20261112.json)을 따른다.

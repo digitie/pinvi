@@ -16,11 +16,9 @@ on:
       - 'tsconfig.base.json'
       - '.github/workflows/web.yml'
       - '.github/workflows/aggregate-ci.yml'
-      # deps 스테이지가 **모든** workspace manifest와 vendored tarball로 `npx --yes npm@12.0.1 ci`를
-      # 돈다. 이 둘이 빠져 있으면 이미지 빌드 입력이 바뀌는데 `docker-image`가
-      # 돌지 않는다 — 방금 닫은 이중 선언을 CI 트리거로 옮겨 놓는 셈이다.
+      # deps 스테이지가 모든 workspace manifest와 공유 vendor로 설치한다.
+      # 모바일 manifest도 감시한다. 공유 vendor는 위 apps/web/**가 포함한다.
       - 'apps/mobile/package.json'
-      - 'apps/mobile/vendor/**'
       - '.dockerignore'
       - 'scripts/validate-image-provenance.sh'
   push:
@@ -39,11 +37,9 @@ on:
       - 'tsconfig.base.json'
       - '.github/workflows/web.yml'
       - '.github/workflows/aggregate-ci.yml'
-      # deps 스테이지가 **모든** workspace manifest와 vendored tarball로 `npx --yes npm@12.0.1 ci`를
-      # 돈다. 이 둘이 빠져 있으면 이미지 빌드 입력이 바뀌는데 `docker-image`가
-      # 돌지 않는다 — 방금 닫은 이중 선언을 CI 트리거로 옮겨 놓는 셈이다.
+      # deps 스테이지가 모든 workspace manifest와 공유 vendor로 설치한다.
+      # 모바일 manifest도 감시한다. 공유 vendor는 위 apps/web/**가 포함한다.
       - 'apps/mobile/package.json'
-      - 'apps/mobile/vendor/**'
       - '.dockerignore'
       - 'scripts/validate-image-provenance.sh'
 

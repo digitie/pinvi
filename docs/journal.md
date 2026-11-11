@@ -1,3 +1,7 @@
+## 2026-11-12 — SDK4 latest patch·필수 진단·main 병합
+
+SDK4 latest exact patch를 strict 설치하고 물리 Expo Doctor20/20·React Doctor0·type/lint/guard를 확인했다. main476의5파일을 먼저 병합해 기존 synthetic CI tree와 같음을 확인하고 SDK WIP를 복원했다. 깨끗한 CI 경로 회귀1FAIL/3PASS→4PASS이며 SDK 진단을 aggregate 필수로 연결했다. C11 bytes/원장·328 baseline/batch2는 보존한다. 새SDK exports/smoke 및 새main web 전체는 hosted CI 확인 대상이다. N150·운영 변경은 없다. [기록](reports/pinvi-expo-sdk-patches-20261112.json).
+
 ## 2026-11-12 — C11 실제 설치·모달·종료 경계 검증
 
 C10 f3d4ddd8을 보존하고 소유권을 인계받았다. C11 사용7종297파일·3원장·lock·canonical 웹/모바일 검사를 통과했다. 기존521+새 경계6건=unit527·양쪽 타입/Doctor0·mobile lint0을 확인했다. 웹 lint는 기존 인증 경고1이다. 새 production 전체browser209PASS/0FAIL/기존flagSKIP4와 각 flag의 별도build canvas3PASS/restore2PASS를 완료했다. 이전 C9/C10 실패 기록·native fix4 승인 증거는 보존했다. 최종 소비자2리뷰·정확 HEAD CI·merge·부모 go 전에는 배포하지 않는다. [최신 보고서](reports/common-unification-20261111.md)를 따른다.

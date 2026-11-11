@@ -143,13 +143,12 @@ jobs:
       - name: Lint (@pinvi/mobile)
         run: npm --workspace @pinvi/mobile run lint
 
-  # 정보성(비필수) — SDK 정합/버전 드리프트 진단. api.expo.dev·npm registry에 의존해 비결정적이라
-  # Aggregate gate에는 넣지 않고 continue-on-error로 둔다(issue #215 "expo-doctor 검토").
+  # SDK patch 정합성을 실제20/20으로 확인했다. 권장 버전 drift는 필수 실패로 잡는다.
+  # 네트워크 장애도 원문으로 구분하며 검사 우회·exclude 추가로 숨기지 않는다.
   mobile-doctor:
-    name: mobile-doctor (informational)
+    name: mobile-doctor
     runs-on: ubuntu-latest
     timeout-minutes: 12
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
@@ -172,4 +171,4 @@ jobs:
         env:
           EXPO_NO_TELEMETRY: '1'
           CI: '1'
-        run: npx --yes expo-doctor@1.20.2
+        run: npx --yes expo-doctor@1.20.2 "$PWD"
