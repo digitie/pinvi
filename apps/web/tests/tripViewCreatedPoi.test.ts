@@ -35,7 +35,7 @@ function viewPoi(poiId: string, sortOrder: string) {
 
 function view(): TripView {
   return {
-    trip: {} as TripView['trip'],
+    trip: { trip_id: tripId } as TripView['trip'],
     companions: [],
     share_links: [],
     broken_feature_count: 0,
@@ -106,6 +106,8 @@ describe('withCreatedPois (#733)', () => {
     expect(added.marker_color).toBe('P-05');
     expect(added.marker_icon).toBe('cave');
     expect(added.feature_resolution_state).toBe('found');
+    // 사용자 지정 색이 없으면 서버처럼 일자 기본색(1일차 = P-01)을 쓴다.
+    expect(added.display_marker_color).toBe('P-01');
     expect(next.days.find((d) => d.day_index === 2)!.pois).toEqual([]);
   });
 
@@ -140,6 +142,25 @@ describe('withCreatedPois (#733)', () => {
     expect(next).toBe(base);
     expect(next.days[0]!.pois).toHaveLength(2);
     expect(next.days[0]!.pois[1]!.title).toBe('서버 제목');
+  });
+
+  it('일자 override 색이 있으면 그 색을 표시색으로 쓴다', () => {
+    const base = view();
+    base.days[1]!.marker_color = 'P-12';
+    const next = withCreatedPois(base, [created({ day_index: 2 })]);
+    expect(next.days[1]!.pois[0]!.display_marker_color).toBe('P-12');
+  });
+
+  it('재조회 결과의 다른 일자에 이미 있으면(이동됨) 다시 넣지 않는다', () => {
+    const base = view();
+    base.days[1]!.pois.push(viewPoi('bbbbbbbb-0000-4000-8000-000000000002', 'a0'));
+    expect(withCreatedPois(base, [created()])).toBe(base);
+  });
+
+  it('다른 여행의 POI는 넣지 않는다', () => {
+    const base = view();
+    const other = created({ trip_id: '99999999-9999-4999-8999-999999999999' });
+    expect(withCreatedPois(base, [other])).toBe(base);
   });
 
   it('없는 일자나 빈 목록이면 view를 바꾸지 않는다', () => {

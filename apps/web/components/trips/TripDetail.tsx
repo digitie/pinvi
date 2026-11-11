@@ -37,7 +37,7 @@ import {
   holidayLabel,
   holidaysByDate,
 } from '@/lib/tripDateLabels';
-import { withCreatedPois } from '@/lib/tripViewCreatedPoi';
+import { type PendingCreatedPoi, withCreatedPois } from '@/lib/tripViewCreatedPoi';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import {
   ApiError,
@@ -463,7 +463,20 @@ function usePanelScrollAccess(mobileWebLayout: boolean) {
 
 function useTripDetailModel({ tripId }: TripDetailProps) {
   const mobileWebLayout = useMobileWebLayout();
-  const [view, setView] = useState<TripView | null>(null);
+  // 서버 조회 결과와 그 조회의 출발 순번. 화면의 `view`는 그 결과에, 이 조회가 출발한 뒤 POST로 만들어진
+  // POI를 끼운 값이다(#733) — 이 조회보다 늦게 출발한 조회가 끝나면 서버 결과만 쓴다.
+  const [loaded, setLoaded] = useState<{ view: TripView; seq: number } | null>(null);
+  const [pendingCreatedPois, setPendingCreatedPois] = useState<PendingCreatedPoi[]>([]);
+  const view = useMemo(
+    () =>
+      loaded == null
+        ? null
+        : withCreatedPois(
+            loaded.view,
+            pendingCreatedPois.filter((pending) => pending.seq >= loaded.seq).map((p) => p.poi),
+          ),
+    [loaded, pendingCreatedPois],
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<TripRealtimeStatus>('idle');
@@ -496,8 +509,6 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
   const [busy, setBusy] = useState(false);
   const realtimeClientRef = useRef<TripRealtimeClient | null>(null);
   const realtimeReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // POST로 만들었지만 아직 그 뒤에 출발한 재조회로 확정되지 않은 POI(#733).
-  const pendingCreatedPoisRef = useRef(new Map<string, PoiResponse>());
   // Track the latest viewing day so a freshly (re)created realtime client can re-apply it
   // without adding selectedDayIndex to the client-creation effect deps (T-289).
   // 렌더 중 ref.current를 쓰지 않는다(react-hooks/refs) — 대신 effect에서 동기화한다. 이 ref는
@@ -521,22 +532,24 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
   // 저장 직후 `reload()`가 그보다 먼저 출발한 실시간 재조회에 합류하면 낡은 view로 끝난다(#699 — 내보내기
   // 미리보기가 방금 저장한 메모를 빠뜨렸다). 진행 중이면 끝난 뒤 한 번 더 읽는다. 여행마다 새 loader라 다른
   // 여행의 진행 중 조회에도 합류하지 않는다.
-  const reload = useMemo(
-    () =>
-      createLatestReload(async (): Promise<TripView | null> => {
-        try {
-          const res = await tripApi(apiClient).get(tripId);
-          // 이 조회가 방금 만든 POI보다 먼저 출발했으면 그 행이 빠져 있다 — 확정될 때까지 끼워 둔다(#733).
-          setView(withCreatedPois(res, pendingCreatedPoisRef.current.values()));
-          setError(null);
-          return res;
-        } catch (err) {
-          setError(err instanceof ApiError ? err.message : '여행을 불러오지 못했습니다.');
-          return null;
-        }
-      }),
-    [tripId],
-  );
+  // 조회마다 출발 순번을 매긴다(#733) — 새 POI가 어느 조회보다 늦게 만들어졌는지 가린다.
+  const reloader = useMemo(() => {
+    let startedFetches = 0;
+    const load = createLatestReload(async (): Promise<TripView | null> => {
+      const seq = (startedFetches += 1);
+      try {
+        const res = await tripApi(apiClient).get(tripId);
+        setLoaded({ view: res, seq });
+        setError(null);
+        return res;
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : '여행을 불러오지 못했습니다.');
+        return null;
+      }
+    });
+    return { reload: load, startedFetches: () => startedFetches };
+  }, [tripId]);
+  const reload = reloader.reload;
 
   useEffect(() => {
     let cancelled = false;
@@ -799,8 +812,8 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
   );
 
   // 장소 추가: POST 응답으로 행을 곧바로 그리고, 뒤따르는 재조회(weather 보강 포함)가 서버 값으로
-  // 덮어쓴다(#733). 그 재조회가 끝날 때까지 pending에 두어, 먼저 출발한 진행 중 조회의 결과가 행을
-  // 지우지 않게 한다.
+  // 덮어쓴다(#733). POST보다 먼저 출발한 진행 중 조회의 결과가 행을 지우지 않게, POST 뒤에 출발한
+  // 조회(runMutation이 기다리는 재조회)가 끝날 때까지 pending에 둔다.
   const runMutationShowingCreatedPoi = (
     create: () => Promise<PoiResponse>,
     options?: MutationOptions,
@@ -808,12 +821,22 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     let createdId: string | null = null;
     return runMutation(async () => {
       const created = await create();
-      createdId = created.attachment_id;
-      pendingCreatedPoisRef.current.set(created.attachment_id, created);
-      setView((current) => (current ? withCreatedPois(current, [created]) : current));
+      const createdIdNow = created.attachment_id;
+      createdId = createdIdNow;
+      // 지금까지 출발한 조회는 이 POI를 모른다 — 그 결과에는 끼우고, 이후 출발한 조회는 서버 결과만 쓴다.
+      const seq = reloader.startedFetches();
+      setPendingCreatedPois((current) => [
+        ...current.filter((pending) => pending.poi.attachment_id !== createdIdNow),
+        { poi: created, seq },
+      ]);
       return created;
     }, options).finally(() => {
-      if (createdId) pendingCreatedPoisRef.current.delete(createdId);
+      const id = createdId;
+      if (id) {
+        setPendingCreatedPois((current) =>
+          current.filter((pending) => pending.poi.attachment_id !== id),
+        );
+      }
     });
   };
 
