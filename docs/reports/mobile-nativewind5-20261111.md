@@ -74,3 +74,7 @@ root/web/mobile의 직접 dev file 참조와 root $lightningcss override를 맞�
 fix4의 새 독립 TMPDIR에서 Android/iOS Hermes export와 각4OTF 포함, 웹SSR35routes, 별도빈cache 강제WASM iOS export가 모두 통과했다. N150의 c8 웹산출물375/1280px CSS·폰트·로그인 입력·오류·무가로넘침 스모크도 통과했다. 증거는 /tmp/pinvi-c8-*-export.log(WSL), /tmp/pinvi-c8-mobile-harvey/evidence(N150)이다. 과거 fix3 증거를 fix4 성공으로 재사용하지 않는다.
 
 독립 리뷰 B에서 추출된 지도/이메일 인증 컴포넌트의 fragment 첫 자식 공백 문자열 두 곳을 지적하여 제거했다. RN Text 밖 raw text를 만드는 회귀이며 최종 소스의 export는 후속 재검증한다. native 실기기/EAS/macOS 실행은 아직 없다.
+
+## integration-9 checker 동기화
+
+부모 c9 source2c1182e의 tokens를 같은 파일로 실제 재설치하고 모바일 공유 file 경로·원장·lock을 갱신했다. c8→c9는 check-dependencies.mjs만 다르며 tokens runtime/CSS/metadata 및 CSSfix4/지도3종이 모두 동일하다. 실제설치 전체파일/새 mobile guard/최신 외부 canonical guard/스타일/tree가 통과했다. 모바일 소스는 검증한00bd8c8d와 같고 새 compiler 또는 native bundle로 바뀐 것이 없어 앞의 export4종·폰트4종·N150스모크 증거를 유지한다.

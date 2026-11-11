@@ -1,6 +1,6 @@
 # 공통 산출물 출처 및 무결성
 
-현재 프런트엔드 후보는 integration-8-review이며 정식 registry 릴리스가 아니다. 부모가 만든 단일 tgz를 그대로 전달받아 사용한다. 같은 후보 버전의 bytes 변경은 승인된 통합 검증에 한하며 소비자가 자체 pack을 만들지 않는다.
+현재 프런트엔드 후보는 integration-9-review이며 정식 registry 릴리스가 아니다. 부모가 만든 단일 tgz를 그대로 전달받아 사용한다. 같은 후보 버전의 bytes 변경은 승인된 통합 검증에 한하며 소비자가 자체 pack을 만들지 않는다.
 
 | 패키지             | 버전                   | 라이선스(실제 package.json) |
 | ------------------ | ---------------------- | --------------------------- |
@@ -13,7 +13,7 @@
 
 ## 소스 정본
 
-- common: 670a753bc17f956f71bdc28385d6241a6e4ee017
+- common: 2c1182e765bb2bc53e01e0962cf2a73683891e1d
 - maplibre-vworld-react: 9a7a348b02d61969b394c681b024d5851eef836b
 - lightningcss: 748651cbd845971e65c411166ddee101745dab21
 - serde-content: 18e53fcf6f8ace093a292891b34fa3411192617d

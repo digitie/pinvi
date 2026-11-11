@@ -118,3 +118,11 @@ c8 실제modules/lock/상대file/원장일치PASS, web/mobile의새공통guard�
 배포 Dockerfile과 동일한 Node22.23.1 Bookworm digest(glibc2.36)에서도 CSSfix4 native와 강제WASM을 실제 로드해 같은 transform 결과를 확인했다. 사용자에게 전달한 네 플랫폼 export를 이 단순 transform으로 대체하지 않는다.
 
 독립 리뷰의 실제 thread A=01a1cb51-e757-7ee0-82e1-7cb7bcf9eeae, B=01a1cb51-eb7c-7e42-b0ba-0779bb8abd89다. Harvey는 구현 소유자의 파일태그였다. 원본 provider JSON·실제 probe·원입력 commit/tree/lock/manifest hashes는 저장소 밖 PINVI-REVIEW-AUDIT.md 및 내용 주소 input manifest로 보존한다. 원검토3626/수정재확인00bd 이후 busy 변경은 기존 판정의 범위가 아니며 부모 최종 독립 gate를 대체하지 않는다.
+
+## integration-9 checker 최종 동기화
+
+c8 런타임 gate 실행 종료 뒤 부모 c9 단일 UI/tokens 파일을 복사하고 web/mobile에서 npm12의 명시적 file install로 실제 modules와 lock을 갱신했다. root/web/mobile 원장은 source2c1182e765bb2bc53e01e0962cf2a73683891e1d와 동일6종SRI를 보존한다. UI94/tokens25 전파일을 비교해 c8→c9 차이는 checker 하나뿐이며 runtime/CSS/metadata가 같음을 소비자도 독립 확인했다. 지도3종·CSSfix4는 tgz 전체 bytes도 같다.
+
+설치 뒤 6종 archive의 모든 실제설치파일과 원장/lock을 비교하여 UI94/tokens25/CSS19/core25/RN34/web85 파일이 각각 정확히 일치했다. 모든 패키지 위치·버전은 이전 lock과 같고 UI/tokens SRI만 갱신됐다. root $lightningcss 및 root/web/mobile CSS 직접 dev 의존성을 유지한다. c9 실제설치guard 두 곳, 최신 외부 도구의 --policy/--canonical guard 두 곳, own source AST, styling, npm12 전체tree가 모두 통과했다. parent 소유 중앙 workflow는 편집/커밋하지 않았다.
+
+checker 변경 때문에 모바일 export/build를 재실행하지 않는다. 후속 웹 검증은 별도 busy 도메인 소스 수정이 이유다. 그 수정의 전체unit은 **520PASS/1FAIL(521)**, 타입/lint오류0/기존auth경고1, fullDoctor486files0 및 자체ASTguardPASS다. known FocusScope reverse-entry는 아직 남아 있고 새 전체 브라우저에서 보완된 busy 포커스와 기존768px prefetch 실패도 다시 확인한다.
