@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useSyncExternalStore } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { Link2Off } from 'lucide-react';
 import { PublicColophon, PublicMasthead } from '@/components/app/PublicChrome';
 import { FullPageMessage } from '@/components/feedback/FullPageMessage';
 import { ButtonLink } from '@/components/ui/Button';
 import { readStashedSharedToken } from '@/lib/sharedTokenStash';
+import { Link2Off } from 'lucide-react';
+import { redirect, useParams } from 'next/navigation';
+import { useSyncExternalStore } from 'react';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Long Document · design-system: DESIGN.md · designed-as-app
  * 로그인 복귀 전용 경유지(#671): 복귀 경로에는 공유 토큰 대신 `/shared/{tripId}`만 싣는다.
@@ -19,7 +19,6 @@ function subscribeNothing(): () => void {
 
 export default function SharedTripResumePage() {
   const params = useParams<{ tripId: string }>();
-  const router = useRouter();
   // 서버 렌더에서는 undefined(확인 중), 브라우저에서는 저장된 토큰 또는 null(없음).
   const token = useSyncExternalStore(
     subscribeNothing,
@@ -28,9 +27,7 @@ export default function SharedTripResumePage() {
   );
   const missing = token === null;
 
-  useEffect(() => {
-    if (token) router.replace(`/shared/${encodeURIComponent(params.tripId)}/${encodeURIComponent(token)}`);
-  }, [params.tripId, router, token]);
+  if (token) redirect(`/shared/${encodeURIComponent(params.tripId)}/${encodeURIComponent(token)}`);
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-ink">

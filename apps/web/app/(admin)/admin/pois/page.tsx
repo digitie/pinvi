@@ -1,18 +1,18 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
-import { Plus } from 'lucide-react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import type { AdminPoiCreateRequest, AdminPoiSummary, AdminTripSummary } from '@pinvi/schemas';
 import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
 import { Button } from '@/components/admin/ui/button';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import type { AdminPoiCreateRequest, AdminPoiSummary, AdminTripSummary } from '@pinvi/schemas';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useRef, useState, type FormEvent } from 'react';
 // KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 손수 만든
-// `role="dialog"` + scrim + `aria-modal`을 base-ui가 대신한다.
+// `role="dialog"` + scrim + `aria-modal`을 공통 Radix가 대신한다.
 import {
   Dialog,
   DialogContent,
@@ -91,7 +91,14 @@ const columns: AdminTableColumn<AdminPoiSummary>[] = [
   },
 ];
 
-function AdminPoiCreateDialog({ onClose }: { onClose: () => void }) {
+function AdminPoiCreateDialog(...args: Parameters<typeof useAdminPoiCreateDialogModel>) {
+  const viewModel = useAdminPoiCreateDialogModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminPoiCreateDialogView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminPoiCreateDialogModel({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [tripQueryInput, setTripQueryInput] = useState('');
@@ -122,6 +129,7 @@ function AdminPoiCreateDialog({ onClose }: { onClose: () => void }) {
     enabled: tripQuery.length > 0,
   });
 
+  const createInFlight = useRef(false);
   const createMutation = useMutation({
     mutationFn: (body: AdminPoiCreateRequest) => adminApi(apiClient).createPoi(body),
     onSuccess: (poi) => {
@@ -191,6 +199,8 @@ function AdminPoiCreateDialog({ onClose }: { onClose: () => void }) {
       return;
     }
 
+    if (createInFlight.current) return;
+    createInFlight.current = true;
     setFormError(null);
     try {
       await createMutation.mutateAsync({
@@ -212,12 +222,86 @@ function AdminPoiCreateDialog({ onClose }: { onClose: () => void }) {
       });
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : 'POI 생성 실패');
+    } finally {
+      createInFlight.current = false;
     }
   };
 
+  return {
+    renderBranch: 'render0' as const,
+    accessReason,
+    actualAmount,
+    addressLabel,
+    arrivalAt,
+    budgetAmount,
+    createMutation,
+    currency,
+    dayIndex,
+    departureAt,
+    featureId,
+    formError,
+    lat,
+    lon,
+    markerColor,
+    markerIcon,
+    note,
+    onClose,
+    onCreate,
+    onTripSearch,
+    poiName,
+    selectedTrip,
+    setAccessReason,
+    setActualAmount,
+    setAddressLabel,
+    setArrivalAt,
+    setBudgetAmount,
+    setCurrency,
+    setDayIndex,
+    setDepartureAt,
+    setFeatureId,
+    setLat,
+    setLon,
+    setMarkerColor,
+    setMarkerIcon,
+    setNote,
+    setPoiName,
+    setSelectedTrip,
+    setSortOrder,
+    setTripQueryInput,
+    setUserUrl,
+    sortOrder,
+    tripQuery,
+    tripQueryInput,
+    tripQueryResult,
+    userUrl,
+  };
+}
+
+type AdminPoiCreateDialogView0Model = Extract<
+  ReturnType<typeof useAdminPoiCreateDialogModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminPoiCreateDialogView0({ viewModel }: { viewModel: AdminPoiCreateDialogView0Model }) {
+  const {
+    accessReason,
+    createMutation,
+    formError,
+    note,
+    onClose,
+    onCreate,
+    onTripSearch,
+    selectedTrip,
+    setAccessReason,
+    setNote,
+    setSelectedTrip,
+    setTripQueryInput,
+    tripQuery,
+    tripQueryInput,
+    tripQueryResult,
+  } = viewModel;
   return (
     // `open`은 상수 true다 — 이 컴포넌트 자체가 호출부에서 조건부 마운트되므로 열림/닫힘
-    // 상태의 **소유자**는 그대로 `showCreateDialog`다. 다만 base-ui는 소유자와 별개로
+    // 상태의 **소유자**는 그대로 `showCreateDialog`다. 다만 공통 Radix는 소유자와 별개로
     // Escape·바깥클릭이라는 **닫기 경로**를 추가하므로, 폼 입력을 지키려면 `hasUnsavedInput`으로
     // 그 둘을 꺼야 한다(아래).
     <Dialog
@@ -307,156 +391,7 @@ function AdminPoiCreateDialog({ onClose }: { onClose: () => void }) {
           )}
 
           <form onSubmit={onCreate} className="grid gap-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">일차</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={dayIndex}
-                  onChange={(event) => setDayIndex(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-poi-create-day"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">정렬 순서</span>
-                <input
-                  value={sortOrder}
-                  onChange={(event) => setSortOrder(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  maxLength={80}
-                  data-testid="admin-poi-create-sort"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">feature_id</span>
-                <input
-                  value={featureId}
-                  onChange={(event) => setFeatureId(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  maxLength={200}
-                  data-testid="admin-poi-create-feature-id"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">POI 이름</span>
-                <input
-                  value={poiName}
-                  onChange={(event) => setPoiName(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-poi-create-name"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">lon</span>
-                <input
-                  inputMode="decimal"
-                  value={lon}
-                  onChange={(event) => setLon(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-poi-create-lon"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">lat</span>
-                <input
-                  inputMode="decimal"
-                  value={lat}
-                  onChange={(event) => setLat(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-poi-create-lat"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm md:col-span-2">
-                <span className="text-xs text-muted">주소</span>
-                <input
-                  value={addressLabel}
-                  onChange={(event) => setAddressLabel(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-poi-create-address"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">마커 색상</span>
-                <input
-                  value={markerColor}
-                  onChange={(event) => setMarkerColor(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  placeholder="P-08"
-                  data-testid="admin-poi-create-marker-color"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">마커 아이콘</span>
-                <input
-                  value={markerIcon}
-                  onChange={(event) => setMarkerIcon(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  maxLength={64}
-                  data-testid="admin-poi-create-marker-icon"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">도착</span>
-                <input
-                  type="datetime-local"
-                  value={arrivalAt}
-                  onChange={(event) => setArrivalAt(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-poi-create-arrival"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">출발</span>
-                <input
-                  type="datetime-local"
-                  value={departureAt}
-                  onChange={(event) => setDepartureAt(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-poi-create-departure"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">예산</span>
-                <input
-                  inputMode="decimal"
-                  value={budgetAmount}
-                  onChange={(event) => setBudgetAmount(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-poi-create-budget"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">실제 금액</span>
-                <input
-                  inputMode="decimal"
-                  value={actualAmount}
-                  onChange={(event) => setActualAmount(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-poi-create-actual"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">통화</span>
-                <input
-                  value={currency}
-                  onChange={(event) => setCurrency(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2 uppercase"
-                  maxLength={3}
-                  data-testid="admin-poi-create-currency"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted">URL</span>
-                <input
-                  value={userUrl}
-                  onChange={(event) => setUserUrl(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
-                  data-testid="admin-poi-create-url"
-                />
-              </label>
-            </div>
+            <AdminPoiCreateDialogView0Part0 viewModel={viewModel} />
 
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs text-muted">메모</span>
@@ -640,5 +575,196 @@ export default function AdminPoisPage() {
         </button>
       </div>
     </AdminPage>
+  );
+}
+
+function AdminPoiCreateDialogView0Part0({
+  viewModel,
+}: {
+  viewModel: AdminPoiCreateDialogView0Model;
+}) {
+  const {
+    dayIndex,
+    setDayIndex,
+    sortOrder,
+    setSortOrder,
+    featureId,
+    setFeatureId,
+    poiName,
+    setPoiName,
+    lon,
+    setLon,
+    lat,
+    setLat,
+    addressLabel,
+    setAddressLabel,
+    markerColor,
+    setMarkerColor,
+    markerIcon,
+    setMarkerIcon,
+    arrivalAt,
+    setArrivalAt,
+    departureAt,
+    setDepartureAt,
+    budgetAmount,
+    setBudgetAmount,
+    actualAmount,
+    setActualAmount,
+    currency,
+    setCurrency,
+    userUrl,
+    setUserUrl,
+  } = viewModel;
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">일차</span>
+        <input
+          type="number"
+          min={1}
+          value={dayIndex}
+          onChange={(event) => setDayIndex(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          data-testid="admin-poi-create-day"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">정렬 순서</span>
+        <input
+          value={sortOrder}
+          onChange={(event) => setSortOrder(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          maxLength={80}
+          data-testid="admin-poi-create-sort"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">feature_id</span>
+        <input
+          value={featureId}
+          onChange={(event) => setFeatureId(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          maxLength={200}
+          data-testid="admin-poi-create-feature-id"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">POI 이름</span>
+        <input
+          value={poiName}
+          onChange={(event) => setPoiName(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          data-testid="admin-poi-create-name"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">lon</span>
+        <input
+          inputMode="decimal"
+          value={lon}
+          onChange={(event) => setLon(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          data-testid="admin-poi-create-lon"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">lat</span>
+        <input
+          inputMode="decimal"
+          value={lat}
+          onChange={(event) => setLat(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          data-testid="admin-poi-create-lat"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm md:col-span-2">
+        <span className="text-xs text-muted">주소</span>
+        <input
+          value={addressLabel}
+          onChange={(event) => setAddressLabel(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          data-testid="admin-poi-create-address"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">마커 색상</span>
+        <input
+          value={markerColor}
+          onChange={(event) => setMarkerColor(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          placeholder="P-08"
+          data-testid="admin-poi-create-marker-color"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">마커 아이콘</span>
+        <input
+          value={markerIcon}
+          onChange={(event) => setMarkerIcon(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          maxLength={64}
+          data-testid="admin-poi-create-marker-icon"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">도착</span>
+        <input
+          type="datetime-local"
+          value={arrivalAt}
+          onChange={(event) => setArrivalAt(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          data-testid="admin-poi-create-arrival"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">출발</span>
+        <input
+          type="datetime-local"
+          value={departureAt}
+          onChange={(event) => setDepartureAt(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          data-testid="admin-poi-create-departure"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">예산</span>
+        <input
+          inputMode="decimal"
+          value={budgetAmount}
+          onChange={(event) => setBudgetAmount(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          data-testid="admin-poi-create-budget"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">실제 금액</span>
+        <input
+          inputMode="decimal"
+          value={actualAmount}
+          onChange={(event) => setActualAmount(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          data-testid="admin-poi-create-actual"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">통화</span>
+        <input
+          value={currency}
+          onChange={(event) => setCurrency(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2 uppercase"
+          maxLength={3}
+          data-testid="admin-poi-create-currency"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs text-muted">URL</span>
+        <input
+          value={userUrl}
+          onChange={(event) => setUserUrl(event.target.value)}
+          className="rounded-sm border border-hairline px-3 py-2"
+          data-testid="admin-poi-create-url"
+        />
+      </label>
+    </div>
   );
 }

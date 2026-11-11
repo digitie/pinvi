@@ -22,9 +22,9 @@
 // 보존한 것(계약): 모든 `data-testid`, 라벨/값 문구, `formatDateTime`·`formatAmount`의 `—` 글리프,
 // Section 제목과 순서.
 
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { Button } from '@/components/admin/ui/button';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
 import type {
   AdminAuditEntry,
@@ -34,11 +34,13 @@ import type {
   AdminTripSummary,
 } from '@pinvi/schemas';
 import { Copy, MoveRight, Search, Trash2, X } from 'lucide-react';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { Button } from '@/components/admin/ui/button';
+import Link from 'next/link';
+import { redirect, useParams, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 // KTM `src/components/ui/dialog.tsx` 프리미티브로 수렴(T-356) — 손수 만든 scrim +
-// `role="dialog"`/`aria-modal`을 base-ui가 대신한다(Escape·focus trap·scroll lock 포함).
+// `role="dialog"`/`aria-modal`을 공통 Radix가 대신한다(Escape·focus trap·scroll lock 포함).
+import { DetailList } from '@/components/admin/detail-list';
+import { JsonViewer } from '@/components/admin/json-viewer';
 import {
   Dialog,
   DialogContent,
@@ -47,15 +49,13 @@ import {
   DialogTitle,
 } from '@/components/admin/ui/dialog';
 import { FormTextArea } from '@/components/forms/FormTextArea';
-import { DetailList } from '@/components/admin/detail-list';
-import { JsonViewer } from '@/components/admin/json-viewer';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
 });
 
 const formatDateTime = (value: string | null) =>
-  value ? new Date(value).toLocaleString('ko-KR') : '—';
+  value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '—';
 
 const formatAmount = (value: string | null, currency: string) =>
   value === null ? '—' : `${value} ${currency}`;
@@ -136,13 +136,24 @@ function OperationImpactPanel({ impact }: { impact: AdminOperationImpact | null 
   );
 }
 
-export default function AdminPoiDetailPage() {
+export default function AdminPoiDetailPage(...args: Parameters<typeof useAdminPoiDetailPageModel>) {
+  const viewModel = useAdminPoiDetailPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminPoiDetailPageView0 viewModel={viewModel} />;
+  if (viewModel.renderBranch === 'render1') return <AdminPoiDetailPageView1 />;
+  if (viewModel.renderBranch === 'render2')
+    return <AdminPoiDetailPageView2 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminPoiDetailPageModel() {
   const router = useRouter();
   const params = useParams<{ poi_id: string }>();
   const poiId = params.poi_id;
   const [poi, setPoi] = useState<AdminPoiDetail | null>(null);
   const [brokenDraft, setBrokenDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
   const [reason, setReason] = useState('');
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [acting, setActing] = useState(false);
@@ -172,7 +183,7 @@ export default function AdminPoiDetailPage() {
       .catch((err) => {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 404) {
-          router.replace('/admin/pois');
+          setMissing(true);
           return;
         }
         setError(err instanceof ApiError ? err.message : '조회 실패');
@@ -298,7 +309,7 @@ export default function AdminPoiDetailPage() {
       }
       setOperationResult(result);
       if (operationMode === 'poi_delete') {
-        router.replace('/admin/pois');
+        setMissing(true);
         return;
       }
       await refreshPoi();
@@ -310,20 +321,14 @@ export default function AdminPoiDetailPage() {
     }
   };
 
+  if (missing) redirect('/admin/pois');
+
   if (error) {
-    return (
-      <AdminPage title="POI 상세">
-        <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
-      </AdminPage>
-    );
+    return { renderBranch: 'render0' as const, error };
   }
 
   if (!poi) {
-    return (
-      <AdminPage title="POI 상세">
-        <p className="text-sm text-muted">불러오는 중…</p>
-      </AdminPage>
-    );
+    return { renderBranch: 'render1' as const };
   }
 
   const currentBroken = isBroken(poi);
@@ -335,6 +340,105 @@ export default function AdminPoiDetailPage() {
     operationReason.trim().length < 1 ||
     (operationNeedsTarget && (!targetTripId || targetDayIndex < 1));
 
+  return {
+    renderBranch: 'render2' as const,
+    acting,
+    brokenDraft,
+    childPolicy,
+    currentBroken,
+    featureTitle,
+    hasFeatureLink,
+    includeAttachments,
+    onLinkStatusSave,
+    onOperationSave,
+    openOperationDialog,
+    operationConfirmDisabled,
+    operationError,
+    operationImpact,
+    operationMode,
+    operationNeedsTarget,
+    operationReason,
+    operationResult,
+    poi,
+    reason,
+    setBrokenDraft,
+    setChildPolicy,
+    setIncludeAttachments,
+    setOperationError,
+    setOperationMode,
+    setOperationReason,
+    setOperationResult,
+    setReason,
+    setShowOperationDialog,
+    setShowStatusDialog,
+    setTargetDayIndex,
+    setTargetTripId,
+    setTargetTripQuery,
+    showOperationDialog,
+    showStatusDialog,
+    targetDayIndex,
+    targetTripId,
+    targetTripQuery,
+    targetTrips,
+  };
+}
+
+type AdminPoiDetailPageView0Model = Extract<
+  ReturnType<typeof useAdminPoiDetailPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminPoiDetailPageView0({ viewModel }: { viewModel: AdminPoiDetailPageView0Model }) {
+  const { error } = viewModel;
+  return (
+    <AdminPage title="POI 상세">
+      <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
+    </AdminPage>
+  );
+}
+function AdminPoiDetailPageView1() {
+  return (
+    <AdminPage title="POI 상세">
+      <p className="text-sm text-muted">불러오는 중…</p>
+    </AdminPage>
+  );
+}
+
+type AdminPoiDetailPageView2Model = Extract<
+  ReturnType<typeof useAdminPoiDetailPageModel>,
+  { renderBranch: 'render2' }
+>;
+function AdminPoiDetailPageView2({ viewModel }: { viewModel: AdminPoiDetailPageView2Model }) {
+  const {
+    acting,
+    childPolicy,
+    featureTitle,
+    includeAttachments,
+    onOperationSave,
+    operationConfirmDisabled,
+    operationError,
+    operationImpact,
+    operationMode,
+    operationNeedsTarget,
+    operationReason,
+    operationResult,
+    poi,
+    setChildPolicy,
+    setIncludeAttachments,
+    setOperationError,
+    setOperationMode,
+    setOperationReason,
+    setOperationResult,
+    setShowOperationDialog,
+    setTargetDayIndex,
+    setTargetTripId,
+    setTargetTripQuery,
+    showOperationDialog,
+    showStatusDialog,
+    targetDayIndex,
+    targetTripId,
+    targetTripQuery,
+    targetTrips,
+  } = viewModel;
   return (
     <AdminPage
       title={featureTitle}
@@ -345,105 +449,9 @@ export default function AdminPoiDetailPage() {
         </Link>
       }
     >
-      <Section title="기본 정보">
-        <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2" data-testid="admin-poi-info">
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">여행</dt>
-            <dd>
-              <Link href={`/admin/trips/${poi.trip_id}`} className="text-primary underline">
-                {poi.trip_title}
-              </Link>
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">소유자</dt>
-            <dd className="font-mono">{poi.owner_email_masked}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">추가자</dt>
-            <dd className="font-mono">{poi.added_by_email_masked ?? poi.added_by_user_id}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">일차 / 순서</dt>
-            <dd>
-              {poi.day_index}일차 / {poi.sort_order}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">feature_id</dt>
-            <dd className="font-mono text-xs">{poi.feature_id ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">연결 상태</dt>
-            <dd className="mt-1 flex flex-wrap items-center gap-2">
-              {hasFeatureLink ? (
-                <>
-                  <select
-                    value={brokenDraft ? 'broken' : 'normal'}
-                    onChange={(e) => setBrokenDraft(e.target.value === 'broken')}
-                    className="rounded-sm border border-hairline px-2 py-1 text-sm"
-                    data-testid="admin-poi-link-status"
-                  >
-                    <option value="normal">정상</option>
-                    <option value="broken">끊김</option>
-                  </select>
-                  <button
-                    type="button"
-                    disabled={brokenDraft === currentBroken}
-                    onClick={() => setShowStatusDialog(true)}
-                    className="rounded-sm border border-primary px-3 py-1 text-sm text-primary disabled:opacity-50"
-                    data-testid="admin-poi-link-status-save"
-                  >
-                    저장
-                  </button>
-                </>
-              ) : (
-                <span className="text-muted">—</span>
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">끊김 시각</dt>
-            <dd>{formatDateTime(poi.feature_link_broken_at)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">version</dt>
-            <dd>{poi.version}</dd>
-          </div>
-        </dl>
-      </Section>
+      <AdminPoiDetailPageSection2_0 viewModel={viewModel} />
 
-      <Section title="운영 작업">
-        <div className="flex flex-wrap gap-2" data-testid="admin-poi-operations">
-          <button
-            type="button"
-            onClick={() => openOperationDialog('poi_copy')}
-            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
-            data-testid="admin-poi-copy-open"
-          >
-            <Copy className="h-4 w-4" aria-hidden="true" />
-            POI 복사
-          </button>
-          <button
-            type="button"
-            onClick={() => openOperationDialog('poi_move')}
-            className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
-            data-testid="admin-poi-move-open"
-          >
-            <MoveRight className="h-4 w-4" aria-hidden="true" />
-            POI 이동
-          </button>
-          <button
-            type="button"
-            onClick={() => openOperationDialog('poi_delete')}
-            className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm text-error-text hover:bg-error-bg"
-            data-testid="admin-poi-delete-open"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-            POI 삭제
-          </button>
-        </div>
-      </Section>
+      <AdminPoiDetailPageSection2_1 viewModel={viewModel} />
 
       <Section title="일정 / 비용">
         <DetailList
@@ -539,7 +547,10 @@ export default function AdminPoiDetailPage() {
                       type="number"
                       min={1}
                       value={targetDayIndex}
-                      onChange={(e) => setTargetDayIndex(Number(e.target.value))}
+                      onChange={(e) => {
+                        const day = e.currentTarget.valueAsNumber;
+                        if (Number.isSafeInteger(day) && day >= 1) setTargetDayIndex(day);
+                      }}
                       className="w-full rounded-sm border border-hairline px-3 py-2"
                       data-testid="admin-poi-operation-target-day"
                     />
@@ -664,58 +675,183 @@ export default function AdminPoiDetailPage() {
         </Dialog>
       )}
 
-      {showStatusDialog && (
-        <Dialog
-          open
-          onOpenChange={(open) => {
-            // Escape·scrim도 취소 버튼과 같은 정리 경로를 탄다(사유 입력값을 남기지 않는다).
-            if (!open) {
+      {showStatusDialog && <AdminPoiDetailPageSection2_2 viewModel={viewModel} />}
+    </AdminPage>
+  );
+}
+
+function AdminPoiDetailPageSection2_0({ viewModel }: { viewModel: AdminPoiDetailPageView2Model }) {
+  const { brokenDraft, currentBroken, hasFeatureLink, poi, setBrokenDraft, setShowStatusDialog } =
+    viewModel;
+  return (
+    <Section title="기본 정보">
+      <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2" data-testid="admin-poi-info">
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">여행</dt>
+          <dd>
+            <Link href={`/admin/trips/${poi.trip_id}`} className="text-primary underline">
+              {poi.trip_title}
+            </Link>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">소유자</dt>
+          <dd className="font-mono">{poi.owner_email_masked}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">추가자</dt>
+          <dd className="font-mono">{poi.added_by_email_masked ?? poi.added_by_user_id}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">일차 / 순서</dt>
+          <dd>
+            {poi.day_index}일차 / {poi.sort_order}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">feature_id</dt>
+          <dd className="font-mono text-xs">{poi.feature_id ?? '—'}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">연결 상태</dt>
+          <dd className="mt-1 flex flex-wrap items-center gap-2">
+            {hasFeatureLink ? (
+              <>
+                <select
+                  value={brokenDraft ? 'broken' : 'normal'}
+                  onChange={(e) => setBrokenDraft(e.target.value === 'broken')}
+                  className="rounded-sm border border-hairline px-2 py-1 text-sm"
+                  aria-label="연결 상태"
+                  data-testid="admin-poi-link-status"
+                >
+                  <option value="normal">정상</option>
+                  <option value="broken">끊김</option>
+                </select>
+                <button
+                  type="button"
+                  disabled={brokenDraft === currentBroken}
+                  onClick={() => setShowStatusDialog(true)}
+                  className="rounded-sm border border-primary px-3 py-1 text-sm text-primary disabled:opacity-50"
+                  data-testid="admin-poi-link-status-save"
+                >
+                  저장
+                </button>
+              </>
+            ) : (
+              <span className="text-muted">—</span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">끊김 시각</dt>
+          <dd>{formatDateTime(poi.feature_link_broken_at)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">version</dt>
+          <dd>{poi.version}</dd>
+        </div>
+      </dl>
+    </Section>
+  );
+}
+
+function AdminPoiDetailPageSection2_1({ viewModel }: { viewModel: AdminPoiDetailPageView2Model }) {
+  const { openOperationDialog } = viewModel;
+  return (
+    <Section title="운영 작업">
+      <div className="flex flex-wrap gap-2" data-testid="admin-poi-operations">
+        <button
+          type="button"
+          onClick={() => openOperationDialog('poi_copy')}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
+          data-testid="admin-poi-copy-open"
+        >
+          <Copy className="h-4 w-4" aria-hidden="true" />
+          POI 복사
+        </button>
+        <button
+          type="button"
+          onClick={() => openOperationDialog('poi_move')}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm hover:bg-surface-soft"
+          data-testid="admin-poi-move-open"
+        >
+          <MoveRight className="h-4 w-4" aria-hidden="true" />
+          POI 이동
+        </button>
+        <button
+          type="button"
+          onClick={() => openOperationDialog('poi_delete')}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm text-error-text hover:bg-error-bg"
+          data-testid="admin-poi-delete-open"
+        >
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+          POI 삭제
+        </button>
+      </div>
+    </Section>
+  );
+}
+
+function AdminPoiDetailPageSection2_2({ viewModel }: { viewModel: AdminPoiDetailPageView2Model }) {
+  const {
+    acting,
+    brokenDraft,
+    currentBroken,
+    onLinkStatusSave,
+    reason,
+    setReason,
+    setShowStatusDialog,
+  } = viewModel;
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        // Escape·scrim도 취소 버튼과 같은 정리 경로를 탄다(사유 입력값을 남기지 않는다).
+        if (!open) {
+          setShowStatusDialog(false);
+          setReason('');
+        }
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>POI 연결 상태 변경</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4 p-4">
+          <p className="text-xs text-muted">
+            {currentBroken ? '끊김' : '정상'} → {brokenDraft ? '끊김' : '정상'}
+          </p>
+          <FormTextArea
+            id="admin-poi-action-reason"
+            label="사유"
+            hint="감사 로그에 기록됩니다."
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            data-testid="admin-poi-action-reason"
+          />
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
               setShowStatusDialog(false);
               setReason('');
-            }
-          }}
-        >
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>POI 연결 상태 변경</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-4 p-4">
-              <p className="text-xs text-muted">
-                {currentBroken ? '끊김' : '정상'} → {brokenDraft ? '끊김' : '정상'}
-              </p>
-              <FormTextArea
-                id="admin-poi-action-reason"
-                label="사유"
-                hint="감사 로그에 기록됩니다."
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                rows={3}
-                data-testid="admin-poi-action-reason"
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setShowStatusDialog(false);
-                  setReason('');
-                }}
-              >
-                취소
-              </Button>
-              <Button
-                type="button"
-                disabled={acting || reason.trim().length < 1}
-                onClick={onLinkStatusSave}
-                data-testid="admin-poi-action-confirm"
-              >
-                {acting ? '처리 중…' : '확인'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-    </AdminPage>
+            }}
+          >
+            취소
+          </Button>
+          <Button
+            type="button"
+            disabled={acting || reason.trim().length < 1}
+            onClick={onLinkStatusSave}
+            data-testid="admin-poi-action-confirm"
+          >
+            {acting ? '처리 중…' : '확인'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

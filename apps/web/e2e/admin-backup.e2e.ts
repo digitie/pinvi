@@ -203,7 +203,9 @@ test('Admin backup restore dialog가 확인 문구, focus, 단계 표시, POST b
 
   await page.getByTestId('admin-backup-restore').first().click();
   await expect(page.getByTestId('restore-hotswap-dialog')).toBeVisible();
-  await page.getByTestId('restore-hotswap-dialog-backdrop').click({ position: { x: 2, y: 2 } });
+  const overlay = page.locator('[data-slot="dialog-overlay"][data-state="open"]');
+  await expect(overlay).toHaveCount(1);
+  await overlay.click({ position: { x: 2, y: 2 } });
   await expect(page.getByTestId('restore-hotswap-dialog')).toHaveCount(0);
 
   await page.getByTestId('admin-backup-restore').first().click();

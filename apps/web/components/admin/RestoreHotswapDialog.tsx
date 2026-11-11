@@ -1,18 +1,17 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
-import { CheckCircle2, Loader2, RotateCcw, ShieldAlert, X, XCircle } from 'lucide-react';
+import { Button } from '@/components/admin/ui/button';
+import { apiClient } from '@/lib/api';
 import { ApiError, adminApi } from '@pinvi/api-client';
 import type {
   AdminBackupRestorePhase,
   AdminBackupRestoreRun,
   AdminBackupSnapshot,
 } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
-import { Button } from '@/components/admin/ui/button';
-// T-356: 사용자 표면 `components/ui/Dialog`(useModalDialog) → admin base-ui `Dialog`.
-// admin 화면에서는 두 모달 스택을 섞지 않는다. 사용자 표면은 계속 useModalDialog를 쓴다.
+import { CheckCircle2, Loader2, RotateCcw, ShieldAlert, X, XCircle } from 'lucide-react';
+import type { FormEvent } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+// T-356: 복원 도메인은 관리자 디자인 어댑터를 사용한다. 공개 UI와 엔진은 common Radix로 동일하다.
 import {
   Dialog,
   DialogContent,
@@ -57,15 +56,27 @@ function phaseIcon(phase: AdminBackupRestorePhase) {
 }
 
 /* Hallmark · component: dialog(admin, destructive) · design-system: design.md(KTM admin)
- * admin 프리미티브(`components/admin/ui/dialog`, base-ui)로 뜬다 — T-356에서 사용자 표면
- * `components/ui/Dialog`(useModalDialog)에서 옮겼다. 포털·배경 inert·Tab 트랩·Escape·포커스
- * 복원은 base-ui가 담당한다.
+ * admin 프리미티브(`components/admin/ui/dialog`, 공통 Radix)로 뜬다 — T-356에서 사용자 표면
+ * 공개 디자인 셸에서 관리자 어댑터로 옮겼다. 포털·배경 inert·Tab 트랩·Escape·포커스
+ * 복원은 공통 Radix가 담당한다.
  *
  * 파괴적 흐름이므로 `restoring` 동안 닫기 경로는 잠긴 채 유지한다: Escape/scrim은
  * `onOpenChange` → `closeIfIdle`이 삼키고, 헤더 ×와 푸터 `닫기`는 native `disabled`다
  * (e2e가 `restore-hotswap-dialog-close`의 disabled를 직접 확인한다 — `aria-disabled`인
  * Button `loading`을 쓰면 안 된다). 이 다이얼로그는 진행 중 요청을 취소할 방법이 없다. */
-export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreHotswapDialogProps) {
+export function RestoreHotswapDialog(...args: Parameters<typeof useRestoreHotswapDialogModel>) {
+  const viewModel = useRestoreHotswapDialogModel(...args);
+  if (viewModel.renderBranch === 'render0') return <RestoreHotswapDialogView0 />;
+  if (viewModel.renderBranch === 'render1')
+    return <RestoreHotswapDialogView1 viewModel={viewModel} />;
+  return null;
+}
+
+function useRestoreHotswapDialogModel({
+  snapshot,
+  onClose,
+  onComplete,
+}: RestoreHotswapDialogProps) {
   const reasonRef = useRef<HTMLTextAreaElement | null>(null);
   const [reason, setReason] = useState('');
   const [confirmed, setConfirmed] = useState(false);
@@ -102,7 +113,7 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
     [],
   );
 
-  if (!snapshot) return null;
+  if (!snapshot) return { renderBranch: 'render0' as const };
 
   const phases = run?.phases ?? (restoring ? pendingPhases : []);
   const confirmationText = snapshot.filename;
@@ -148,6 +159,64 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
     }
   };
 
+  return {
+    renderBranch: 'render1' as const,
+    canSubmit,
+    closeIfIdle,
+    confirmation,
+    confirmationMatches,
+    confirmationText,
+    confirmed,
+    error,
+    phases,
+    reason,
+    reasonRef,
+    restoring,
+    run,
+    setConfirmation,
+    setConfirmed,
+    setReason,
+    snapshot,
+    submit,
+  };
+}
+function RestoreHotswapDialogView0() {
+  return null;
+}
+
+type RestoreHotswapDialogView1Model = Extract<
+  ReturnType<typeof useRestoreHotswapDialogModel>,
+  { renderBranch: 'render1' }
+>;
+function RestoreHotswapDialogView1({ viewModel }: { viewModel: RestoreHotswapDialogView1Model }) {
+  return <RestoreHotswapDialogSection1_0 viewModel={viewModel} />;
+}
+
+function RestoreHotswapDialogSection1_0({
+  viewModel,
+}: {
+  viewModel: RestoreHotswapDialogView1Model;
+}) {
+  const {
+    canSubmit,
+    closeIfIdle,
+    confirmation,
+    confirmationMatches,
+    confirmationText,
+    confirmed,
+    error,
+    phases,
+    reason,
+    reasonRef,
+    restoring,
+    run,
+    setConfirmation,
+    setConfirmed,
+    setReason,
+    snapshot,
+    submit,
+  } = viewModel;
+
   return (
     <Dialog
       // 을 쓰지 않는다 — 이 Escape 닫힘을
@@ -163,7 +232,6 @@ export function RestoreHotswapDialog({ snapshot, onClose, onComplete }: RestoreH
         className="max-w-3xl"
         data-testid="restore-hotswap-dialog"
         initialFocus={reasonRef}
-        viewportProps={{ 'data-testid': 'restore-hotswap-dialog-backdrop' }}
       >
         <DialogHeader>
           <div className="min-w-0">

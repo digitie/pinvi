@@ -11,9 +11,7 @@
 // 원문에서 바꾼 부분과 이유:
 //   1) nav(NAV_GROUPS)·rail 마크업·로그아웃·접힘 상태·`usePathname` 기반 section 추론을 전부 뺐다.
 //      그 책임은 pinvi layout.tsx가 이미 갖는다. 그래서 `section`은 추론 없이 명시 prop만 받는다.
-//   2) `withOccurrenceKeys`(KTM `@/lib/occurrence-key`)가 pinvi에 없다. breadcrumb은 위치가 곧
-//      identity인 고정 배열이라 index 기반 key로 대체했다 — 같은 라벨이 두 번 나와도 충돌하지 않는다.
-//      값 identity별 occurrence 유틸을 통째로 들여올 이유가 없다.
+//   2) breadcrumb은 Pinvi의 withOccurrenceKeys로 동일 라벨의 반복도 안정된 key로 구분한다.
 //   3) import 경로 — `@/components/ui/breadcrumb` -> `@/components/admin/ui/breadcrumb`,
 //      `@/components/help-tip` -> `@/components/admin/ui/help-tip`, `@/lib/utils` -> `@/lib/admin/cn`.
 //   4) 색 토큰만 pinvi 팔레트 이름으로 치환:
@@ -34,8 +32,9 @@
 //
 // 런타임 값으로 Tailwind 클래스를 조립하지 않는다 — `gap`은 리터럴 클래스 3종의 정적 lookup이다.
 
-import * as React from 'react';
+import { withOccurrenceKeys } from '@/lib/occurrenceKeys';
 import Link from 'next/link';
+import * as React from 'react';
 
 import {
   Breadcrumb,
@@ -140,25 +139,27 @@ function AdminPageHeader({
         {hasBreadcrumbs && breadcrumbs ? (
           <Breadcrumb>
             <BreadcrumbList className="text-xs">
-              {breadcrumbs.map((crumb, index) => (
-                // breadcrumb은 위치가 곧 identity인 고정 배열이다(KTM withOccurrenceKeys 대체).
-                <React.Fragment key={`${index}:${crumb.href ?? ''}:${crumb.label}`}>
-                  {index > 0 ? <BreadcrumbSeparator /> : null}
-                  <BreadcrumbItem>
-                    {crumb.href ? (
-                      // `render`로 next/link를 넘긴다 — 맨 `<a href>`는 admin 셸을 통째로 다시
-                      // 내려받는 full page reload가 된다(App Router 클라이언트 전환 상실).
-                      <BreadcrumbLink render={<Link href={crumb.href} />}>
-                        {crumb.label}
-                      </BreadcrumbLink>
-                    ) : index === breadcrumbs.length - 1 ? (
-                      <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
-                    ) : (
-                      <span>{crumb.label}</span>
-                    )}
-                  </BreadcrumbItem>
-                </React.Fragment>
-              ))}
+              {withOccurrenceKeys(breadcrumbs, (crumb) => `${crumb.href ?? ''}:${crumb.label}`).map(
+                ({ item: crumb, key }, index) => (
+                  // 반복 항목은 내용별 occurrence로 구분하고 separator는 표시 순서만 따른다.
+                  <React.Fragment key={key}>
+                    {index > 0 ? <BreadcrumbSeparator /> : null}
+                    <BreadcrumbItem>
+                      {crumb.href ? (
+                        // `asChild`로 next/link를 넘긴다 — 맨 `<a href>`는 admin 셸을 통째로 다시
+                        // 내려받는 full page reload가 된다(App Router 클라이언트 전환 상실).
+                        <BreadcrumbLink asChild>
+                          <Link href={crumb.href}>{crumb.label}</Link>
+                        </BreadcrumbLink>
+                      ) : index === breadcrumbs.length - 1 ? (
+                        <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                      ) : (
+                        <span>{crumb.label}</span>
+                      )}
+                    </BreadcrumbItem>
+                  </React.Fragment>
+                ),
+              )}
             </BreadcrumbList>
           </Breadcrumb>
         ) : section ? (

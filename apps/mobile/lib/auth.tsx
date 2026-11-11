@@ -87,13 +87,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 부팅 복구.
   useEffect(() => {
     let active = true;
-    (async () => {
-      const token = await getAccessToken();
-      if (!token) {
-        if (active) setStatus('unauthenticated');
-        return;
-      }
+    void (async () => {
       try {
+        // SecureStore 미지원/잠금 오류도 네트워크 복구와 같은 실패 경로에서 처리한다.
+        const token = await getAccessToken();
+        if (!token) {
+          if (active) setStatus('unauthenticated');
+          return;
+        }
         // me()가 401을 만나면 api.ts refreshingFetcher가 refresh 1회를 투명하게
         // 시도한다. 여기 도달한 401(ApiError)은 refresh까지 실패한 확정 인증 실패.
         const me = await api.auth.me();

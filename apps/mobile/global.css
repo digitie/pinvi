@@ -1,3 +1,23 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/preflight.css' layer(base);
+@import 'tailwindcss/utilities.css';
+@import 'nativewind/theme';
+@import '@pinvi/design-tokens/theme.css';
+
+/* 공통 패키지의 className을 포함한다. utilities는 RN Web 기본값보다 우선한다. */
+@source "./app";
+@source "./components";
+@source "../../packages";
+
+/* native는 브라우저 fallback 목록 대신 등록한 정적 font family를 사용한다. */
+@theme {
+  --font-pinvi-regular: 'Pretendard-Regular';
+  --font-pinvi-medium: 'Pretendard-Medium';
+  --font-pinvi-semibold: 'Pretendard-SemiBold';
+  --font-pinvi-bold: 'Pretendard-Bold';
+}
+@media native {
+  :root {
+    --font-sans: 'Pretendard-Regular';
+  }
+}

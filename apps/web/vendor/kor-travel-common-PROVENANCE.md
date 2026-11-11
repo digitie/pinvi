@@ -1,30 +1,55 @@
-# Common vendored artifacts
+# 공통 산출물 출처 및 무결성
 
-- UI: `kor-travel-ui-0.1.0-dev.9.tgz`, source `kor-travel-common@aa232ad5f255233184de80eceaab2e9b6ccb00c9`, SHA256 `b738d8824e36eb6e58d8cc6b78af7dc31233b6763248d634286044def795b403`.
-  dev.9 제품 커밋은 `f0b60bb`(Common PR #47)이고, 현재 main `c289b4624c8640eb918cc915803e72ae754e58fb`의 `packages/`·루트 `package.json`/`package-lock.json`/`.nvmrc`는 aa232ad와 같다.
-- Tokens: `kor-travel-tokens-0.1.0.tgz`, source `kor-travel-common@426de4fbad35282bb558712d922c06268e9aba62`, SHA256 `554ae3f6a18cbf453130b29f8a2d737ddb880101b55e14535cf8d63174b47505`. 이후 tokens 소스 변경이 없어 그대로 쓴다.
-- Python: API(`[http]`)·ETL(`[dagster]`) 모두 exact `c289b4624c8640eb918cc915803e72ae754e58fb` Git dependency, 각 uv.lock 고정.
-- License: GPL-3.0-or-later. Copyright 2026 Youn-sok Choi (digitie).
-- Original Dagster model/UI: kor-travel-weather GPL-3.0-or-later. Tarball LICENSE/NOTICE/THIRD_PARTY_NOTICES를 보존한다.
-- dev.7+ 지도 작업면(map-controls)은 `digitie/kor-travel-map@974e2d025`의 Feature 지도 레시피(GPL-3.0-or-later)를 재구성했고 Base UI(MIT)·Lucide(ISC)를
-  런타임 의존으로 쓴다(tarball THIRD_PARTY_NOTICES). Common T-217(dev.9)은 Common 쪽에서 아직 IN_PROGRESS이며 Common의 소비자 수용 기록은 Transport만 다룬다.
-- dev.7부터 UI는 지도 작업면(`@kor-travel/ui/map-controls`)용 runtime dependency `lucide-react` 1.41.0과 peer `@base-ui/react` ^1.8.0을 선언한다. PinVi는 `@base-ui/react` 1.9.0을 이미 쓰고 map-controls는 import하지 않는다. lucide는 루트 1.61.0과 달라 `node_modules/@kor-travel/ui/node_modules` 아래에 따로 설치된다.
+현재 정본은 integration-11-review의 foundation 최초릴리스7종이다. 부모가 동결한 tgz·원장을 그대로 소비한다.
+common PR49는 main e8ed3ae75000be5cd22a3a11492bd97660635d78로 병합됐다.
+동일 버전의 bytes를 바꾸거나 독립 pack을 만들지 않는다. 후속 runtime 변경은 새 버전으로 소비한다.
+원장의 제작 시점 status 라벨은 정본 그대로 보존한다.
 
-## 재현과 무결성
+| 패키지 | 정확 버전 | 실제 package.json 라이선스 | SHA512 |
+| --- | --- | --- | --- |
+| @kor-travel/tokens | 0.1.1 | GPL-3.0-or-later | sha512-85mqNJXqhTlA4RbtKUhmzx6rH6mOOeNmsXTJtCetQ5y8njLy+5XLZbdT6j1tf3ME9XQA6X63Ah4kmuLdqEZHbA== |
+| @kor-travel/ui | 0.2.0 | GPL-3.0-or-later | sha512-BsRRdnJUp6FQ2KWkXtINb7IkrxxwnWFlLP/oVlNN4UXBKren7uTlnYT4iJsdaO98iA4Tn2EMPX06eT2uB5jEDA== |
+| lightningcss | 1.33.0+nativecss.fix.4 | MPL-2.0 | sha512-zDQ03VJE37OlyBrLsRcsEdIVu0T4BXJKDH5y9//To6GlGN2UrKQGERFVAFblkPQ5ZEbhuOp5wpXxGARZNdbQLA== |
+| vworld-map-core | 1.0.1 | GPL-3.0-only | sha512-Djm14Arr7U0r7Sabj6P0V57CdzWIGaJmecklmY1hwrq1QUZJjMUFgkZfGRFalUo6AFzHEwwzOEzbJPMifGhINw== |
+| vworld-map-rn | 1.0.1 | GPL-3.0-only | sha512-lgDBasKIEG2ElQ9jnHDB9pA+x04Xge9yzBb1NPPw1auyvlkQvxsq4NfRPIrw1VWiutcGiIefySLiVaZDUkO69Q== |
+| vworld-map-web | 1.0.3 | GPL-3.0-only | sha512-HPXZcz/wP6tFsCZqlAbansWNICcZPubC+/V7rDWXYTQVlOBLl9cZQ1HSMJd25c2CZoMNreVFTQA0vzkVglkS1w== |
+| @radix-ui/react-focus-scope | 1.3.1+kortravel.fix.2 | MIT | sha512-v3XweXrUSZ/QfrMVvYmsAkVNDnvcN21QKbSrViXYf0OQf5Ue9xSgqQIukgGjsYMEBQ5qxQW8fnOC9t1Y0ENPXw== |
 
-Common `docs.yml`의 pack 명령과 같다(그 CI는 `.nvmrc` Node 22.23.1, 아래 재현은 Node 22.22.2). source checkout에서 npm 11.19.1로 `npm ci --no-audit --no-fund` 뒤
-`npm pack --workspace packages/ui --pack-destination <dir>`를 실행하고, 산출물 SHA256이 위 값(Common T-217 기록값)과 같을 때만 vendor한다.
-2026-10-27 N150(Node 22.22.2)에서 aa232ad의 산출물은 27파일·35441 bytes·위 SHA256으로, 대조군 `e28559803c1ec1134ef7ba7736b9acf4cadb9a32`의 dev.6은
-아래 기록 SHA256으로 재현됐다. 새 버전은 **새 파일명**으로만 들여오고 `apps/web/package.json` specifier를 바꾼 뒤 npm 12.0.1의
-`npm install --package-lock-only`로 lock을 갱신한다(같은 파일명의 내용만 바꾸면 lock `integrity`가 갱신되지 않는다 — `docs/agent-failure-patterns.md` 패턴 F).
-lock `integrity`는 vendor 파일의 SHA-512이며 실제 bytes 대조는 `npm ci`가 한다(`scripts/check-lockfile-integrity.mjs`는 `file:` 항목을
-건너뛰고 registry 항목의 integrity 보유율만 본다). 갱신 직후 `sha512sum`/base64로 파일 해시와 lock 값을 직접 대조한다(패턴 F).
-새 파일명 방식은 기존 lock 항목의 specifier가 바뀌어 재해시되므로 lock을 통째로 다시 만들 필요가 없다 — 같은 파일명의 내용만 바꿀 때만 패턴 F의 전체 재생성을 따른다.
+## 소스 정본
 
-## 이전 산출물
+- common: a35481349d6747b4f13b958ae64d9c0bbd0b5413
+- maplibre-vworld-react: 9a7a348b02d61969b394c681b024d5851eef836b
+- lightningcss: 748651cbd845971e65c411166ddee101745dab21
+- serde-content: 18e53fcf6f8ace093a292891b34fa3411192617d
+- radix-ui-primitives: 1752a539c8d5ae57961a0fa2702d2573d48fefe7
 
-작업 트리에는 `package.json`이 참조하는 파일만 둔다. 아래 tarball은 PR #575(`07cfef22`)부터 dev.9 채택 직전까지의 Git 이력에 bytes 그대로 남는다.
+중앙 reusable code/common-ref는 55a921b55d248106cbe320e7f5305f3d3cdb60fe를 유지한다.
+producer a35481349d6747b4f13b958ae64d9c0bbd0b5413과 검사 코드 pin을 구분한다.
 
-- dev.4: SHA256 `7504b77aa451d238fdaa1a6a8f2ec43e2f0cf6ed611341a3b37a688bc9070dda`. 새 버전으로 upstream dev.3 frozen bytes를 바꾸지 않았다. 무태그 cap은 null=미확인이다.
-- dev.5: source `fa8179e9c495987019494bdf28d15059f6e0aeb0`, SHA256 `bb8b0441276b208e01be55df4d03fc72dfe44226b3a7f49615bac61b48ebbbb0`. 모바일 표의 최소 너비와 내부 스크롤을 적용했다.
-- dev.6: source `e28559803c1ec1134ef7ba7736b9acf4cadb9a32`, SHA256 `e4945d01d9eb89ed505a95b551899fd0ecf41be66c9ee6b76246701350447e6d`. 공통 기본 구성 너비 회귀 수정.
+Scope fix.2는 source1752a539c8d5ae57961a0fa2702d2573d48fefe7의 33,511bytes이며
+SHA256은 1ca04870692565c243130d99c3dba91f3ac853ab2ec9538fc7b658b17fb7b49a다.
+root/web의 공식 runtime file 의존성과 root $@radix-ui/react-focus-scope override가 물리 사본1개를 고정한다.
+mobile에는 직접 DOM Scope 의존성을 넣지 않는다.
+
+root/web/mobile 원장의 source·7종 version/SRI는 같으며 file 경로만 각 workspace 기준으로 다르다.
+정확한 파일명은 [웹 원장](../common-artifacts.json), root lock과 각 workspace 원장이 함께 고정한다.
+LICENSE/NOTICE/실제 소스 고지는 전달 archive 그대로 보존한다. CSSfix4와 지도3종 bytes는 바뀌지 않았다.
+
+## 갱신과 검증
+
+동명 UI/tokens는 npm12.0.1의 명시적 file 설치로 lock·actual modules를 갱신한다.
+Scope는 root의 apps/web/vendor 상대 경로에서 명시적으로 설치해 workspace 중복 경로 ENOENT를 피한다.
+웹 UI/tokens·모바일 tokens도 각 workspace의 file 경로로 명시 재설치하고 root install로 정규화한다.
+lock integrity를 수동 편집하거나 legacy-peer/force를 사용하지 않는다.
+종료된 본인 QA 설치에서 확인된 UI/tokens/Scope 폴더만 정리하며 공유 cache는 삭제하지 않는다.
+
+actual7종297파일(UI94/tokens25/Scope15 포함)을 archive 원문과 byte 비교한다.
+원장·lock·실제 버전/사본과 installed/external canonical 웹·모바일 guard를 함께 확인한다.
+C10→C11은 UI/tokens의 policy JSON2개만 변경됐고 나머지117파일은 동일하다.
+Scope runtime은 바뀌었으므로 최종 웹 build·전체 단위/브라우저와 모달 초기 포커스·fieldset 경계를 새로 검증한다.
+기존 native fix4의4 export·글꼴·모바일 웹 증거는 native 소스 및 tokens runtime 동일성 근거로 보존한다.
+그 결과를 새 웹 runtime 수용으로 대신하지 않는다.
+
+최종 결과·실패 이력·원문 로그·미실행 범위는 [통합 보고서](../../../docs/reports/common-unification-20261111.md)를 따른다.
+기존 C9 520/1·207/2/4와 C10 521/0·207/2/4는 해당 입력의 별도 기록으로 유지한다.
+현재 작업 트리에는 manifest가 사용하는 tgz만 두고 이전 후보는 Git 이력에 보존한다.

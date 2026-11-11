@@ -1,8 +1,12 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useMemo, useState, type FormEvent } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import {
   ApiClient,
   ApiError,
@@ -12,14 +16,10 @@ import {
   type AdminUpstreamApiCallLogListParams,
 } from '@pinvi/api-client';
 import type { AdminUpstreamApiCallLogRecord, AdminUpstreamSystemLogRecord } from '@pinvi/schemas';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Pause, Play, Radio, RefreshCw, Search } from 'lucide-react';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
-import { Button } from '@/components/admin/ui/button';
-import { Input } from '@/components/admin/ui/input';
-import { NativeSelect } from '@/components/admin/ui/native-select';
-import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
+import { useRouter } from 'next/navigation';
+import { useMemo, useState, type FormEvent } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -48,7 +48,14 @@ function ErrorBox({ message }: { message: string }) {
   );
 }
 
-export default function AdminDebugLogsPage() {
+export default function AdminDebugLogsPage(...args: Parameters<typeof useAdminDebugLogsPageModel>) {
+  const viewModel = useAdminDebugLogsPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminDebugLogsPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminDebugLogsPageModel() {
   const router = useRouter();
   const [level, setLevel] = useState<(typeof LEVEL_OPTIONS)[number]['value']>('error');
   const [source, setSource] = useState('');
@@ -247,6 +254,68 @@ export default function AdminDebugLogsPage() {
   };
   const liveState = liveEnabled ? (livePaused ? 'paused' : 'live') : 'off';
 
+  return {
+    renderBranch: 'render0' as const,
+    apiColumns,
+    apiError,
+    apiLogsQuery,
+    level,
+    liveEnabled,
+    livePaused,
+    liveState,
+    method,
+    minStatus,
+    onLiveToggle,
+    onPauseToggle,
+    onSearch,
+    onTimelineSearch,
+    path,
+    pollIntervalMs,
+    queryInput,
+    setLevel,
+    setMethod,
+    setMinStatus,
+    setPath,
+    setQueryInput,
+    setSource,
+    setTimelineRequestId,
+    source,
+    streamStatusQuery,
+    systemColumns,
+    systemError,
+    systemLogsQuery,
+    timelineError,
+    timelineRequestId,
+  };
+}
+
+type AdminDebugLogsPageView0Model = Extract<
+  ReturnType<typeof useAdminDebugLogsPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminDebugLogsPageView0({ viewModel }: { viewModel: AdminDebugLogsPageView0Model }) {
+  const {
+    apiColumns,
+    apiError,
+    apiLogsQuery,
+    liveEnabled,
+    livePaused,
+    liveState,
+    method,
+    minStatus,
+    onLiveToggle,
+    onPauseToggle,
+    path,
+    pollIntervalMs,
+    setMethod,
+    setMinStatus,
+    setPath,
+    streamStatusQuery,
+    systemColumns,
+    systemError,
+    systemLogsQuery,
+    timelineError,
+  } = viewModel;
   return (
     <AdminPage
       title="Debug logs"
@@ -267,31 +336,7 @@ export default function AdminDebugLogsPage() {
       }
     >
       <FilterBar>
-        <form
-          onSubmit={onTimelineSearch}
-          className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-2"
-        >
-          <FilterField
-            className="w-96 max-w-full"
-            htmlFor="admin-debug-request-id"
-            label="Request ID"
-          >
-            <Input
-              id="admin-debug-request-id"
-              value={timelineRequestId}
-              onChange={(event) => setTimelineRequestId(event.target.value)}
-              className="font-mono"
-              placeholder="00000000-0000-0000-0000-000000000000"
-              data-testid="admin-debug-request-id"
-            />
-          </FilterField>
-          <FilterActions>
-            <Button type="submit" variant="outline" data-testid="admin-debug-request-submit">
-              <Search aria-hidden="true" />
-              Timeline
-            </Button>
-          </FilterActions>
-        </form>
+        <AdminDebugLogsPageSection0_0 viewModel={viewModel} />
       </FilterBar>
 
       {timelineError && <ErrorBox message={timelineError} />}
@@ -336,55 +381,7 @@ export default function AdminDebugLogsPage() {
       <FilterBar>
         {/* system log 3종은 전환 전과 같이 한 form 안에 둔다(레벨/소스는 즉시, 메시지 검색만
             제출로 적용). API call log 3종은 form 밖이라 입력 즉시 적용된다. */}
-        <form
-          onSubmit={onSearch}
-          className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-2"
-        >
-          <FilterField htmlFor="admin-debug-level" label="레벨">
-            <NativeSelect
-              id="admin-debug-level"
-              value={level}
-              onChange={(event) => setLevel(event.target.value as typeof level)}
-              data-testid="admin-debug-level"
-            >
-              {LEVEL_OPTIONS.map((item) => (
-                <NativeSelectOption key={item.value} value={item.value}>
-                  {item.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </FilterField>
-          <FilterField className="w-36" htmlFor="admin-debug-source" label="소스">
-            <Input
-              id="admin-debug-source"
-              value={source}
-              onChange={(event) => setSource(event.target.value)}
-              placeholder="source"
-              data-testid="admin-debug-source"
-            />
-          </FilterField>
-          <FilterField className="w-48" htmlFor="admin-debug-q" label="메시지 검색">
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
-                aria-hidden="true"
-              />
-              <Input
-                id="admin-debug-q"
-                value={queryInput}
-                onChange={(event) => setQueryInput(event.target.value)}
-                className="pl-9"
-                placeholder="message"
-                data-testid="admin-debug-q"
-              />
-            </div>
-          </FilterField>
-          <FilterActions>
-            <Button type="submit" variant="outline" data-testid="admin-debug-submit">
-              조회
-            </Button>
-          </FilterActions>
-        </form>
+        <AdminDebugLogsPageSection0_1 viewModel={viewModel} />
         <FilterField className="w-20" htmlFor="admin-debug-method" label="메서드">
           <Input
             id="admin-debug-method"
@@ -441,5 +438,84 @@ export default function AdminDebugLogsPage() {
         />
       </Section>
     </AdminPage>
+  );
+}
+
+function AdminDebugLogsPageSection0_0({ viewModel }: { viewModel: AdminDebugLogsPageView0Model }) {
+  const { onTimelineSearch, setTimelineRequestId, timelineRequestId } = viewModel;
+  return (
+    <form
+      onSubmit={onTimelineSearch}
+      className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-2"
+    >
+      <FilterField className="w-96 max-w-full" htmlFor="admin-debug-request-id" label="Request ID">
+        <Input
+          id="admin-debug-request-id"
+          value={timelineRequestId}
+          onChange={(event) => setTimelineRequestId(event.target.value)}
+          className="font-mono"
+          placeholder="00000000-0000-0000-0000-000000000000"
+          data-testid="admin-debug-request-id"
+        />
+      </FilterField>
+      <FilterActions>
+        <Button type="submit" variant="outline" data-testid="admin-debug-request-submit">
+          <Search aria-hidden="true" />
+          Timeline
+        </Button>
+      </FilterActions>
+    </form>
+  );
+}
+
+function AdminDebugLogsPageSection0_1({ viewModel }: { viewModel: AdminDebugLogsPageView0Model }) {
+  const { level, onSearch, queryInput, setLevel, setQueryInput, setSource, source } = viewModel;
+  return (
+    <form onSubmit={onSearch} className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-2">
+      <FilterField htmlFor="admin-debug-level" label="레벨">
+        <NativeSelect
+          id="admin-debug-level"
+          value={level}
+          onChange={(event) => setLevel(event.target.value as typeof level)}
+          data-testid="admin-debug-level"
+        >
+          {LEVEL_OPTIONS.map((item) => (
+            <NativeSelectOption key={item.value} value={item.value}>
+              {item.label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </FilterField>
+      <FilterField className="w-36" htmlFor="admin-debug-source" label="소스">
+        <Input
+          id="admin-debug-source"
+          value={source}
+          onChange={(event) => setSource(event.target.value)}
+          placeholder="source"
+          data-testid="admin-debug-source"
+        />
+      </FilterField>
+      <FilterField className="w-48" htmlFor="admin-debug-q" label="메시지 검색">
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
+            aria-hidden="true"
+          />
+          <Input
+            id="admin-debug-q"
+            value={queryInput}
+            onChange={(event) => setQueryInput(event.target.value)}
+            className="pl-9"
+            placeholder="message"
+            data-testid="admin-debug-q"
+          />
+        </div>
+      </FilterField>
+      <FilterActions>
+        <Button type="submit" variant="outline" data-testid="admin-debug-submit">
+          조회
+        </Button>
+      </FilterActions>
+    </form>
   );
 }

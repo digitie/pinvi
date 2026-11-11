@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { cameraBbox, clamp, type MapCamera } from '../lib/cameraBbox';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { transportApi } from '@pinvi/api-client';
 import type { TransportItem, TransportLayer, TransportLayerResult } from '@pinvi/schemas';
@@ -19,47 +20,9 @@ import {
 import { apiClient } from '../lib/api';
 import { Body, Card, Muted, Subheading } from './ui';
 
-/** `vworld-map-rn` `onCameraChanged`가 주는 카메라. */
-export type MapCamera = {
-  center: [number, number];
-  zoom: number;
-  bounds?: { ne: [number, number]; sw: [number, number] };
-};
-
 const DEBOUNCE_MS = 400;
 /** 클러스터링이 없는 네이티브 마커라 레이어당 상한을 낮게 둔다. */
 const LIMIT = 100;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-/**
- * 카메라 → `lng_min,lat_min,lng_max,lat_max`(국내 범위로 clamp). bounds가 없으면 중심·줌으로 어림한다.
- * 소수 3자리로 반올림해 작은 흔들림이 새 요청이 되지 않게 한다.
- */
-export function cameraBbox(camera: MapCamera): string | null {
-  let west: number;
-  let south: number;
-  let east: number;
-  let north: number;
-  if (camera.bounds) {
-    [west, south] = camera.bounds.sw;
-    [east, north] = camera.bounds.ne;
-  } else {
-    const lonSpan = 360 / 2 ** camera.zoom;
-    const latSpan = lonSpan * 1.6;
-    [west, south] = [camera.center[0] - lonSpan, camera.center[1] - latSpan / 2];
-    [east, north] = [camera.center[0] + lonSpan, camera.center[1] + latSpan / 2];
-  }
-  const w = clamp(Math.min(west, east), 124, 132);
-  const e = clamp(Math.max(west, east), 124, 132);
-  const s = clamp(Math.min(south, north), 33, 43);
-  const n = clamp(Math.max(south, north), 33, 43);
-  // 화면 전체가 국내 범위 밖이면 clamp 결과가 면적 0이다 — 요청하지 않는다.
-  if (w >= e || s >= n) return null;
-  return [w, s, e, n].map((v) => v.toFixed(3)).join(',');
-}
 
 /** 지도 화면의 transport 레이어 상태(ADR-076). 기능이 꺼져 있으면 `visible=false`. */
 export function useMobileTransport(camera: MapCamera | null) {
@@ -131,9 +94,7 @@ export function useMobileTransport(camera: MapCamera | null) {
   const itemForMarker = (id: string): TransportItem | null => {
     const parsed = parseTransportMarkerId(id);
     if (!parsed) return null;
-    return (
-      items.find((i) => i.layer === parsed.layer && i.feature_id === parsed.featureId) ?? null
-    );
+    return items.find((i) => i.layer === parsed.layer && i.feature_id === parsed.featureId) ?? null;
   };
 
   const toggle = (layer: TransportLayer) => {
@@ -159,39 +120,23 @@ export function useMobileTransport(camera: MapCamera | null) {
 
 export type MobileTransportState = ReturnType<typeof useMobileTransport>;
 
+type LayerMeta = (typeof TRANSPORT_LAYER_META)[number];
+const layerKey = (meta: LayerMeta) => meta.layer;
 export function TransportChips({ state }: { state: MobileTransportState }) {
+  const renderItem = useCallback(
+    ({ item }: { item: LayerMeta }) => <TransportChip meta={item} state={state} />,
+    [state],
+  );
   if (!state.visible) return null;
   return (
-    <ScrollView
+    <FlatList
+      data={TRANSPORT_LAYER_META}
+      keyExtractor={layerKey}
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={{ gap: 8 }}
-    >
-      {TRANSPORT_LAYER_META.map((meta) => {
-        const on = state.enabled.has(meta.layer);
-        const result = state.results.find((r) => r.layer === meta.layer);
-        const hint =
-          on && state.zoom != null && state.zoom < meta.minZoom
-            ? ' · 확대'
-            : on && result && result.status !== 'ok'
-              ? ' · 불가'
-              : '';
-        return (
-          <Pressable
-            key={meta.layer}
-            accessibilityRole="button"
-            accessibilityState={{ selected: on }}
-            onPress={() => state.toggle(meta.layer)}
-            className={`min-h-11 justify-center rounded-full border px-4 ${on ? 'border-primary bg-primary' : 'border-hairline bg-canvas'}`}
-          >
-            <Text className={`text-sm font-medium ${on ? 'text-white' : 'text-body'}`}>
-              {meta.label}
-              {hint}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+      renderItem={renderItem}
+    />
   );
 }
 
@@ -247,7 +192,11 @@ export function TransportItemCard({
           <Subheading>{transportItemTitle(item)}</Subheading>
           <Muted>{transportLayerLabel(item.layer)}</Muted>
         </View>
-        <Pressable accessibilityRole="button" onPress={onClose} className="min-h-11 justify-center px-2">
+        <Pressable
+          accessibilityRole="button"
+          onPress={onClose}
+          className="min-h-11 justify-center px-2"
+        >
           <Text className="text-sm text-muted">닫기</Text>
         </Pressable>
       </View>
@@ -267,5 +216,29 @@ export function TransportItemCard({
         </Muted>
       ) : null}
     </Card>
+  );
+}
+
+function TransportChip({ meta, state }: { meta: LayerMeta; state: MobileTransportState }) {
+  const on = state.enabled.has(meta.layer);
+  const result = state.results.find((r) => r.layer === meta.layer);
+  const hint =
+    on && state.zoom != null && state.zoom < meta.minZoom
+      ? ' · 확대'
+      : on && result && result.status !== 'ok'
+        ? ' · 불가'
+        : '';
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: on }}
+      onPress={() => state.toggle(meta.layer)}
+      className={`min-h-11 justify-center rounded-full border px-4 ${on ? 'border-primary bg-primary' : 'border-hairline bg-canvas'}`}
+    >
+      <Text className={`text-sm font-medium ${on ? 'text-white' : 'text-body'}`}>
+        {meta.label}
+        {hint}
+      </Text>
+    </Pressable>
   );
 }

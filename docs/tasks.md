@@ -1,8 +1,13 @@
 # tasks.md — 활성 작업
 
+2026-11-12 공개 UI 공통화 후속: Dialog/ConfirmDialog 자체 모달 엔진을 공통 Radix 어댑터로 이관하고 useModalDialog를 정리했다. 기존14행동cases와 추가회귀 유지, AppShell 더보기 common Popover6casesPASS. 새공통overlayProps/unstyled pack 대기 및 실제브라우저 initial-panel ShiftTab 회귀1건이 남는다. 과거전체493/1·203/6/4는 최종PASS가 아니며 새pack후전체재검증필수. 상세 docs/reports/common-unification-20261111.md.
+
+2026-11-11 공통 이관 checkpoint: 지도 source9a의 core1.0.1/web1.0.3/RN1.0.1과 Lightning CSS1.33.0+nativecss.fix.3 동일 tgz 실제 설치·lock/원장 SHA512 일치. 웹/모바일 타입·lint 및 Doctor482/45files 진단0. Android/iOS/Web export와 SDK58 N150375/1280px 로그인·글꼴 스모크PASS. 웹 unit493PASS/1FAIL은 최종 common LoginForm 자동완성 수정 pack 대기. 최종 common 정책·clean ci/build/e2e·독립2리뷰 미완료이며 push/배포 대기. 후속 N150 production buildPASS/E2E203PASS6FAIL(긴 공통Dialog)4SKIP, 별도 실제 canvas3casesPASS. ESLint도 전이까지10.14.0 하나로 정리했다. 상세는 docs/reports/common-unification-20261111.md.
+
+- [/] T-COMMON-20261111 — 원 A OCI/ENV source 동등성+validSHA 음성검사 수정, 원 B CI경로 green. 같은 final head 원 A/B closure·actual image CI 확인.  SDK4 latest/필수Doctor20·main476 bounded merge 뒤 fresh hosted export/smoke·web CI 확인.  C11 actual7종297파일·원장/lock/guard·unit527·type/Doctor0 검증. N150 새 production 전체browser209/0/기존flagSKIP4·canvas3·restore2 PASS. 소비자 독립2리뷰·정확 HEAD CI·merge·부모 go 및 이미지 배포. 근거: docs/reports/common-unification-20261111.md.
+
 - [/] #636/#638 — PR688 일정 수동 전송·사용자 opt-in 일간/주간 예약의 최종 WSL UI·두 전문 적대리뷰·정확HEAD CI 후 일반 merge. 운영·실수신자 전송 없음.
 - [ ] #637 — Weather201의 공식 지역별 발령/해제·행정구역 매핑 계약을 선병합하고 Pinvi 대표지역 특보 알림을 후속 구현한다.
-
 
 이 문서는 완료되지 않은 작업만 의존 순서대로 한 줄씩 나열한다. lane, 담당자 구분,
 계층형 하위 작업은 사용하지 않는다. 완료·퇴역 이력은
@@ -17,6 +22,7 @@
 > 근거를 남긴다. `kor-travel-map` 저장소 `docs/tasks-done.md`에도 별도로
 > **line 577에 미해결 git merge conflict marker(`|||||||`, commit `ae547dead7`,
 > 2026-08-31)가 그대로 커밋돼 있다** — Pinvi가 고칠 파일이 아니라 여기 기록만 남긴다.
+
 - [/] T-VN-OPS-GRID-REFRESH-POLICY — `/admin/provider-sync` 502(Map `ProviderRefreshPolicyRecord.provider_dataset_id`
   미수용) 수정. 소유자 claude, 브랜치 `fix/ops-grid-refresh-policy-provider-dataset-id`, 충돌 회피 범위
   `apps/api/app/services/kor_travel_map_ops_projection.py`·`apps/api/tests/unit/test_kor_travel_map_ops_{projection,contract}.py`·
@@ -35,24 +41,24 @@
 - [/] T-VN-M05-NEW-CANDIDATE — PinVi `69a5ac65…`·Map `9c64e862…`의 pinset `030b12fc…`은 `committed` generation(Map application `300`, Map Dagster `29b539ebc72a`, PinVi `20260824_0101`)으로 보존하며 재실행하지 않는다. committed Map runtime provenance를 반영한 PinVi `a90b1f06…`·Map `9c64e862…`의 pinset `87fe2abc…`만 다음 trusted release candidate다. 이 새 pinset에서만 `rebuild-pinned --confirm --json`을 정확히 한 번 실행한다. (교차 저장소 감사: Map·Manager 어느 쪽에도 이 ID는 없다 — PinVi 전용 잠긴 이력 기록.)
 
 - [ ] T-VN-M05-ACTIVATION — provenance가 재결박된 committed candidate에서만 isolated M04/M05 live mutating E2E와 activation attestation을 통과한다.
-  **⚠️ 미해소 교차 저장소 모순**: `kor-travel-map`은 같은 ID를 `[x]` 완료(2026-09-08,
-  "M04/M05 live acceptance attestation 승격")로 기록했다. `kor-travel-docker-manager`는
-  "M05 activation"을 여전히 `[ ]`(미착수)로 두고, 2026-09-03 측정 기록에 "**남은
-  판정은 소유자 몫**"이라고 명시했다 — 그 직후 pair 계약이 v1→v2로 승격(9/7~9/8,
-  PinVi PR #538/539)했으므로 9/3 측정은 "fresh candidate" 요건상 무효화됐을 가능성이
-  높다. v2 계약 위에서 `pin rotate-pair → run-pinned-rebuild-once →
-  run-m05-isolated-e2e-once → activation attestation`이 재실행된 기록이 세 저장소
-  어디에도 없다 — **다음 단계는 여기서 막혀 있다.**
-  2026-09-28: Manager M05 격리 실행 p3·p4·p8이 멈춘 `app-dagster` unhealthy는 PinVi app compose가
-  #558 이후 Dagster instance storage(`PINVI_DAGSTER_PG_URL`/`pinvi_dagster`)를 주지 않던 결함이었다 —
-  `fix/app-dagster-instance-storage`가 고친다. 다음 격리 실행은 그 fix를 포함한 PinVi pin에서 한다.
+      **⚠️ 미해소 교차 저장소 모순**: `kor-travel-map`은 같은 ID를 `[x]` 완료(2026-09-08,
+      "M04/M05 live acceptance attestation 승격")로 기록했다. `kor-travel-docker-manager`는
+      "M05 activation"을 여전히 `[ ]`(미착수)로 두고, 2026-09-03 측정 기록에 "**남은
+      판정은 소유자 몫**"이라고 명시했다 — 그 직후 pair 계약이 v1→v2로 승격(9/7~9/8,
+      PinVi PR #538/539)했으므로 9/3 측정은 "fresh candidate" 요건상 무효화됐을 가능성이
+      높다. v2 계약 위에서 `pin rotate-pair → run-pinned-rebuild-once →
+run-m05-isolated-e2e-once → activation attestation`이 재실행된 기록이 세 저장소
+      어디에도 없다 — **다음 단계는 여기서 막혀 있다.**
+      2026-09-28: Manager M05 격리 실행 p3·p4·p8이 멈춘 `app-dagster` unhealthy는 PinVi app compose가
+      #558 이후 Dagster instance storage(`PINVI_DAGSTER_PG_URL`/`pinvi_dagster`)를 주지 않던 결함이었다 —
+      `fix/app-dagster-instance-storage`가 고친다. 다음 격리 실행은 그 fix를 포함한 PinVi pin에서 한다.
 - [ ] T-VN-41C — relay, reconciliation, consumer enable paired acceptance를 완료한다.
-  **교차 저장소 확인(2026-09-18)**: `kor-travel-map`은 이 ID를 `[ ]`로 유지하되
-  "**보류**(오너 지시 2026-09-07)"로 명시한다 — relay/reconciliation 구현은 끝났고,
-  남은 것은 런타임 결선·enable뿐인데 현재 lifecycle에서 enable과 pinned rebuild가
-  **상호배타**라 실 production 전환 시점까지 의도적으로 미룬 것이다("실 production
-  전환이 결정되면 이 절을 그대로 다시 세운다"). 기술적 blocker가 아니라 owner
-  timing 결정이므로 여기서도 같은 상태로 둔다.
+      **교차 저장소 확인(2026-09-18)**: `kor-travel-map`은 이 ID를 `[ ]`로 유지하되
+      "**보류**(오너 지시 2026-09-07)"로 명시한다 — relay/reconciliation 구현은 끝났고,
+      남은 것은 런타임 결선·enable뿐인데 현재 lifecycle에서 enable과 pinned rebuild가
+      **상호배타**라 실 production 전환 시점까지 의도적으로 미룬 것이다("실 production
+      전환이 결정되면 이 절을 그대로 다시 세운다"). 기술적 blocker가 아니라 owner
+      timing 결정이므로 여기서도 같은 상태로 둔다.
 - [ ] T-VN-H49 — standalone backup의 주기 실행, bounded retention, off-box 증거를 완료한다.
 - [ ] T-369 — `deploy-node.sh` fresh fallback 스택(Manager 부재 시)의 호스트 재부팅 복구. `app-postgres`·`app-api`·`app-web`에 restart policy가 없어 재부팅 뒤 내려간 채 남고, `up`의 재사용 검사는 PostgreSQL이 running이어야 해서 어떤 wrapper 명령도 되살리지 못한다(2026-09-28 리뷰). compose restart policy는 Manager 배포와 공유하므로 따로 판단한다.
 
@@ -71,13 +77,13 @@
 - [/] T-376 — (구 ID T-373 — 2026-10-13 weather Track 2 항목과 ID가 겹쳐 2026-10-15 재번호; PR #581 제목·커밋에는 T-373으로 남음) `/admin/etl/summary` 상시 degraded(C6c `pinvi_etl_summary`, 2026-10-13 t1013d): Dagster live query의 두 `ticks(limit: 3)` 선택에 `afterTimestamp` 창(schedule 2일·sensor 1시간)을 싣고 첫 시간 초과를 남은 예산으로 한 번 재시도한다. 브랜치 `fix/admin-etl-dagster-ticks-window`(claude), 충돌 회피 범위 `apps/api/app/services/admin_etl.py`·`apps/api/tests/unit/test_admin_etl_dagster_probe.py`·`apps/etl/tests/test_admin_probe_graphql_schema.py`·`docs/runbooks/common-dagster.md`. 이 PR만으로 pair 회전 금지 — 순서는 `docs/resume.md`.
 
 - [ ] **T-382 (P1, 운영 복원 경로 결함)** — 운영 API 이미지(Debian 13)의 `pg_dump`/`pg_restore`는 17.11, 공용 PG는 16.9다. PG17+ `pg_restore`는
-  출력 머리에 항상 `SET transaction_timeout = 0;`을 쓰고(`pg_backup_archiver.c` `_doSetFixedOutputState`) PG16은 이를 거부한다. 따라서
-  `scripts/restore-hotswap.sh`(SQL 생성 → 보호 세션 재생)는 schema-swap에서 실패하고 write fence가 남으며, `scripts/restore-db.sh`
-  (`pg_restore --exit-on-error --dbname`)도 같은 SET에서 중단될 것으로 본다(소스 근거, 운영 drill 미실행). 2026-10-27 CI(ubuntu-26.04, PG18 클라이언트)가
-  같은 실패를 재현했다([패턴 G](agent-failure-patterns.md#10-패턴-g--ci-runner-이미지-교체로-postgresql-클라이언트-major가-서버보다-앞섬), PR #606).
-  제약: 운영 스냅샷은 `pg_dump` 17이 만든 archive 1.16이라 16 클라이언트로는 읽지 못한다 — 클라이언트를 16으로 내리는 해법은 쓸 수 없다.
-  방향은 서버 측 거부를 피하는 것(생성 SQL의 해당 SET 처리 또는 서버 17+ 이전)이며, 정해지면 `api.yml` `integration-test`의 `ubuntu-24.04` 고정을
-  운영과 같은 클라이언트 조합으로 바꾼다. 그 전까지 운영 복원은 [backup-restore 런북](runbooks/backup-restore.md)의 경고를 따른다.
+      출력 머리에 항상 `SET transaction_timeout = 0;`을 쓰고(`pg_backup_archiver.c` `_doSetFixedOutputState`) PG16은 이를 거부한다. 따라서
+      `scripts/restore-hotswap.sh`(SQL 생성 → 보호 세션 재생)는 schema-swap에서 실패하고 write fence가 남으며, `scripts/restore-db.sh`
+      (`pg_restore --exit-on-error --dbname`)도 같은 SET에서 중단될 것으로 본다(소스 근거, 운영 drill 미실행). 2026-10-27 CI(ubuntu-26.04, PG18 클라이언트)가
+      같은 실패를 재현했다([패턴 G](agent-failure-patterns.md#10-패턴-g--ci-runner-이미지-교체로-postgresql-클라이언트-major가-서버보다-앞섬), PR #606).
+      제약: 운영 스냅샷은 `pg_dump` 17이 만든 archive 1.16이라 16 클라이언트로는 읽지 못한다 — 클라이언트를 16으로 내리는 해법은 쓸 수 없다.
+      방향은 서버 측 거부를 피하는 것(생성 SQL의 해당 SET 처리 또는 서버 17+ 이전)이며, 정해지면 `api.yml` `integration-test`의 `ubuntu-24.04` 고정을
+      운영과 같은 클라이언트 조합으로 바꾼다. 그 전까지 운영 복원은 [backup-restore 런북](runbooks/backup-restore.md)의 경고를 따른다.
 
 ## 모바일
 

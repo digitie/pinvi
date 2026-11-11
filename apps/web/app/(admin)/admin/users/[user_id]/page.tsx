@@ -1,23 +1,10 @@
 'use client';
 
+import { VirtualTable } from '@kor-travel/ui/virtual-table';
+
 /* eslint-disable @next/next/no-img-element */
 
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { type ChangeEvent, useEffect, useRef, useState } from 'react';
-import {
-  Eraser,
-  ImageIcon,
-  KeyRound,
-  Loader2,
-  LogOut,
-  Mail,
-  RotateCcw,
-  ShieldCheck,
-  Trash2,
-  Upload,
-  UserX,
-} from 'lucide-react';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { ApiClient, ApiError, adminApi } from '@pinvi/api-client';
 import {
   IMAGE_UPLOAD_CONTENT_TYPES,
@@ -33,13 +20,28 @@ import type {
   AdminUserSessionRecord,
   MutableAdminRole,
 } from '@pinvi/schemas';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-// T-356: 이 화면의 두 모달을 admin base-ui 프리미티브로 수렴했다.
+import {
+  Eraser,
+  ImageIcon,
+  KeyRound,
+  Loader2,
+  LogOut,
+  Mail,
+  RotateCcw,
+  ShieldCheck,
+  Trash2,
+  Upload,
+  UserX,
+} from 'lucide-react';
+import Link from 'next/link';
+import { redirect, useParams, useRouter } from 'next/navigation';
+import { type ChangeEvent, useEffect, useRef, useState } from 'react';
+// T-356: 이 화면의 두 모달을 admin 공통 Radix 프리미티브로 수렴했다.
 //  - 사유를 입력받는 운영 액션(이메일 원본 보기/강제 인증/비활성화) → `Dialog`
-//    (수제 `fixed inset-0` scrim + role 없는 패널이었다 — 이제 role/포커스/Escape는 base-ui).
+//    (수제 `fixed inset-0` scrim + role 없는 패널이었다 — 이제 role/포커스/Escape는 공통 Radix).
 //  - 되돌릴 수 없는 확인(아바타 삭제·삭제 대기·즉시 익명화) → KTM 규약대로 `AlertDialog`.
-//    사용자 표면 `components/ui/ConfirmDialog`(useModalDialog)를 대체한다.
-import { Button } from '@/components/admin/ui/button';
+//    사용자 표면 `components/ui/ConfirmDialog`(이전 전용 훅)를 대체한다.
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -47,6 +49,7 @@ import {
   AlertDialogFooter,
   AlertDialogTitle,
 } from '@/components/admin/ui/alert-dialog';
+import { Button } from '@/components/admin/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -54,7 +57,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/admin/ui/dialog';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 
 const apiClient = new ApiClient({
@@ -63,12 +65,7 @@ const apiClient = new ApiClient({
 
 type ActionKind = 'force-verify' | 'disable' | 'reveal-email';
 type LifecycleActionKind =
-  | 'resend-verify'
-  | 'force-password-reset'
-  | 'revoke-all'
-  | 'reactivate'
-  | 'delete'
-  | 'anonymize';
+  'resend-verify' | 'force-password-reset' | 'revoke-all' | 'reactivate' | 'delete' | 'anonymize';
 
 const ROLE_OPTIONS: { value: MutableAdminRole; label: string }[] = [
   { value: 'admin', label: 'admin' },
@@ -113,13 +110,26 @@ const auditColumns: AdminTableColumn<AdminAuditEntry>[] = [
   },
 ];
 
-export default function AdminUserDetailPage() {
+export default function AdminUserDetailPage(
+  ...args: Parameters<typeof useAdminUserDetailPageModel>
+) {
+  const viewModel = useAdminUserDetailPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminUserDetailPageView0 viewModel={viewModel} />;
+  if (viewModel.renderBranch === 'render1') return <AdminUserDetailPageView1 />;
+  if (viewModel.renderBranch === 'render2')
+    return <AdminUserDetailPageView2 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminUserDetailPageModel() {
   const router = useRouter();
   const params = useParams<{ user_id: string }>();
   const userId = params.user_id;
   const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
   const [actionDialog, setActionDialog] = useState<ActionKind | null>(null);
   const [reason, setReason] = useState('');
   const [acting, setActing] = useState(false);
@@ -193,7 +203,7 @@ export default function AdminUserDetailPage() {
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 404) {
-          router.replace('/admin/users');
+          setMissing(true);
           return;
         }
         setError(err instanceof ApiError ? err.message : '조회 실패');
@@ -503,25 +513,98 @@ export default function AdminUserDetailPage() {
     }
   };
 
+  if (missing) redirect('/admin/users');
+
   if (error && !user) {
-    return (
-      <AdminPage title="사용자 상세">
-        <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
-      </AdminPage>
-    );
+    return { renderBranch: 'render0' as const, error };
   }
 
   if (!user) {
-    return (
-      <AdminPage title="사용자 상세">
-        <p className="text-sm text-muted">불러오는 중…</p>
-      </AdminPage>
-    );
+    return { renderBranch: 'render1' as const };
   }
 
   const blockedAuthStatus = ['disabled', 'pending_delete', 'deleted'].includes(user.status);
   const activeSessionCount = sessions.filter((session) => session.is_active).length;
 
+  return {
+    renderBranch: 'render2' as const,
+    acting,
+    actionDialog,
+    activeSessionCount,
+    avatarAction,
+    avatarMaxBytes,
+    avatarReason,
+    avatarSettings,
+    avatarSrc,
+    blockedAuthStatus,
+    destructiveCancelRef,
+    destructiveTriggerRef,
+    error,
+    lifecycleBusy,
+    lifecycleReason,
+    message,
+    onAction,
+    onAvatarFile,
+    onDeleteAvatar,
+    onLifecycleAction,
+    onRevokeSession,
+    onRoleMutation,
+    onSaveAvatarSettings,
+    onSaveQuota,
+    pendingDestructive,
+    quotaBusy,
+    quotaDraft,
+    quotaReason,
+    reason,
+    requestDeleteAvatar,
+    requestLifecycleAction,
+    roleBusy,
+    roleDraft,
+    roleReason,
+    sessionBusy,
+    sessions,
+    setActionDialog,
+    setAvatarMaxBytes,
+    setAvatarReason,
+    setLifecycleReason,
+    setPendingDestructive,
+    setQuotaDraft,
+    setQuotaReason,
+    setReason,
+    setRoleDraft,
+    setRoleReason,
+    setSettingsReason,
+    settingsReason,
+    user,
+  };
+}
+
+type AdminUserDetailPageView0Model = Extract<
+  ReturnType<typeof useAdminUserDetailPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminUserDetailPageView0({ viewModel }: { viewModel: AdminUserDetailPageView0Model }) {
+  const { error } = viewModel;
+  return (
+    <AdminPage title="사용자 상세">
+      <p className="rounded-sm bg-error-bg p-3 text-sm text-error-text">{error}</p>
+    </AdminPage>
+  );
+}
+function AdminUserDetailPageView1() {
+  return (
+    <AdminPage title="사용자 상세">
+      <p className="text-sm text-muted">불러오는 중…</p>
+    </AdminPage>
+  );
+}
+
+type AdminUserDetailPageView2Model = Extract<
+  ReturnType<typeof useAdminUserDetailPageModel>,
+  { renderBranch: 'render2' }
+>;
+function AdminUserDetailPageView2({ viewModel }: { viewModel: AdminUserDetailPageView2Model }) {
+  const { actionDialog, error, message, pendingDestructive, setActionDialog, user } = viewModel;
   return (
     <AdminPage
       title={user.email_revealed ? user.email : user.email_masked}
@@ -544,479 +627,15 @@ export default function AdminUserDetailPage() {
         </p>
       )}
 
-      <Section title="기본 정보">
-        <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2" data-testid="admin-user-info">
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">이메일</dt>
-            <dd className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-ink" data-testid="admin-user-email">
-                {user.email}
-              </span>
-              {user.email_revealed ? (
-                <span className="rounded-sm bg-surface-soft px-2 py-1 text-xs text-muted">
-                  원본
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setActionDialog('reveal-email')}
-                  className="rounded-sm border border-hairline px-2 py-1 text-xs"
-                  data-testid="admin-user-reveal-email"
-                >
-                  원본 보기
-                </button>
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">이메일 상태</dt>
-            <dd>{user.email_status}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">상태</dt>
-            <dd>{user.status}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">역할</dt>
-            <dd>{user.roles.join(', ')}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">활성 여부</dt>
-            <dd>{user.is_active ? 'Y' : 'N'}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">이메일 인증</dt>
-            <dd>{user.email_verified_at ?? '미인증'}</dd>
-          </div>
-        </dl>
-      </Section>
+      <AdminUserDetailPageSection2_0 viewModel={viewModel} />
 
-      <Section title="역할 관리">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)_auto] lg:items-end">
-          <div className="space-y-2" data-testid="admin-user-role-manager">
-            <div className="flex flex-wrap gap-2">
-              {user.roles.map((role) => (
-                <span
-                  key={role}
-                  className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-canvas px-2 py-1 text-xs font-semibold text-ink"
-                >
-                  <ShieldCheck className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-                  {role}
-                </span>
-              ))}
-            </div>
-            <FormTextArea
-              id="admin-user-role-reason"
-              label="역할 변경 사유"
-              value={roleReason}
-              onChange={(e) => setRoleReason(e.target.value)}
-              rows={2}
-              maxLength={500}
-              data-testid="admin-user-role-reason"
-            />
-          </div>
-          <label className="text-sm">
-            <span className="mb-1 block text-xs font-semibold text-muted">역할</span>
-            <select
-              value={roleDraft}
-              onChange={(e) => setRoleDraft(e.target.value as MutableAdminRole)}
-              className="h-10 w-full rounded-sm border border-hairline px-3"
-              data-testid="admin-user-role-select"
-            >
-              {ROLE_OPTIONS.map((role) => (
-                <option key={role.value} value={role.value}>
-                  {role.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={roleBusy !== null || user.roles.includes(roleDraft)}
-              onClick={() => void onRoleMutation('grant')}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
-              data-testid="admin-user-role-grant"
-            >
-              {roleBusy === 'grant' && <Loader2 className="h-4 w-4 animate-spin" />}
-              부여
-            </button>
-            <button
-              type="button"
-              disabled={roleBusy !== null || !user.roles.includes(roleDraft)}
-              onClick={() => void onRoleMutation('revoke')}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm border border-error-text px-3 text-sm font-semibold text-error-text disabled:opacity-50"
-              data-testid="admin-user-role-revoke"
-            >
-              {roleBusy === 'revoke' && <Loader2 className="h-4 w-4 animate-spin" />}
-              회수
-            </button>
-          </div>
-        </div>
-      </Section>
+      <AdminUserDetailPageSection2_1 viewModel={viewModel} />
 
-      <Section title="Lifecycle">
-        <div className="space-y-4" data-testid="admin-user-lifecycle-section">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-            <FormTextArea
-              id="admin-user-lifecycle-reason"
-              label="lifecycle 액션 사유"
-              value={lifecycleReason}
-              onChange={(e) => setLifecycleReason(e.target.value)}
-              rows={2}
-              maxLength={500}
-              data-testid="admin-user-lifecycle-reason"
-            />
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={
-                  lifecycleBusy !== null ||
-                  !!user.email_verified_at ||
-                  blockedAuthStatus ||
-                  lifecycleReason.trim().length < 1
-                }
-                onClick={(event) => requestLifecycleAction('resend-verify', event.currentTarget)}
-                className="inline-flex h-10 items-center gap-2 rounded-sm border border-primary px-3 text-sm font-semibold text-primary disabled:opacity-50"
-                data-testid="admin-user-resend-verify"
-              >
-                {lifecycleBusy === 'resend-verify' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Mail className="h-4 w-4" aria-hidden="true" />
-                )}
-                인증 재발송
-              </button>
-              <button
-                type="button"
-                disabled={
-                  lifecycleBusy !== null ||
-                  !user.email_verified_at ||
-                  blockedAuthStatus ||
-                  lifecycleReason.trim().length < 1
-                }
-                onClick={(event) =>
-                  requestLifecycleAction('force-password-reset', event.currentTarget)
-                }
-                className="inline-flex h-10 items-center gap-2 rounded-sm border border-primary px-3 text-sm font-semibold text-primary disabled:opacity-50"
-                data-testid="admin-user-force-password-reset"
-              >
-                {lifecycleBusy === 'force-password-reset' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <KeyRound className="h-4 w-4" aria-hidden="true" />
-                )}
-                비밀번호 재설정
-              </button>
-              <button
-                type="button"
-                disabled={
-                  lifecycleBusy !== null ||
-                  activeSessionCount < 1 ||
-                  lifecycleReason.trim().length < 1
-                }
-                onClick={(event) => requestLifecycleAction('revoke-all', event.currentTarget)}
-                className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink disabled:opacity-50"
-                data-testid="admin-user-revoke-all-sessions"
-              >
-                {lifecycleBusy === 'revoke-all' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <LogOut className="h-4 w-4" aria-hidden="true" />
-                )}
-                전체 로그아웃
-              </button>
-              <button
-                type="button"
-                disabled={
-                  lifecycleBusy !== null ||
-                  !['disabled', 'pending_delete'].includes(user.status) ||
-                  lifecycleReason.trim().length < 1
-                }
-                onClick={(event) => requestLifecycleAction('reactivate', event.currentTarget)}
-                className="inline-flex h-10 items-center gap-2 rounded-sm border border-success-text px-3 text-sm font-semibold text-success-text disabled:opacity-50"
-                data-testid="admin-user-reactivate"
-              >
-                {lifecycleBusy === 'reactivate' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                )}
-                재활성화
-              </button>
-              <button
-                type="button"
-                disabled={
-                  lifecycleBusy !== null ||
-                  ['pending_delete', 'deleted'].includes(user.status) ||
-                  lifecycleReason.trim().length < 1
-                }
-                onClick={(event) => requestLifecycleAction('delete', event.currentTarget)}
-                className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm font-semibold text-error-text disabled:opacity-50"
-                data-testid="admin-user-schedule-delete"
-              >
-                {lifecycleBusy === 'delete' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <UserX className="h-4 w-4" aria-hidden="true" />
-                )}
-                삭제 대기
-              </button>
-              <button
-                type="button"
-                disabled={
-                  lifecycleBusy !== null ||
-                  user.status === 'deleted' ||
-                  lifecycleReason.trim().length < 1
-                }
-                onClick={(event) => requestLifecycleAction('anonymize', event.currentTarget)}
-                className="inline-flex h-10 items-center gap-2 rounded-sm bg-error-text px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
-                data-testid="admin-user-anonymize"
-              >
-                {lifecycleBusy === 'anonymize' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Eraser className="h-4 w-4" aria-hidden="true" />
-                )}
-                익명화
-              </button>
-            </div>
-          </div>
+      <AdminUserDetailPageSection2_2 viewModel={viewModel} />
 
-          <div className="overflow-x-auto" data-testid="admin-user-sessions">
-            {sessions.length === 0 ? (
-              <p className="text-sm text-muted">세션 기록이 없습니다.</p>
-            ) : (
-              <table className="min-w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-hairline text-left text-xs uppercase text-muted">
-                    <th className="py-2 pr-3 font-semibold">상태</th>
-                    <th className="py-2 pr-3 font-semibold">생성</th>
-                    <th className="py-2 pr-3 font-semibold">만료</th>
-                    <th className="py-2 pr-3 font-semibold">IP hash</th>
-                    <th className="py-2 pr-3 font-semibold">UA</th>
-                    <th className="py-2 pr-3 font-semibold">액션</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sessions.map((session) => (
-                    <tr key={session.session_id} className="border-b border-hairline/70">
-                      <td className="py-2 pr-3">{session.is_active ? 'active' : 'revoked'}</td>
-                      <td className="py-2 pr-3 text-muted">
-                        {new Date(session.created_at).toLocaleString('ko-KR')}
-                      </td>
-                      <td className="py-2 pr-3 text-muted">
-                        {new Date(session.expires_at).toLocaleString('ko-KR')}
-                      </td>
-                      <td className="py-2 pr-3 font-mono text-xs">
-                        {session.ip_hash ? session.ip_hash.slice(0, 12) : '—'}
-                      </td>
-                      <td className="max-w-72 truncate py-2 pr-3 text-muted">
-                        {session.user_agent ?? '—'}
-                      </td>
-                      <td className="py-2 pr-3">
-                        <button
-                          type="button"
-                          disabled={
-                            !session.is_active ||
-                            sessionBusy !== null ||
-                            lifecycleReason.trim().length < 1
-                          }
-                          onClick={() => void onRevokeSession(session.session_id)}
-                          className="rounded-sm border border-hairline px-2 py-1 text-xs disabled:opacity-50"
-                          data-testid={`admin-user-session-revoke-${session.session_id}`}
-                        >
-                          {sessionBusy === session.session_id ? '처리 중…' : '강제 로그아웃'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      </Section>
+      <AdminUserDetailPageSection2_3 viewModel={viewModel} />
 
-      <Section title="아바타">
-        <div className="space-y-5" data-testid="admin-user-avatar-section">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-center gap-3">
-              {avatarSrc ? (
-                <img
-                  src={avatarSrc}
-                  alt=""
-                  className="h-16 w-16 rounded-full border border-hairline object-cover"
-                  data-testid="admin-user-avatar-image"
-                />
-              ) : (
-                <div className="flex h-16 w-16 items-center justify-center rounded-full border border-hairline bg-surface-soft text-muted">
-                  <ImageIcon className="h-6 w-6" aria-hidden="true" />
-                </div>
-              )}
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-ink">
-                  {user.has_avatar ? '등록됨' : '등록된 이미지 없음'}
-                </p>
-                <p className="text-xs text-muted" data-testid="admin-user-avatar-meta">
-                  {user.has_avatar
-                    ? `${user.avatar_content_type ?? 'image'} · ${formatBytes(
-                        user.avatar_byte_size,
-                      )}`
-                    : 'RustFS 아바타 없음'}
-                </p>
-                {avatarSettings && (
-                  <p className="text-xs text-muted">
-                    전역 제한 {formatBytes(avatarSettings.avatar_max_upload_bytes)}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="w-full space-y-3 lg:max-w-md">
-              <FormTextArea
-                id="admin-user-avatar-reason"
-                label="변경 사유"
-                hint="아바타 교체/삭제 사유는 감사 로그에 기록됩니다."
-                value={avatarReason}
-                onChange={(e) => setAvatarReason(e.target.value)}
-                rows={2}
-                maxLength={500}
-                data-testid="admin-user-avatar-reason"
-              />
-              <div className="flex flex-wrap gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm font-semibold text-on-primary">
-                  {avatarAction === 'upload' ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Upload className="h-4 w-4" aria-hidden="true" />
-                  )}
-                  {user.has_avatar ? '교체' : '업로드'}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    className="sr-only"
-                    disabled={avatarAction !== null}
-                    onChange={onAvatarFile}
-                    data-testid="admin-user-avatar-input"
-                  />
-                </label>
-                <button
-                  type="button"
-                  disabled={!user.has_avatar || avatarAction !== null}
-                  onClick={(event) => requestDeleteAvatar(event.currentTarget)}
-                  className="inline-flex items-center gap-2 rounded-sm border border-error-text px-3 py-2 text-sm font-semibold text-error-text disabled:opacity-50"
-                  data-testid="admin-user-avatar-delete"
-                >
-                  {avatarAction === 'delete' ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  )}
-                  삭제
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 border-t border-hairline pt-4 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] md:items-end">
-            <label className="space-y-1 text-sm">
-              <span className="text-xs uppercase tracking-wide text-muted">최대 크기(bytes)</span>
-              <input
-                type="number"
-                min={1}
-                max={104857600}
-                value={avatarMaxBytes}
-                onChange={(e) => setAvatarMaxBytes(e.target.value)}
-                className="w-full rounded-sm border border-hairline px-3 py-2"
-                data-testid="admin-avatar-settings-max-bytes"
-              />
-            </label>
-            <FormTextArea
-              id="admin-avatar-settings-reason"
-              label="설정 변경 사유"
-              value={settingsReason}
-              onChange={(e) => setSettingsReason(e.target.value)}
-              rows={2}
-              maxLength={500}
-              data-testid="admin-avatar-settings-reason"
-            />
-            <button
-              type="button"
-              disabled={avatarAction !== null}
-              onClick={onSaveAvatarSettings}
-              className="inline-flex items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm font-semibold text-on-primary disabled:opacity-50"
-              data-testid="admin-avatar-settings-save"
-            >
-              {avatarAction === 'settings' && (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              )}
-              저장
-            </button>
-          </div>
-        </div>
-      </Section>
-
-      <Section title="파일 용량 override">
-        <div className="grid gap-3 lg:grid-cols-4" data-testid="admin-user-file-quota">
-          {(
-            [
-              [
-                'attachment_max_upload_bytes_override',
-                'effective_attachment_max_upload_bytes',
-                '개별 파일',
-              ],
-              [
-                'trip_attachment_quota_bytes_override',
-                'effective_trip_attachment_quota_bytes',
-                '계획 총량',
-              ],
-              [
-                'user_attachment_quota_bytes_override',
-                'effective_user_attachment_quota_bytes',
-                '사용자 총량',
-              ],
-            ] as const
-          ).map(([key, effectiveKey, label]) => (
-            <label key={key} className="text-sm">
-              <span className="mb-1 block text-xs font-semibold text-muted">{label}</span>
-              <input
-                value={quotaDraft[key]}
-                onChange={(e) => setQuotaDraft((prev) => ({ ...prev, [key]: e.target.value }))}
-                inputMode="numeric"
-                placeholder="전역값 사용"
-                className="h-10 w-full rounded-sm border border-hairline px-3"
-                data-testid={`admin-user-file-quota-${key}`}
-              />
-              <span className="mt-1 block text-xs text-muted">
-                개별값 {user.file_quota[key] ? formatBytes(user.file_quota[key]) : '전역값'} · 적용{' '}
-                {formatBytes(user.file_quota[effectiveKey])}
-              </span>
-            </label>
-          ))}
-          <div className="space-y-2">
-            <FormTextArea
-              id="admin-user-file-quota-reason"
-              label="사유"
-              value={quotaReason}
-              onChange={(e) => setQuotaReason(e.target.value)}
-              rows={2}
-              maxLength={500}
-              data-testid="admin-user-file-quota-reason"
-            />
-            <button
-              type="button"
-              disabled={quotaBusy || quotaReason.trim().length < 1}
-              onClick={onSaveQuota}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
-              data-testid="admin-user-file-quota-save"
-            >
-              {quotaBusy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-              저장
-            </button>
-          </div>
-        </div>
-      </Section>
+      <AdminUserDetailPageSection2_4 viewModel={viewModel} />
 
       <Section title="액션 (admin role만)">
         <div className="flex gap-2">
@@ -1052,129 +671,742 @@ export default function AdminUserDetailPage() {
         </div>
       </Section>
 
-      {actionDialog && (
-        <Dialog
-          open
-          onOpenChange={(open) => {
-            // Escape·scrim도 취소 버튼과 같은 정리 경로를 탄다(사유 입력값을 남기지 않는다).
-            if (!open) {
-              setActionDialog(null);
-              setReason('');
-            }
-          }}
-        >
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>
-                {actionDialog === 'reveal-email'
-                  ? '이메일 원본 보기'
-                  : actionDialog === 'force-verify'
-                    ? '강제 이메일 인증'
-                    : '사용자 비활성화'}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="p-4">
-              <FormTextArea
-                id="admin-user-action-reason"
-                label="사유"
-                hint="사유는 감사 로그에 기록됩니다. (최소 1자, 최대 500자)"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                rows={3}
-                maxLength={500}
-                data-testid="admin-user-action-reason"
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setActionDialog(null);
-                  setReason('');
-                }}
-              >
-                취소
-              </Button>
-              <Button
-                type="button"
-                disabled={acting || reason.trim().length < 1}
-                onClick={onAction}
-                data-testid="admin-user-action-confirm"
-              >
-                {acting ? '처리 중…' : '확인'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+      {actionDialog && <AdminUserDetailPageSection2_5 viewModel={viewModel} />}
       {/* 되돌릴 수 없는 확인 — KTM 규약대로 AlertDialog(role=alertdialog). scrim 클릭 닫기는
-          base-ui가 alertdialog에서 강제로 끈다. 조건부 마운트라 닫힘 중 제목/라벨이 비지 않는다. */}
-      {pendingDestructive != null && (
-        <AlertDialog
-          open
-          onOpenChange={(open) => {
-            if (!open && lifecycleBusy === null && avatarAction === null) {
-              setPendingDestructive(null);
-            }
-          }}
-        >
-          <AlertDialogContent
-            data-testid="admin-user-destructive-confirm"
-            initialFocus={destructiveCancelRef}
-            finalFocus={destructiveTriggerRef}
-          >
-            <AlertDialogTitle>
-              {pendingDestructive.kind === 'avatar'
-                ? '이 사용자의 아바타 이미지를 삭제할까요?'
-                : pendingDestructive.kind === 'delete'
-                  ? '이 사용자를 삭제 대기 상태로 전환할까요?'
-                  : '이 사용자의 계정을 즉시 익명화할까요?'}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingDestructive.kind === 'anonymize'
-                ? '즉시 실행되며 되돌릴 수 없습니다.'
-                : pendingDestructive.kind === 'delete'
-                  ? '삭제 대기로 전환되며 보존 정책에 따라 처리됩니다.'
-                  : '삭제하면 되돌릴 수 없습니다.'}
-            </AlertDialogDescription>
-            {/* 사유를 재수집하지 않는다 — 폼에서 이미 받은 값을 그대로 보여 준다(이중 입력 방지). */}
-            <p className="mt-4 rounded-sm bg-surface-soft px-3 py-2 text-sm text-body">
-              사유: {pendingDestructive.reason}
-            </p>
-            <AlertDialogFooter>
-              <Button
-                ref={destructiveCancelRef}
-                type="button"
-                variant="outline"
-                disabled={lifecycleBusy !== null || avatarAction !== null}
-                onClick={() => setPendingDestructive(null)}
-                data-testid="admin-user-destructive-confirm-cancel"
-              >
-                취소
-              </Button>
-              {/* design.md §CTA voice: destructive fill은 confirm dialog 안에서만 쓴다. */}
-              <Button
-                type="button"
-                variant="destructive-solid"
-                disabled={lifecycleBusy !== null || avatarAction !== null}
-                onClick={() => {
-                  const target = pendingDestructive;
-                  if (target.kind === 'avatar') void onDeleteAvatar();
-                  else void onLifecycleAction(target.kind);
-                }}
-                data-testid="admin-user-destructive-confirm-confirm"
-              >
-                {pendingDestructive.kind === 'avatar'
-                  ? '아바타 삭제'
-                  : pendingDestructive.kind === 'delete'
-                    ? '삭제 대기로 전환'
-                    : '즉시 익명화'}
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
+          공통 Radix가 alertdialog에서 강제로 끈다. 조건부 마운트라 닫힘 중 제목/라벨이 비지 않는다. */}
+      {pendingDestructive != null && <AdminUserDetailPageSection2_6 viewModel={viewModel} />}
     </AdminPage>
   );
+}
+
+function AdminUserDetailPageSection2_0({
+  viewModel,
+}: {
+  viewModel: AdminUserDetailPageView2Model;
+}) {
+  const { setActionDialog, user } = viewModel;
+  return (
+    <Section title="기본 정보">
+      <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2" data-testid="admin-user-info">
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">이메일</dt>
+          <dd className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-ink" data-testid="admin-user-email">
+              {user.email}
+            </span>
+            {user.email_revealed ? (
+              <span className="rounded-sm bg-surface-soft px-2 py-1 text-xs text-muted">원본</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setActionDialog('reveal-email')}
+                className="rounded-sm border border-hairline px-2 py-1 text-xs"
+                data-testid="admin-user-reveal-email"
+              >
+                원본 보기
+              </button>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">이메일 상태</dt>
+          <dd>{user.email_status}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">상태</dt>
+          <dd>{user.status}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">역할</dt>
+          <dd>{user.roles.join(', ')}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">활성 여부</dt>
+          <dd>{user.is_active ? 'Y' : 'N'}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-muted">이메일 인증</dt>
+          <dd>{user.email_verified_at ?? '미인증'}</dd>
+        </div>
+      </dl>
+    </Section>
+  );
+}
+
+function AdminUserDetailPageSection2_1({
+  viewModel,
+}: {
+  viewModel: AdminUserDetailPageView2Model;
+}) {
+  const { onRoleMutation, roleBusy, roleDraft, roleReason, setRoleDraft, setRoleReason, user } =
+    viewModel;
+  return (
+    <Section title="역할 관리">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,220px)_auto] lg:items-end">
+        <div className="space-y-2" data-testid="admin-user-role-manager">
+          <div className="flex flex-wrap gap-2">
+            {user.roles.map((role) => (
+              <span
+                key={role}
+                className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-canvas px-2 py-1 text-xs font-semibold text-ink"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                {role}
+              </span>
+            ))}
+          </div>
+          <FormTextArea
+            id="admin-user-role-reason"
+            label="역할 변경 사유"
+            value={roleReason}
+            onChange={(e) => setRoleReason(e.target.value)}
+            rows={2}
+            maxLength={500}
+            data-testid="admin-user-role-reason"
+          />
+        </div>
+        <label className="text-sm">
+          <span className="mb-1 block text-xs font-semibold text-muted">역할</span>
+          <select
+            value={roleDraft}
+            onChange={(e) => setRoleDraft(e.target.value as MutableAdminRole)}
+            className="h-10 w-full rounded-sm border border-hairline px-3"
+            data-testid="admin-user-role-select"
+          >
+            {ROLE_OPTIONS.map((role) => (
+              <option key={role.value} value={role.value}>
+                {role.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={roleBusy !== null || user.roles.includes(roleDraft)}
+            onClick={() => void onRoleMutation('grant')}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
+            data-testid="admin-user-role-grant"
+          >
+            {roleBusy === 'grant' && <Loader2 className="h-4 w-4 animate-spin" />}
+            부여
+          </button>
+          <button
+            type="button"
+            disabled={roleBusy !== null || !user.roles.includes(roleDraft)}
+            onClick={() => void onRoleMutation('revoke')}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-sm border border-error-text px-3 text-sm font-semibold text-error-text disabled:opacity-50"
+            data-testid="admin-user-role-revoke"
+          >
+            {roleBusy === 'revoke' && <Loader2 className="h-4 w-4 animate-spin" />}
+            회수
+          </button>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function AdminUserDetailPageSection2_2({
+  viewModel,
+}: {
+  viewModel: AdminUserDetailPageView2Model;
+}) {
+  return (
+    <Section title="Lifecycle">
+      <div className="space-y-4" data-testid="admin-user-lifecycle-section">
+        <AdminUserDetailPageSection2_2Part0 viewModel={viewModel} />
+
+        <AdminUserDetailPageSection2_2Part1 viewModel={viewModel} />
+      </div>
+    </Section>
+  );
+}
+
+function AdminUserDetailPageSection2_3({
+  viewModel,
+}: {
+  viewModel: AdminUserDetailPageView2Model;
+}) {
+  const {
+    avatarAction,
+    avatarMaxBytes,
+    avatarReason,
+    avatarSettings,
+    avatarSrc,
+    onAvatarFile,
+    onSaveAvatarSettings,
+    requestDeleteAvatar,
+    setAvatarMaxBytes,
+    setAvatarReason,
+    setSettingsReason,
+    settingsReason,
+    user,
+  } = viewModel;
+  return (
+    <Section title="아바타">
+      <div className="space-y-5" data-testid="admin-user-avatar-section">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-center gap-3">
+            {avatarSrc ? (
+              <img
+                src={avatarSrc}
+                alt=""
+                className="h-16 w-16 rounded-full border border-hairline object-cover"
+                data-testid="admin-user-avatar-image"
+              />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-hairline bg-surface-soft text-muted">
+                <ImageIcon className="h-6 w-6" aria-hidden="true" />
+              </div>
+            )}
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-ink">
+                {user.has_avatar ? '등록됨' : '등록된 이미지 없음'}
+              </p>
+              <p className="text-xs text-muted" data-testid="admin-user-avatar-meta">
+                {user.has_avatar
+                  ? `${user.avatar_content_type ?? 'image'} · ${formatBytes(user.avatar_byte_size)}`
+                  : 'RustFS 아바타 없음'}
+              </p>
+              {avatarSettings && (
+                <p className="text-xs text-muted">
+                  전역 제한 {formatBytes(avatarSettings.avatar_max_upload_bytes)}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="w-full space-y-3 lg:max-w-md">
+            <FormTextArea
+              id="admin-user-avatar-reason"
+              label="변경 사유"
+              hint="아바타 교체/삭제 사유는 감사 로그에 기록됩니다."
+              value={avatarReason}
+              onChange={(e) => setAvatarReason(e.target.value)}
+              rows={2}
+              maxLength={500}
+              data-testid="admin-user-avatar-reason"
+            />
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm font-semibold text-on-primary">
+                {avatarAction === 'upload' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Upload className="h-4 w-4" aria-hidden="true" />
+                )}
+                {user.has_avatar ? '교체' : '업로드'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="sr-only"
+                  disabled={avatarAction !== null}
+                  onChange={onAvatarFile}
+                  data-testid="admin-user-avatar-input"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={!user.has_avatar || avatarAction !== null}
+                onClick={(event) => requestDeleteAvatar(event.currentTarget)}
+                className="inline-flex items-center gap-2 rounded-sm border border-error-text px-3 py-2 text-sm font-semibold text-error-text disabled:opacity-50"
+                data-testid="admin-user-avatar-delete"
+              >
+                {avatarAction === 'delete' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                )}
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 border-t border-hairline pt-4 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] md:items-end">
+          <label className="space-y-1 text-sm">
+            <span className="text-xs uppercase tracking-wide text-muted">최대 크기(bytes)</span>
+            <input
+              type="number"
+              min={1}
+              max={104857600}
+              value={avatarMaxBytes}
+              onChange={(e) => setAvatarMaxBytes(e.target.value)}
+              className="w-full rounded-sm border border-hairline px-3 py-2"
+              data-testid="admin-avatar-settings-max-bytes"
+            />
+          </label>
+          <FormTextArea
+            id="admin-avatar-settings-reason"
+            label="설정 변경 사유"
+            value={settingsReason}
+            onChange={(e) => setSettingsReason(e.target.value)}
+            rows={2}
+            maxLength={500}
+            data-testid="admin-avatar-settings-reason"
+          />
+          <button
+            type="button"
+            disabled={avatarAction !== null}
+            onClick={onSaveAvatarSettings}
+            className="inline-flex items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm font-semibold text-on-primary disabled:opacity-50"
+            data-testid="admin-avatar-settings-save"
+          >
+            {avatarAction === 'settings' && (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            )}
+            저장
+          </button>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function AdminUserDetailPageSection2_4({
+  viewModel,
+}: {
+  viewModel: AdminUserDetailPageView2Model;
+}) {
+  const { onSaveQuota, quotaBusy, quotaDraft, quotaReason, setQuotaDraft, setQuotaReason, user } =
+    viewModel;
+  return (
+    <Section title="파일 용량 override">
+      <div className="grid gap-3 lg:grid-cols-4" data-testid="admin-user-file-quota">
+        {(
+          [
+            [
+              'attachment_max_upload_bytes_override',
+              'effective_attachment_max_upload_bytes',
+              '개별 파일',
+            ],
+            [
+              'trip_attachment_quota_bytes_override',
+              'effective_trip_attachment_quota_bytes',
+              '계획 총량',
+            ],
+            [
+              'user_attachment_quota_bytes_override',
+              'effective_user_attachment_quota_bytes',
+              '사용자 총량',
+            ],
+          ] as const
+        ).map(([key, effectiveKey, label]) => (
+          <label key={key} className="text-sm">
+            <span className="mb-1 block text-xs font-semibold text-muted">{label}</span>
+            <input
+              value={quotaDraft[key]}
+              onChange={(e) => setQuotaDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+              inputMode="numeric"
+              placeholder="전역값 사용"
+              className="h-10 w-full rounded-sm border border-hairline px-3"
+              data-testid={`admin-user-file-quota-${key}`}
+            />
+            <span className="mt-1 block text-xs text-muted">
+              개별값 {user.file_quota[key] ? formatBytes(user.file_quota[key]) : '전역값'} · 적용{' '}
+              {formatBytes(user.file_quota[effectiveKey])}
+            </span>
+          </label>
+        ))}
+        <div className="space-y-2">
+          <FormTextArea
+            id="admin-user-file-quota-reason"
+            label="사유"
+            value={quotaReason}
+            onChange={(e) => setQuotaReason(e.target.value)}
+            rows={2}
+            maxLength={500}
+            data-testid="admin-user-file-quota-reason"
+          />
+          <button
+            type="button"
+            disabled={quotaBusy || quotaReason.trim().length < 1}
+            onClick={onSaveQuota}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
+            data-testid="admin-user-file-quota-save"
+          >
+            {quotaBusy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            저장
+          </button>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function AdminUserDetailPageSection2_5({
+  viewModel,
+}: {
+  viewModel: AdminUserDetailPageView2Model;
+}) {
+  const { acting, actionDialog, onAction, reason, setActionDialog, setReason } = viewModel;
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        // Escape·scrim도 취소 버튼과 같은 정리 경로를 탄다(사유 입력값을 남기지 않는다).
+        if (!open) {
+          setActionDialog(null);
+          setReason('');
+        }
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {actionDialog === 'reveal-email'
+              ? '이메일 원본 보기'
+              : actionDialog === 'force-verify'
+                ? '강제 이메일 인증'
+                : '사용자 비활성화'}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="p-4">
+          <FormTextArea
+            id="admin-user-action-reason"
+            label="사유"
+            hint="사유는 감사 로그에 기록됩니다. (최소 1자, 최대 500자)"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            maxLength={500}
+            data-testid="admin-user-action-reason"
+          />
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setActionDialog(null);
+              setReason('');
+            }}
+          >
+            취소
+          </Button>
+          <Button
+            type="button"
+            disabled={acting || reason.trim().length < 1}
+            onClick={onAction}
+            data-testid="admin-user-action-confirm"
+          >
+            {acting ? '처리 중…' : '확인'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AdminUserDetailPageSection2_6({
+  viewModel,
+}: {
+  viewModel: AdminUserDetailPageView2Model;
+}) {
+  const {
+    avatarAction,
+    destructiveCancelRef,
+    destructiveTriggerRef,
+    lifecycleBusy,
+    onDeleteAvatar,
+    onLifecycleAction,
+    pendingDestructive,
+    setPendingDestructive,
+  } = viewModel;
+  if (pendingDestructive == null) return null;
+  return (
+    <AlertDialog
+      open
+      onOpenChange={(open) => {
+        if (!open && lifecycleBusy === null && avatarAction === null) {
+          setPendingDestructive(null);
+        }
+      }}
+    >
+      <AlertDialogContent
+        data-testid="admin-user-destructive-confirm"
+        initialFocus={destructiveCancelRef}
+        finalFocus={destructiveTriggerRef}
+      >
+        <AlertDialogTitle>
+          {pendingDestructive.kind === 'avatar'
+            ? '이 사용자의 아바타 이미지를 삭제할까요?'
+            : pendingDestructive.kind === 'delete'
+              ? '이 사용자를 삭제 대기 상태로 전환할까요?'
+              : '이 사용자의 계정을 즉시 익명화할까요?'}
+        </AlertDialogTitle>
+        <AlertDialogDescription>
+          {pendingDestructive.kind === 'anonymize'
+            ? '즉시 실행되며 되돌릴 수 없습니다.'
+            : pendingDestructive.kind === 'delete'
+              ? '삭제 대기로 전환되며 보존 정책에 따라 처리됩니다.'
+              : '삭제하면 되돌릴 수 없습니다.'}
+        </AlertDialogDescription>
+        {/* 사유를 재수집하지 않는다 — 폼에서 이미 받은 값을 그대로 보여 준다(이중 입력 방지). */}
+        <p className="mt-4 rounded-sm bg-surface-soft px-3 py-2 text-sm text-body">
+          사유: {pendingDestructive.reason}
+        </p>
+        <AlertDialogFooter>
+          <Button
+            ref={destructiveCancelRef}
+            type="button"
+            variant="outline"
+            disabled={lifecycleBusy !== null || avatarAction !== null}
+            onClick={() => setPendingDestructive(null)}
+            data-testid="admin-user-destructive-confirm-cancel"
+          >
+            취소
+          </Button>
+          {/* design.md §CTA voice: destructive fill은 confirm dialog 안에서만 쓴다. */}
+          <Button
+            type="button"
+            variant="destructive-solid"
+            disabled={lifecycleBusy !== null || avatarAction !== null}
+            onClick={() => {
+              const target = pendingDestructive;
+              if (target.kind === 'avatar') void onDeleteAvatar();
+              else void onLifecycleAction(target.kind);
+            }}
+            data-testid="admin-user-destructive-confirm-confirm"
+          >
+            {pendingDestructive.kind === 'avatar'
+              ? '아바타 삭제'
+              : pendingDestructive.kind === 'delete'
+                ? '삭제 대기로 전환'
+                : '즉시 익명화'}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function AdminUserDetailPageSection2_2Part0({
+  viewModel,
+}: {
+  viewModel: AdminUserDetailPageView2Model;
+}) {
+  const { lifecycleReason, setLifecycleReason, lifecycleBusy, requestLifecycleAction } = viewModel;
+  return (
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+      <FormTextArea
+        id="admin-user-lifecycle-reason"
+        label="lifecycle 액션 사유"
+        value={lifecycleReason}
+        onChange={(e) => setLifecycleReason(e.target.value)}
+        rows={2}
+        maxLength={500}
+        data-testid="admin-user-lifecycle-reason"
+      />
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={lifecycleActionDisabled('resend-verify', viewModel)}
+          onClick={(event) => requestLifecycleAction('resend-verify', event.currentTarget)}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-primary px-3 text-sm font-semibold text-primary disabled:opacity-50"
+          data-testid="admin-user-resend-verify"
+        >
+          {lifecycleBusy === 'resend-verify' ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Mail className="h-4 w-4" aria-hidden="true" />
+          )}
+          인증 재발송
+        </button>
+        <button
+          type="button"
+          disabled={lifecycleActionDisabled('force-password-reset', viewModel)}
+          onClick={(event) => requestLifecycleAction('force-password-reset', event.currentTarget)}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-primary px-3 text-sm font-semibold text-primary disabled:opacity-50"
+          data-testid="admin-user-force-password-reset"
+        >
+          {lifecycleBusy === 'force-password-reset' ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <KeyRound className="h-4 w-4" aria-hidden="true" />
+          )}
+          비밀번호 재설정
+        </button>
+        <button
+          type="button"
+          disabled={lifecycleActionDisabled('revoke-all', viewModel)}
+          onClick={(event) => requestLifecycleAction('revoke-all', event.currentTarget)}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          data-testid="admin-user-revoke-all-sessions"
+        >
+          {lifecycleBusy === 'revoke-all' ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+          )}
+          전체 로그아웃
+        </button>
+        <button
+          type="button"
+          disabled={lifecycleActionDisabled('reactivate', viewModel)}
+          onClick={(event) => requestLifecycleAction('reactivate', event.currentTarget)}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-success-text px-3 text-sm font-semibold text-success-text disabled:opacity-50"
+          data-testid="admin-user-reactivate"
+        >
+          {lifecycleBusy === 'reactivate' ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          )}
+          재활성화
+        </button>
+        <button
+          type="button"
+          disabled={lifecycleActionDisabled('delete', viewModel)}
+          onClick={(event) => requestLifecycleAction('delete', event.currentTarget)}
+          className="inline-flex h-10 items-center gap-2 rounded-sm border border-error-text px-3 text-sm font-semibold text-error-text disabled:opacity-50"
+          data-testid="admin-user-schedule-delete"
+        >
+          {lifecycleBusy === 'delete' ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <UserX className="h-4 w-4" aria-hidden="true" />
+          )}
+          삭제 대기
+        </button>
+        <button
+          type="button"
+          disabled={lifecycleActionDisabled('anonymize', viewModel)}
+          onClick={(event) => requestLifecycleAction('anonymize', event.currentTarget)}
+          className="inline-flex h-10 items-center gap-2 rounded-sm bg-error-text px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
+          data-testid="admin-user-anonymize"
+        >
+          {lifecycleBusy === 'anonymize' ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Eraser className="h-4 w-4" aria-hidden="true" />
+          )}
+          익명화
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AdminUserDetailPageSection2_2Part1({
+  viewModel,
+}: {
+  viewModel: AdminUserDetailPageView2Model;
+}) {
+  const { sessions, sessionBusy, lifecycleReason, onRevokeSession } = viewModel;
+  return (
+    <div className="overflow-x-auto" data-testid="admin-user-sessions">
+      {sessions.length === 0 ? (
+        <p className="text-sm text-muted">세션 기록이 없습니다.</p>
+      ) : (
+        <VirtualTable
+          data={sessions}
+          getRowId={(session) => String(session.session_id)}
+          columns={[
+            {
+              id: 'column-0',
+              header: () => <>상태</>,
+              enableSorting: false,
+              meta: { cellClassName: 'py-2 pr-3', headerClassName: 'py-2 pr-3 font-semibold' },
+              cell: ({ row: { original: session } }) => (
+                <>{session.is_active ? 'active' : 'revoked'}</>
+              ),
+            },
+            {
+              id: 'column-1',
+              header: () => <>생성</>,
+              enableSorting: false,
+              meta: {
+                cellClassName: 'py-2 pr-3 text-muted',
+                headerClassName: 'py-2 pr-3 font-semibold',
+              },
+              cell: ({ row: { original: session } }) => (
+                <>{new Date(session.created_at).toLocaleString('ko-KR')}</>
+              ),
+            },
+            {
+              id: 'column-2',
+              header: () => <>만료</>,
+              enableSorting: false,
+              meta: {
+                cellClassName: 'py-2 pr-3 text-muted',
+                headerClassName: 'py-2 pr-3 font-semibold',
+              },
+              cell: ({ row: { original: session } }) => (
+                <>{new Date(session.expires_at).toLocaleString('ko-KR')}</>
+              ),
+            },
+            {
+              id: 'column-3',
+              header: () => <>IP hash</>,
+              enableSorting: false,
+              meta: {
+                cellClassName: 'py-2 pr-3 font-mono text-xs',
+                headerClassName: 'py-2 pr-3 font-semibold',
+              },
+              cell: ({ row: { original: session } }) => (
+                <>{session.ip_hash ? session.ip_hash.slice(0, 12) : '—'}</>
+              ),
+            },
+            {
+              id: 'column-4',
+              header: () => <>UA</>,
+              enableSorting: false,
+              meta: {
+                cellClassName: 'max-w-72 truncate py-2 pr-3 text-muted',
+                headerClassName: 'py-2 pr-3 font-semibold',
+              },
+              cell: ({ row: { original: session } }) => <>{session.user_agent ?? '—'}</>,
+            },
+            {
+              id: 'column-5',
+              header: () => <>액션</>,
+              enableSorting: false,
+              meta: { cellClassName: 'py-2 pr-3', headerClassName: 'py-2 pr-3 font-semibold' },
+              cell: ({ row: { original: session } }) => (
+                <>
+                  <button
+                    type="button"
+                    disabled={
+                      !session.is_active ||
+                      sessionBusy !== null ||
+                      lifecycleReason.trim().length < 1
+                    }
+                    onClick={() => void onRevokeSession(session.session_id)}
+                    className="rounded-sm border border-hairline px-2 py-1 text-xs disabled:opacity-50"
+                    data-testid={`admin-user-session-revoke-${session.session_id}`}
+                  >
+                    {sessionBusy === session.session_id ? '처리 중…' : '강제 로그아웃'}
+                  </button>
+                </>
+              ),
+            },
+          ]}
+          stickyHeader
+          manualSorting
+        />
+      )}
+    </div>
+  );
+}
+
+function lifecycleActionDisabled(
+  action: LifecycleActionKind,
+  model: AdminUserDetailPageView2Model,
+) {
+  if (model.lifecycleBusy !== null || model.lifecycleReason.trim().length < 1) return true;
+  switch (action) {
+    case 'resend-verify':
+      return !!model.user.email_verified_at || model.blockedAuthStatus;
+    case 'force-password-reset':
+      return !model.user.email_verified_at || model.blockedAuthStatus;
+    case 'revoke-all':
+      return model.activeSessionCount < 1;
+    case 'reactivate':
+      return !['disabled', 'pending_delete'].includes(model.user.status);
+    case 'delete':
+      return ['pending_delete', 'deleted'].includes(model.user.status);
+    case 'anonymize':
+      return model.user.status === 'deleted';
+  }
 }

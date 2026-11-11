@@ -12,10 +12,10 @@
  * No route mocking anywhere (#618 pitfall) — these only observe real requests.
  */
 import { expect, type Locator, type Page, type Response } from '@playwright/test';
-import { runSearch, searchRows } from './search';
 import { renderedMap, waitForCamera } from './geometry';
-import { coordinateFixtureIndex } from './searchFixture';
 import { dismissFeaturePopup } from './live';
+import { runSearch, searchRows } from './search';
+import { coordinateFixtureIndex } from './searchFixture';
 
 export const LAYERS = ['fuel_station', 'rest_area', 'highway_incident', 'airport'] as const;
 export type Layer = (typeof LAYERS)[number];
@@ -101,7 +101,11 @@ export interface LayerResult {
   reason?: string | null;
   truncated: boolean;
   freshness?: { age_seconds: number; stale: boolean } | null;
-  items: Array<{ feature_id: string; coord: { lon: number; lat: number } | null; [k: string]: unknown }>;
+  items: Array<{
+    feature_id: string;
+    coord: { lon: number; lat: number } | null;
+    [k: string]: unknown;
+  }>;
 }
 
 export async function markersBody(res: Response): Promise<{ zoom: number; layers: LayerResult[] }> {
@@ -141,7 +145,8 @@ export function nextMarkersResponse(
   timeout = 30_000,
 ): Promise<Response> {
   return page.waitForResponse(
-    (r) => MARKERS_RE.test(r.url()) && r.request().method() === 'GET' && r.ok() && pred(markersQuery(r)),
+    (r) =>
+      MARKERS_RE.test(r.url()) && r.request().method() === 'GET' && r.ok() && pred(markersQuery(r)),
     { timeout },
   );
 }
@@ -176,7 +181,11 @@ export async function zoomBy(page: Page, steps: number): Promise<void> {
 }
 
 /** Pan with arrow keys (maplibre keyboard: 100 px per press) — triggers moveend → re-query. */
-export async function panBy(page: Page, key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown', presses = 3) {
+export async function panBy(
+  page: Page,
+  key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown',
+  presses = 3,
+) {
   const canvas = mapCanvas(page);
   await canvas.focus();
   for (let i = 0; i < presses; i += 1) {
@@ -189,7 +198,7 @@ export async function panBy(page: Page, key: 'ArrowLeft' | 'ArrowRight' | 'Arrow
 export async function searchAndFly(page: Page, query: string): Promise<void> {
   const result = await runSearch(page, query);
   expect(result.status).toBe(200);
-  const index = coordinateFixtureIndex(result.rows,query);
+  const index = coordinateFixtureIndex(result.rows, query);
   expect(index, '좌표 있는 정확 일치 검색 fixture가 있어야 한다').toBeGreaterThanOrEqual(0);
   const picked = result.rows[index]!;
   const map = await renderedMap(page);
@@ -218,20 +227,37 @@ export async function searchAndFly(page: Page, query: string): Promise<void> {
 type Coord = { lon: number; lat: number };
 
 /** 지금 캔버스 안에서 최상단으로 보이는(=사용자가 누를 수 있는) `layer` 개별 마커의 ID·이름. */
-async function topmostTransportMarkers(page: Page, layer: Layer): Promise<Array<{ title: string; id: string }>> {
-  const items = await legendMarkers(page, layer).evaluateAll((elements) =>
-    elements.map((el) => ({ title: el.textContent?.trim() ?? '', id: el.getAttribute('data-feature-id') ?? '' })),
-  );
-  const canvasBox = await mapCanvas(page).boundingBox();
+async function topmostTransportMarkers(
+  page: Page,
+  layer: Layer,
+): Promise<Array<{ title: string; id: string }>> {
+  const [items, canvasBox] = await Promise.all([
+    legendMarkers(page, layer).evaluateAll((elements) =>
+      elements.map((el) => ({
+        title: el.textContent?.trim() ?? '',
+        id: el.getAttribute('data-feature-id') ?? '',
+      })),
+    ),
+    mapCanvas(page).boundingBox(),
+  ]);
   if (!canvasBox) return [];
   const out: Array<{ title: string; id: string }> = [];
   for (const item of items) {
-    const marker = page.locator('.maplibregl-marker[data-interaction-id=' + JSON.stringify('transport:' + layer + ':' + item.id) + ']');
+    const marker = page.locator(
+      '.maplibregl-marker[data-interaction-id=' +
+        JSON.stringify('transport:' + layer + ':' + item.id) +
+        ']',
+    );
     if ((await marker.count()) !== 1) continue;
     const box = await marker.boundingBox();
-    if (!box || box.x < canvasBox.x || box.y < canvasBox.y ||
-        box.x + box.width > canvasBox.x + canvasBox.width ||
-        box.y + box.height > canvasBox.y + canvasBox.height) continue;
+    if (
+      !box ||
+      box.x < canvasBox.x ||
+      box.y < canvasBox.y ||
+      box.x + box.width > canvasBox.x + canvasBox.width ||
+      box.y + box.height > canvasBox.y + canvasBox.height
+    )
+      continue;
     const onTop = await marker.evaluate((el) => {
       const r = el.getBoundingClientRect();
       const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
@@ -247,34 +273,50 @@ async function topmostTransportMarkers(page: Page, layer: Layer): Promise<Array<
  * NEAR-006) 사용자가 하듯 `targets` 좌표에 가장 가까운 '묶음 펼치기'를 실제로 눌러 펼친다. 카메라가 멈추고
  * 새 viewport의 markers 응답이 온 뒤 돌아온다. 펼칠 묶음이 없으면 false.
  */
-async function expandClusterToward(page: Page, layer: Layer, targets: readonly Coord[]): Promise<boolean> {
+async function expandClusterToward(
+  page: Page,
+  layer: Layer,
+  targets: readonly Coord[],
+): Promise<boolean> {
   const map = await renderedMap(page);
   try {
-    const pick = await map.evaluate((m, coords) => {
-      const rect = m.getCanvas().getBoundingClientRect();
-      const projected = coords.map((c) => m.project([c.lon, c.lat])).map((p) => ({ x: rect.left + p.x, y: rect.top + p.y }));
-      let best: { index: number; distance: number } | null = null;
-      // vworld-map-web ClusterMarker: 마커 루트에 aria-label "N개 위치 묶음 펼치기"(클릭 = 펼침 zoom으로 flyTo).
-      const clusters = Array.from(document.querySelectorAll('.maplibregl-marker[aria-label*="묶음 펼치기"]'));
-      clusters.forEach((el, index) => {
-        const r = el.getBoundingClientRect();
-        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-        if (cx < rect.left || cx > rect.right || cy < rect.top || cy > rect.bottom) return;
-        const top = document.elementFromPoint(cx, cy);
-        if (!top || !(top === el || el.contains(top))) return;
-        for (const p of projected) {
-          const distance = Math.hypot(p.x - cx, p.y - cy);
-          if (!best || distance < best.distance) best = { index, distance };
-        }
-      });
-      if (!best) return null;
-      clusters.forEach((el) => el.removeAttribute('data-e2e-expand'));
-      clusters[(best as { index: number }).index]!.setAttribute('data-e2e-expand', '1');
-      return true;
-    }, [...targets]);
+    const pick = await map.evaluate(
+      (m, coords) => {
+        const rect = m.getCanvas().getBoundingClientRect();
+        const projected = coords
+          .map((c) => m.project([c.lon, c.lat]))
+          .map((p) => ({ x: rect.left + p.x, y: rect.top + p.y }));
+        let best: { index: number; distance: number } | null = null;
+        // vworld-map-web ClusterMarker: 마커 루트에 aria-label "N개 위치 묶음 펼치기"(클릭 = 펼침 zoom으로 flyTo).
+        const clusters = Array.from(
+          document.querySelectorAll('.maplibregl-marker[aria-label*="묶음 펼치기"]'),
+        );
+        clusters.forEach((el, index) => {
+          const r = el.getBoundingClientRect();
+          const cx = r.left + r.width / 2,
+            cy = r.top + r.height / 2;
+          if (cx < rect.left || cx > rect.right || cy < rect.top || cy > rect.bottom) return;
+          const top = document.elementFromPoint(cx, cy);
+          if (!top || !(top === el || el.contains(top))) return;
+          for (const p of projected) {
+            const distance = Math.hypot(p.x - cx, p.y - cy);
+            if (!best || distance < best.distance) best = { index, distance };
+          }
+        });
+        if (!best) return null;
+        clusters.forEach((el) => el.removeAttribute('data-e2e-expand'));
+        clusters[(best as { index: number }).index]!.setAttribute('data-e2e-expand', '1');
+        return true;
+      },
+      [...targets],
+    );
     if (!pick) return false;
     const zoomBefore = await map.evaluate((m) => m.getZoom());
-    const next = nextMarkersResponse(page, (q) => q.layers.includes(layer) && q.zoom > Math.floor(zoomBefore), 45_000);
+    const next = nextMarkersResponse(
+      page,
+      (q) => q.layers.includes(layer) && q.zoom > Math.floor(zoomBefore),
+      45_000,
+    );
     await page.locator('.maplibregl-marker[data-e2e-expand="1"]').click();
     await waitForCamera(map);
     await next;
@@ -296,18 +338,28 @@ export async function clickTransportMarker(
   layer: Layer,
   expandToward: readonly Coord[] = [],
 ): Promise<string> {
-  expect(await legendMarkers(page, layer).count(), 'legend has requested transport markers').toBeGreaterThan(0);
+  expect(
+    await legendMarkers(page, layer).count(),
+    'legend has requested transport markers',
+  ).toBeGreaterThan(0);
   let candidates = await topmostTransportMarkers(page, layer);
   for (let round = 0; round < 4 && candidates.length === 0 && expandToward.length > 0; round += 1) {
     if (!(await expandClusterToward(page, layer, expandToward))) break;
     candidates = await topmostTransportMarkers(page, layer);
   }
   for (const item of candidates) {
-    const marker = page.locator('.maplibregl-marker[data-interaction-id=' + JSON.stringify('transport:' + layer + ':' + item.id) + ']');
+    const marker = page.locator(
+      '.maplibregl-marker[data-interaction-id=' +
+        JSON.stringify('transport:' + layer + ':' + item.id) +
+        ']',
+    );
     // 동명 feature 대신 누른 transport ID의 실제 HTTP와 본문까지 연결한다.
-    const response = page.waitForResponse((res) =>
-      res.request().method() === 'GET' &&
-      new URL(res.url()).pathname.endsWith('/transport/' + LAYER_PATH[layer] + '/' + encodeURIComponent(item.id)),
+    const response = page.waitForResponse(
+      (res) =>
+        res.request().method() === 'GET' &&
+        new URL(res.url()).pathname.endsWith(
+          '/transport/' + LAYER_PATH[layer] + '/' + encodeURIComponent(item.id),
+        ),
     );
     await marker.click();
     const res = await response;
@@ -331,7 +383,11 @@ export async function openTransportNear(page: Page, layer: Layer, query: string)
   // #709: 검색 결과(같은 이름의 Map 장소)를 고르면 그 장소의 선택 popup이 같은 자리에 열려(canvas 쌓임
   // 맥락 위) transport 마커를 덮는다(김포국제공항). 사용자가 하듯 popup을 닫는다.
   await dismissFeaturePopup(page);
-  const pending = nextMarkersResponse(page, (q) => q.layers.includes(layer) && q.zoom <= 13, 45_000);
+  const pending = nextMarkersResponse(
+    page,
+    (q) => q.layers.includes(layer) && q.zoom <= 13,
+    45_000,
+  );
   await zoomBy(page, -3);
   await pending;
   return clickTransportMarker(page, layer);

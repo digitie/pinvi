@@ -3,7 +3,7 @@ import { Alert, Pressable, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@pinvi/api-client';
-import type { TripStatus, TripVisibility, TripViewPoi } from '@pinvi/schemas';
+import type { TripStatus, TripVisibility, TripViewPoi, TripViewDay } from '@pinvi/schemas';
 import {
   STATUS_LABEL,
   VISIBILITY_LABEL,
@@ -105,7 +105,8 @@ export default function TripEditScreen() {
 
   const reorderMutation = useMutation({
     mutationFn: ({
-      moves, dayIndex,
+      moves,
+      dayIndex,
     }: {
       dayIndex: number;
       moves: { poi_id: string; new_sort_order: string }[];
@@ -193,7 +194,8 @@ export default function TripEditScreen() {
   const onDeleteTrip = () => {
     confirmDestructive({
       title: '여행 삭제',
-      message: '이 여행을 삭제할까요? 삭제한 여행은 웹의 여행 휴지통에서 초안으로 복원할 수 있습니다.',
+      message:
+        '이 여행을 삭제할까요? 삭제한 여행은 웹의 여행 휴지통에서 초안으로 복원할 수 있습니다.',
       confirmLabel: '삭제',
       onConfirm: () => deleteTripMutation.mutate(),
     });
@@ -259,60 +261,15 @@ export default function TripEditScreen() {
       <View className="gap-5 py-2">
         <Heading>여행 편집</Heading>
 
-        <Card className="gap-3">
-          <Subheading>기본 정보</Subheading>
-          <ErrorBanner message={formError} />
-          <Field
-            label="제목"
-            value={form.title}
-            onChangeText={(title) => setForm({ ...form, title })}
-            maxLength={200}
-          />
-          <Field
-            label="지역 (선택)"
-            value={form.regionHint}
-            onChangeText={(regionHint) => setForm({ ...form, regionHint })}
-            maxLength={120}
-            placeholder="예: 제주"
-          />
-          <Field
-            label="시작일 (YYYY-MM-DD)"
-            value={form.startDate}
-            onChangeText={(startDate) => {
-              setForm({ ...form, startDate });
-              setDateError(null);
-            }}
-            error={dateError?.field === 'startDate' ? dateError.message : undefined}
-            autoCapitalize="none"
-            keyboardType="numbers-and-punctuation"
-            placeholder="2026-07-01"
-          />
-          <Field
-            label="종료일 (YYYY-MM-DD)"
-            value={form.endDate}
-            onChangeText={(endDate) => {
-              setForm({ ...form, endDate });
-              setDateError(null);
-            }}
-            error={dateError?.field === 'endDate' ? dateError.message : undefined}
-            autoCapitalize="none"
-            keyboardType="numbers-and-punctuation"
-            placeholder="2026-07-03"
-          />
-          <ChipGroup
-            label="공개 범위"
-            value={form.visibility}
-            options={VISIBILITY_OPTIONS}
-            onChange={(visibility) => setForm({ ...form, visibility })}
-          />
-          <ChipGroup
-            label="상태"
-            value={form.status}
-            options={STATUS_OPTIONS}
-            onChange={(status) => setForm({ ...form, status })}
-          />
-          <Button label="저장" onPress={onSave} loading={saveMutation.isPending} />
-        </Card>
+        <TripBasicsCard
+          form={form}
+          formError={formError}
+          dateError={dateError}
+          setForm={setForm}
+          setDateError={setDateError}
+          saveMutation={saveMutation}
+          onSave={onSave}
+        />
 
         <View className="gap-1">
           <Subheading>일정 · 장소</Subheading>
@@ -321,89 +278,22 @@ export default function TripEditScreen() {
           </Muted>
         </View>
 
-        {days.length === 0 ? (
-          <Muted>아직 일정이 없습니다.</Muted>
-        ) : (
-          days.map((day) => {
-            const ids = idsForDay(day.day_index);
-            return (
-              <Card key={day.day_index} className="gap-3">
-                <View className="flex-row items-center gap-2">
-                  <Subheading className="flex-1">
-                    Day {day.day_index}
-                    {day.title ? ` · ${day.title}` : ''}
-                    {day.date ? ` (${day.date})` : ''}
-                  </Subheading>
-                  <Button
-                    label="일자 삭제"
-                    variant="secondary"
-                    loading={
-                      deleteDayMutation.isPending &&
-                      deleteDayMutation.variables?.dayIndex === day.day_index
-                    }
-                    onPress={() => onDeleteDay(day.day_index, day.version)}
-                  />
-                </View>
-                {ids.length === 0 ? (
-                  <Muted>이 날의 장소가 없습니다.</Muted>
-                ) : (
-                  ids.map((poiId, index) => {
-                    const poi = poiById.get(poiId);
-                    if (!poi) return null;
-                    return (
-                      <View key={poiId} className="gap-1.5 border-t border-hairline-soft pt-2">
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => router.push(`/trips/${tripId}/poi/${poiId}`)}
-                          className="flex-row items-center gap-2 active:opacity-70"
-                        >
-                          <View
-                            className="h-3 w-3 rounded-full"
-                            style={{ backgroundColor: paletteHex(poi.marker_color) }}
-                          />
-                          <Body className="flex-1 text-ink">{poi.title ?? '제목 없는 장소'}</Body>
-                          <Muted>편집 ›</Muted>
-                        </Pressable>
-                        <View className="flex-row gap-2">
-                          <Button
-                            label="↑"
-                            variant="secondary"
-                            className="flex-1"
-                            disabled={
-                              index === 0 || reorderMutation.isPending || deleteMutation.isPending
-                            }
-                            onPress={() => move(day.day_index, index, index - 1)}
-                          />
-                          <Button
-                            label="↓"
-                            variant="secondary"
-                            className="flex-1"
-                            disabled={
-                              index === ids.length - 1 ||
-                              reorderMutation.isPending ||
-                              deleteMutation.isPending
-                            }
-                            onPress={() => move(day.day_index, index, index + 1)}
-                          />
-                          <Button
-                            label="삭제"
-                            variant="danger"
-                            className="flex-1"
-                            disabled={deleteMutation.isPending || reorderMutation.isPending}
-                            loading={
-                              deleteMutation.isPending && deleteMutation.variables?.poiId === poiId
-                            }
-                            onPress={() => onDelete(day.day_index, poiId, poi.title ?? '이 장소')}
-                          />
-                        </View>
-                      </View>
-                    );
-                  })
-                )}
-              </Card>
-            );
-          })
-        )}
+        <TripDayList
+          days={days}
+          idsForDay={idsForDay}
+          poiById={poiById}
+          onDeleteDay={onDeleteDay}
+          onDelete={onDelete}
+          move={move}
+          onEditPoi={(poiId) => router.push(`/trips/${tripId}/poi/${poiId}`)}
+          pending={{
+            day: deleteDayMutation.isPending,
+            dayIndex: deleteDayMutation.variables?.dayIndex,
+            reorder: reorderMutation.isPending,
+            delete: deleteMutation.isPending,
+            poiId: deleteMutation.variables?.poiId,
+          }}
+        />
 
         <Button
           label="+ 일자 추가"
@@ -423,5 +313,177 @@ export default function TripEditScreen() {
         </View>
       </View>
     </Screen>
+  );
+}
+
+function TripDayList({
+  days,
+  idsForDay,
+  poiById,
+  onDeleteDay,
+  onDelete,
+  move,
+  onEditPoi,
+  pending,
+}: {
+  days: TripViewDay[];
+  idsForDay: (day: number) => string[];
+  poiById: Map<string, TripViewPoi>;
+  onDeleteDay: (day: number, version: number) => void;
+  onDelete: (day: number, id: string, title: string) => void;
+  move: (day: number, from: number, to: number) => void;
+  onEditPoi: (id: string) => void;
+  pending: { day: boolean; dayIndex?: number; reorder: boolean; delete: boolean; poiId?: string };
+}) {
+  return (
+    <>
+      {days.length === 0 ? (
+        <Muted>아직 일정이 없습니다.</Muted>
+      ) : (
+        days.map((day) => {
+          const ids = idsForDay(day.day_index);
+          return (
+            <Card key={day.day_index} className="gap-3">
+              <View className="flex-row items-center gap-2">
+                <Subheading className="flex-1">
+                  Day {day.day_index}
+                  {day.title ? ` · ${day.title}` : ''}
+                  {day.date ? ` (${day.date})` : ''}
+                </Subheading>
+                <Button
+                  label="일자 삭제"
+                  variant="secondary"
+                  loading={pending.day && pending.dayIndex === day.day_index}
+                  onPress={() => onDeleteDay(day.day_index, day.version)}
+                />
+              </View>
+              {ids.length === 0 ? (
+                <Muted>이 날의 장소가 없습니다.</Muted>
+              ) : (
+                ids.map((poiId, index) => {
+                  const poi = poiById.get(poiId);
+                  if (!poi) return null;
+                  return (
+                    <View key={poiId} className="gap-1.5 border-t border-hairline-soft pt-2">
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => onEditPoi(poiId)}
+                        className="flex-row items-center gap-2 active:opacity-70"
+                      >
+                        <View
+                          className="h-3 w-3 rounded-full"
+                          style={{ backgroundColor: paletteHex(poi.marker_color) }}
+                        />
+                        <Body className="flex-1 text-ink">{poi.title ?? '제목 없는 장소'}</Body>
+                        <Muted>편집 ›</Muted>
+                      </Pressable>
+                      <View className="flex-row gap-2">
+                        <Button
+                          label="↑"
+                          variant="secondary"
+                          className="flex-1"
+                          disabled={index === 0 || pending.reorder || pending.delete}
+                          onPress={() => move(day.day_index, index, index - 1)}
+                        />
+                        <Button
+                          label="↓"
+                          variant="secondary"
+                          className="flex-1"
+                          disabled={index === ids.length - 1 || pending.reorder || pending.delete}
+                          onPress={() => move(day.day_index, index, index + 1)}
+                        />
+                        <Button
+                          label="삭제"
+                          variant="danger"
+                          className="flex-1"
+                          disabled={pending.delete || pending.reorder}
+                          loading={pending.delete && pending.poiId === poiId}
+                          onPress={() => onDelete(day.day_index, poiId, poi.title ?? '이 장소')}
+                        />
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </Card>
+          );
+        })
+      )}
+    </>
+  );
+}
+
+function TripBasicsCard({
+  form,
+  formError,
+  dateError,
+  setForm,
+  setDateError,
+  saveMutation,
+  onSave,
+}: {
+  form: TripEditForm;
+  formError: string | null;
+  dateError: TripDateRangeError | null;
+  setForm: (form: TripEditForm) => void;
+  setDateError: (error: TripDateRangeError | null) => void;
+  saveMutation: { isPending: boolean };
+  onSave: () => void;
+}) {
+  return (
+    <Card className="gap-3">
+      <Subheading>기본 정보</Subheading>
+      <ErrorBanner message={formError} />
+      <Field
+        label="제목"
+        value={form.title}
+        onChangeText={(title) => setForm({ ...form, title })}
+        maxLength={200}
+      />
+      <Field
+        label="지역 (선택)"
+        value={form.regionHint}
+        onChangeText={(regionHint) => setForm({ ...form, regionHint })}
+        maxLength={120}
+        placeholder="예: 제주"
+      />
+      <Field
+        label="시작일 (YYYY-MM-DD)"
+        value={form.startDate}
+        onChangeText={(startDate) => {
+          setForm({ ...form, startDate });
+          setDateError(null);
+        }}
+        error={dateError?.field === 'startDate' ? dateError.message : undefined}
+        autoCapitalize="none"
+        keyboardType="numbers-and-punctuation"
+        placeholder="2026-07-01"
+      />
+      <Field
+        label="종료일 (YYYY-MM-DD)"
+        value={form.endDate}
+        onChangeText={(endDate) => {
+          setForm({ ...form, endDate });
+          setDateError(null);
+        }}
+        error={dateError?.field === 'endDate' ? dateError.message : undefined}
+        autoCapitalize="none"
+        keyboardType="numbers-and-punctuation"
+        placeholder="2026-07-03"
+      />
+      <ChipGroup
+        label="공개 범위"
+        value={form.visibility}
+        options={VISIBILITY_OPTIONS}
+        onChange={(visibility) => setForm({ ...form, visibility })}
+      />
+      <ChipGroup
+        label="상태"
+        value={form.status}
+        options={STATUS_OPTIONS}
+        onChange={(status) => setForm({ ...form, status })}
+      />
+      <Button label="저장" onPress={onSave} loading={saveMutation.isPending} />
+    </Card>
   );
 }

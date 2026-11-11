@@ -29,9 +29,9 @@ RUN npx --yes npm@12.0.1 ci --no-audit --no-fund
 FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS build
 WORKDIR /repo
 # 루트 `node_modules`만이 아니라 deps 스테이지의 트리를 통째로 가져온다.
-# npm은 버전이 충돌하면 hoist 대신 **중첩**한다 — 실제로 루트는
-# `tailwindcss@3`(다른 workspace가 끌어온다)이고 `apps/web`이 쓰는
-# `tailwindcss@4`는 `apps/web/node_modules`에 있다. 루트만 복사하면 webpack이
+# npm은 버전이 충돌하면 hoist 대신 **중첩**한다 — 과거에는 루트의
+# `tailwindcss@3`(다른 workspace가 끌어온다)과 `apps/web`의
+# `tailwindcss@4`가 갈라져 v4가 `apps/web/node_modules`에 있다. 루트만 복사하면 webpack이
 # v3를 집어 `@import "tailwindcss"`가 `Can't resolve 'tailwindcss'`로 죽는다
 # (2026-09-02 pinned rebuild 실패의 직접 원인).
 #
@@ -93,8 +93,8 @@ COPY --from=build /repo/apps/web/next.config.mjs ./next.config.mjs
 #    "어느 workspace가 중첩되는지 열거하지 않는다"고 해 놓고 한 개를
 #    결박한 셈이었다.
 #
-# 지금 중첩되는 것은 devDependency 하나뿐이고 런타임 의존 중 중첩되는 것은
-# 없다(lockfile 확인). 런타임 우선순위가 실제로 필요해지면 그때의 정답은
+# 2026-11-11 모바일도 Tailwind4.3.5로 맞춰 현재 Tailwind3 중첩은 없다.
+# 이 정렬 여부는 check-mobile-styling.mjs가 lock 전체에서 검사한다. 런타임 우선순위가 실제로 필요해지면 그때의 정답은
 # 이 자리의 손수 병합이 아니라 Next `output: 'standalone'`이다 — 추적된
 # 의존만 그대로 담아 이 문제와 이미지 크기를 함께 없앤다.
 COPY --from=build /repo/node_modules ./node_modules

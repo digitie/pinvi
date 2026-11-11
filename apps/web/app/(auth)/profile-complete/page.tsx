@@ -1,16 +1,16 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { FormField } from '@/components/forms/FormField';
+import { buttonClassName } from '@/components/ui/button-styles';
+import { CONSENT_LEGAL_SLUG } from '@/lib/legalDocs';
+import { ApiClient, ApiError } from '@pinvi/api-client';
+import { validateForm, type FieldErrors } from '@pinvi/domain';
+import type { ConsentType } from '@pinvi/schemas';
+import { ProfileCompleteRequestSchema } from '@pinvi/schemas';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ProfileCompleteRequestSchema } from '@pinvi/schemas';
-import type { ConsentType } from '@pinvi/schemas';
-import { ApiClient, ApiError } from '@pinvi/api-client';
+import { useRef, useState } from 'react';
 import { z } from 'zod';
-import { FormField } from '@/components/forms/FormField';
-import { buttonClassName } from '@/components/ui/Button';
-import { CONSENT_LEGAL_SLUG } from '@/lib/legalDocs';
-import { validateForm, type FieldErrors } from '@pinvi/domain';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -37,10 +37,10 @@ interface CheckedMap {
 export default function ProfileCompletePage() {
   const router = useRouter();
   const [nickname, setNickname] = useState('');
-  const [required, setRequired] = useState<CheckedMap>(
+  const [required, setRequired] = useState<CheckedMap>(() =>
     Object.fromEntries(REQUIRED.map((c) => [c.type, false])),
   );
-  const [optional, setOptional] = useState<CheckedMap>(
+  const [optional, setOptional] = useState<CheckedMap>(() =>
     Object.fromEntries(OPTIONAL.map((c) => [c.type, false])),
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});

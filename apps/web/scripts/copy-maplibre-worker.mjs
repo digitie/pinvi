@@ -24,7 +24,7 @@
  * `predev`/`prebuild`에서 돈다.
  */
 
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
@@ -34,9 +34,16 @@ const require = createRequire(import.meta.url);
 const dist = path.join(path.dirname(require.resolve('maplibre-gl/package.json')), 'dist');
 const dest = path.join(process.cwd(), 'public', 'maplibre');
 
-mkdirSync(dest, { recursive: true });
+const checkOnly = process.argv.includes('--check');
+if (!checkOnly) mkdirSync(dest, { recursive: true });
 for (const file of WORKER_FILES) {
-  copyFileSync(path.join(dist, file), path.join(dest, file));
+  const source = path.join(dist, file);
+  const copied = path.join(dest, file);
+  if (!checkOnly) copyFileSync(source, copied);
+  if (!readFileSync(source).equals(readFileSync(copied)))
+    throw new Error(`MapLibre worker 원본 바이트 불일치: ${file}`);
 }
 
-console.log(`maplibre worker 복사: ${WORKER_FILES.join(', ')} -> ${dest}`);
+console.log(
+  `maplibre worker ${checkOnly ? '원본 검사' : '복사·원본 검사'}: ${WORKER_FILES.join(', ')} -> ${dest}`,
+);

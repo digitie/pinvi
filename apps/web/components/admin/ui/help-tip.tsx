@@ -20,8 +20,8 @@
 
 // Hallmark · genre: editorial-utilitarian · macrostructure: Rail-Workbench · design-system: design.md · designed-as-app
 
-import * as React from 'react';
 import { CircleHelpIcon } from 'lucide-react';
+import * as React from 'react';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/admin/ui/popover';
 import {
@@ -72,7 +72,9 @@ function HelpTip({ label, children, className }: HelpTipProps) {
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <TooltipProvider>
         <Tooltip>
-          <TooltipTrigger render={<PopoverTrigger render={trigger} />} />
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+          </TooltipTrigger>
           {popoverOpen ? null : <TooltipContent>{children}</TooltipContent>}
         </Tooltip>
       </TooltipProvider>

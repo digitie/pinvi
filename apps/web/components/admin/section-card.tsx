@@ -55,7 +55,9 @@ function SectionCard({
   return (
     <Card className={className} size={size}>
       <CardHeader className="border-b">
-        <CardTitle aria-level={headingLevel}>{title}</CardTitle>
+        <CardTitle role="heading" aria-level={headingLevel}>
+          {title}
+        </CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
         {actions ? <CardAction>{actions}</CardAction> : null}
       </CardHeader>

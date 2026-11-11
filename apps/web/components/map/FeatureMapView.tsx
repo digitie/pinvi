@@ -1,7 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { LocateFixed } from 'lucide-react';
+import {
+  FeatureGeometryControls,
+  FeatureGeometryLayers,
+  FeatureGeometryPopup,
+} from '@/components/map/FeatureGeometryLayer';
+import { apiClient } from '@/lib/api';
+import type { GeometryFeature } from '@/lib/featureGeometry';
+import { useFeatureGeometry } from '@/lib/useFeatureGeometry';
 import { ApiError, featureApi, userApi, weatherApi } from '@pinvi/api-client';
 import type {
   FeaturesInBoundsResponse,
@@ -9,42 +15,18 @@ import type {
   PlaceSearchResult,
   WeatherMarkersInBoundsResponse,
 } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
-import { useFeatureGeometry } from '@/lib/useFeatureGeometry';
-import type { GeometryFeature } from '@/lib/featureGeometry';
-import {
-  FeatureGeometryControls,
-  FeatureGeometryLayers,
-  FeatureGeometryPopup,
-} from '@/components/map/FeatureGeometryLayer';
+import { LocateFixed } from 'lucide-react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 
-import { isAbortError } from '@/lib/abort';
-import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
-import { viewportSearchBias } from '@/lib/searchBias';
-import { providerLabel } from '@/lib/weatherProviderLabels';
-import {
-  DEFAULT_MAP_CENTER,
-  DEFAULT_MAP_ZOOM,
-  MY_LOCATION_ZOOM,
-  coarseCoordText,
-  locationConsentItems,
-  resolveMapCenter,
-  resolveMarkerStyle,
-  shouldAutoLocate,
-  type AutoCenterSkipReason,
-  type LocationConsentState,
-  type LocationPermissionState,
-} from '@pinvi/domain';
-import { useUserLocation } from '@pinvi/hooks';
-import { webLocationAdapter } from '@/lib/locationAdapter';
-import { getLocationConsentState, setLocationConsentGranted } from '@/lib/locationConsent';
+import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
+import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
+import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
+import { MapSearchBox } from '@/components/map/MapSearchBox';
+import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
+import { TransportLayerControls } from '@/components/map/TransportLayerControls';
+import { TransportMarkerLegend, TransportMarkers } from '@/components/map/TransportMarkers';
 import {
   ClusterLayer,
-  type ClusterPoint,
-  type WeatherCondition,
-  type MapLibreEvent,
-  type MapLibreMap,
-  type MapMouseEvent,
   MakiMarker,
   MapContextMenu,
   MapFallback,
@@ -53,19 +35,37 @@ import {
   UserLocationMarker,
   VWorldMap,
   WeatherMarker,
+  type ClusterPoint,
+  type MapLibreEvent,
+  type MapLibreMap,
+  type MapMouseEvent,
 } from '@/components/map/vworldPrimitives';
-import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
+import { isAbortError } from '@/lib/abort';
+import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
+import { webLocationAdapter } from '@/lib/locationAdapter';
+import { getLocationConsentState, setLocationConsentGranted } from '@/lib/locationConsent';
 import { markerZIndex } from '@/lib/markerStacking';
-import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
-import { MapSearchBox } from '@/components/map/MapSearchBox';
-import { useFeatureDetailCard } from '@/lib/useFeatureDetailCard';
-import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
-import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
+import { viewportSearchBias } from '@/lib/searchBias';
 import { useAbortableLoad } from '@/lib/useAbortableLoad';
+import { useFeatureDetailCard } from '@/lib/useFeatureDetailCard';
+import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { useTransportLayers, type TransportDetailTarget } from '@/lib/useTransportLayers';
-import { TransportLayerControls } from '@/components/map/TransportLayerControls';
-import { TransportMarkerLegend, TransportMarkers } from '@/components/map/TransportMarkers';
-import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
+import { toWeatherPoints, type WeatherMapPoint } from '@/lib/weatherMapPoints';
+import { providerLabel } from '@/lib/weatherProviderLabels';
+import {
+  coarseCoordText,
+  DEFAULT_MAP_CENTER,
+  DEFAULT_MAP_ZOOM,
+  locationConsentItems,
+  MY_LOCATION_ZOOM,
+  resolveMapCenter,
+  resolveMarkerStyle,
+  shouldAutoLocate,
+  type AutoCenterSkipReason,
+  type LocationConsentState,
+  type LocationPermissionState,
+} from '@pinvi/domain';
+import { useUserLocation } from '@pinvi/hooks';
 
 const DEFAULT_CENTER: [number, number] = [...DEFAULT_MAP_CENTER] as [number, number];
 const DEFAULT_ZOOM = DEFAULT_MAP_ZOOM;
@@ -104,14 +104,17 @@ type MapPoint = ClusterPoint & {
 };
 
 /** T-368 — feature가 아니라 `kor-travel-weather`의 location을 직접 노출한다. */
-export type WeatherMapPoint = ClusterPoint & {
-  kind: 'weather';
-  locationId: string;
-  title: string;
-  temperatureC: number;
-  condition: WeatherCondition;
-  provider: string | null;
-};
+/** 지도 재생성/언마운트 시 동일 이벤트 핸들러를 해제한다. */
+function bindUserInteraction(
+  map: MapLibreMap,
+  listener: (event?: { originalEvent?: unknown }) => void,
+) {
+  const events = ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'] as const;
+  for (const event of events) map.on(event, listener);
+  return () => {
+    for (const event of events) map.off(event, listener);
+  };
+}
 
 interface ContextMenuState {
   x: number;
@@ -188,20 +191,6 @@ function cachedViewport<T>(cache: Map<string, ViewportCacheEntry<T>>, key: strin
   return entry.data;
 }
 
-/** T-368 — `kor-travel-weather` `/nearby` 투영 응답 → 지도 point. */
-export function toWeatherPoints(data: WeatherMarkersInBoundsResponse): WeatherMapPoint[] {
-  return data.items.map((m) => ({
-    id: `weather:${m.location_id}`,
-    lngLat: [m.coord.lon, m.coord.lat] as [number, number],
-    kind: 'weather' as const,
-    locationId: m.location_id,
-    title: m.name,
-    temperatureC: m.temperature_c,
-    condition: m.condition,
-    provider: m.provider ?? null,
-  }));
-}
-
 /** 평탄 weather metric 중 기온(℃) metric 의 현재값을 찾는다(metric_key 미확정 → 방어적). */
 function currentTempC(card: FeatureWeatherCard | null): number | null {
   const metric = card?.metrics.find(
@@ -221,7 +210,13 @@ export interface FeatureMapViewProps {
   initialSuggestCoord?: { lon: number; lat: number } | null;
 }
 
-export function FeatureMapView({
+export function FeatureMapView(...args: Parameters<typeof useFeatureMapViewModel>) {
+  const viewModel = useFeatureMapViewModel(...args);
+  if (viewModel.renderBranch === 'render0') return <FeatureMapViewView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useFeatureMapViewModel({
   apiKey = '',
   className,
   initialCenter = DEFAULT_CENTER,
@@ -229,6 +224,7 @@ export function FeatureMapView({
   initialSuggestCoord = null,
 }: FeatureMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
+  const interactionCleanup = useRef<(() => void) | null>(null);
   // 장소 검색 지역 편향 — 탐색 지도는 지금 화면 범위(2026-11-02 결정).
   const getSearchBias = useCallback(
     () => (mapRef.current ? viewportSearchBias(mapRef.current.getBounds()) : null),
@@ -352,7 +348,7 @@ export function FeatureMapView({
       if (isAbortError(err) || requestId !== latestRequest.current) return;
       setError(err instanceof ApiError ? err.message : '지도 데이터를 불러오지 못했습니다.');
     } finally {
-      if (requestId === latestRequest.current) setLoading(false);
+      setLoading((current) => (requestId === latestRequest.current ? false : current));
     }
   }, []);
 
@@ -416,6 +412,7 @@ export function FeatureMapView({
   useEffect(() => {
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      interactionCleanup.current?.();
       inBoundsAbort.current?.abort();
       weatherAbort.current?.abort();
     };
@@ -435,9 +432,8 @@ export function FeatureMapView({
       // `VWorldMap`은 moveend/zoomend만 노출한다. 자동 센터링을 취소해야 하는 것은 "사용자가
       // 직접 만졌는가"이므로 시작 이벤트를 직접 바인딩하고, 핸들러가 `originalEvent` 유무로
       // 사용자 제스처와 프로그램 이동을 가른다(`dragstart`만 사용자 전용이다).
-      for (const eventName of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'] as const) {
-        map.on(eventName, markUserInteracted);
-      }
+      interactionCleanup.current?.();
+      interactionCleanup.current = bindUserInteraction(map, markUserInteracted);
       // 자동 센터링이 확정되기 전에 조회하면 곧바로 다른 viewport로 다시 조회하게 된다.
       if (autoCenterSettledRef.current) {
         void fetchInBounds(map);
@@ -649,10 +645,11 @@ export function FeatureMapView({
    * 자동 경로는 **어떤 모달도 띄우지 않는다**. 동의가 없거나 확인되지 않으면 조용히 기본 중심점을
    * 유지하고, 사용자가 "내 위치" 버튼을 눌렀을 때만 동의 다이얼로그를 연다(다크 패턴 회피).
    */
+  const settleAutoCenterLatest = useEffectEvent(settleAutoCenter);
   useEffect(() => {
     let alive = true;
     // 결정이 지연돼도 지도가 빈 채로 남지 않도록 조회를 여는 상한.
-    const timeout = setTimeout(settleAutoCenter, AUTO_CENTER_TIMEOUT_MS);
+    const timeout = setTimeout(() => settleAutoCenterLatest(), AUTO_CENTER_TIMEOUT_MS);
 
     const finish = (
       next: Partial<Omit<typeof autoCenter, 'resolved'>> & {
@@ -661,7 +658,7 @@ export function FeatureMapView({
     ) => {
       if (!alive) return;
       setAutoCenter((prev) => ({ ...prev, ...next, resolved: true }));
-      settleAutoCenter();
+      settleAutoCenterLatest();
     };
 
     void (async () => {
@@ -753,7 +750,6 @@ export function FeatureMapView({
       clearTimeout(timeout);
     };
     // 마운트 1회만 — 의존성을 늘리면 재측위가 반복된다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const copyCoord = useCallback(async (lat: number, lon: number) => {
@@ -769,98 +765,106 @@ export function FeatureMapView({
   const currentTemp = currentTempC(weather);
   const detailAddress = detail?.address_line ?? null;
 
+  return {
+    renderBranch: 'render0' as const,
+    apiKey,
+    autoCenter,
+    camera,
+    className,
+    clearGeometrySelection,
+    consentError,
+    consentOpen,
+    consentSaving,
+    contextMenu,
+    copyCoord,
+    currentTemp,
+    detail,
+    detailAddress,
+    detailError,
+    detailFeatureId,
+    detailLoading,
+    error,
+    fetchInBounds,
+    flyTo,
+    geometry,
+    getSearchBias,
+    handleConsentAgree,
+    handleContextMenu,
+    handleMapLoad,
+    handleMyLocation,
+    handlePointClick,
+    handleSearchSelect,
+    handleViewportChange,
+    loaded,
+    loading,
+    locating,
+    mapRef,
+    notice,
+    openTransportDetail,
+    points,
+    requestCoord,
+    selected,
+    selectedWeatherMarker,
+    setConsentOpen,
+    setContextMenu,
+    setDetailFeatureId,
+    setNotice,
+    setRequestCoord,
+    setSelected,
+    setSelectedWeatherMarker,
+    transport,
+    userLocation,
+    weather,
+    weatherPoints,
+  };
+}
+
+type FeatureMapViewView0Model = Extract<
+  ReturnType<typeof useFeatureMapViewModel>,
+  { renderBranch: 'render0' }
+>;
+function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Model }) {
+  const {
+    apiKey,
+    camera,
+    className,
+    clearGeometrySelection,
+    consentError,
+    consentOpen,
+    consentSaving,
+    contextMenu,
+    copyCoord,
+    detailFeatureId,
+    flyTo,
+    geometry,
+    handleConsentAgree,
+    handleContextMenu,
+    handleMapLoad,
+    handlePointClick,
+    handleViewportChange,
+    openTransportDetail,
+    points,
+    requestCoord,
+    selected,
+    selectedWeatherMarker,
+    setConsentOpen,
+    setContextMenu,
+    setDetailFeatureId,
+    setNotice,
+    setRequestCoord,
+    setSelected,
+    setSelectedWeatherMarker,
+    transport,
+    userLocation,
+    weatherPoints,
+  } = viewModel;
   return (
     // 높이는 셸이 흘려보낸다 — 바깥 래퍼까지 flex 사슬을 이어야 `h-full`이 실제로 해소된다
     // (사슬이 끊기면 content 높이로 붕괴한다, T-316 리뷰 P1).
     <div className={`flex min-h-0 flex-col ${className ?? ''}`} data-testid="feature-map">
       <div className="flex min-h-[360px] flex-1 flex-col overflow-hidden rounded-sm border border-hairline bg-canvas">
         <div className="relative min-h-0 flex-1">
-          <div className="pointer-events-none absolute inset-0 z-10">
-            <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
-              <MapSearchBox
-                onSelect={handleSearchSelect}
-                allowFeatureDetail
-                getBias={getSearchBias}
-              />
-              {/* 상태는 상시 표가 아니라 **일이 생겼을 때만** 뜬다(DESIGN.md 상태 UI). */}
-              {error ? (
-                <p
-                  role="alert"
-                  className="mt-1 flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-2 py-1.5 text-xs text-error-text shadow-card"
-                  data-testid="feature-map-error"
-                >
-                  <span className="min-w-0">{error}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const map = mapRef.current;
-                      if (map) void fetchInBounds(map);
-                    }}
-                    className="focus-ring shrink-0 rounded-sm border border-error-text px-2 py-0.5 font-semibold"
-                  >
-                    다시 불러오기
-                  </button>
-                </p>
-              ) : loading ? (
-                <p
-                  className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
-                  role="status"
-                  aria-busy="true"
-                  data-testid="feature-map-loading"
-                >
-                  장소를 불러오는 중…
-                </p>
-              ) : loaded && points.length === 0 ? (
-                <p
-                  className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
-                  role="status"
-                  data-testid="feature-map-empty"
-                >
-                  이 범위에 표시할 장소가 없습니다 — 지도를 움직여 보세요.
-                </p>
-              ) : null}
-              {notice && (
-                <p className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card">
-                  {notice}
-                </p>
-              )}
-              <FeatureGeometryControls state={geometry} className="mt-1" />
-              <TransportLayerControls
-                state={transport}
-                onOpenDetail={openTransportDetail}
-                className="mt-1"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleMyLocation()}
-              aria-label="내 위치로 이동"
-              aria-busy={locating}
-              disabled={locating}
-              data-testid="map-my-location"
-              className="focus-ring pointer-events-auto absolute bottom-4 right-3 flex size-11 items-center justify-center rounded-full border border-hairline bg-canvas text-ink shadow-card hover:bg-surface-soft disabled:cursor-not-allowed disabled:text-muted"
-            >
-              <LocateFixed
-                className={`h-5 w-5 ${locating ? 'animate-pulse' : ''}`}
-                aria-hidden="true"
-              />
-            </button>
-            {/* 자동 센터링 결정의 관측 창구. CI e2e에는 VWorld 키가 없어 실제 카메라를 볼 수 없으므로
-                결정 자체를 노출해야 검증된다. 좌표는 4자리로 절사해 원좌표를 DOM에 싣지 않는다. */}
-            <div
-              className="sr-only"
-              aria-hidden="true"
-              data-testid="map-center-state"
-              data-resolved={autoCenter.resolved ? 'true' : 'false'}
-              data-source={autoCenter.source}
-              data-reason={autoCenter.reason}
-              data-consent={autoCenter.consent}
-              data-permission={autoCenter.permission}
-              data-center-lon={coarseCoordText(camera.center[0])}
-              data-center-lat={coarseCoordText(camera.center[1])}
-              data-zoom={String(camera.zoom)}
-            />
-          </div>
+          <FeatureMapViewView0Part0 viewModel={viewModel} />
 
           {/* 지도는 상자를 **절대 위치로** 채운다 — 부모 높이가 min-height로만 정해지면 `h-full`이 풀리지
               않아 360px(min-h)에서 멈췄다(2026-11-02 prod e2e: 데스크톱 지도 아래 절반 이상이 비었다).
@@ -910,7 +914,9 @@ export function FeatureMapView({
                       selected={isSelected}
                       zIndex={markerZIndex(isSelected)}
                       ariaLabel={mapPoint.title}
-                      interactionId={mapPoint.kind === 'feature' ? 'feature:' + mapPoint.featureId : undefined}
+                      interactionId={
+                        mapPoint.kind === 'feature' ? 'feature:' + mapPoint.featureId : undefined
+                      }
                       onClick={() => handlePointClick(mapPoint)}
                     />
                   );
@@ -951,162 +957,15 @@ export function FeatureMapView({
                 onSelect={openTransportDetail}
               />
               {userLocation && <UserLocationMarker lngLat={userLocation} />}
-              {selected && (
-                <Popup
-                  key={selected.id}
-                  lngLat={selected.lngLat}
-                  maxWidth="260px"
-                  closeButton={false}
-                  onClose={() =>
-                    setSelected((current) => (current?.id === selected.id ? null : current))
-                  }
-                >
-                  <div
-                    className="space-y-2"
-                    data-testid="feature-map-popup"
-                    data-feature-id={selected.featureId}
-                    data-detail-feature-id={detail?.feature_id}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-semibold text-ink">
-                        {detail?.name ?? selected.title}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setSelected(null)}
-                        className="text-xs text-muted hover:text-ink"
-                        aria-label="닫기"
-                      >
-                        닫기
-                      </button>
-                    </div>
-                    {detail?.category_label && (
-                      <p className="text-xs text-muted">{detail.category_label}</p>
-                    )}
-                    {detailAddress && <p className="text-xs text-body">{detailAddress}</p>}
-                    {weather?.is_stale && (
-                      <p
-                        className="text-xs text-muted"
-                        title="일부 날씨 정보의 업데이트가 지연되었습니다."
-                        role="status"
-                      >
-                        오래된 정보 포함
-                      </p>
-                    )}
-                    {currentTemp != null && (
-                      <p className="text-xs text-body">현재 기온 {currentTemp.toFixed(0)}°C</p>
-                    )}
-                    {detailLoading && !detail && (
-                      <p className="text-xs text-muted">상세 불러오는 중…</p>
-                    )}
-                    {detailError && (
-                      <p role="alert" className="text-xs text-error-text">
-                        {detailError}
-                      </p>
-                    )}
-                    {!!detail?.degraded_providers.length && (
-                      <p role="status" className="text-xs text-muted">
-                        일부 상세 정보가 지연되고 있습니다.
-                      </p>
-                    )}
-                    {selected.featureId && (
-                      <button
-                        type="button"
-                        onClick={() => setDetailFeatureId(selected.featureId ?? null)}
-                        data-testid="feature-map-detail-open"
-                        className="min-h-11 w-full rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90"
-                      >
-                        상세보기
-                      </button>
-                    )}
-                  </div>
-                </Popup>
-              )}
+              {selected && <FeatureMapViewView0Part1 viewModel={viewModel} />}
               {/* T-368 — weather marker는 feature가 아니므로 상세보기가 없다. 값은 marker 자체
                   (`selectedWeatherMarker`)에 이미 있어 선택 시 별도 fetch가 필요 없다. */}
-              {selectedWeatherMarker && (
-                <Popup
-                  key={selectedWeatherMarker.id}
-                  lngLat={selectedWeatherMarker.lngLat}
-                  maxWidth="220px"
-                  closeButton={false}
-                  onClose={() =>
-                    setSelectedWeatherMarker((current) =>
-                      current?.id === selectedWeatherMarker.id ? null : current,
-                    )
-                  }
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-semibold text-ink">
-                        {selectedWeatherMarker.title}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedWeatherMarker(null)}
-                        className="text-xs text-muted hover:text-ink"
-                        aria-label="닫기"
-                      >
-                        닫기
-                      </button>
-                    </div>
-                    <p className="text-xs text-body">
-                      현재 기온 {Math.round(selectedWeatherMarker.temperatureC)}°C
-                    </p>
-                    {selectedWeatherMarker.provider && (
-                      <p className="text-xs text-muted">
-                        출처: {providerLabel(selectedWeatherMarker.provider)}
-                      </p>
-                    )}
-                  </div>
-                </Popup>
-              )}
+              {selectedWeatherMarker && <FeatureMapViewView0Part2 viewModel={viewModel} />}
             </VWorldMap>
           </div>
-          <div className="sr-only" aria-hidden="true" data-testid="feature-map-marker-legend">
-            {points.map((point) => (
-              <span
-                key={point.id}
-                data-testid="feature-map-marker-style"
-                data-feature-id={point.featureId ?? ''}
-                data-kind={point.kind}
-                data-marker-color={point.markerColor}
-                data-marker-hex={point.color}
-                data-marker-icon={point.icon}
-                data-marker-source={point.markerSource}
-                data-marker-selected={
-                  point.kind === 'feature' && point.featureId === selected?.featureId
-                    ? 'true'
-                    : 'false'
-                }
-                data-marker-count={point.count ?? ''}
-              >
-                {point.title}
-              </span>
-            ))}
-          </div>
+          <FeatureMapViewView0Part3 viewModel={viewModel} />
           {/* T-368 — VWorld 키 없는 CI에서도 weather marker 데이터를 검증할 수 있게 노출한다. */}
-          <div
-            className="sr-only"
-            aria-hidden="true"
-            data-testid="feature-map-weather-marker-legend"
-          >
-            {weatherPoints.map((point) => (
-              <span
-                key={point.id}
-                data-testid="feature-map-weather-marker"
-                data-location-id={point.locationId}
-                data-temperature-c={point.temperatureC}
-                data-condition={point.condition}
-                data-provider={point.provider ?? ''}
-                data-selected={
-                  point.locationId === selectedWeatherMarker?.locationId ? 'true' : 'false'
-                }
-              >
-                {point.title}
-              </span>
-            ))}
-          </div>
+          <FeatureMapViewView0Part4 viewModel={viewModel} />
 
           <TransportMarkerLegend points={transport.points} />
 
@@ -1172,6 +1031,273 @@ export function FeatureMapView({
         onClose={() => setDetailFeatureId(null)}
       />
       <TransportDetailDialog target={transport.detail} onClose={transport.closeDetail} />
+    </div>
+  );
+}
+
+function FeatureMapViewView0Part0({ viewModel }: { viewModel: FeatureMapViewView0Model }) {
+  const {
+    handleSearchSelect,
+    getSearchBias,
+    error,
+    mapRef,
+    fetchInBounds,
+    loading,
+    loaded,
+    points,
+    notice,
+    geometry,
+    transport,
+    openTransportDetail,
+    handleMyLocation,
+    locating,
+    autoCenter,
+    camera,
+  } = viewModel;
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10">
+      <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
+        <MapSearchBox onSelect={handleSearchSelect} allowFeatureDetail getBias={getSearchBias} />
+        {/* 상태는 상시 표가 아니라 **일이 생겼을 때만** 뜬다(DESIGN.md 상태 UI). */}
+        {error ? (
+          <p
+            role="alert"
+            className="mt-1 flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-2 py-1.5 text-xs text-error-text shadow-card"
+            data-testid="feature-map-error"
+          >
+            <span className="min-w-0">{error}</span>
+            <button
+              type="button"
+              onClick={() => {
+                const map = mapRef.current;
+                if (map) void fetchInBounds(map);
+              }}
+              className="focus-ring shrink-0 rounded-sm border border-error-text px-2 py-0.5 font-semibold"
+            >
+              다시 불러오기
+            </button>
+          </p>
+        ) : loading ? (
+          <p
+            className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
+            role="status"
+            aria-busy="true"
+            data-testid="feature-map-loading"
+          >
+            장소를 불러오는 중…
+          </p>
+        ) : loaded && points.length === 0 ? (
+          <p
+            className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
+            role="status"
+            data-testid="feature-map-empty"
+          >
+            이 범위에 표시할 장소가 없습니다 — 지도를 움직여 보세요.
+          </p>
+        ) : null}
+        {notice && (
+          <p className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card">
+            {notice}
+          </p>
+        )}
+        <FeatureGeometryControls state={geometry} className="mt-1" />
+        <TransportLayerControls
+          state={transport}
+          onOpenDetail={openTransportDetail}
+          className="mt-1"
+        />
+      </div>
+      <button
+        type="button"
+        onClick={() => void handleMyLocation()}
+        aria-label="내 위치로 이동"
+        aria-busy={locating}
+        disabled={locating}
+        data-testid="map-my-location"
+        className="focus-ring pointer-events-auto absolute bottom-4 right-3 flex size-11 items-center justify-center rounded-full border border-hairline bg-canvas text-ink shadow-card hover:bg-surface-soft disabled:cursor-not-allowed disabled:text-muted"
+      >
+        <LocateFixed className={`h-5 w-5 ${locating ? 'animate-pulse' : ''}`} aria-hidden="true" />
+      </button>
+      {/* 자동 센터링 결정의 관측 창구. CI e2e에는 VWorld 키가 없어 실제 카메라를 볼 수 없으므로
+                결정 자체를 노출해야 검증된다. 좌표는 4자리로 절사해 원좌표를 DOM에 싣지 않는다. */}
+      <div
+        className="sr-only"
+        aria-hidden="true"
+        data-testid="map-center-state"
+        data-resolved={autoCenter.resolved ? 'true' : 'false'}
+        data-source={autoCenter.source}
+        data-reason={autoCenter.reason}
+        data-consent={autoCenter.consent}
+        data-permission={autoCenter.permission}
+        data-center-lon={coarseCoordText(camera.center[0])}
+        data-center-lat={coarseCoordText(camera.center[1])}
+        data-zoom={String(camera.zoom)}
+      />
+    </div>
+  );
+}
+
+function FeatureMapViewView0Part1({ viewModel }: { viewModel: FeatureMapViewView0Model }) {
+  const {
+    selected,
+    setSelected,
+    detail,
+    detailAddress,
+    weather,
+    currentTemp,
+    detailLoading,
+    detailError,
+    setDetailFeatureId,
+  } = viewModel;
+  if (selected == null) return null;
+  return (
+    <Popup
+      key={selected.id}
+      lngLat={selected.lngLat}
+      maxWidth="260px"
+      closeButton={false}
+      onClose={() => setSelected((current) => (current?.id === selected.id ? null : current))}
+    >
+      <div
+        className="space-y-2"
+        data-testid="feature-map-popup"
+        data-feature-id={selected.featureId}
+        data-detail-feature-id={detail?.feature_id}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-semibold text-ink">{detail?.name ?? selected.title}</p>
+          <button
+            type="button"
+            onClick={() => setSelected(null)}
+            className="text-xs text-muted hover:text-ink"
+            aria-label="닫기"
+          >
+            닫기
+          </button>
+        </div>
+        {detail?.category_label && <p className="text-xs text-muted">{detail.category_label}</p>}
+        {detailAddress && <p className="text-xs text-body">{detailAddress}</p>}
+        {weather?.is_stale && (
+          <p
+            className="text-xs text-muted"
+            title="일부 날씨 정보의 업데이트가 지연되었습니다."
+            role="status"
+          >
+            오래된 정보 포함
+          </p>
+        )}
+        {currentTemp != null && (
+          <p className="text-xs text-body">현재 기온 {currentTemp.toFixed(0)}°C</p>
+        )}
+        {detailLoading && !detail && <p className="text-xs text-muted">상세 불러오는 중…</p>}
+        {detailError && (
+          <p role="alert" className="text-xs text-error-text">
+            {detailError}
+          </p>
+        )}
+        {!!detail?.degraded_providers.length && (
+          <p role="status" className="text-xs text-muted">
+            일부 상세 정보가 지연되고 있습니다.
+          </p>
+        )}
+        {selected.featureId && (
+          <button
+            type="button"
+            onClick={() => setDetailFeatureId(selected.featureId ?? null)}
+            data-testid="feature-map-detail-open"
+            className="min-h-11 w-full rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90"
+          >
+            상세보기
+          </button>
+        )}
+      </div>
+    </Popup>
+  );
+}
+
+function FeatureMapViewView0Part2({ viewModel }: { viewModel: FeatureMapViewView0Model }) {
+  const { selectedWeatherMarker, setSelectedWeatherMarker } = viewModel;
+  if (selectedWeatherMarker == null) return null;
+  return (
+    <Popup
+      key={selectedWeatherMarker.id}
+      lngLat={selectedWeatherMarker.lngLat}
+      maxWidth="220px"
+      closeButton={false}
+      onClose={() =>
+        setSelectedWeatherMarker((current) =>
+          current?.id === selectedWeatherMarker.id ? null : current,
+        )
+      }
+    >
+      <div className="space-y-1">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-semibold text-ink">{selectedWeatherMarker.title}</p>
+          <button
+            type="button"
+            onClick={() => setSelectedWeatherMarker(null)}
+            className="text-xs text-muted hover:text-ink"
+            aria-label="닫기"
+          >
+            닫기
+          </button>
+        </div>
+        <p className="text-xs text-body">
+          현재 기온 {Math.round(selectedWeatherMarker.temperatureC)}°C
+        </p>
+        {selectedWeatherMarker.provider && (
+          <p className="text-xs text-muted">
+            출처: {providerLabel(selectedWeatherMarker.provider)}
+          </p>
+        )}
+      </div>
+    </Popup>
+  );
+}
+
+function FeatureMapViewView0Part3({ viewModel }: { viewModel: FeatureMapViewView0Model }) {
+  const { points, selected } = viewModel;
+  return (
+    <div className="sr-only" aria-hidden="true" data-testid="feature-map-marker-legend">
+      {points.map((point) => (
+        <span
+          key={point.id}
+          data-testid="feature-map-marker-style"
+          data-feature-id={point.featureId ?? ''}
+          data-kind={point.kind}
+          data-marker-color={point.markerColor}
+          data-marker-hex={point.color}
+          data-marker-icon={point.icon}
+          data-marker-source={point.markerSource}
+          data-marker-selected={
+            point.kind === 'feature' && point.featureId === selected?.featureId ? 'true' : 'false'
+          }
+          data-marker-count={point.count ?? ''}
+        >
+          {point.title}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function FeatureMapViewView0Part4({ viewModel }: { viewModel: FeatureMapViewView0Model }) {
+  const { weatherPoints, selectedWeatherMarker } = viewModel;
+  return (
+    <div className="sr-only" aria-hidden="true" data-testid="feature-map-weather-marker-legend">
+      {weatherPoints.map((point) => (
+        <span
+          key={point.id}
+          data-testid="feature-map-weather-marker"
+          data-location-id={point.locationId}
+          data-temperature-c={point.temperatureC}
+          data-condition={point.condition}
+          data-provider={point.provider ?? ''}
+          data-selected={point.locationId === selectedWeatherMarker?.locationId ? 'true' : 'false'}
+        >
+          {point.title}
+        </span>
+      ))}
     </div>
   );
 }

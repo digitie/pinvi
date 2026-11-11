@@ -1,19 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Gavel, Loader2, RefreshCw, RotateCcw, Send } from 'lucide-react';
+import { SettingsList, SettingsSection } from '@/components/app/SettingsSurface';
+import { FormField } from '@/components/forms/FormField';
+import { FormSelect } from '@/components/forms/FormSelect';
+import { FormTextArea } from '@/components/forms/FormTextArea';
+import { buttonClassName } from '@/components/ui/button-styles';
+import { apiClient } from '@/lib/api';
 import { ApiError, userApi } from '@pinvi/api-client';
 import type {
   ContentReportReasonCode,
   ContentReportRecord,
   ContentReportTargetType,
 } from '@pinvi/schemas';
-import { SettingsList, SettingsSection } from '@/components/app/SettingsSurface';
-import { FormField } from '@/components/forms/FormField';
-import { FormTextArea } from '@/components/forms/FormTextArea';
-import { FormSelect } from '@/components/forms/FormSelect';
-import { buttonClassName } from '@/components/ui/Button';
-import { apiClient } from '@/lib/api';
+import { Gavel, Loader2, RefreshCw, RotateCcw, Send } from 'lucide-react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
 const TARGET_OPTIONS: { value: ContentReportTargetType; label: string }[] = [
   { value: 'trip', label: '여행' },
@@ -68,7 +68,16 @@ function formatDateTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString('ko-KR') : '-';
 }
 
-export default function ModerationSettingsPage() {
+export default function ModerationSettingsPage(
+  ...args: Parameters<typeof useModerationSettingsPageModel>
+) {
+  const viewModel = useModerationSettingsPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <ModerationSettingsPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useModerationSettingsPageModel() {
   const [reports, setReports] = useState<ContentReportRecord[]>([]);
   const [targetType, setTargetType] = useState<ContentReportTargetType>('trip');
   const [targetId, setTargetId] = useState('');
@@ -160,6 +169,59 @@ export default function ModerationSettingsPage() {
     }
   };
 
+  return {
+    renderBranch: 'render0' as const,
+    appealReason,
+    appealReportId,
+    appealing,
+    error,
+    evidenceField,
+    evidenceNote,
+    evidenceUrl,
+    load,
+    loading,
+    notice,
+    onAppeal,
+    onCreate,
+    reasonCode,
+    reasonText,
+    reports,
+    saving,
+    setAppealReason,
+    setAppealReportId,
+    setEvidenceField,
+    setEvidenceNote,
+    setEvidenceUrl,
+    setLoading,
+    setReasonCode,
+    setReasonText,
+    setTargetId,
+    setTargetType,
+    targetId,
+    targetType,
+  };
+}
+
+type ModerationSettingsPageView0Model = Extract<
+  ReturnType<typeof useModerationSettingsPageModel>,
+  { renderBranch: 'render0' }
+>;
+function ModerationSettingsPageView0({
+  viewModel,
+}: {
+  viewModel: ModerationSettingsPageView0Model;
+}) {
+  const {
+    appealReportId,
+    error,
+    load,
+    loading,
+    notice,
+    reports,
+    setAppealReason,
+    setAppealReportId,
+    setLoading,
+  } = viewModel;
   return (
     <div className="space-y-6">
       <header>
@@ -179,136 +241,12 @@ export default function ModerationSettingsPage() {
       )}
 
       <SettingsSection title="새 신고">
-        <form onSubmit={onCreate} className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)]">
-          <FormSelect
-            id="settings-moderation-target-type"
-            label="대상"
-            value={targetType}
-            onChange={(event) => {
-              // 대상이 바뀌면 이전 대상의 필드가 payload에 남지 않게 초기화한다(T-316 리뷰 P2).
-              setEvidenceField('');
-              setTargetType(event.target.value as ContentReportTargetType);
-            }}
-          >
-            {TARGET_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </FormSelect>
-          <FormField
-            id="settings-moderation-target-id"
-            label="대상 ID"
-            type="text"
-            value={targetId}
-            onChange={(event) => setTargetId(event.target.value)}
-            required
-          />
-          <FormSelect
-            id="settings-moderation-reason"
-            label="사유"
-            value={reasonCode}
-            onChange={(event) => setReasonCode(event.target.value as ContentReportReasonCode)}
-          >
-            {REASON_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </FormSelect>
-          <FormTextArea
-            id="settings-moderation-reason-text"
-            label="신고 내용"
-            value={reasonText}
-            onChange={(event) => setReasonText(event.target.value)}
-            maxLength={2000}
-            rows={4}
-            required
-          />
-          <div className="grid gap-3 lg:col-span-2 lg:grid-cols-2">
-            <FormSelect
-              id="settings-moderation-evidence-field"
-              label="문제가 된 부분(선택)"
-              value={evidenceField}
-              onChange={(event) => setEvidenceField(event.target.value)}
-            >
-              <option value="">선택 안 함</option>
-              {(EVIDENCE_FIELDS[targetType] ?? []).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </FormSelect>
-            <FormField
-              id="settings-moderation-evidence-url"
-              label="관련 링크(선택)"
-              type="url"
-              value={evidenceUrl}
-              onChange={(event) => setEvidenceUrl(event.target.value)}
-            />
-            <div className="lg:col-span-2">
-              <FormTextArea
-                id="settings-moderation-evidence-note"
-                label="추가 설명(선택)"
-                value={evidenceNote}
-                onChange={(event) => setEvidenceNote(event.target.value)}
-                maxLength={1000}
-                rows={3}
-              />
-            </div>
-          </div>
-          <button
-            type="submit"
-            disabled={saving}
-            className={buttonClassName({ className: 'lg:col-start-2 lg:justify-self-start' })}
-            data-testid="settings-moderation-submit"
-          >
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Send className="h-4 w-4" aria-hidden="true" />
-            )}
-            접수
-          </button>
-        </form>
+        <ModerationSettingsPageSection0_0 viewModel={viewModel} />
       </SettingsSection>
 
       {appealReportId && (
         <SettingsSection title="이의제기">
-          <form onSubmit={onAppeal} className="grid gap-3">
-            <div className="font-mono text-xs text-muted">{appealReportId}</div>
-            <FormTextArea
-              id="settings-moderation-appeal-reason"
-              label="이의제기 사유"
-              value={appealReason}
-              onChange={(event) => setAppealReason(event.target.value)}
-              maxLength={2000}
-              rows={4}
-              required
-            />
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={appealing}
-                className={buttonClassName()}
-                data-testid="settings-moderation-appeal-submit"
-              >
-                {appealing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                )}
-                제출
-              </button>
-              <button
-                type="button"
-                onClick={() => setAppealReportId(null)}
-                className={buttonClassName({ variant: 'secondary' })}
-              >
-                취소
-              </button>
-            </div>
-          </form>
+          <ModerationSettingsPageSection0_1 viewModel={viewModel} />
         </SettingsSection>
       )}
 
@@ -371,5 +309,169 @@ export default function ModerationSettingsPage() {
         />
       </SettingsSection>
     </div>
+  );
+}
+
+function ModerationSettingsPageSection0_0({
+  viewModel,
+}: {
+  viewModel: ModerationSettingsPageView0Model;
+}) {
+  const {
+    evidenceField,
+    evidenceNote,
+    evidenceUrl,
+    onCreate,
+    reasonCode,
+    reasonText,
+    saving,
+    setEvidenceField,
+    setEvidenceNote,
+    setEvidenceUrl,
+    setReasonCode,
+    setReasonText,
+    setTargetId,
+    setTargetType,
+    targetId,
+    targetType,
+  } = viewModel;
+  return (
+    <form onSubmit={onCreate} className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)]">
+      <FormSelect
+        id="settings-moderation-target-type"
+        label="대상"
+        value={targetType}
+        onChange={(event) => {
+          // 대상이 바뀌면 이전 대상의 필드가 payload에 남지 않게 초기화한다(T-316 리뷰 P2).
+          setEvidenceField('');
+          setTargetType(event.target.value as ContentReportTargetType);
+        }}
+      >
+        {TARGET_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </FormSelect>
+      <FormField
+        id="settings-moderation-target-id"
+        label="대상 ID"
+        type="text"
+        value={targetId}
+        onChange={(event) => setTargetId(event.target.value)}
+        required
+      />
+      <FormSelect
+        id="settings-moderation-reason"
+        label="사유"
+        value={reasonCode}
+        onChange={(event) => setReasonCode(event.target.value as ContentReportReasonCode)}
+      >
+        {REASON_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </FormSelect>
+      <FormTextArea
+        id="settings-moderation-reason-text"
+        label="신고 내용"
+        value={reasonText}
+        onChange={(event) => setReasonText(event.target.value)}
+        maxLength={2000}
+        rows={4}
+        required
+      />
+      <div className="grid gap-3 lg:col-span-2 lg:grid-cols-2">
+        <FormSelect
+          id="settings-moderation-evidence-field"
+          label="문제가 된 부분(선택)"
+          value={evidenceField}
+          onChange={(event) => setEvidenceField(event.target.value)}
+        >
+          <option value="">선택 안 함</option>
+          {(EVIDENCE_FIELDS[targetType] ?? []).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </FormSelect>
+        <FormField
+          id="settings-moderation-evidence-url"
+          label="관련 링크(선택)"
+          type="url"
+          value={evidenceUrl}
+          onChange={(event) => setEvidenceUrl(event.target.value)}
+        />
+        <div className="lg:col-span-2">
+          <FormTextArea
+            id="settings-moderation-evidence-note"
+            label="추가 설명(선택)"
+            value={evidenceNote}
+            onChange={(event) => setEvidenceNote(event.target.value)}
+            maxLength={1000}
+            rows={3}
+          />
+        </div>
+      </div>
+      <button
+        type="submit"
+        disabled={saving}
+        className={buttonClassName({ className: 'lg:col-start-2 lg:justify-self-start' })}
+        data-testid="settings-moderation-submit"
+      >
+        {saving ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Send className="h-4 w-4" aria-hidden="true" />
+        )}
+        접수
+      </button>
+    </form>
+  );
+}
+
+function ModerationSettingsPageSection0_1({
+  viewModel,
+}: {
+  viewModel: ModerationSettingsPageView0Model;
+}) {
+  const { appealReason, appealReportId, appealing, onAppeal, setAppealReason, setAppealReportId } =
+    viewModel;
+  return (
+    <form onSubmit={onAppeal} className="grid gap-3">
+      <div className="font-mono text-xs text-muted">{appealReportId}</div>
+      <FormTextArea
+        id="settings-moderation-appeal-reason"
+        label="이의제기 사유"
+        value={appealReason}
+        onChange={(event) => setAppealReason(event.target.value)}
+        maxLength={2000}
+        rows={4}
+        required
+      />
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={appealing}
+          className={buttonClassName()}
+          data-testid="settings-moderation-appeal-submit"
+        >
+          {appealing ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          )}
+          제출
+        </button>
+        <button
+          type="button"
+          onClick={() => setAppealReportId(null)}
+          className={buttonClassName({ variant: 'secondary' })}
+        >
+          취소
+        </button>
+      </div>
+    </form>
   );
 }

@@ -1,3 +1,31 @@
+## 2026-11-12 — 이미지 source provenance 동등성 수정
+
+원 A의328 image OCI/ENV가 synthetic2ce였던 오류를 재현했다. 실제 HEAD 단일 output·예상PRhead 대조·실제 built inspect 비교·서로 다른 유효40hex negative control을 연결했다.6 contract/clean CI trigger4검사 PASS. 원 B obsolete vendor CI 경로는 이미 수정됐고5cb full required API CI도 SUCCESS다. SDK4·main476·C11은 보존하고 새 immutable input의 실제 CI와 원 A/B closure를 확인한다. [기록](reports/pinvi-image-provenance-20261112.json).
+
+## 2026-11-12 — SDK styling guard 기대값 정렬
+
+새 hosted 필수 Expo Doctor20/20은 통과했으나 styling guard의 이전Expo58.0.23 기대값이 type/macOS job을 막았다. 로컬 별도 guard 누락을 확인하고 SDK4 exact를 모두 명시 검사하도록 갱신했다. 수정 전 실패/수정 후 PASS를 보존했고 검사 완화·C11 변경·runtime source 변경은 없다. 새 hosted validation을 이어간다.
+
+## 2026-11-12 — SDK4 latest patch·필수 진단·main 병합
+
+SDK4 latest exact patch를 strict 설치하고 물리 Expo Doctor20/20·React Doctor0·type/lint/guard를 확인했다. main476의5파일을 먼저 병합해 기존 synthetic CI tree와 같음을 확인하고 SDK WIP를 복원했다. 깨끗한 CI 경로 회귀1FAIL/3PASS→4PASS이며 SDK 진단을 aggregate 필수로 연결했다. C11 bytes/원장·328 baseline/batch2는 보존한다. 새SDK exports/smoke 및 새main web 전체는 hosted CI 확인 대상이다. N150·운영 변경은 없다. [기록](reports/pinvi-expo-sdk-patches-20261112.json).
+
+## 2026-11-12 — C11 실제 설치·모달·종료 경계 검증
+
+C10 f3d4ddd8을 보존하고 소유권을 인계받았다. C11 사용7종297파일·3원장·lock·canonical 웹/모바일 검사를 통과했다. 기존521+새 경계6건=unit527·양쪽 타입/Doctor0·mobile lint0을 확인했다. 웹 lint는 기존 인증 경고1이다. 새 production 전체browser209PASS/0FAIL/기존flagSKIP4와 각 flag의 별도build canvas3PASS/restore2PASS를 완료했다. 이전 C9/C10 실패 기록·native fix4 승인 증거는 보존했다. 최종 소비자2리뷰·정확 HEAD CI·merge·부모 go 전에는 배포하지 않는다. [최신 보고서](reports/common-unification-20261111.md)를 따른다.
+
+## 2026-11-11 — 공통 VirtualTable/Radix·NativeWind5RC·Expo58 통합 후보
+
+2026-11-12 공개 UI 공통화 후속: Dialog/ConfirmDialog 자체 모달 엔진을 공통 Radix 어댑터로 이관하고 useModalDialog를 정리했다. 기존14행동cases와 추가회귀 유지, AppShell 더보기 common Popover6casesPASS. 새공통overlayProps/unstyled pack 대기 및 실제브라우저 initial-panel ShiftTab 회귀1건이 남는다. 과거전체493/1·203/6/4는 최종PASS가 아니며 새pack후전체재검증필수. 상세 docs/reports/common-unification-20261111.md.
+
+2026-11-11 공통 이관 checkpoint: 지도 source9a의 core1.0.1/web1.0.3/RN1.0.1과 Lightning CSS1.33.0+nativecss.fix.3 동일 tgz 실제 설치·lock/원장 SHA512 일치. 웹/모바일 타입·lint 및 Doctor482/45files 진단0. Android/iOS/Web export와 SDK58 N150375/1280px 로그인·글꼴 스모크PASS. 웹 unit493PASS/1FAIL은 최종 common LoginForm 자동완성 수정 pack 대기. 최종 common 정책·clean ci/build/e2e·독립2리뷰 미완료이며 push/배포 대기. 후속 N150 production buildPASS/E2E203PASS6FAIL(긴 공통Dialog)4SKIP, 별도 실제 canvas3casesPASS. ESLint도 전이까지10.14.0 하나로 정리했다. 상세는 docs/reports/common-unification-20261111.md.
+
+관리자 표를 common VirtualTable로 연결하고 Radix 프리미티브·LoginForm/RHF/Zod·인스턴스별 Zustand 상태·Pretendard를 실제 사용한다. 모바일은 사용자 추가 승인에 따라 NativeWind5RC1/engine3.1RC1/Tailwind4.3.5와 Expo58.0.23/RN0.88.1로 이동한다. 기존 보안/세션/위치 동의 순서와 사용자 화면 토큰을 유지한다.
+
+검증 기준선은 웹 unit488PASS/공통overlay·DOM자동완성2FAIL, 앱 타입 오류는 Dialog overlay 전달 API3건, webpack 컴파일PASS 뒤 같은 타입 오류로 buildFAIL이다. 웹 lint는 기존 auth hard-navigation warning1건과 오류0, Doctor full gate0(문자열 검색 정적 오탐3줄은 명시 예외)이다. 모바일 Expo58 lint/타입/스타일/Doctor0를 통과했으며 Android/iOS export는 임시 Lightning CSS1.30.1로PASS, OTF4종 포함을 확인했다. 실기기 검증은 미실행이다.
+
+최종 공통/GPL 포함 지도pack과 Lightning CSS1.33 원본 fix를 대기한다. 최신 compiler 실패의 최소 재현을 원본 전담에게 전달했다. [통합 보고서](reports/common-unification-20261111.md)·[모바일 보고서](reports/mobile-nativewind5-20261111.md)·[배포 계획](reports/common-unification-deploy-plan-20261111.md)에 상세 근거를 남긴다. push/PR/merge/배포는 하지 않았다.
+
 ## 2026-11-11 — #719 WS 중복 close·#721 call-log flush 재시도·context 분리
 
 - #719: rate limit(4429) grace 중 클라이언트가 먼저 끊으면 그 사이 broadcast 전송이 `ClientDisconnected`(OSError)로 실패해 starlette가 소켓을 `DISCONNECTED`로 만들고, grace 끝의 `websocket.close()`가 `WebSocketDisconnected`("Cannot call "send" once a close message has been sent.")를 올렸다. `_close_websocket`을 멱등으로(application/client state가 `DISCONNECTED`면 생략, 전송 실패는 `WebSocketDisconnect`·`WebSocketDisconnected`만 잡는다), reject·4408 사유 payload도 끊긴 소켓엔 보내지 않는다. close metric은 서버 결정으로 한 번만 센다. 적대 리뷰 P1: 처리 중 응답 send가 끊긴 전송에서 실패하면 다음 `receive_json()`이 `WebSocketDisconnected`(RuntimeError)를 올려 `except WebSocketDisconnect`를 빠져나갔다 — 루프도 둘 다 잡아 `client_disconnect`로 기록한다.
@@ -136,7 +164,6 @@
 ### 원격 기존 공유 URL 회귀 기대값 동기화
 
 dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 웹 경로 기대값1건을 포착했다(255통과/1실패). API 공개 read/comment/edit 경로와 혼동하지 않고 기존 검사의 발급 웹 URL 기대값만 실제 정본 /shared/{trip_id}/{token}에 맞춰 전체 URL로 강화했다. 제품 source는 dff 그대로다. 보완 후 WSL 실제 PG의 해당 검사·신규 링크 회귀·기존 공유권한 합계9검사가18.70초에 통과했다. 최신 workspace타입/lint(기존5warning)·Ruff/format도 통과했다. 정확 최종 문서/테스트 후보의 원격 CI는 별도 확인한다.
-
 
 ## 2026-11-05 — #641 여행 내보내기 초안 착수
 
@@ -380,7 +407,6 @@ dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 �
 - 기존 원시 popup 상세가 Map4초 지연 때3초 뒤에도 loading인 것을 재현했다. 동일한 detail-card 예산·취소·오류/부분 상태를 popup에 연결하며 modal과 동시 중복 조회하지 않는다. 새 빌드의 제한된 popup 검증은 진행 중이다.
 - 검색·본문·팝업의 실제 feature ID를 회귀 단언에 연결했다. 웹 전체339·타입·lint(기존5경고)를 확인했다.
 
-
 ## 2026-11-04 — #669 병렬 보강·검색 선택 경계 구현
 
 - 수정 전 동시 시작/빠른 두 번째 결과/취소 회귀3개와 잘못된 provider 응답3개 실패를 확인했다.
@@ -389,14 +415,12 @@ dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 �
 - 검색어 변경 즉시 이전 결과를 제거·취소하고 취소를 무시하는 응답도 버린다. 좌표 없는 feature는 정본 상세로 연결하고 실행할 위치·상세가 없는 행은 비활성화한다. 검색 회귀8개·웹 타입·lint를 확인했다.
 - 근처 교통 E2E는 현재 응답의 좌표 있는 정확 일치 결과를 고르고 실제 카메라 zoom/중심 완료를 기다린다. 모바일 맞춤·popup 가림 실제 UI는 진행 중이다.
 
-
 ## 2026-11-04 — #635 완료·#669/#674 지도 회귀 시작
 
 - #635는 PR665(613a055)로 완료했다. 독립 리뷰2인·최종 CI16상태와 WSL API2765/12skip·웹333·실제 UI14흐름을 확인했다.
 - 사용자 지시로 다른 Code가 담당하는671/672를 건너뛰고 중복 draft676을 닫았다. 로컬 미완 수정은 stash로 보관했으며 구현을 머지하지 않았다.
 - 다음은669/674의 병렬 상세 보강과 지도 이동·모바일 맞춤·popup 가림 재현이다. 계획은 docs/execplan/issues-669-674-map-detail-regressions.md에 둔다.
 - #643 최신 후속8개와650재오픈은 반영하되671/672는 외부 담당으로 추적한다. 운영 접근·배포·검증은 수행하지 않는다.
-
 
 ## 2026-11-04 — #635 실제 선·면 UI와 카탈로그 보강
 
@@ -405,7 +429,6 @@ dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 �
 - 추적된 catalogue helper를 직접 실행했다. 목록 DOM을 남기고 native layer를 지우면 canvas 단언이 실패한다. 상세는 fallback 제목 대신 정확한 HTTP200·ID/kind·렌더된 본문을 검증한다.
 - 웹 전체333·타입·lint(기존 경고5개)를 통과했다. API 전체2765 통과·12 제외와 공용 스키마23개를 확인했다. 최종 두 리뷰·CI·머지는 별도다.
 - 운영 검증은 하지 않았다. 안전한 증거는 docs/reviews/pinvi-635-geometry-local-live.json에 둔다.
-
 
 - Codex 가 머지한 #654~#662 를 두 독립 적대 리뷰(보안·권한·데이터 / 정확성·UX·계약)로 다시 보고, 직접 확인한 지적만
   한 PR 로 고쳤다. 여행 PATCH 는 잠금 뒤 휴지통 재확인·기간 이동으로 생기는 일자 날짜 중복 422·한국어 날짜 안내,
@@ -434,24 +457,22 @@ dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 �
 - 이 커밋은 provenance/테스트 핀/문서만 바꾸며 제품은 679ca7a와 같다. 그 제품의 전체 WSL API 2,740개·웹 282개·실제 지연 UI 10항목 및 두 독립 리뷰를 완료했다.
 - 최종 Docker 설치 검증·두 exact HEAD 리뷰·CI를 마친 뒤 #662를 병합하고 최신 #643/#1444를 갱신한다. 운영 접속·배포·검증은 하지 않는다.
 
-
 - Map #1447을 7ee94fb로 일반 병합했다. exact b778c097의 독립 리뷰 두 명과 최종 CI 전체를 확인했다. CI 단위/lint 3,643개·API 1,600개·Dagster 920개, PG 1,622개를 통과했다.
 - 세 OpenAPI profile은 검토된 바이트와 동일하다. Pinvi의 service/admin 실행 revision을 실제 Map 병합 커밋으로 맞췄고 capability generation과 M05 기존 attestation/체크섬은 보존했다.
 - 소비자 계약 318개 통과·조건부 9개 skip, 독립 설치 wheel의 packaged JSON·SHA·runtime revision·capability 대조를 통과했다.
 - 이 커밋은 provenance/테스트 핀/문서만 바꾸며 제품은 679ca7a와 같다. 그 제품의 전체 WSL API 2,740개·웹 282개·실제 지연 UI 10항목 및 두 독립 리뷰를 완료했다.
 - 최종 Docker 설치 검증·두 exact HEAD 리뷰·CI를 마친 뒤 #662를 병합하고 최신 #643/#1444를 갱신한다. 운영 접속·배포·검증은 하지 않는다.
 
-
-
 ## 2026-11-04 — #635 geometry HTTP 계약 연결
+
 - 수정 전 API6개·웹6개 회귀 실패를 확인했다. geometry와 truncated가 제거되던 투영을 보완하고 include_geometry를 opt-in 전달한다.
 - route/area의 nullable coord는 그대로 유지하고 네 도형·다각형 내부 구멍을 보존한다. Zod는 유한 WGS84 좌표·선 길이·닫힌 ring을 검사하며 잘못된 도형은 예외 누출 없이 거부한다.
 - 낮은 zoom의 geometry 요청은 상류 I/O 전에 422다. 관련 API104개·웹14개와 schema/api-client 타입 검사를 통과했다.
 - 검토·병합된 Map dd0238c의 3 OpenAPI와 provenance를 동기화했다. service/user bytes는 불변이고 admin은 검토된 이벤트 payload 필드만 추가됨을 대조했다. M05 envelope/조건부 키를 유지하며 생성물을 재생성했다.
 - 지도 레이어·선택·토글·오래된 응답 경계와 새 카탈로그 정합을 이어간다. 운영 접근·배포·테스트 없음.
 
-
 ## 2026-11-04 — #635 경로·영역 지도 레이어 초안
+
 - #643 본문·댓글과 Map #1444를 다시 읽었다. Map #1448(dd0238c) 및 SDK #20이 머지됐으며 Map 묶음은 완료됐다.
 - 최신 main7479bbe의 새 live E2E 카탈로그 #664(346건)를 기준으로 작업한다. 완료된 #643 항목의 카탈로그 기대값도 실제 동작 근거에 맞춰 확인한다.
 - 탐색·소유자 여행 지도에 경로/영역 토글을 추가하고 기존 vworld-map-web 선·면 컴포넌트로 LineString/MultiLineString/Polygon/MultiPolygon과 내부 구멍을 보존한다. 기존 팔레트·마커 톤은 유지한다.
@@ -510,7 +531,6 @@ dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 �
 - 관련 계약 274개 통과·운영 opt-in 1개 생략, 독립 설치 wheel과 network none Docker의 실제 포함 JSON·지문·release revision 검증을 통과했다. API 이미지 검증의 고정 artifact 지문도 새 provenance와 맞췄다.
 - 제품 로직은 앞서 전체 backend 2,728개·web 280개·실제 연결 UI 8항목을 통과한 것과 같다. 최종 SHA 두 리뷰와 CI 후 소비자 #661을 병합한다. 운영 접속·배포·검증은 수행하지 않았다.
 
-
 ## 2026-11-04 — #642·Map #1440 실제 날씨 연결 검증
 
 - WSL에서 전체 backend 2,728개 통과·12개 조건부 생략, Ruff·481파일 포맷·엄격 mypy 256파일, 전체 workspace typecheck와 web 280개를 통과했다. 초기 web fixture 키의 인덱스 타입 오류를 실제 실패 후 한정된 키 타입으로 수정했다.
@@ -518,7 +538,6 @@ dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 �
 - 과거 날짜만 있는 여행의 5일 전 요약 4개, 여행/익명 공유의 카드 범위 경고, fresh 현재기온+원천 지연 예보의 Feature API, 정상 새 세대에서 경고 해제와 과거 값 보존을 확인했다. 구버전 source 캐시에는 빈 위치만 넣고 시작했다. 안전한 제품 객체 지문과 범위는 docs/reviews/pinvi-642-weather-local-live.json에 기록했다.
 - 두 독립 리뷰어는 제품 HEAD 0791355에 추가 P0/P1/P2가 없다고 판정했다. 원격 CI의 web build/e2e/Docker 실패도 같은 테스트 키 타입 오류임을 대조했다. 전체 backend 실행 중에는 HEAD를 유지했고 종료 후 이 보완을 커밋한다.
 - Map 기반 PR의 최종 CI/병합 후 실제 merge revision과 서비스 provenance·pair pin을 대조하고, 최종 SHA 리뷰·CI 뒤 소비자를 병합한다. 테스트 서버와 소유 fixture 컨테이너는 종료했다. 운영 접속·배포·검증은 하지 않았다.
-
 
 ## 2026-11-04 — #642·Map #1440 날씨 품질 묶음 소비자 착수
 
@@ -926,12 +945,12 @@ pinvi-api → weather `/health` 200, geo reverse 정상. 계획 순서(T-374 →
 - **T-374** (`kor-travel-weather.md` §8.3 "대응" 그대로): (a) settings `pinvi_kor_travel_weather_connect_timeout_seconds`
   (기본 2.0, `gt=0`) → `kor_travel_weather_timeout()` = `httpx.Timeout(10.0, connect=2.0)`. (b) `trip_weather_batch.py`
   2단계 resolve를 feature마다 `(KorTravelWeatherError, TimeoutError)` 개별 try(그 feature만 `unavailable`, 순차 유지)
-  + 2·4단계가 하나의 deadline(`asyncio.timeout_at`)을 공유; 2단계에서 예산이 끊기면 pending 전체 `unavailable`.
-  `weather_card.py`는 resolver `KorTravelWeatherUnavailable` → `([], None)`(빈 카드; Admin weather-values도 같은 pipeline).
-  (c) `_CircuitBreaker`를 `_send`에 씌웠다 — 논리 호출 단위, 연속 3회 실패 → 30 s open(transport 0회·즉시 `Unavailable`),
-  half-open 시험 1회(동시 호출은 거부), 4xx·계약 오류는 실패로 안 셈, 취소된 호출은 상태 불변·시험 자리만 반환.
-  모듈 상수(`_CIRCUIT_FAILURE_THRESHOLD`/`_CIRCUIT_OPEN_SECONDS`), env 노출 없음, ETL resource 제외. `.env.example`에
-  `PINVI_KOR_TRAVEL_WEATHER_CONNECT_TIMEOUT_SECONDS=2` 줄 추가.
+  - 2·4단계가 하나의 deadline(`asyncio.timeout_at`)을 공유; 2단계에서 예산이 끊기면 pending 전체 `unavailable`.
+    `weather_card.py`는 resolver `KorTravelWeatherUnavailable` → `([], None)`(빈 카드; Admin weather-values도 같은 pipeline).
+    (c) `_CircuitBreaker`를 `_send`에 씌웠다 — 논리 호출 단위, 연속 3회 실패 → 30 s open(transport 0회·즉시 `Unavailable`),
+    half-open 시험 1회(동시 호출은 거부), 4xx·계약 오류는 실패로 안 셈, 취소된 호출은 상태 불변·시험 자리만 반환.
+    모듈 상수(`_CIRCUIT_FAILURE_THRESHOLD`/`_CIRCUIT_OPEN_SECONDS`), env 노출 없음, ETL resource 제외. `.env.example`에
+    `PINVI_KOR_TRAVEL_WEATHER_CONNECT_TIMEOUT_SECONDS=2` 줄 추가.
 - **T-373**: `.env.example` 6-2 주석을 "운영 값은 Manager compose 기본값(ETL·pinvi-api 두 블록, 2026-10-15 `192.168.1.13:12201`),
   `localhost:14101`은 개발용(weather standalone compose가 여전히 14101), 피호출자 다운은 timeout"으로, `runbooks/etl.md` env 표
   행도 같은 취지로. 코드 기본값은 그대로(task 지시 + weather 저장소 개발 포트가 14101).
@@ -1019,7 +1038,7 @@ n150에서 odroid 192.168.1.13으로 — 포트·URL·이름 동일, 호스트�
 - ADR-067(odroid 실행 환경 퇴역)은 유지 — supersede가 아니라 "피호출자의 호스트"로 범위를 적었다. 공개 read 무인증·보존 7일·
   가드 6일(ADR-073)은 불변. Map 핀 bump·M05 pair 회전과 무관(contracts 불변).
 - 검증: 인용 file:line을 head에서 `sed -n`으로 전부 재확인(`config.py:894,898-899,903-905`, `clients/kor_travel_weather.py:
-  480-501,649-660,663-682`, `trip_weather_batch.py:151-157,190-191,206,214-222`, `weather_card.py:84-93,119-121`,
+480-501,649-660,663-682`, `trip_weather_batch.py:151-157,190-191,206,214-222`, `weather_card.py:84-93,119-121`,
   `features.py:609-655`, `trip_view_builder.py:46,271-281`, `weather_location_resolver.py:74-82`, `resources.py:58-72`(파일 72줄),
   `definitions.py:56,66-68,74-84`, `pinvi_weather_retention_horizon.py:145-157,186`, `api/v1/weather_markers.py:61`,
   `.env.example:201-204`, `main.py:71,75,117`, e2e `…live-mutating.live.ts:42,509-513`, runbook `live-mutating-e2e.md:218,225`,
@@ -1041,9 +1060,9 @@ n150에서 odroid 192.168.1.13으로 — 포트·URL·이름 동일, 호스트�
 모든 컨테이너가 healthy인 03:3xZ 이후에도 같았다.
 
 - 원인 1(코드 동일, 데이터 성장 — 지속): `_PINVI_DAGSTER_LIVE_QUERY`의 `scheduleState/sensorState { ticks(limit: 3,
-  statuses: [...]) }`에 시간 경계가 없다. Dagster 1.13.24는 이를 instigator마다
+statuses: [...]) }`에 시간 경계가 없다. Dagster 1.13.24는 이를 instigator마다
   `SELECT … FROM job_ticks WHERE (selector_id = X OR selector_id IS NULL AND job_origin_id = Y) AND status IN (…)
-  ORDER BY timestamp DESC LIMIT 3`으로 풀고, PostgreSQL은 OR 때문에 인덱스 순서 탐색 대신 그 instigator의
+ORDER BY timestamp DESC LIMIT 3`으로 풀고, PostgreSQL은 OR 때문에 인덱스 순서 탐색 대신 그 instigator의
   **전체** tick을 Bitmap Heap Scan으로 읽고 top-N 정렬한다(리뷰 EXPLAIN: `job_ticks` 406,018행, 가장 큰
   instigator 33,990 tick, 추정 33,601행 읽기). 공유 `dagster_shared`의 `job_ticks`는 10-06 03:00Z(공통 Dagster
   live)부터 하루 1.2k → 58k건(Map 29.5k·PinVi 10.1k·ktc 9.3k·transport 6.3k; 387k건이 sensor SKIPPED, 7일 보존이라
@@ -1051,7 +1070,7 @@ n150에서 odroid 192.168.1.13으로 — 포트·URL·이름 동일, 호스트�
   `psycopg2.errors.QueryCanceled … statement timeout`(webserver `--db-statement-timeout` 기본 15초)이고, PinVi의
   2초 probe timeout은 그보다 먼저 `httpx.ReadTimeout`을 받아 `except (httpx.HTTPError, ValueError)` → "연결 실패"로
   보고했다. 10-05 pair가 통과한 것은 `job_ticks`가 ~5k행이었을 때다(`git diff 0058369c origin/main --
-  apps/api/app/services/admin_etl.py` 비어 있음). `timestamp > after`를 주면 planner가 `(selector_id, timestamp)`
+apps/api/app/services/admin_etl.py` 비어 있음). `timestamp > after`를 주면 planner가 `(selector_id, timestamp)`
   인덱스 범위를 쓴다: 1시간 창 heap 블록 190개/1.3 ms, 34k-tick instigator의 2일 창 8,199개/146 ms.
 - 원인 2(시점 — t1013d 스모크 시각에 겹침): webserver 로그에서 PinVi location이 03:12:15 LOCATION_ERROR →
   03:13:39 UPDATED → 03:13:57 ERROR(`127.0.0.1:12803 Connection refused`) → 03:14:44 UPDATED로 흔들렸다.
@@ -1081,10 +1100,10 @@ n150에서 odroid 192.168.1.13으로 — 포트·URL·이름 동일, 호스트�
 - 테스트(수정 전 빨강 → 후 초록을 실제 확인, `afterTimestamp`만 빼는 변이에서도 빨강):
   `apps/api/tests/unit/test_admin_etl_dagster_probe.py` — MockTransport로 잡은 `/graphql` 본문에서 모든 `ticks(`
   선택이 `afterTimestamp: $변수`를 싣고 그 값이 호출 전후 시각 − 창 안에 드는지(`test_every_tick_selection_is_
-  bounded_to_a_recent_window`), 두 번 모두 시간 초과면 "시간 초과"(`/server_info`, `/graphql`, `/graphql` 순),
+bounded_to_a_recent_window`), 두 번 모두 시간 초과면 "시간 초과"(`/server_info`, `/graphql`, `/graphql` 순),
   첫 시도만 시간 초과면 같은 본문으로 한 번 더 보내 ok가 되고 재시도의 read timeout이 남은 예산 이하인지, 예산이
   없으면 재시도하지 않는지, 바깥 예산 초과가 "전체 예산 초과"인지. `apps/etl/tests/test_admin_probe_graphql_
-  schema.py`(dagster 1.13.24 lock 환경) — 창을 이 location의 정의에 묶는다(schedule: cron 연속 실행 간격 최대값
+schema.py`(dagster 1.13.24 lock 환경) — 창을 이 location의 정의에 묶는다(schedule: cron 연속 실행 간격 최대값
   × 2 ≤ 창, `dagster._utils.schedules.cron_string_iterator`; sensor: `minimum_interval_seconds` 최대값 × 10 ≤ 창),
   그리고 `pinvi.etl.definitions`를 in-process code location으로 실은 ephemeral instance에 문서를 실제 실행해
   storage `get_ticks`가 instigator 13개(schedule 7 + sensor 6)마다 창 안의 `after`를 받는지 단언한다(query
@@ -1109,11 +1128,11 @@ n150에서 odroid 192.168.1.13으로 — 포트·URL·이름 동일, 호스트�
   **이 PR만으로 pair를 회전·재구축하지 않는다**(C6c는 `pinvi_provider_sync`에서 선다). 502는 다른 세션이 형제
   worktree `pinvi-fix-2`(브랜치 `fix/ops-grid-refresh-policy-provider-dataset-id`, `kor_travel_map_ops_projection.py`)
   에서 고치는 중이다. Map `c4d17343`의 `packages/kor-travel-map-api/src/kortravelmap/api/dagster_query_service.py:
-  56,73`은 같은 `ticks(limit: 3, statuses: [...])`(statuses 있음, afterTimestamp 없음)라 같은 instigator별
+56,73`은 같은 `ticks(limit: 3, statuses: [...])`(statuses 있음, afterTimestamp 없음)라 같은 instigator별
   `get_ticks` 무경계 경로다 — Map 측 수정은 `openapi.json`을 건드리지 않으므로 PinVi 재vendor 없이 같은 pair에
   실린다. Manager 검증기가 200/degraded를 실패로 보는 것은 Dagster 건강 게이트 역할이라 유지하되 기록만 남긴다.
   `job_ticks` 자체의 성장(Map 15–30초 sensor가 절반, 보존 `skipped: 7일`)은 Manager `config/dagster-shared/
-  dagster.yaml`·테넌트 측 조정 사안이고 Dagster UI 자체의 Overview 페이지는 같은 무경계 조회를 한다.
+dagster.yaml`·테넌트 측 조정 사안이고 Dagster UI 자체의 Overview 페이지는 같은 무경계 조회를 한다.
   `PINVI_ETL_SCHEDULES`(정적 5건)·`PINVI_ETL_SENSORS`(빈 목록)는 정의(schedule 7·sensor 6)보다 낡았다 —
   `docs/tasks.md` T-377(구 T-374)로 뺐다. `runsOrError` 절반은 여전히 시간 경계가 없다(`RunsFilter.createdAfter`가 있지만
   이번 범위 밖).
@@ -1135,7 +1154,7 @@ t1013d 재구축(Map `c4d17343` + PinVi `97f2baf2`, Manager `ba35401a`) `_deploy
   `ops.provider_refresh_policies`에 행이 없어 grid의 `refresh_policy`가 늘 null이라 잠복했고, Map #1312(ADR-108) migration
   `405_mois_freshness_sla`가 2026-10-13T03:12:49Z 배포 중 MOIS bulk(`provider_dataset_id=30`)에 첫 policy 행
   (`stale_after_minutes=57600`)을 INSERT하자 items[68]이 `extra_forbidden loc=('items', 68, 'refresh_policy',
-  'provider_dataset_id')`로 거부됐다 — 한 행이 75행 grid 전체를 502로 만든다. Map 응답은 자기 OpenAPI와 같으므로 Map
+'provider_dataset_id')`로 거부됐다 — 한 행이 75행 grid 전체를 502로 만든다. Map 응답은 자기 OpenAPI와 같으므로 Map
   `c4d17343` 결함·계약 변경이 아니고 재vendor도 필요 없다(스냅샷 핀 `54dbc8b1…` 불변). 교훈: 재vendor 절차에
   consumer 방향 게이트가 있어야 하고, ADR-088류 breaking 변경에는 consumer 체크리스트가 필요하다.
 - 수정(코드 1 파일 `kor_travel_map_ops_projection.py`): `_RefreshPolicy`에 `provider_dataset_id: int = Field(ge=1)` 추가,
@@ -1151,7 +1170,7 @@ t1013d 재구축(Map `c4d17343` + PinVi `97f2baf2`, Manager `ba35401a`) `_deploy
   `test_admin_etl_provider_sync_api.py` `_provider_item_with_refresh_policy()`/`_PolicyOpsClient`로 그대로 넣었다 — 기존
   픽스처는 둘 다 `refresh_policy: None`뿐이라 이 경로를 한 번도 밟지 않았다. 투영 성공·`provider_dataset_id==30` 보존,
   nullable provider/dataset_key 수용, identity drift 3종을 **규칙 문구**(`value_error at items.0 (refresh policy identity
-  must match the dataset row)`)로 거부(label만 보면 다른 계약 오류와 구분이 안 된다), 오류 메시지에 loc은 있고 입력값은
+must match the dataset row)`)로 거부(label만 보면 다른 계약 오류와 구분이 안 된다), 오류 메시지에 loc은 있고 입력값은
   없음, `/admin/provider-sync` 200에 policy 포함, `/admin/etl/summary`도 같은 픽스처로 `provider_dataset_count==2`·
   `kor_travel_map.errors`에 contract mismatch 없음. `test_kor_travel_map_ops_contract.py`에 **반대 방향 게이트**
   `test_consumed_model_accepts_every_snapshot_property`: `_CanonicalModel`을 쓰는 소비 스키마 **34쌍 전부**(dataset grid·
@@ -1299,7 +1318,6 @@ Map1ba6/PinVi2a36 실제 paired 재구축에서 API·web은 통과했지만 마�
 
 적대적 리뷰가 발견한 요청 client 정리 지연에 별도 50ms 예산을 적용했다. 결과·원래 예외·취소를 보존하고 요청별 client를 재사용하지 않는다. 정리 실패 로그에는 연결/인증 값을 남기지 않는다. 정상·시간 초과·연결 오류·취소 회귀를 포함한 probe 31건과 strict mypy 247 PASS. 후속 리뷰가 발견한 손상 repository·필수 collection 누락도 fail-closed한다. 응답 name/location을 selector와 비교하고 다른 서비스의 metadata를 반환하지 않는다. 정상 빈 collection은 허용한다. 후속 immutable 2인 FULL 리뷰·exact CI·paired 실제 재구축·live gate는 아직 미완료다.
 
-
 ## 2026-10-05 — T-370 Common Dagster 복구·메모리·Admin UI
 
 PinVi 46305d44/Common dev.6의 두 독립 post-fix PASS, N150 실제 PostgreSQL16/Alembic0102/API/GraphQL/Chromium·Firefox 4PASS를 [검증 기록](reviews/common-dagster-2026-10-05/README.md)에 보존했다. ETL67/APIfocused28/Web172/CommonUI50 및 strict mypy247·build PASS. API전체의 기존 로컬 Map freshness1실패는 vendor bytes base==candidate로 구분했다. 최초 live 준비 실패와 P1 autodiscovery 수정도 별도 원문으로 보존하며 마지막 성공에 합산하지 않는다.
@@ -1374,7 +1392,7 @@ byte-exact vendor했다(user `3a847c8a…`, service `6677d41f…`, admin `d2935f
   적고, 테스트는 `__` 이름을 건너뛰던 것을 "tag 없는 job 집합 == {`__ASSET_JOB`}" 단언으로 바꿨다.
 - **설치 도구 고정.** Dockerfile의 `pip install --upgrade pip` → `pip==26.2.1`; `-e .`의 build isolation은
   `--build-constraint apps/etl/build-constraints.txt`(hatchling 1.32.4와 그 의존성 `==`). `[tool.uv]
-  required-version = "==0.11.21"` — 이미지 uv 태그·CI uv와 테스트로 묶었다.
+required-version = "==0.11.21"` — 이미지 uv 태그·CI uv와 테스트로 묶었다.
 - **location 이름은 설정.** `PINVI_DAGSTER_LOCATION_NAME`(기본 `pinvi.etl.definitions`). 기본값은
   `workspace.yaml`의 `location_name`, `pyproject [tool.dagster].module_name`, 이미지 CMD의 `-m`에 테스트로 묶였다.
 - **GraphQL 스키마 검증.** `apps/etl/tests/test_admin_probe_graphql_schema.py`가 API의 live query를 lock의
@@ -1429,8 +1447,8 @@ Manager M05 격리 실행이 `--profile etl up --wait app-dagster`에서 `contai
   `m05i-pinvi-ff2c…-dagster:latest`(rev fd07903f, isolated), origin/main compose, Manager와 같은 모양의
   무작위 owner/app/migrator 비밀번호): webserver가 기동 중
   `dagster._core.errors.DagsterInvalidConfigError: … Error 1: Post processing at path root:postgres_url of
-  original value {'env': 'PINVI_DAGSTER_PG_URL'} failed: … PostProcessingError: You have attempted to fetch
-  the environment variable "PINVI_DAGSTER_PG_URL" which is not set.`로 죽고 restart loop에 빠진다.
+original value {'env': 'PINVI_DAGSTER_PG_URL'} failed: … PostProcessingError: You have attempted to fetch
+the environment variable "PINVI_DAGSTER_PG_URL" which is not set.`로 죽고 restart loop에 빠진다.
   compose `--wait`는 105초에 `container … is unhealthy`, exit 1.
 - 수정:
   1. `app-dagster-db-init`(profile `etl`, app-postgres와 같은 핀 postgis image, `app-db-runtime-role`
@@ -1492,7 +1510,7 @@ Manager M05 격리 실행이 `--profile etl up --wait app-dagster`에서 `contai
      `fresh_stack_pinned_image_id`가 모델 전체(`compose --profile '*' config`)에서 찾는다 — 봉인하는
      effective digest는 그대로 profile을 따른다.
   2. 실패한 fresh `deploy`의 `cleanup_failed_fresh_stack`이 profile 없이 `down`했다. → `compose
-     --profile '*' down --volumes --remove-orphans`. n150 실측(Compose v5.2.0): app-dagster를 ID로 지운
+--profile '*' down --volumes --remove-orphans`. n150 실측(Compose v5.2.0): app-dagster를 ID로 지운
      뒤 profile 없는 `down -v --remove-orphans`는 exit 0인데 `app-dagster-db-init`(exited) 컨테이너 1개와
      `app-dagster` 볼륨 1개를 남겼고(볼륨은 이 브랜치 전에도 남았다), `--profile '*'` down 뒤에는
      컨테이너·볼륨·네트워크 0건이었다.
@@ -1522,7 +1540,7 @@ Manager M05 격리 실행이 `--profile etl up --wait app-dagster`에서 `contai
     `--profile '*' config`로 풀리고 profile 없는 config로는 풀리지 않는다(`compose-image-reference` exit 2). teardown 뒤 컨테이너·볼륨·네트워크·/tmp 0건.
     1차 live의 `up --wait` 종료 코드는 기록하지 않았다(healthy 93초만 적었다) — 2차가 그 자리를 채운다.
     Manager driver의 실제 순서(`docker-app.sh build/up` → `--profile etl up --detach --build --wait
-    app-dagster`)와 deploy-node 경로는 live로 돌리지 않았다(deploy-node는 fake docker 테스트). 인수
+app-dagster`)와 deploy-node 경로는 live로 돌리지 않았다(deploy-node는 fake docker 테스트). 인수
     증거는 이 커밋을 포함한 PinVi pin의 다음 M05 격리 실행이다.
   - 테스트: 두 프로세스 재사용 테스트의 `dagster-storage-without-profile`을 거부 → 수용으로 바꾸고
     (profile 0 봉인 + exited one-shot + 남은 `app-dagster` 볼륨), profile 0에서도 증명이 도는지
@@ -1694,7 +1712,7 @@ Map을 고쳐도 M05는 바로 다음 PinVi 단계에서 같은 이유로 멈춘
   `pinvi-admin-bootstrap`의 DSN을 `KOR_TRAVEL_SHARED_DB_PORT`(11000)로 전환,
   옛 `pinvi-postgres`/`pinvi-db-init` 의존은 롤백 안전망으로 유지. `c6c_deployment.py`
   확장: `PINVI_DB_PORT == 12800`(전용 instance) 핀과 `KOR_TRAVEL_SHARED_DB_PORT
-  == 11000`(공용 instance) 핀을 **같은 전역 함수**에 나란히 두어, 분리 과정에서
+== 11000`(공용 instance) 핀을 **같은 전역 함수**에 나란히 두어, 분리 과정에서
   실제로 한 번 핀 하나를 놓칠 뻔한 것을 테스트 회귀로 잡았다(아래 참고).
 - **ADR 번호 충돌과 rebase**: 같은 세션 안에서 사용자가 geo에도 같은 지시를
   병행 세션에 내렸다는 것을 뒤늦게 발견했다 — geo의 "ADR-45" PR(#365)이 이
@@ -1739,7 +1757,7 @@ kor-travel-docker-manager PR #356으로 이미 머지돼 있었다 — 이번 �
 - **kor-travel-docker-manager**(PR #358): `pinvi-dagster-code-server` 서비스
   신설, webserver/daemon command를 `-m` 직접 import에서 `-w workspace.yaml`로
   전환, `config/docker-targets.yml` 등록, `test_dagster_daemon_liveness_
-  contract.py`에 code-server 섹션 추가(2021 passed, 3 skipped, 회귀 없음).
+contract.py`에 code-server 섹션 추가(2021 passed, 3 skipped, 회귀 없음).
 - **동시성 사고 하나 발견·정정**(PR #359): `docs/platform-topology.md`에
   "pinvi가 code-server 분리 1단계를 밟은 첫 프로젝트"라고 적었는데, 거의
   동시에 머지된 PR #357이 `kor-travel-geo`도 같은 걸 이미 했다는 걸
@@ -1835,13 +1853,13 @@ G-1(KMA 커버리지 ~9%) 부분 상태를 영구 수용하고 T-365를 진행�
 - `features.py`/`admin/features.py`의 weather 엔드포인트에서
   `_weather_from_kor_travel_map`/`_weather_values_from_payload`(구
   kor_travel_map dict 매핑) 분기를 삭제. **처음에는** `OptionalKorTravelWeatherClientDep`
-  + 수동 `None` 체크를 `KorTravelWeatherClientDep`(required, 자동 503)로
-  바꾸려 했으나, 기존 테스트가 `app.dependency_overrides[get_optional_kor_travel_weather_client]`로
-  override하는 것을 발견하고 되돌렸다 — FastAPI override는 callable 정체성으로
-  매칭되므로 의존성 함수를 바꾸면 override가 조용히 무효화되고 실제 미설정
-  client를 resolve하려 든다. `OptionalKorTravelWeatherClientDep` + 명시적
-  `if weather_client is None: raise HTTPException(503, ...)`를 양쪽 endpoint에
-  유지해 기존 override 계약과 일관성을 보존했다.
+  - 수동 `None` 체크를 `KorTravelWeatherClientDep`(required, 자동 503)로
+    바꾸려 했으나, 기존 테스트가 `app.dependency_overrides[get_optional_kor_travel_weather_client]`로
+    override하는 것을 발견하고 되돌렸다 — FastAPI override는 callable 정체성으로
+    매칭되므로 의존성 함수를 바꾸면 override가 조용히 무효화되고 실제 미설정
+    client를 resolve하려 든다. `OptionalKorTravelWeatherClientDep` + 명시적
+    `if weather_client is None: raise HTTPException(503, ...)`를 양쪽 endpoint에
+    유지해 기존 override 계약과 일관성을 보존했다.
 - `build_trip_view`의 `weather_client`는 계속 Optional로 남겼다 —
   `apps/api/app/mcp/tools/registry.py`의 `_get_trip`이 weather client를 전혀 주입하지
   않기 때문(kor_travel_map_client=None "저장 snapshot만 사용" 패턴과 동일한
@@ -2161,6 +2179,7 @@ DB의 `found`/`retired`/`suppressed`/`missing` fixture feature ID가 필요하�
 
 **kor-travel-map-postgres를 직접 조회**(`docker exec ... psql -p 12700`)해 fixture
 후보를 찾다가 중요한 사실을 발견했다:
+
 - `feature.features`에 `place` kind 1047개뿐 — event/notice/price/route/area/weather
   kind가 전혀 없다.
 - `lifecycle_state='retired'` 또는 `publication_state='suppressed'`인 feature가
@@ -2255,8 +2274,7 @@ BFF(실제 Admin UI)만 안다** — 게다가 trusted proxy CIDR 검증까지 �
 2. 해석된 모든 feature의 `source_location_ids` 합집합 `L` 계산(§3.3 — 대표
    location 하나만 쓰면 기상청 예보가 조용히 누락된다).
 3. `GET /markers(L)` 1회(현재값+특보, 500개씩 청크) + `GET /forecast(location,
-   from=필요한 최소 날짜, to=최대 날짜+1일)` location마다 1회·병렬(동시성 상한
-   10) — 날짜 fanout 없음, location마다 정확히 1회.
+from=필요한 최소 날짜, to=최대 날짜+1일)` location마다 1회·병렬(동시성 상한 10) — 날짜 fanout 없음, location마다 정확히 1회.
 4. `card_key := 대표 location_id`. 같은 대표 id를 공유하는 모든 feature의
    `source_location_ids` 합집합에서 나온 값을 merge해 provider 우선순위로
    dedupe(§3.3 회귀 가드 — 대표 location에 KMA 사실이 없어도 번들의 다른 location
@@ -2268,6 +2286,7 @@ BFF(실제 Admin UI)만 안다** — 게다가 trusted proxy CIDR 검증까지 �
    location이 있으면 `unavailable`("모른다"를 `no_data`로 지어내지 않는다). 전부
    성공했는데 0행이면 그때만 `no_data`(확인된 없음). 예산 10초 초과/전체 실패는
    미결 전체 `unavailable`.
+
 - `app/services/weather_metrics.py`(신설) — provider 우선순위·metric key
   정규화·dedupe를 `weather_card.py`(T-362)와 공유하도록 추출(중복 제거, 두
   소비자가 같은 규칙을 따르도록 강제).
@@ -2346,7 +2365,8 @@ green, `tests/unit` 1428건 회귀 없음, `mypy --strict app` 240파일 0, `ruf
 ## 2026-09-17 (claude) — T-361(P2): `weather_location_links` + 해석기 (ADR-068)
 
 `agent/claude-weather-t360-client`(계속). Alembic `20260917_0102_weather_location_links`
-+ `WeatherLocationLink` 모델 + `resolve_weather_location`.
+
+- `WeatherLocationLink` 모델 + `resolve_weather_location`.
 
 ### 실측으로 확인한 것 — `/resolve`는 반경 내 매치가 없으면 404다
 
@@ -2396,11 +2416,13 @@ PR #545 CI의 `integration-test (2)`가 실패했다. 조사해 보니 **flaky 4
 무관 확인)과 **결정론적 회귀 3건**이 섞여 있었다.
 
 결정론적 회귀의 진짜 원인: `infra/postgres/bootstrap-pinvi-runtime-role.sh`가
+
 ```sh
 if [ "${applied_revision}" = "20260824_0101" ]; then
     ...GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app...
 fi
 ```
+
 로 **현재 Alembic head 리터럴을 하드코딩**하고 있었다. 주석: "Alembic은 이미 적용된
 0101을 재실행하지 않는다. 따라서 과거 0101 variant가 남긴 runtime ACL 누락은 일반
 role bootstrap에서 **exact head일 때만** 정본 app owner로 보정한다." — 즉 0101 뒤에
@@ -2465,6 +2487,7 @@ switch 전에 반드시 `git status --short`로 clean을 확인했다.
 
 전체 저장소를 `grep`해서 `"20260824_0101"`을 참조하는 프로덕션 코드(테스트 제외)를 다
 찾았다 — **총 5곳**:
+
 1. `infra/postgres/bootstrap-pinvi-runtime-role.sh` (이미 수정)
 2. `app/services/cache_target_final_boundary.py` — 파이썬 런타임 게이트
 3. `app/models/cache_target_sync.py` — DB CHECK 제약 SQLAlchemy 선언
@@ -2515,9 +2538,10 @@ CHECK 텍스트가 정확히 기대한 형태로 나오는지 재확인, `shellc
 새 경고 0(라인 번호만 밀림), `mypy --strict app` 239파일 0, `ruff` 0, `tests/unit`
 1428건, `test_cache_target_causal_canary.py` 41건 **전부 통과**(`schema_revision_mismatch`
 완전 소멸 — 재실행 3회 결정론적으로 나던 것이 이제 안 남), `test_restore_hotswap_preflight.py`
-+ `test_tvn40_curation_import_receipts.py` + `test_weather_location_resolver.py` +
-`test_m05_activation_anchor_migration.py` + `test_m05_migrator_login_lifecycle.py`
-58건 전부 통과.
+
+- `test_tvn40_curation_import_receipts.py` + `test_weather_location_resolver.py` +
+  `test_m05_activation_anchor_migration.py` + `test_m05_migrator_login_lifecycle.py`
+  58건 전부 통과.
 
 ## 2026-09-17 (claude) — T-360(P1): `kor-travel-weather` client 신설 (ADR-068)
 
@@ -2759,6 +2783,7 @@ SDK 57이 널리 쓰이는데 우리만 깨졌다면 우리 구성 문제라는 
 C++ 호출부였다. 버전 선언이 아니라 **실제 심볼을 봐야 했다.**
 
 고치는 과정에서 **npm workspace hoisting 분열 3건**이 드러났고 셋 다 EAS 빌드를 깨뜨린다.
+
 - **reanimated 이중 인스턴스.** `nativewind`/`css-interop`이 root로 hoist되면서 npm이 root에
   4.6.0을 peer로 깔았고 `overrides`는 `apps/mobile` 쪽에만 먹었다. 앱은 4.5.1을, NativeWind는
   4.6.0을 해석한다. reanimated는 네이티브 상태를 가져 두 벌이면 깨진다. SDK 정본 조합은
@@ -2802,6 +2827,7 @@ TanStack Table은 `sortDescFirst:false` + `enableSortingRemoval` 기본값(true)
 자체를 검증하게 고쳤다.
 
 P1 반영 중 드러난 것:
+
 - **`Section`의 `space-y-4`가 자식의 수동 마진과 겹쳤다.** 4곳에서 `mb-3`/`mt-3`이 16px 위에
   12px을 더해 28px이 됐다. 간격 소유권을 `SectionCard`로 넘기고 자식 마진을 걷었다.
 - **헤더에 버튼이 필요한 패널은 `Section`을 쓸 수 없었다.** `SectionCard`는 `actions` 슬롯을
@@ -3181,6 +3207,7 @@ bash errexit이 꺼진 채 하위 체크가 bare statement로 실행돼 실패�
   문자열로 치환된다(루프 자체는 정상적으로 4번 돈다) — 반드시 `.sh` 파일에 써서 그 파일을
   실행해야 한다. (2) 로컬 shard 분할 검증 시 처음에 이 문제로 group 값이 다 비어 결과가
   깨졌었는데, 파일 기반으로 바꾸자 바로 해결됐다.
+
 ## 2026-08-26 (codex) — PR487 적대 리뷰 P1 반영
 
 - exact head `e442cc63`에 대한 전문 리뷰 2건이 외부 DB URL 주입, 기존 Compose project/DB volume
@@ -3210,6 +3237,7 @@ bash errexit이 꺼진 채 하위 체크가 bare statement로 실행돼 실패�
   페이지 전부 생성, `/admin/retention` 포함) 전부 재검증 통과. push 후 CI 재실행 —
   `e2e` 2m58s, `lint-typecheck-build` 2m55s, `Aggregate CI gate` 3m9s 전부 green.
   `gh pr merge --squash`로 머지(`d8d9db07`).
+
 ## 2026-08-26 (codex) — PR487 N150 단일 운영·Odroid 퇴역 및 runtime guard 보완
 
 - PR #487을 최신 `origin/main`에 리베이스한 뒤 exported Compose dotenv(`export KEY=value`)도
@@ -3231,7 +3259,7 @@ bash errexit이 꺼진 채 하위 체크가 bare statement로 실행돼 실패�
   partial unique index `uq_retention_runs_single_executing`)을 작성하고, advisory lock을
   우회해 직접 두 번째 `executing` 행을 INSERT하면 `IntegrityError`가 나는 회귀 테스트를
   추가했다. 로컬에서는 `pytest tests/integration/test_retention_concurrency.py
-  tests/integration/test_admin_retention_api.py` 9건 통과, 일회성 컨테이너에서
+tests/integration/test_admin_retention_api.py` 9건 통과, 일회성 컨테이너에서
   upgrade→downgrade -1→upgrade 왕복, ruff/format/mypy --strict 전부 통과해 PR #491을 올렸다.
 - CI의 `pytest (unit)`에서 `test_tvn40_migration_immutability.py::test_active_migration_artifacts_are_complete_and_digest_guarded`
   (PR #466, M05 production activation receipt gate)가 실패했다 — 이 테스트는
@@ -3264,7 +3292,7 @@ bash errexit이 꺼진 채 하위 체크가 bare statement로 실행돼 실패�
 - **CI e2e 49건 실패 발견 및 원인 규명**: 실패한 스펙은 예외 없이 지도(`vworld-map-web`)를
   렌더링하는 페이지·다이얼로그·폼이었다. 로컬에서 production build(`next build && next start`)로
   재현하니 `/map` 콘솔에 `Module ... was instantiated ... but the module factory is not
-  available` 런타임 에러가 떴고 앱 에러 바운더리까지 전파돼 지도가 fallback UI조차 그리지
+available` 런타임 에러가 떴고 앱 에러 바운더리까지 전파돼 지도가 fallback UI조차 그리지
   못했다. `next build --webpack`으로는 콘솔 에러 없이 정상 렌더링됐고 실패했던 19개 대표
   e2e가 전부 통과했다 — Next 16 Turbopack 프로덕션 번들러가 vendored `vworld-map-web`
   (ADR-046)의 모듈 그래프를 청크로 나누는 과정에서 생기는 런타임 버그로 확정, 이번 리팩터와는
@@ -3513,7 +3541,7 @@ CHANGELOG 항목 추가. 범위를 넘는 두 건은 T-326(동의 철회 이력�
 
 - release failure에서 schema rename-back·restore candidate 삭제·ACL/CONNECT 자동 복구를 없앴다.
   forensic marker는 최초 mutation 전부터 `prepared → fence_intent → fence_applied → restore_ready
-  → switched → fence_release_intent → fence_released`를 append-only로 남기며, latch된 marker는 새
+→ switched → fence_release_intent → fence_released`를 append-only로 남기며, latch된 marker는 새
   hotswap을 차단한다.
 - 이후 `20260824_0101`로 통합된 M05 receipt 계약은 `ops.m05_hotswap_release_receipts`, `ENABLE ALWAYS` append-only
   trigger, target DB owner에만 한정한 `SELECT`/`EXECUTE` ACL과 canonical topology/receipt 함수를
@@ -3547,7 +3575,7 @@ CHANGELOG 항목 추가. 범위를 넘는 두 건은 T-326(동의 철회 이력�
 - 변경 파일에 Web/packages가 포함되면 aggregate가 `lint-typecheck-build`와 `e2e`를 모두 기다리도록
   고치고, workflow 인덱스와 열린 작업 원장의 현재 선점을 동기화한다.
 - PR CI에서 exact head의 Playwright job과 aggregate gate가 함께 green인지 확인한 뒤 T-323을 완료
- 아카이브로 이동한다.
+  아카이브로 이동한다.
 
 ## 2026-08-24 (codex) — T-324 Google OAuth 런타임 설정 복원 착수
 
@@ -3630,6 +3658,7 @@ CHANGELOG 항목 추가. 범위를 넘는 두 건은 T-326(동의 철회 이력�
   현재 head를 DB CHECK에 재결박하고, service `FINALIZE_SCHEMA_REVISION`도 같은 값으로 맞췄다.
 - 표적 final-boundary/constraint Postgres 회귀는 5 passed다. 테스트 subprocess가 `alembic`을
   찾도록 virtualenv `PATH`를 명시한 실행 환경에서 검증했다.
+
 ## 2026-08-21 (codex) — T-VN-M04/M05 격리 paired 실제 browser E2E 완료
 
 - M04 관리자 승인 뒤 Map manual_request queue 승인, M05 rebind event, PinVi applied receipt와 Map ACK를
@@ -3688,6 +3717,7 @@ wire 표현 단언으로 방향만 뒤집었다 — 선언과 값이 함께 되�
 **곁다리로 발견** — `vitest run`이 fork 워커 기동에 실패한 파일을 조용히 건너뛰고 **exit 0**으로 끝난다
 (로컬에서 18파일 중 3~6개 누락, `Failed to start forks worker` 로그만 남음). CI에서 같은 일이 나면
 false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 실행해 18파일 전부 통과를 확인했다.
+
 ## 2026-08-21 (codex) — T-VN-M05 runtime DB owner 분리 및 readiness 보정
 
 - app schema/table/trigger migration owner와 API/Dagster runtime login을 분리했다.
@@ -3704,7 +3734,7 @@ false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 �
   image healthcheck와 deploy/smoke probe도 이 ready route를 함께 검사한다. mock Playwright는
   `PLAYWRIGHT_BASE_URL`의 실제 포트에 전용 Next server를 띄워 다른 worktree artifact 재사용을 막는다.
 - disposable source→fresh target 실제 drill에서 `pg_dump → pg_restore --no-owner
-  --no-privileges` 뒤 M05 delivery attempt 1건을 runtime login으로 읽었다. runtime login의 trigger
+--no-privileges` 뒤 M05 delivery attempt 1건을 runtime login으로 읽었다. runtime login의 trigger
   disable와 direct UPDATE는 모두 실패했다. 별도 compose role drill도 runtime role이 owner가 아니며
   superuser/role-creation/database-creation 권한이 없음을 확인했다.
 - M05 activation은 계속 `false`다. 실제 non-owner role no-owner restore drill과 N150 isolated
@@ -3718,7 +3748,7 @@ false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 �
 - M05 evidence trigger는 `ENABLE ALWAYS`로 올려 `session_replication_role = replica`에서도
   update/delete/truncate를 거부한다. integration fixture의 schema cleanup은 superuser test-only
   trigger disable/restore를 명시해 runtime 우회로 오인되지 않게 했다. fresh `--no-owner
-  --no-privileges` restore는 단일-role schema-owner를 대조하거나
+--no-privileges` restore는 단일-role schema-owner를 대조하거나
   `PINVI_RESTORE_APP_ROLE`의 table/sequence grant를 명시적으로 재적용한다.
 - read/ACK worker는 Map의 401/403/422/503 pairing fault에서 poll-rate 재시도하지 않고 멈춰
   `/health/feature-reference-reconciliation`에 비밀 없는 fault를 남긴다. ACK cursor는 해당 event
@@ -3834,7 +3864,6 @@ false-green이라 T-321로 등록했다. 이번 검증은 누락분을 개별 �
 - **정본 문서 정렬**: `docs/api/admin.md`의 obsolete direct-create 설명을 제거했다. `new_place`는
   저장된 immutable payload를 service queue로만 제출하며, body category/marker override가 없고,
   correction/closure만 admin change API를 쓴다.
-
 
 ## 2026-08-19 (codex) — T-VN-42 Admin 계약 폐쇄 + Codex worktree 복구
 
@@ -11386,7 +11415,7 @@ PR-C 전체 DoD 중 "viewport 기반 feature 로딩 + 클러스터 렌더 + 팔�
 - `api/v1/admin/notice_plans.py` 신규 — §5.3 plan 첨부(GET/POST/DELETE) + §5.4 POI 첨부
   (GET/POST/DELETE). `require_role("admin")`→비admin 404. plan/POI 없으면 404 `NOT_FOUND`,
   개수 초과 409. POST/DELETE 는 admin*audit chain 기록(`curated_plan.attachment*_`/`curated*poi.attachment*_`). DELETE 는 soft delete 만 — RustFS object 보존(§5.6, notice→trip
-copy 시 `storage_key` 공유).
+  copy 시 `storage_key` 공유).
 - 응답은 `AttachmentResponse`(curated*\* + notice*\* alias 항상 동기). 입력 `AttachmentCreate`
   (storage_key 위생 검증 재사용).
 - 테스트 4건(plan CRUD / POI CRUD / unknown-plan 404 / 비admin 404).

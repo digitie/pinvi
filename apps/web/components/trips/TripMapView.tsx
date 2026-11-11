@@ -1,6 +1,26 @@
 'use client';
 
 import {
+  FeatureGeometryControls,
+  FeatureGeometryLayers,
+  FeatureGeometryPopup,
+} from '@/components/map/FeatureGeometryLayer';
+import {
+  ClusterLayer,
+  MapFallback,
+  MapLoadingSkeleton,
+  PinMarker,
+  Popup,
+  VWorldMap,
+  type ClusterPoint,
+  type MapLibreMap,
+} from '@/components/map/vworldPrimitives';
+import { apiClient } from '@/lib/api';
+import type { GeometryFeature } from '@/lib/featureGeometry';
+import { useFeatureGeometry } from '@/lib/useFeatureGeometry';
+import { ApiError, featureApi } from '@pinvi/api-client';
+import type { FeatureSummary } from '@pinvi/schemas';
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -10,27 +30,11 @@ import {
   type ReactNode,
   type TouchEvent,
 } from 'react';
-import {
-  ClusterLayer,
-  type ClusterPoint,
-  type MapLibreMap,
-  MapFallback,
-  MapLoadingSkeleton,
-  PinMarker,
-  Popup,
-  VWorldMap,
-} from '@/components/map/vworldPrimitives';
-import { ApiError, featureApi } from '@pinvi/api-client';
-import type { FeatureSummary } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
-import { useFeatureGeometry } from '@/lib/useFeatureGeometry';
-import type { GeometryFeature } from '@/lib/featureGeometry';
-import {
-  FeatureGeometryControls,
-  FeatureGeometryLayers,
-  FeatureGeometryPopup,
-} from '@/components/map/FeatureGeometryLayer';
 
+import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
+import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
+import { TransportLayerControls } from '@/components/map/TransportLayerControls';
+import { TransportMarkerLegend, TransportMarkers } from '@/components/map/TransportMarkers';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import {
@@ -40,20 +44,16 @@ import {
   fitPanelRect,
   pinBoxIntersects,
 } from '@/lib/mapFitPadding';
+import { markerZIndex } from '@/lib/markerStacking';
 import { viewportSearchBias } from '@/lib/searchBias';
+import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
+import { useTransportLayers } from '@/lib/useTransportLayers';
 import {
   featureResolutionNotice,
   pointsBounds,
   resolveMarkerStyle,
   type TripMapPoint,
 } from '@pinvi/domain';
-import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
-import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
-import { useTransportLayers } from '@/lib/useTransportLayers';
-import { TransportLayerControls } from '@/components/map/TransportLayerControls';
-import { TransportMarkerLegend, TransportMarkers } from '@/components/map/TransportMarkers';
-import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
-import { markerZIndex } from '@/lib/markerStacking';
 
 // 전국이 보이는 기본 시점(POI 가 없을 때).
 const DEFAULT_CENTER: [number, number] = [127.5, 36.5];
@@ -183,7 +183,13 @@ export interface TripMapViewProps {
   onViewportBboxChange?: (bbox: string) => void;
 }
 
-export function TripMapView({
+export function TripMapView(...args: Parameters<typeof useTripMapViewModel>) {
+  const viewModel = useTripMapViewModel(...args);
+  if (viewModel.renderBranch === 'render0') return <TripMapViewView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useTripMapViewModel({
   apiKey = '',
   points,
   selectedPoiId = null,
@@ -240,13 +246,13 @@ export function TripMapView({
   });
   const { onViewportChange: geometryViewportChange, clearSelection: clearGeometrySelection } =
     geometry;
+  useEffect(() => {
+    if (selectedPoiId != null) clearGeometrySelection();
+  }, [selectedPoiId, clearGeometrySelection]);
   const [previousGeometryPoiId, setPreviousGeometryPoiId] = useState(selectedPoiId);
   if (previousGeometryPoiId !== selectedPoiId) {
     setPreviousGeometryPoiId(selectedPoiId);
-    if (selectedPoiId != null) {
-      clearGeometrySelection();
-      if (selectedFeature) setSelectedFeature(null);
-    }
+    if (selectedPoiId != null && selectedFeature) setSelectedFeature(null);
   }
 
   // flush = 여행 상세 지도 열. 데스크톱(lg)은 창 높이에 고정된 열을 그대로 채운다 — 고정 최소 높이가 남으면
@@ -346,7 +352,8 @@ export function TripMapView({
         const panelCoversCenter =
           panel != null && panel.left < centerX + half && panel.right > centerX - half;
         const singlePadding = fitPaddingForOverlay(
-          container, panel && panelCoversCenter ? panel : fitOverlayRect(stack),
+          container,
+          panel && panelCoversCenter ? panel : fitOverlayRect(stack),
           TRIP_MAP_PIN_HEIGHT,
           bottom && bottom.left < centerX + half && bottom.right > centerX - half ? bottom : null,
         );
@@ -372,8 +379,11 @@ export function TripMapView({
           points.some((point) => {
             const at = map.project([point.lon, point.lat]);
             return pinBoxIntersects(
-              container.left + at.x, container.top + at.y,
-              TRIP_MAP_MARKER_SIZE, TRIP_MAP_PIN_HEIGHT, rect,
+              container.left + at.x,
+              container.top + at.y,
+              TRIP_MAP_MARKER_SIZE,
+              TRIP_MAP_PIN_HEIGHT,
+              rect,
             );
           });
         let changed = false;
@@ -388,7 +398,8 @@ export function TripMapView({
         if (!changed) break;
         map.fitBounds(lngLatBounds, {
           padding: fitPaddingForOverlay(container, topOverlay, TRIP_MAP_PIN_HEIGHT, bottomOverlay),
-          maxZoom: 15, animate: false,
+          maxZoom: 15,
+          animate: false,
         });
       }
     },
@@ -431,8 +442,14 @@ export function TripMapView({
           const bottom = fitBottomRect(map.getContainer());
           const container = map.getContainer().getBoundingClientRect();
           const layout = JSON.stringify([
-            anchor?.bottom, panel?.left, panel?.right, panel?.top, panel?.bottom,
-            bottom?.top, container.width, container.height,
+            anchor?.bottom,
+            panel?.left,
+            panel?.right,
+            panel?.top,
+            panel?.bottom,
+            bottom?.top,
+            container.width,
+            container.height,
           ]);
           if (layout === previousLayout) return;
           previousLayout = layout;
@@ -441,7 +458,9 @@ export function TripMapView({
         const observed = new Set<Element>();
         const observePanels = () => {
           const targets = new Set<Element>([
-            stack, map.getContainer(), ...stack.querySelectorAll('[data-map-fit-panel]'),
+            stack,
+            map.getContainer(),
+            ...stack.querySelectorAll('[data-map-fit-panel]'),
           ]);
           for (const element of observed) {
             if (!targets.has(element)) {
@@ -564,8 +583,10 @@ export function TripMapView({
       const coversCenter = (rect: NonNullable<typeof panel>) =>
         rect.left < centerX + half && rect.right > centerX - half;
       const padding = fitPaddingForOverlay(
-        container, panel && coversCenter(panel) ? panel : fitOverlayRect(stack),
-        TRIP_MAP_PIN_HEIGHT, bottom && coversCenter(bottom) ? bottom : null,
+        container,
+        panel && coversCenter(panel) ? panel : fitOverlayRect(stack),
+        TRIP_MAP_PIN_HEIGHT,
+        bottom && coversCenter(bottom) ? bottom : null,
       );
       map.flyTo({
         center: [selected.lon, selected.lat],
@@ -657,6 +678,88 @@ export function TripMapView({
     />
   );
 
+  return {
+    renderBranch: 'render0' as const,
+    apiKey,
+    canAddFeature,
+    className,
+    clearGeometrySelection,
+    clearLongPress,
+    detailFeatureId,
+    featurePoints,
+    geometry,
+    handleLoad,
+    handleMouseDown,
+    handleTouchMove,
+    handleTouchStart,
+    handleViewportChange,
+    longPressCreatedAtRef,
+    mapMinHeightClassName,
+    markerPoints,
+    mobileLayout,
+    onAddFeature,
+    onCreatePoiAtCoordinate,
+    onMarkerContextMenu,
+    onSelectPoi,
+    openCoordinatePoiDialog,
+    overlayStackRef,
+    overlayTopLeft,
+    overlayTopLeftClassName,
+    points,
+    selected,
+    selectedFeature,
+    selectedPoiId,
+    selectedResolutionNotice,
+    setDetailFeatureId,
+    setSelectedFeature,
+    showFeatures,
+    showNavigationControls,
+    surfaceClassName,
+    transport,
+    transportControls,
+    userMovedRef,
+  };
+}
+
+type TripMapViewView0Model = Extract<
+  ReturnType<typeof useTripMapViewModel>,
+  { renderBranch: 'render0' }
+>;
+function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
+  const {
+    apiKey,
+    className,
+    clearGeometrySelection,
+    clearLongPress,
+    detailFeatureId,
+    featurePoints,
+    geometry,
+    handleLoad,
+    handleMouseDown,
+    handleTouchMove,
+    handleTouchStart,
+    handleViewportChange,
+    longPressCreatedAtRef,
+    mapMinHeightClassName,
+    markerPoints,
+    mobileLayout,
+    onCreatePoiAtCoordinate,
+    onMarkerContextMenu,
+    onSelectPoi,
+    openCoordinatePoiDialog,
+    overlayTopLeft,
+    selected,
+    selectedFeature,
+    selectedPoiId,
+    selectedResolutionNotice,
+    setDetailFeatureId,
+    setSelectedFeature,
+    showFeatures,
+    showNavigationControls,
+    surfaceClassName,
+    transport,
+    userMovedRef,
+  } = viewModel;
   return (
     <div className={className} data-testid="trip-map">
       <div
@@ -677,38 +780,9 @@ export function TripMapView({
             검색창에 닿지 않게(위치는 absolute·z-10이라 보이는 모습은 같다). `data-map-overlay`는 길게
             누르기/우클릭 "여기에 장소 추가" 제스처가 오버레이 위에서 시작되지 않게 한다. */}
         {overlayTopLeft != null ? (
-          <div
-            ref={overlayStackRef}
-            className={overlayTopLeftClassName}
-            data-testid="trip-map-overlay-stack"
-            data-map-overlay=""
-          >
-            <div className="pointer-events-auto">{overlayTopLeft}</div>
-            {showFeatures && (
-              <div className="pointer-events-auto mt-2 w-64 max-w-[80%]" data-map-fit-panel="">
-                <FeatureGeometryControls state={geometry} />
-              </div>
-            )}
-            {transport.visible && (
-              <div className="pointer-events-auto mt-2 w-64 max-w-[70%]">{transportControls}</div>
-            )}
-          </div>
+          <TripMapViewView0Part0 viewModel={viewModel} />
         ) : (
-          (showFeatures || transport.visible) && (
-            <div
-              className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]"
-              data-map-overlay=""
-            >
-              {showFeatures && (
-                <div className="pointer-events-auto">
-                  <FeatureGeometryControls state={geometry} />
-                </div>
-              )}
-              {transport.visible && (
-                <div className="pointer-events-auto mt-2">{transportControls}</div>
-              )}
-            </div>
-          )
+          (showFeatures || transport.visible) && <TripMapViewView0Part1 viewModel={viewModel} />
         )}
         <VWorldMap
           apiKey={apiKey}
@@ -739,7 +813,9 @@ export function TripMapView({
                 }
               : undefined
           }
-          fallback={(info) => <MapFallback info={info} minHeightClassName={mapMinHeightClassName} />}
+          fallback={(info) => (
+            <MapFallback info={info} minHeightClassName={mapMinHeightClassName} />
+          )}
           loadingSkeleton={<MapLoadingSkeleton minHeightClassName={mapMinHeightClassName} />}
           className={`h-full ${mapMinHeightClassName}`}
           unsupportedTileFallback={{ label: 'VWorld tile' }}
@@ -801,9 +877,7 @@ export function TripMapView({
                     size={FEATURE_MARKER_SIZE}
                     showInnerCircle={false}
                     className="trip-map-feature-marker"
-                    zIndex={markerZIndex(
-                      selectedFeature?.feature_id === marker.feature.feature_id,
-                    )}
+                    zIndex={markerZIndex(selectedFeature?.feature_id === marker.feature.feature_id)}
                     title={marker.feature.name}
                     ariaLabel={marker.feature.name}
                     onClick={() => {
@@ -847,80 +921,10 @@ export function TripMapView({
               </div>
             </Popup>
           )}
-          {selectedFeature?.coord && (
-            <Popup
-              lngLat={[selectedFeature.coord.lon, selectedFeature.coord.lat]}
-              onClose={() => setSelectedFeature(null)}
-              maxWidth="240px"
-              closeButton={false}
-            >
-              <div className="space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-ink">
-                      {selectedFeature.name}
-                    </p>
-                    {selectedFeature.category_label && (
-                      <p className="text-xs text-muted">{selectedFeature.category_label}</p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFeature(null)}
-                    className="text-xs text-muted hover:text-ink"
-                    aria-label="닫기"
-                  >
-                    닫기
-                  </button>
-                </div>
-                {selectedFeature.kind !== 'weather' && (
-                  <button
-                    type="button"
-                    onClick={() => setDetailFeatureId(selectedFeature.feature_id)}
-                    data-testid="trip-map-detail-open"
-                    className="min-h-11 w-full rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-                  >
-                    상세보기
-                  </button>
-                )}
-                <button
-                  type="button"
-                  disabled={!canAddFeature}
-                  onClick={() => {
-                    onAddFeature?.(selectedFeature);
-                    setSelectedFeature(null);
-                  }}
-                  className="min-h-11 w-full rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
-                >
-                  일정에 추가
-                </button>
-              </div>
-            </Popup>
-          )}
+          {selectedFeature?.coord && <TripMapViewView0Part2 viewModel={viewModel} />}
         </VWorldMap>
         <TransportMarkerLegend points={transport.points} />
-        <div className="sr-only" aria-hidden="true" data-testid="trip-map-marker-legend">
-          {points.map((point) => (
-            <span
-              key={point.poiId}
-              data-testid="trip-map-marker-style"
-              data-poi-id={point.poiId}
-              data-day-index={point.dayIndex}
-              data-marker-color={point.markerColor}
-              data-marker-hex={point.color}
-              data-marker-icon={point.icon}
-              data-marker-rendered-icon={makiIconName(point.icon)}
-              data-marker-size={TRIP_MAP_MARKER_SIZE}
-              data-marker-source={point.markerSource}
-              data-marker-selected={point.poiId === selectedPoiId ? 'true' : 'false'}
-              data-feature-resolution-state={point.featureResolutionState}
-              data-marker-category={point.category ?? ''}
-              data-marker-kind={point.kind ?? ''}
-            >
-              {point.title}
-            </span>
-          ))}
-        </div>
+        <TripMapViewView0Part3 viewModel={viewModel} />
         <div className="sr-only" aria-hidden="true" data-testid="trip-map-feature-legend">
           {featurePoints.map((point) => (
             <span
@@ -944,6 +948,135 @@ export function TripMapView({
         onClose={() => setDetailFeatureId(null)}
       />
       <TransportDetailDialog target={transport.detail} onClose={transport.closeDetail} />
+    </div>
+  );
+}
+
+function TripMapViewView0Part0({ viewModel }: { viewModel: TripMapViewView0Model }) {
+  const {
+    overlayStackRef,
+    overlayTopLeftClassName,
+    overlayTopLeft,
+    showFeatures,
+    geometry,
+    transport,
+    transportControls,
+  } = viewModel;
+  return (
+    <div
+      ref={overlayStackRef}
+      className={overlayTopLeftClassName}
+      data-testid="trip-map-overlay-stack"
+      data-map-overlay=""
+    >
+      <div className="pointer-events-auto">{overlayTopLeft}</div>
+      {showFeatures && (
+        <div className="pointer-events-auto mt-2 w-64 max-w-[80%]" data-map-fit-panel="">
+          <FeatureGeometryControls state={geometry} />
+        </div>
+      )}
+      {transport.visible && (
+        <div className="pointer-events-auto mt-2 w-64 max-w-[70%]">{transportControls}</div>
+      )}
+    </div>
+  );
+}
+
+function TripMapViewView0Part1({ viewModel }: { viewModel: TripMapViewView0Model }) {
+  const { showFeatures, geometry, transport, transportControls } = viewModel;
+  return (
+    <div
+      className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]"
+      data-map-overlay=""
+    >
+      {showFeatures && (
+        <div className="pointer-events-auto">
+          <FeatureGeometryControls state={geometry} />
+        </div>
+      )}
+      {transport.visible && <div className="pointer-events-auto mt-2">{transportControls}</div>}
+    </div>
+  );
+}
+
+function TripMapViewView0Part2({ viewModel }: { viewModel: TripMapViewView0Model }) {
+  const { selectedFeature, setSelectedFeature, setDetailFeatureId, canAddFeature, onAddFeature } =
+    viewModel;
+  if (selectedFeature == null || selectedFeature.coord == null) return null;
+  return (
+    <Popup
+      lngLat={[selectedFeature.coord.lon, selectedFeature.coord.lat]}
+      onClose={() => setSelectedFeature(null)}
+      maxWidth="240px"
+      closeButton={false}
+    >
+      <div className="space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-ink">{selectedFeature.name}</p>
+            {selectedFeature.category_label && (
+              <p className="text-xs text-muted">{selectedFeature.category_label}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedFeature(null)}
+            className="text-xs text-muted hover:text-ink"
+            aria-label="닫기"
+          >
+            닫기
+          </button>
+        </div>
+        {selectedFeature.kind !== 'weather' && (
+          <button
+            type="button"
+            onClick={() => setDetailFeatureId(selectedFeature.feature_id)}
+            data-testid="trip-map-detail-open"
+            className="min-h-11 w-full rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+          >
+            상세보기
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={!canAddFeature}
+          onClick={() => {
+            onAddFeature?.(selectedFeature);
+            setSelectedFeature(null);
+          }}
+          className="min-h-11 w-full rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
+        >
+          일정에 추가
+        </button>
+      </div>
+    </Popup>
+  );
+}
+
+function TripMapViewView0Part3({ viewModel }: { viewModel: TripMapViewView0Model }) {
+  const { points, selectedPoiId } = viewModel;
+  return (
+    <div className="sr-only" aria-hidden="true" data-testid="trip-map-marker-legend">
+      {points.map((point) => (
+        <span
+          key={point.poiId}
+          data-testid="trip-map-marker-style"
+          data-poi-id={point.poiId}
+          data-day-index={point.dayIndex}
+          data-marker-color={point.markerColor}
+          data-marker-hex={point.color}
+          data-marker-icon={point.icon}
+          data-marker-rendered-icon={makiIconName(point.icon)}
+          data-marker-size={TRIP_MAP_MARKER_SIZE}
+          data-marker-source={point.markerSource}
+          data-marker-selected={point.poiId === selectedPoiId ? 'true' : 'false'}
+          data-feature-resolution-state={point.featureResolutionState}
+          data-marker-category={point.category ?? ''}
+          data-marker-kind={point.kind ?? ''}
+        >
+          {point.title}
+        </span>
+      ))}
     </div>
   );
 }

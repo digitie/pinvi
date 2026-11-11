@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { CheckCircle2 } from 'lucide-react';
-import { ApiError, noticePlanApi, tripApi } from '@pinvi/api-client';
-import type { NoticePlan, NoticePlanCopyResponse, TripResponse } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
-import { buildCopyRequest, canCopy, type CopyForm } from '@pinvi/domain';
 import { FormField } from '@/components/forms/FormField';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+import { apiClient } from '@/lib/api';
+import { ApiError, noticePlanApi, tripApi } from '@pinvi/api-client';
+import { buildCopyRequest, canCopy, type CopyForm } from '@pinvi/domain';
+import type { NoticePlan, NoticePlanCopyResponse, TripResponse } from '@pinvi/schemas';
+import { CheckCircle2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 const DIALOG_LABEL = 'block text-sm font-semibold text-ink';
 
@@ -24,7 +24,14 @@ export interface NoticePlanCopyDialogProps {
   onCopyUncertain?: () => void;
 }
 
-export function NoticePlanCopyDialog({
+export function NoticePlanCopyDialog(...args: Parameters<typeof useNoticePlanCopyDialogModel>) {
+  const viewModel = useNoticePlanCopyDialogModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <NoticePlanCopyDialogView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useNoticePlanCopyDialogModel({
   plan,
   onClose,
   onCopied,
@@ -126,6 +133,50 @@ export function NoticePlanCopyDialog({
     </>
   );
 
+  return {
+    renderBranch: 'render0' as const,
+    cancelCopyAndClose,
+    copying,
+    error,
+    footer,
+    form,
+    loadingTrips,
+    onClose,
+    plan,
+    result,
+    titleRef,
+    trips,
+    update,
+  };
+}
+
+type NoticePlanCopyDialogView0Model = Extract<
+  ReturnType<typeof useNoticePlanCopyDialogModel>,
+  { renderBranch: 'render0' }
+>;
+function NoticePlanCopyDialogView0({ viewModel }: { viewModel: NoticePlanCopyDialogView0Model }) {
+  return <NoticePlanCopyDialogSection0_0 viewModel={viewModel} />;
+}
+
+function NoticePlanCopyDialogSection0_0({
+  viewModel,
+}: {
+  viewModel: NoticePlanCopyDialogView0Model;
+}) {
+  const {
+    cancelCopyAndClose,
+    copying,
+    error,
+    footer,
+    form,
+    loadingTrips,
+    onClose,
+    plan,
+    result,
+    titleRef,
+    trips,
+    update,
+  } = viewModel;
   return (
     <Dialog
       open

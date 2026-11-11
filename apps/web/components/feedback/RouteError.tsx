@@ -1,16 +1,17 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
-import { AlertTriangle, RotateCcw } from 'lucide-react';
 import { FullPageMessage } from '@/components/feedback/FullPageMessage';
-import { Button, buttonClassName } from '@/components/ui/Button';
 import { DocumentNavLink } from '@/components/navigation/DocumentNavLink';
+import { Button } from '@/components/ui/Button';
+import { buttonClassName } from '@/components/ui/button-styles';
 import {
   claimErrorReloadAttempt,
   clearErrorReloadAttempt,
   isLikelyRecoverableNextRuntimeError,
 } from '@/lib/error-recovery';
 import { errorDigest, friendlyErrorText } from '@pinvi/domain';
+import { AlertTriangle, RotateCcw } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
 
 export interface RouteErrorProps {
   error: Error & { digest?: string };

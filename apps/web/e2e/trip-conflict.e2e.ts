@@ -178,6 +178,10 @@ test('편집 다이얼로그 위에 뜬 충돌 다이얼로그에 키보드로 �
   await page.getByLabel('제목').fill('내 제목');
   await page.getByTestId('trip-edit-save').click();
   await expect(page.getByTestId('conflict-dialog')).toBeVisible();
+  // 패널에 둔 초기 포커스에서도 역방향 진입이 마지막 액션으로 순환해야 한다.
+  await expect(page.getByTestId('conflict-dialog')).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.getByTestId('conflict-apply-selected')).toBeFocused();
 
   const insideConflict = () =>
     page.evaluate(() => {

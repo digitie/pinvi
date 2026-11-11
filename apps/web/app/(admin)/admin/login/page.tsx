@@ -1,12 +1,15 @@
 'use client';
 
-import { Suspense, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
+import { useStore } from 'zustand';
+import { createStore } from 'zustand/vanilla';
+
 import { LoginForm, type LoginSubmission } from '@kor-travel/ui';
-import { LoginRequestSchema } from '@pinvi/schemas';
 import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 import { validateForm } from '@pinvi/domain';
+import { LoginRequestSchema } from '@pinvi/schemas';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useRef, useState } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -24,9 +27,13 @@ function AdminLoginForm() {
   const queryClient = useQueryClient();
   const search = useSearchParams();
   const formHost = useRef<HTMLDivElement>(null);
-  const [error, setError] = useState<string | null>(
-    search.get('reason') === 'forbidden' ? '관리자 권한이 필요합니다.' : null,
+  const [loginUi] = useState(() =>
+    createStore<{ error: string | null }>(() => ({
+      error: search.get('reason') === 'forbidden' ? '관리자 권한이 필요합니다.' : null,
+    })),
   );
+  const error = useStore(loginUi, (state) => state.error);
+  const setError = (error: string | null) => loginUi.setState({ error });
   function clearError() {
     setError(null);
     formHost.current

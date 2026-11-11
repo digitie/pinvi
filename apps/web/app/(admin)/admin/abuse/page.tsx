@@ -1,20 +1,20 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Loader2, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
-import { ApiError, adminApi, queryKeys, type AdminRateLimitAbuseParams } from '@pinvi/api-client';
-import type {
-  AdminRateLimitBucketRecord,
-  AdminRateLimitOverrideRecord,
-  AdminRateLimitSuspiciousActivityRecord,
-} from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterBar, FilterField } from '@/components/admin/filter-bar';
 import { NativeSelect } from '@/components/admin/ui/native-select';
 import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { apiClient } from '@/lib/api';
+import { ApiError, adminApi, queryKeys, type AdminRateLimitAbuseParams } from '@pinvi/api-client';
+import type {
+  AdminRateLimitBucketRecord,
+  AdminRateLimitOverrideRecord,
+  AdminRateLimitSuspiciousActivityRecord,
+} from '@pinvi/schemas';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Ban, Loader2, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
+import { useMemo, useState, type FormEvent } from 'react';
 
 const POLICY_IDENTITY = {
   public: 'ip',
@@ -67,7 +67,13 @@ function MetricBox({
   );
 }
 
-export default function AdminAbusePage() {
+export default function AdminAbusePage(...args: Parameters<typeof useAdminAbusePageModel>) {
+  const viewModel = useAdminAbusePageModel(...args);
+  if (viewModel.renderBranch === 'render0') return <AdminAbusePageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminAbusePageModel() {
   const queryClient = useQueryClient();
   const [limitFilter, setLimitFilter] = useState('');
   const [limitName, setLimitName] = useState<PolicyName>('auth_low');
@@ -300,6 +306,50 @@ export default function AdminAbusePage() {
     createMutation.mutate();
   };
 
+  return {
+    renderBranch: 'render0' as const,
+    action,
+    bucketColumns,
+    createMutation,
+    email,
+    error,
+    identityKind,
+    ip,
+    limitFilter,
+    limitName,
+    notice,
+    onLimitNameChange,
+    overrideColumns,
+    policies,
+    queryClient,
+    reason,
+    rollbackReason,
+    setAction,
+    setEmail,
+    setIp,
+    setLimitFilter,
+    setReason,
+    setRollbackReason,
+    setSharedToken,
+    setTtlMinutes,
+    setUserId,
+    sharedToken,
+    submitOverride,
+    summary,
+    summaryQuery,
+    suspiciousColumns,
+    ttlMinutes,
+    userId,
+  };
+}
+
+type AdminAbusePageView0Model = Extract<
+  ReturnType<typeof useAdminAbusePageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminAbusePageView0({ viewModel }: { viewModel: AdminAbusePageView0Model }) {
+  const { error, notice, overrideColumns, queryClient, summary, summaryQuery, suspiciousColumns } =
+    viewModel;
   return (
     <AdminPage
       title="Rate-limit abuse"
@@ -354,148 +404,9 @@ export default function AdminAbusePage() {
         )}
       </Section>
 
-      <Section title="Override 생성">
-        <form className="grid gap-3 lg:grid-cols-6" onSubmit={submitOverride}>
-          <select
-            value={limitName}
-            onChange={(event) => onLimitNameChange(event.target.value)}
-            className={inputClass}
-            aria-label="Policy"
-            data-testid="admin-abuse-policy"
-          >
-            {(policies.length
-              ? policies
-              : Object.keys(POLICY_IDENTITY).map((name) => ({ name }))
-            ).map((policy) => (
-              <option key={policy.name} value={policy.name}>
-                {policy.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={action}
-            onChange={(event) => setAction(event.target.value as OverrideAction)}
-            className={inputClass}
-            aria-label="Action"
-            data-testid="admin-abuse-action"
-          >
-            <option value="blocked">blocked</option>
-            <option value="allowed">allowed</option>
-          </select>
-          <input
-            value={ttlMinutes}
-            onChange={(event) => setTtlMinutes(event.target.value)}
-            className={inputClass}
-            inputMode="numeric"
-            aria-label="TTL minutes"
-            placeholder="TTL"
-            data-testid="admin-abuse-ttl"
-          />
-          {(identityKind === 'ip' || identityKind === 'ip_email') && (
-            <input
-              value={ip}
-              onChange={(event) => setIp(event.target.value)}
-              className={inputClass}
-              aria-label="IP"
-              placeholder="IP"
-              data-testid="admin-abuse-ip"
-            />
-          )}
-          {identityKind === 'ip_email' && (
-            <input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className={inputClass}
-              aria-label="Email"
-              placeholder="Email"
-              data-testid="admin-abuse-email"
-            />
-          )}
-          {identityKind === 'user' && (
-            <input
-              value={userId}
-              onChange={(event) => setUserId(event.target.value)}
-              className={inputClass}
-              aria-label="User ID"
-              placeholder="User ID"
-              data-testid="admin-abuse-user-id"
-            />
-          )}
-          {identityKind === 'shared_token' && (
-            <input
-              value={sharedToken}
-              onChange={(event) => setSharedToken(event.target.value)}
-              className={inputClass}
-              aria-label="Share token"
-              placeholder="Share token"
-              data-testid="admin-abuse-shared-token"
-            />
-          )}
-          <textarea
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            className={`${textareaClass} lg:col-span-4`}
-            aria-label="사유"
-            placeholder="사유"
-            data-testid="admin-abuse-reason"
-          />
-          <button
-            type="submit"
-            disabled={createMutation.isPending}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
-            data-testid="admin-abuse-create"
-          >
-            {createMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : action === 'blocked' ? (
-              <Ban className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            )}
-            등록
-          </button>
-        </form>
-        <div className="mt-3">
-          <input
-            value={rollbackReason}
-            onChange={(event) => setRollbackReason(event.target.value)}
-            className={`${inputClass} w-full max-w-xl`}
-            aria-label="Rollback reason"
-            placeholder="Rollback reason"
-            data-testid="admin-abuse-rollback-reason"
-          />
-        </div>
-      </Section>
+      <AdminAbusePageSection0_0 viewModel={viewModel} />
 
-      <Section title="Buckets">
-        <FilterBar>
-          {/* 가시 라벨이 접근성 이름을 갖게 됐으므로 중복이 되는 aria-label("Bucket policy
-              filter")은 제거했다 — 저장소에서 그 문자열을 잡는 테스트는 없다(T-356). */}
-          <FilterField htmlFor="admin-abuse-bucket-policy" label="정책">
-            <NativeSelect
-              id="admin-abuse-bucket-policy"
-              value={limitFilter}
-              onChange={(event) => setLimitFilter(event.target.value)}
-              data-testid="admin-abuse-filter"
-            >
-              <NativeSelectOption value="">정책 전체</NativeSelectOption>
-              {policies.map((policy) => (
-                <NativeSelectOption key={policy.name} value={policy.name}>
-                  {policy.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </FilterField>
-        </FilterBar>
-        <AdminTable
-          columns={bucketColumns}
-          rows={summary?.buckets ?? []}
-          loading={summaryQuery.isLoading}
-          rowKey={(row) => `${row.limit_name}:${row.bucket_hash_prefix}`}
-          rowTestId={(row) => `admin-abuse-bucket-${row.limit_name}-${row.bucket_hash_prefix}`}
-          empty="bucket이 없습니다."
-        />
-      </Section>
+      <AdminAbusePageSection0_1 viewModel={viewModel} />
 
       <Section title="Suspicious">
         <AdminTable
@@ -519,5 +430,181 @@ export default function AdminAbusePage() {
         />
       </Section>
     </AdminPage>
+  );
+}
+
+function AdminAbusePageSection0_0({ viewModel }: { viewModel: AdminAbusePageView0Model }) {
+  const {
+    action,
+    createMutation,
+    email,
+    identityKind,
+    ip,
+    limitName,
+    onLimitNameChange,
+    policies,
+    reason,
+    rollbackReason,
+    setAction,
+    setEmail,
+    setIp,
+    setReason,
+    setRollbackReason,
+    setSharedToken,
+    setTtlMinutes,
+    setUserId,
+    sharedToken,
+    submitOverride,
+    ttlMinutes,
+    userId,
+  } = viewModel;
+  return (
+    <Section title="Override 생성">
+      <form className="grid gap-3 lg:grid-cols-6" onSubmit={submitOverride}>
+        <select
+          value={limitName}
+          onChange={(event) => onLimitNameChange(event.target.value)}
+          className={inputClass}
+          aria-label="Policy"
+          data-testid="admin-abuse-policy"
+        >
+          {(policies.length
+            ? policies
+            : Object.keys(POLICY_IDENTITY).map((name) => ({ name }))
+          ).map((policy) => (
+            <option key={policy.name} value={policy.name}>
+              {policy.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={action}
+          onChange={(event) => setAction(event.target.value as OverrideAction)}
+          className={inputClass}
+          aria-label="Action"
+          data-testid="admin-abuse-action"
+        >
+          <option value="blocked">blocked</option>
+          <option value="allowed">allowed</option>
+        </select>
+        <input
+          value={ttlMinutes}
+          onChange={(event) => setTtlMinutes(event.target.value)}
+          className={inputClass}
+          inputMode="numeric"
+          aria-label="TTL minutes"
+          placeholder="TTL"
+          data-testid="admin-abuse-ttl"
+        />
+        {(identityKind === 'ip' || identityKind === 'ip_email') && (
+          <input
+            value={ip}
+            onChange={(event) => setIp(event.target.value)}
+            className={inputClass}
+            aria-label="IP"
+            placeholder="IP"
+            data-testid="admin-abuse-ip"
+          />
+        )}
+        {identityKind === 'ip_email' && (
+          <input
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            className={inputClass}
+            aria-label="Email"
+            placeholder="Email"
+            data-testid="admin-abuse-email"
+          />
+        )}
+        {identityKind === 'user' && (
+          <input
+            value={userId}
+            onChange={(event) => setUserId(event.target.value)}
+            className={inputClass}
+            aria-label="User ID"
+            placeholder="User ID"
+            data-testid="admin-abuse-user-id"
+          />
+        )}
+        {identityKind === 'shared_token' && (
+          <input
+            value={sharedToken}
+            onChange={(event) => setSharedToken(event.target.value)}
+            className={inputClass}
+            aria-label="Share token"
+            placeholder="Share token"
+            data-testid="admin-abuse-shared-token"
+          />
+        )}
+        <textarea
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          className={`${textareaClass} lg:col-span-4`}
+          aria-label="사유"
+          placeholder="사유"
+          data-testid="admin-abuse-reason"
+        />
+        <button
+          type="submit"
+          disabled={createMutation.isPending}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 text-sm font-semibold text-on-primary disabled:opacity-50"
+          data-testid="admin-abuse-create"
+        >
+          {createMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : action === 'blocked' ? (
+            <Ban className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+          )}
+          등록
+        </button>
+      </form>
+      <div className="mt-3">
+        <input
+          value={rollbackReason}
+          onChange={(event) => setRollbackReason(event.target.value)}
+          className={`${inputClass} w-full max-w-xl`}
+          aria-label="Rollback reason"
+          placeholder="Rollback reason"
+          data-testid="admin-abuse-rollback-reason"
+        />
+      </div>
+    </Section>
+  );
+}
+
+function AdminAbusePageSection0_1({ viewModel }: { viewModel: AdminAbusePageView0Model }) {
+  const { bucketColumns, limitFilter, policies, setLimitFilter, summary, summaryQuery } = viewModel;
+  return (
+    <Section title="Buckets">
+      <FilterBar>
+        {/* 가시 라벨이 접근성 이름을 갖게 됐으므로 중복이 되는 aria-label("Bucket policy
+              filter")은 제거했다 — 저장소에서 그 문자열을 잡는 테스트는 없다(T-356). */}
+        <FilterField htmlFor="admin-abuse-bucket-policy" label="정책">
+          <NativeSelect
+            id="admin-abuse-bucket-policy"
+            value={limitFilter}
+            onChange={(event) => setLimitFilter(event.target.value)}
+            data-testid="admin-abuse-filter"
+          >
+            <NativeSelectOption value="">정책 전체</NativeSelectOption>
+            {policies.map((policy) => (
+              <NativeSelectOption key={policy.name} value={policy.name}>
+                {policy.name}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </FilterField>
+      </FilterBar>
+      <AdminTable
+        columns={bucketColumns}
+        rows={summary?.buckets ?? []}
+        loading={summaryQuery.isLoading}
+        rowKey={(row) => `${row.limit_name}:${row.bucket_hash_prefix}`}
+        rowTestId={(row) => `admin-abuse-bucket-${row.limit_name}-${row.bucket_hash_prefix}`}
+        empty="bucket이 없습니다."
+      />
+    </Section>
   );
 }

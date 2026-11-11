@@ -1,17 +1,5 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ApiClient,
-  ApiError,
-  adminApi,
-  queryKeys,
-  type AdminCategoryMappingListParams,
-} from '@pinvi/api-client';
-import type { AdminCategoryMappingItem, AdminCategoryMappingUpdateRequest } from '@pinvi/schemas';
-import { CATEGORY_MARKER, markerStyleFor, paletteHex, paletteLabelColor } from '@pinvi/domain';
-import { Download, Edit3, RefreshCw, RotateCcw, Save, Search, X } from 'lucide-react';
 import { AdminPage } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
@@ -19,6 +7,18 @@ import { Button } from '@/components/admin/ui/button';
 import { Input } from '@/components/admin/ui/input';
 import { NativeSelect } from '@/components/admin/ui/native-select';
 import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
+import {
+  ApiClient,
+  ApiError,
+  adminApi,
+  queryKeys,
+  type AdminCategoryMappingListParams,
+} from '@pinvi/api-client';
+import { CATEGORY_MARKER, markerStyleFor, paletteHex, paletteLabelColor } from '@pinvi/domain';
+import type { AdminCategoryMappingItem, AdminCategoryMappingUpdateRequest } from '@pinvi/schemas';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Download, Edit3, RefreshCw, RotateCcw, Save, Search, X } from 'lucide-react';
+import { useMemo, useState, type FormEvent } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -54,7 +54,16 @@ function localMarkerFor(item: AdminCategoryMappingItem) {
   };
 }
 
-export default function AdminCategoryMappingPage() {
+export default function AdminCategoryMappingPage(
+  ...args: Parameters<typeof useAdminCategoryMappingPageModel>
+) {
+  const viewModel = useAdminCategoryMappingPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminCategoryMappingPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminCategoryMappingPageModel() {
   const queryClient = useQueryClient();
   const [queryInput, setQueryInput] = useState('');
   const [submittedQ, setSubmittedQ] = useState('');
@@ -342,6 +351,73 @@ export default function AdminCategoryMappingPage() {
     URL.revokeObjectURL(url);
   };
 
+  return {
+    renderBranch: 'render0' as const,
+    accessReason,
+    activeMode,
+    closeEditor,
+    columns,
+    data,
+    draftColor,
+    draftDisplayName,
+    draftIcon,
+    driftCount,
+    enrichedRows,
+    error,
+    exportJson,
+    includeCounts,
+    isDirty,
+    mappingsQuery,
+    mutationError,
+    mutationMessage,
+    mutationPending,
+    onSearch,
+    overrideCount,
+    queryInput,
+    rollbackOverride,
+    rows,
+    saveOverride,
+    selectedRow,
+    setAccessReason,
+    setActiveMode,
+    setDraftColor,
+    setDraftDisplayName,
+    setDraftIcon,
+    setIncludeCounts,
+    setQueryInput,
+    unmappedCount,
+  };
+}
+
+type AdminCategoryMappingPageView0Model = Extract<
+  ReturnType<typeof useAdminCategoryMappingPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminCategoryMappingPageView0({
+  viewModel,
+}: {
+  viewModel: AdminCategoryMappingPageView0Model;
+}) {
+  const {
+    activeMode,
+    columns,
+    data,
+    driftCount,
+    enrichedRows,
+    error,
+    exportJson,
+    includeCounts,
+    mappingsQuery,
+    onSearch,
+    overrideCount,
+    queryInput,
+    rows,
+    selectedRow,
+    setActiveMode,
+    setIncludeCounts,
+    setQueryInput,
+    unmappedCount,
+  } = viewModel;
   return (
     <AdminPage
       title="카테고리 매핑"
@@ -443,114 +519,7 @@ export default function AdminCategoryMappingPage() {
         ))}
       </section>
 
-      {selectedRow && (
-        <section
-          className="rounded-sm border border-hairline bg-canvas p-4"
-          data-testid="admin-category-editor"
-        >
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-ink">{selectedRow.item.label}</h2>
-              <p className="font-mono text-xs text-muted">{selectedRow.item.code}</p>
-            </div>
-            <button
-              type="button"
-              onClick={closeEditor}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline"
-              aria-label="override 편집 닫기"
-              data-testid="admin-category-editor-close"
-            >
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          </div>
-          <form onSubmit={saveOverride} className="grid gap-3 lg:grid-cols-[1fr_1fr_1.4fr_auto]">
-            <label className="grid gap-1 text-xs text-muted">
-              표시명
-              <input
-                value={draftDisplayName}
-                onChange={(event) => setDraftDisplayName(event.target.value)}
-                className={inputClass}
-                maxLength={120}
-                data-testid="admin-category-display-name"
-              />
-            </label>
-            <label className="grid gap-1 text-xs text-muted">
-              아이콘
-              <input
-                value={draftIcon}
-                onChange={(event) => setDraftIcon(event.target.value)}
-                className={inputClass}
-                pattern="[a-z0-9_-]{1,64}"
-                data-testid="admin-category-marker-icon"
-              />
-            </label>
-            <fieldset className="grid gap-1">
-              <legend className="text-xs text-muted">색상</legend>
-              <div className="flex flex-wrap gap-1.5" data-testid="admin-category-marker-colors">
-                {MARKER_COLORS.map((color) => {
-                  const hex = paletteHex(color);
-                  return (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => setDraftColor(color)}
-                      className={`h-7 w-7 rounded-full border ${
-                        draftColor === color ? 'border-ink ring-2 ring-ink/20' : 'border-hairline'
-                      }`}
-                      style={{ backgroundColor: hex }}
-                      aria-label={color}
-                      data-testid={`admin-category-color-${color}`}
-                    />
-                  );
-                })}
-              </div>
-            </fieldset>
-            <label className="grid gap-1 text-xs text-muted lg:col-span-3">
-              사유
-              <input
-                value={accessReason}
-                onChange={(event) => setAccessReason(event.target.value)}
-                className={inputClass}
-                maxLength={500}
-                required
-                data-testid="admin-category-access-reason"
-              />
-            </label>
-            <div className="flex items-end gap-2">
-              <button
-                type="submit"
-                disabled={!accessReason.trim() || !isDirty || mutationPending}
-                className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm disabled:opacity-50"
-                data-testid="admin-category-save"
-              >
-                <Save className="h-3.5 w-3.5" aria-hidden="true" />
-                저장
-              </button>
-              <button
-                type="button"
-                onClick={rollbackOverride}
-                disabled={!accessReason.trim() || mutationPending}
-                className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm disabled:opacity-50"
-                data-testid="admin-category-rollback"
-              >
-                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                rollback
-              </button>
-            </div>
-          </form>
-          {(mutationError || mutationMessage) && (
-            <p
-              role={mutationError ? 'alert' : 'status'}
-              className={`mt-3 rounded-sm p-2 text-sm ${
-                mutationError ? 'bg-error-bg text-error-text' : 'bg-success-bg text-success-text'
-              }`}
-              data-testid="admin-category-mutation-status"
-            >
-              {mutationError ?? mutationMessage}
-            </p>
-          )}
-        </section>
-      )}
+      {selectedRow && <AdminCategoryMappingPageSection0_0 viewModel={viewModel} />}
 
       <AdminTable
         columns={columns}
@@ -562,5 +531,139 @@ export default function AdminCategoryMappingPage() {
         initialSort={{ columnKey: 'sort', desc: false }}
       />
     </AdminPage>
+  );
+}
+
+function AdminCategoryMappingPageSection0_0({
+  viewModel,
+}: {
+  viewModel: AdminCategoryMappingPageView0Model;
+}) {
+  const {
+    accessReason,
+    closeEditor,
+    draftColor,
+    draftDisplayName,
+    draftIcon,
+    isDirty,
+    mutationError,
+    mutationMessage,
+    mutationPending,
+    rollbackOverride,
+    saveOverride,
+    selectedRow,
+    setAccessReason,
+    setDraftColor,
+    setDraftDisplayName,
+    setDraftIcon,
+  } = viewModel;
+  if (selectedRow == null) return null;
+  return (
+    <section
+      className="rounded-sm border border-hairline bg-canvas p-4"
+      data-testid="admin-category-editor"
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-ink">{selectedRow.item.label}</h2>
+          <p className="font-mono text-xs text-muted">{selectedRow.item.code}</p>
+        </div>
+        <button
+          type="button"
+          onClick={closeEditor}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-hairline"
+          aria-label="override 편집 닫기"
+          data-testid="admin-category-editor-close"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      </div>
+      <form onSubmit={saveOverride} className="grid gap-3 lg:grid-cols-[1fr_1fr_1.4fr_auto]">
+        <label className="grid gap-1 text-xs text-muted">
+          표시명
+          <input
+            value={draftDisplayName}
+            onChange={(event) => setDraftDisplayName(event.target.value)}
+            className={inputClass}
+            maxLength={120}
+            data-testid="admin-category-display-name"
+          />
+        </label>
+        <label className="grid gap-1 text-xs text-muted">
+          아이콘
+          <input
+            value={draftIcon}
+            onChange={(event) => setDraftIcon(event.target.value)}
+            className={inputClass}
+            pattern="[a-z0-9_-]{1,64}"
+            data-testid="admin-category-marker-icon"
+          />
+        </label>
+        <fieldset className="grid gap-1">
+          <legend className="text-xs text-muted">색상</legend>
+          <div className="flex flex-wrap gap-1.5" data-testid="admin-category-marker-colors">
+            {MARKER_COLORS.map((color) => {
+              const hex = paletteHex(color);
+              return (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => setDraftColor(color)}
+                  className={`h-7 w-7 rounded-full border ${
+                    draftColor === color ? 'border-ink ring-2 ring-ink/20' : 'border-hairline'
+                  }`}
+                  style={{ backgroundColor: hex }}
+                  aria-label={color}
+                  data-testid={`admin-category-color-${color}`}
+                />
+              );
+            })}
+          </div>
+        </fieldset>
+        <label className="grid gap-1 text-xs text-muted lg:col-span-3">
+          사유
+          <input
+            value={accessReason}
+            onChange={(event) => setAccessReason(event.target.value)}
+            className={inputClass}
+            maxLength={500}
+            required
+            data-testid="admin-category-access-reason"
+          />
+        </label>
+        <div className="flex items-end gap-2">
+          <button
+            type="submit"
+            disabled={!accessReason.trim() || !isDirty || mutationPending}
+            className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm disabled:opacity-50"
+            data-testid="admin-category-save"
+          >
+            <Save className="h-3.5 w-3.5" aria-hidden="true" />
+            저장
+          </button>
+          <button
+            type="button"
+            onClick={rollbackOverride}
+            disabled={!accessReason.trim() || mutationPending}
+            className="inline-flex h-9 items-center gap-1 rounded-sm border border-hairline px-3 text-sm disabled:opacity-50"
+            data-testid="admin-category-rollback"
+          >
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+            rollback
+          </button>
+        </div>
+      </form>
+      {(mutationError || mutationMessage) && (
+        <p
+          role={mutationError ? 'alert' : 'status'}
+          className={`mt-3 rounded-sm p-2 text-sm ${
+            mutationError ? 'bg-error-bg text-error-text' : 'bg-success-bg text-success-text'
+          }`}
+          data-testid="admin-category-mutation-status"
+        >
+          {mutationError ?? mutationMessage}
+        </p>
+      )}
+    </section>
   );
 }

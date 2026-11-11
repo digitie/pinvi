@@ -5,7 +5,8 @@ import { Body, Heading, Muted, Screen, Subheading } from '../../components/ui';
 
 /**
  * 홈(`/`) — 인증 후 진입점. 주요 화면으로의 네비게이션 타일.
- * 지도(§4)는 `maplibre-vworld-react` 선결(이슈 #2/#3) 전까지 placeholder.
+ * 지도는 /map에서 maplibre-vworld-react의 공개 어댑터를 사용한다.
+ * 네이티브는 RN, 웹은 SSR 로딩을 분리한 web 어댑터로 연결한다.
  */
 const TILES: { href: Href; title: string; description: string }[] = [
   { href: '/trips', title: '내 여행', description: '여행 계획을 보고 편집' },

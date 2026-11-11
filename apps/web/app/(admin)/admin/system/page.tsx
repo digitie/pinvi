@@ -1,14 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ApiError, adminApi } from '@pinvi/api-client';
-import type {
-  AdminDockerContainerStatus,
-  AdminSystemDetail,
-  AdminSystemServiceStatus,
-} from '@pinvi/schemas';
+import { VirtualTable } from '@kor-travel/ui/virtual-table';
+
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { apiClient } from '@/lib/api';
+import { ApiError, adminApi } from '@pinvi/api-client';
+import type { AdminSystemDetail, AdminSystemServiceStatus } from '@pinvi/schemas';
+import { useEffect, useState } from 'react';
+
+const displayFormatter1 = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
 const statusMeta: Record<
   AdminSystemServiceStatus['status'],
@@ -39,14 +45,7 @@ const statusMeta: Record<
 const formatLatency = (value: number | null | undefined) =>
   value === null || value === undefined ? '—' : `${value} ms`;
 const formatDateTime = (value: string | undefined) =>
-  value
-    ? new Intl.DateTimeFormat('ko-KR', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(new Date(value))
-    : '—';
+  value ? displayFormatter1.format(new Date(value)) : '—';
 
 function StatusBadge({ status }: { status: AdminSystemServiceStatus['status'] }) {
   const meta = statusMeta[status];
@@ -75,29 +74,6 @@ function DependencyCard({ service }: { service: AdminSystemServiceStatus }) {
       </div>
       <p className="mt-3 text-xs text-muted">latency {formatLatency(service.latency_ms)}</p>
     </div>
-  );
-}
-
-function ContainerRow({ container }: { container: AdminDockerContainerStatus }) {
-  return (
-    <tr
-      className="border-t border-hairline"
-      data-testid={`admin-system-container-${container.name}`}
-    >
-      <td className="px-3 py-2 font-mono text-xs text-muted">{container.container_id || '—'}</td>
-      <td className="px-3 py-2">
-        <p className="font-medium text-ink">{container.name}</p>
-        <p className="mt-1 text-xs text-muted">{container.compose_service ?? 'service 미지정'}</p>
-      </td>
-      <td className="px-3 py-2 text-muted">{container.image || '—'}</td>
-      <td className="px-3 py-2">
-        <span className="rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-ink">
-          {container.state}
-        </span>
-      </td>
-      <td className="px-3 py-2 text-muted">{container.health ?? '—'}</td>
-      <td className="px-3 py-2 text-muted">{container.status}</td>
-    </tr>
   );
 }
 
@@ -171,40 +147,65 @@ export default function AdminSystemPage() {
         </div>
 
         <div className="mt-3 overflow-x-auto rounded-sm border border-hairline bg-canvas">
-          <table className="min-w-full text-left text-sm" data-testid="admin-system-containers">
-            <thead className="bg-surface-soft text-xs uppercase text-muted">
-              <tr>
-                <th className="px-3 py-2 font-semibold">id</th>
-                <th className="px-3 py-2 font-semibold">container</th>
-                <th className="px-3 py-2 font-semibold">image</th>
-                <th className="px-3 py-2 font-semibold">state</th>
-                <th className="px-3 py-2 font-semibold">health</th>
-                <th className="px-3 py-2 font-semibold">status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {containers.map((container) => (
-                <ContainerRow
-                  key={container.container_id || container.name}
-                  container={container}
-                />
-              ))}
-              {!loading && containers.length === 0 && (
-                <tr className="border-t border-hairline">
-                  <td colSpan={6} className="px-3 py-6 text-center text-sm text-muted">
-                    container 상태 없음
-                  </td>
-                </tr>
-              )}
-              {loading && (
-                <tr className="border-t border-hairline">
-                  <td colSpan={6} className="px-3 py-6 text-center text-sm text-muted">
-                    확인 중
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <VirtualTable
+            data={containers}
+            columns={[
+              {
+                id: 'c0',
+                header: 'id',
+                cell: ({ row: { original: container } }) => <>{container.container_id || '—'}</>,
+                enableSorting: false,
+              },
+              {
+                id: 'c1',
+                header: 'container',
+                cell: ({ row: { original: container } }) => (
+                  <>
+                    <p className="font-medium text-ink">{container.name}</p>
+                    <p className="mt-1 text-xs text-muted">
+                      {container.compose_service ?? 'service 미지정'}
+                    </p>
+                  </>
+                ),
+                enableSorting: false,
+              },
+              {
+                id: 'c2',
+                header: 'image',
+                cell: ({ row: { original: container } }) => <>{container.image || '—'}</>,
+                enableSorting: false,
+              },
+              {
+                id: 'c3',
+                header: 'state',
+                cell: ({ row: { original: container } }) => (
+                  <>
+                    <span className="rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-ink">
+                      {container.state}
+                    </span>
+                  </>
+                ),
+                enableSorting: false,
+              },
+              {
+                id: 'c4',
+                header: 'health',
+                cell: ({ row: { original: container } }) => <>{container.health ?? '—'}</>,
+                enableSorting: false,
+              },
+              {
+                id: 'c5',
+                header: 'status',
+                cell: ({ row: { original: container } }) => <>{container.status}</>,
+                enableSorting: false,
+              },
+            ]}
+            getRowId={(container) => container.container_id || container.name}
+            rowTestId={(container) => 'admin-system-container-' + container.name}
+            tableTestId="admin-system-containers"
+            isLoading={loading}
+            emptyMessage="container 상태 없음"
+          />
         </div>
       </Section>
     </AdminPage>

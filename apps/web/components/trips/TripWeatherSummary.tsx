@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { CloudSun, Wind } from 'lucide-react';
-import type { TripWeatherCard, TripWeatherResolution, WeatherMetric } from '@pinvi/schemas';
+import { withOccurrenceKeys } from '@/lib/occurrenceKeys';
 import { providerLabel } from '@/lib/weatherProviderLabels';
+import type { TripWeatherCard, TripWeatherResolution, WeatherMetric } from '@pinvi/schemas';
+import { CloudSun, Wind } from 'lucide-react';
+import { useMemo } from 'react';
 
 const WEATHER_LABELS: Record<string, string> = {
   TEMP: '기온',
@@ -393,8 +394,8 @@ export function TripWeatherSummary({
               <Icon className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
               <span className="shrink-0 font-semibold text-ink">{group.label}</span>
               <span className="flex min-w-0 flex-wrap gap-x-2 gap-y-1">
-                {group.items.map((item, index) => (
-                  <span key={index} data-testid="weather-summary-metric">
+                {withOccurrenceKeys(group.items, (item) => item).map(({ item, key }) => (
+                  <span key={key} data-testid="weather-summary-metric">
                     {item}
                   </span>
                 ))}

@@ -1,7 +1,66 @@
 'use client';
 
-import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MapSearchBox } from '@/components/map/MapSearchBox';
+import { ConflictDialog, type ConflictField } from '@/components/trips/ConflictDialog';
+import { TripActions } from '@/components/trips/TripActions';
+import { TripAttachments } from '@/components/trips/TripAttachments';
+import { TripComments } from '@/components/trips/TripComments';
+import { TripCompanions } from '@/components/trips/TripCompanions';
+import { TripDayControls } from '@/components/trips/TripDayControls';
+import { TripDayHeader } from '@/components/trips/TripDayHeader';
+import { TripDayOptimize } from '@/components/trips/TripDayOptimize';
+import { TripEditDialog } from '@/components/trips/TripEditDialog';
+import { TripExportButton } from '@/components/trips/TripExportButton';
+import {
+  TripManualPoiDialog,
+  type ManualPoiCreateInput,
+} from '@/components/trips/TripManualPoiDialog';
+import { TripMapView } from '@/components/trips/TripMapView';
+import { TripPoiList } from '@/components/trips/TripPoiList';
+import { TripShareLinks } from '@/components/trips/TripShareLinks';
+import { TripTelegramTargets } from '@/components/trips/TripTelegramTargets';
+import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { apiClient, redirectToLogin } from '@/lib/api';
+import { hasPatchFields, pickConflictPatch, resolveConflictKeys } from '@/lib/conflictResolution';
+import { createLatestReload } from '@/lib/latestReload';
+import { pickSearchBias, tripSearchBias } from '@/lib/searchBias';
+import {
+  buildPoiConflictFields,
+  buildTripConflictFields,
+  type PoiConflictFieldKey,
+  type TripConflictFieldKey,
+} from '@/lib/tripConflictFields';
+import {
+  formatTripDate,
+  formatTripDateRange,
+  holidayLabel,
+  holidaysByDate,
+} from '@/lib/tripDateLabels';
+import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
+import {
+  ApiError,
+  TripRealtimeClient,
+  isVersionConflictError,
+  poiApi,
+  refreshCookieSession,
+  tripApi,
+  tripRealtimeInvalidationKeys,
+  type TripRealtimeCloseInfo,
+  type TripRealtimeEvent,
+  type TripRealtimeStatus,
+} from '@pinvi/api-client';
+import { appendRank, paletteHex, reorderMoves, tripDaysToMapPoints } from '@pinvi/domain';
+import type {
+  FeatureSummary,
+  PlaceSearchResult,
+  PoiUpdate,
+  TripDayUpdate,
+  TripStatus,
+  TripUpdate,
+  TripView,
+  TripViewPoi,
+} from '@pinvi/schemas';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -10,70 +69,17 @@ import {
   Loader2,
   MapPin,
   MessageSquare,
-  Paperclip,
   PanelLeftClose,
   PanelLeftOpen,
+  Paperclip,
   Pencil,
   Plus,
   Share2,
   Users,
   Wifi,
 } from 'lucide-react';
-import {
-  ApiError,
-  TripRealtimeClient,
-  isVersionConflictError,
-  poiApi,
-  refreshCookieSession,
-  tripRealtimeInvalidationKeys,
-  tripApi,
-  type TripRealtimeCloseInfo,
-  type TripRealtimeEvent,
-  type TripRealtimeStatus,
-} from '@pinvi/api-client';
-import type {
-  FeatureSummary,
-  PlaceSearchResult,
-  TripDayUpdate,
-  PoiUpdate,
-  TripStatus,
-  TripUpdate,
-  TripView,
-  TripViewPoi,
-} from '@pinvi/schemas';
-import { apiClient, redirectToLogin } from '@/lib/api';
-import { createLatestReload } from '@/lib/latestReload';
-import { pickSearchBias, tripSearchBias } from '@/lib/searchBias';
-import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
-import { appendRank, paletteHex, reorderMoves, tripDaysToMapPoints } from '@pinvi/domain';
-import { MapSearchBox } from '@/components/map/MapSearchBox';
-import { ConflictDialog, type ConflictField } from '@/components/trips/ConflictDialog';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { TripDayHeader } from '@/components/trips/TripDayHeader';
-import { TripActions } from '@/components/trips/TripActions';
-import { TripExportButton } from '@/components/trips/TripExportButton';
-import { TripEditDialog } from '@/components/trips/TripEditDialog';
-import { TripAttachments } from '@/components/trips/TripAttachments';
-import { TripComments } from '@/components/trips/TripComments';
-import { TripCompanions } from '@/components/trips/TripCompanions';
-import { TripDayControls } from '@/components/trips/TripDayControls';
-import { TripDayOptimize } from '@/components/trips/TripDayOptimize';
-import { TripMapView } from '@/components/trips/TripMapView';
-import {
-  TripManualPoiDialog,
-  type ManualPoiCreateInput,
-} from '@/components/trips/TripManualPoiDialog';
-import { TripPoiList } from '@/components/trips/TripPoiList';
-import { TripShareLinks } from '@/components/trips/TripShareLinks';
-import { TripTelegramTargets } from '@/components/trips/TripTelegramTargets';
-import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
-import { hasPatchFields, pickConflictPatch, resolveConflictKeys } from '@/lib/conflictResolution';
-import {
-  formatTripDate,
-  formatTripDateRange,
-  holidaysByDate,
-  holidayLabel,
-} from '@/lib/tripDateLabels';
+import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const STATUS_LABEL: Record<TripStatus, string> = {
   draft: '초안',
@@ -103,9 +109,6 @@ interface PresenceEntry {
   viewingDay: number | null;
   isOnline: boolean;
 }
-
-type TripConflictFieldKey = Extract<keyof TripUpdate, string>;
-type PoiConflictFieldKey = Extract<keyof PoiUpdate, string>;
 
 type ConflictState =
   | {
@@ -138,9 +141,25 @@ interface MutationOptions {
  * 안내대로 **다시 저장하면 내 값으로 덮어쓰는** 경로가 열린다. 갱신하지 않으면 같은 다이얼로그에서
  * 재시도가 영원히 409고, 유일한 탈출(취소→재오픈)이 사용자의 입력을 버린다(T-315 6차 리뷰 P1).
  */
+function observePanelOverflow(element: HTMLDivElement, onChange: (overflowing: boolean) => void) {
+  const measure = () => onChange(element.scrollHeight > element.clientHeight + 1);
+  const resize = new ResizeObserver(measure);
+  const observeChildren = () => {
+    resize.disconnect();
+    resize.observe(element);
+    for (const child of element.children) resize.observe(child);
+  };
+  observeChildren();
+  const mutations = new MutationObserver(observeChildren);
+  mutations.observe(element, { childList: true, subtree: true });
+  return () => {
+    resize.disconnect();
+    mutations.disconnect();
+  };
+}
+
 export type DayUpdateResult =
-  | { ok: true }
-  | { ok: false; message: string; field?: 'date'; latestVersion?: number };
+  { ok: true } | { ok: false; message: string; field?: 'date'; latestVersion?: number };
 
 function tripDurationDays(startDate: string | null, endDate: string | null): number | null {
   if (!startDate || !endDate) return null;
@@ -187,8 +206,9 @@ function plannedDateForDay(view: TripView, dayIndex: number): string | null {
 
 function dayUsingDate(view: TripView, date: string, excludeDayIndex: number): number | null {
   return (
-    view.days.find((day) => day.day_index !== excludeDayIndex && (day.effective_date ?? day.date) === date)?.day_index ??
-    null
+    view.days.find(
+      (day) => day.day_index !== excludeDayIndex && (day.effective_date ?? day.date) === date,
+    )?.day_index ?? null
   );
 }
 
@@ -329,71 +349,6 @@ function realtimeStatusDetail(
   return null;
 }
 
-function displayConflictValue(value: unknown): string {
-  if (value == null || value === '') return '비움';
-  if (typeof value === 'boolean') return value ? '예' : '아니오';
-  return String(value);
-}
-
-function hasOwnField<T extends object, K extends Extract<keyof T, string>>(
-  target: T,
-  key: K,
-): boolean {
-  return Object.prototype.hasOwnProperty.call(target, key);
-}
-
-const TRIP_CONFLICT_FIELDS: Array<{
-  key: TripConflictFieldKey;
-  label: string;
-  serverValue: (trip: TripView['trip']) => unknown;
-}> = [
-  { key: 'title', label: '제목', serverValue: (trip) => trip.title },
-  { key: 'region_hint', label: '지역', serverValue: (trip) => trip.region_hint },
-  { key: 'start_date', label: '시작일', serverValue: (trip) => trip.start_date },
-  { key: 'end_date', label: '종료일', serverValue: (trip) => trip.end_date },
-  { key: 'visibility', label: '공개 범위', serverValue: (trip) => trip.visibility },
-  { key: 'status', label: '상태', serverValue: (trip) => trip.status },
-];
-
-const POI_CONFLICT_FIELDS: Array<{
-  key: PoiConflictFieldKey;
-  label: string;
-  serverValue: (poi: TripViewPoi) => unknown;
-}> = [
-  { key: 'custom_marker_color', label: '마커 색', serverValue: (poi) => poi.marker_color },
-  { key: 'custom_marker_icon', label: '마커 아이콘', serverValue: (poi) => poi.marker_icon },
-  { key: 'planned_arrival_at', label: '도착', serverValue: (poi) => poi.planned_arrival_at },
-  { key: 'planned_departure_at', label: '출발', serverValue: (poi) => poi.planned_departure_at },
-  { key: 'budget_amount', label: '예산', serverValue: (poi) => poi.budget_amount },
-  { key: 'actual_amount', label: '실제 비용', serverValue: (poi) => poi.actual_amount },
-  { key: 'currency', label: '통화', serverValue: (poi) => poi.currency },
-  { key: 'user_note', label: '메모', serverValue: (poi) => poi.user_note },
-  { key: 'user_url', label: '링크', serverValue: (poi) => poi.user_url },
-];
-
-function buildTripConflictFields(patch: TripUpdate, trip: TripView['trip']): ConflictField[] {
-  return TRIP_CONFLICT_FIELDS.filter((field) => hasOwnField(patch, field.key)).map((field) => ({
-    key: field.key,
-    label: field.label,
-    serverValue: displayConflictValue(field.serverValue(trip)),
-    myValue: displayConflictValue(patch[field.key]),
-  }));
-}
-
-export function buildPoiConflictFields(patch: PoiUpdate, poi: TripViewPoi, dayIndex: number | null): ConflictField[] {
-  const fields: ConflictField[] = [];
-  if (hasOwnField(patch, 'day_index')) fields.push({
-    key: 'day_index', label: '일자 이동',
-    serverValue: displayConflictValue(dayIndex), myValue: displayConflictValue(patch.day_index),
-  });
-  return [...fields, ...POI_CONFLICT_FIELDS.filter((field) => hasOwnField(patch, field.key)).map((field) => ({
-    key: field.key,
-    label: field.label,
-    serverValue: displayConflictValue(field.serverValue(poi)),
-    myValue: displayConflictValue(patch[field.key]),
-  }))];
-}
-
 function findPoi(view: TripView | null, poiId: string): TripViewPoi | null {
   return view?.days.flatMap((day) => day.pois).find((poi) => poi.poi_id === poiId) ?? null;
 }
@@ -402,7 +357,109 @@ export interface TripDetailProps {
   tripId: string;
 }
 
-export function TripDetail({ tripId }: TripDetailProps) {
+export function TripDetail(...args: Parameters<typeof useTripDetailModel>) {
+  const viewModel = useTripDetailModel(...args);
+  if (viewModel.renderBranch === 'render0') return <TripDetailView0 />;
+  if (viewModel.renderBranch === 'render1') return <TripDetailView1 viewModel={viewModel} />;
+  if (viewModel.renderBranch === 'render2') return <TripDetailView2 viewModel={viewModel} />;
+  return null;
+}
+
+function tripDayAvailability(view: TripView | null, visibleDayIndexes: Set<number>) {
+  const nextDayIndex = view ? nextAvailableDayIndex(view) : 1;
+  const nextDayDate = view ? plannedDateForDay(view, nextDayIndex) : null;
+  const addDayDisabledReason = view ? addDayValidation(view, nextDayIndex) : null;
+  const canAddDay = addDayDisabledReason == null;
+  const addDayLabel = `${nextDayIndex}일차 추가`;
+  const addDayTitle = addDayDisabledReason ?? addDayLabel;
+  const visibleLayerCount =
+    view?.days.filter((day) => visibleDayIndexes.size === 0 || visibleDayIndexes.has(day.day_index))
+      .length ?? 0;
+  return {
+    nextDayIndex,
+    nextDayDate,
+    addDayDisabledReason,
+    canAddDay,
+    addDayLabel,
+    addDayTitle,
+    visibleLayerCount,
+  };
+}
+
+function realtimeBackoffNotice(
+  realtimeStatus: TripRealtimeStatus,
+  realtimeCloseInfo: TripRealtimeCloseInfo | null,
+) {
+  const showRealtimeBackoffNotice =
+    realtimeStatus === 'connection-limited' ||
+    realtimeStatus === 'rate-limited' ||
+    (realtimeStatus === 'reconnecting' &&
+      (realtimeCloseInfo?.category === 'connection-limited' ||
+        realtimeCloseInfo?.category === 'rate-limited'));
+  return showRealtimeBackoffNotice;
+}
+
+function selectedTripItems(
+  view: TripView | null,
+  selectedDayIndex: number | null,
+  selectedPoiId: string | null,
+) {
+  const selectedDay = view?.days.find((day) => day.day_index === selectedDayIndex) ?? null;
+  const selectedPoi =
+    selectedDay?.pois.find((poi) => poi.poi_id === selectedPoiId) ??
+    view?.days.flatMap((day) => day.pois).find((poi) => poi.poi_id === selectedPoiId) ??
+    null;
+  return { selectedDay, selectedPoi };
+}
+
+function useDayVisibility(dayIndexes: number[]) {
+  const [visibleDayIndexes, setVisibleDayIndexes] = useState<Set<number>>(() => new Set());
+  const dayIndexesKey = dayIndexes.join('|');
+
+  // 일자 구성이 바뀌면(추가/삭제/reload) visibleDayIndexes를 조정한다. 이전 값에 기대는 조정이라
+  // 순수 파생값(useMemo)으로는 못 옮기지만, "prop/id가 바뀔 때 리셋"과 같은 모양이라 렌더 중
+  // 조정 패턴을 쓴다 — effect 안 동기 setState(react-hooks/set-state-in-effect)를 피한다.
+  const [prevDayIndexesKey, setPrevDayIndexesKey] = useState(dayIndexesKey);
+  if (dayIndexesKey !== prevDayIndexesKey) {
+    setPrevDayIndexesKey(dayIndexesKey);
+    setVisibleDayIndexes((current) => {
+      if (dayIndexes.length === 0) return current.size === 0 ? current : new Set();
+
+      const retained = dayIndexes.filter((dayIndex) => current.has(dayIndex));
+      const nextIndexes = current.size === 0 || retained.length === 0 ? dayIndexes : retained;
+      if (
+        nextIndexes.length === current.size &&
+        nextIndexes.every((dayIndex) => current.has(dayIndex))
+      ) {
+        return current;
+      }
+      return new Set(nextIndexes);
+    });
+  }
+
+  return { visibleDayIndexes, setVisibleDayIndexes };
+}
+
+function usePanelScrollAccess(mobileWebLayout: boolean) {
+  // callback ref(state) — 오류 화면에서 본 화면으로 바뀌어 스크롤 영역이 새로 생겨도 관찰을 다시 건다.
+  const [panelScrollElement, setPanelScrollElement] = useState<HTMLDivElement | null>(null);
+  const [panelScrollOverflowing, setPanelScrollOverflowing] = useState(false);
+  // 초점을 가진 채 내용이 줄어도 tabindex를 떼지 않는다(떼면 초점이 body로 떨어진다).
+  const [panelScrollFocused, setPanelScrollFocused] = useState(false);
+  const panelScrollFocusable = !mobileWebLayout && (panelScrollOverflowing || panelScrollFocused);
+  // 데스크톱 패널 스크롤 영역이 실제로 넘치는지 — 넘칠 때만 Tab 순서에 넣는다(#704 후속).
+  // 내용(탭 전환·장소 추가)과 창 크기 모두 바뀌므로 상자와 직계 자식 크기, 하위 노드 변화를 본다.
+  useEffect(() => {
+    // 모바일이면 panelScrollFocusable이 false라 남은 측정값은 쓰이지 않는다. 측정은 observer 콜백에서만
+    // 한다(observe 직후 첫 콜백이 온다) — effect 안 동기 setState를 피한다.
+    const element = panelScrollElement;
+    if (mobileWebLayout || !element || typeof ResizeObserver === 'undefined') return;
+    return observePanelOverflow(element, setPanelScrollOverflowing);
+  }, [mobileWebLayout, panelScrollElement]);
+  return { panelScrollFocusable, setPanelScrollElement, setPanelScrollFocused };
+}
+
+function useTripDetailModel({ tripId }: TripDetailProps) {
   const mobileWebLayout = useMobileWebLayout();
   const [view, setView] = useState<TripView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -417,36 +474,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
     dayIndex: number;
     poiCount: number;
   } | null>(null);
-  const [visibleDayIndexes, setVisibleDayIndexes] = useState<Set<number>>(() => new Set());
   const [activePanel, setActivePanel] = useState<TripDetailPanelTab>('plan');
-  // callback ref(state) — 오류 화면에서 본 화면으로 바뀌어 스크롤 영역이 새로 생겨도 관찰을 다시 건다.
-  const [panelScrollElement, setPanelScrollElement] = useState<HTMLDivElement | null>(null);
-  const [panelScrollOverflowing, setPanelScrollOverflowing] = useState(false);
-  // 초점을 가진 채 내용이 줄어도 tabindex를 떼지 않는다(떼면 초점이 body로 떨어진다).
-  const [panelScrollFocused, setPanelScrollFocused] = useState(false);
-  const panelScrollFocusable = !mobileWebLayout && (panelScrollOverflowing || panelScrollFocused);
-  // 데스크톱 패널 스크롤 영역이 실제로 넘치는지 — 넘칠 때만 Tab 순서에 넣는다(#704 후속).
-  // 내용(탭 전환·장소 추가)과 창 크기 모두 바뀌므로 상자와 직계 자식 크기, 하위 노드 변화를 본다.
-  useEffect(() => {
-    // 모바일이면 panelScrollFocusable이 false라 남은 측정값은 쓰이지 않는다. 측정은 observer 콜백에서만
-    // 한다(observe 직후 첫 콜백이 온다) — effect 안 동기 setState를 피한다.
-    const element = panelScrollElement;
-    if (mobileWebLayout || !element || typeof ResizeObserver === 'undefined') return;
-    const measure = () => setPanelScrollOverflowing(element.scrollHeight > element.clientHeight + 1);
-    const resize = new ResizeObserver(measure);
-    const observeChildren = () => {
-      resize.disconnect();
-      resize.observe(element);
-      for (const child of element.children) resize.observe(child);
-    };
-    observeChildren();
-    const mutations = new MutationObserver(observeChildren);
-    mutations.observe(element, { childList: true, subtree: true });
-    return () => {
-      resize.disconnect();
-      mutations.disconnect();
-    };
-  }, [mobileWebLayout, panelScrollElement]);
+  const { panelScrollFocusable, setPanelScrollElement, setPanelScrollFocused } =
+    usePanelScrollAccess(mobileWebLayout);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [desktopPanelCollapsed, setDesktopPanelCollapsed] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -592,28 +622,7 @@ export function TripDetail({ tripId }: TripDetailProps) {
   }, [selectedDayIndex]);
 
   const dayIndexes = useMemo(() => view?.days.map((day) => day.day_index) ?? [], [view]);
-  const dayIndexesKey = dayIndexes.join('|');
-
-  // 일자 구성이 바뀌면(추가/삭제/reload) visibleDayIndexes를 조정한다. 이전 값에 기대는 조정이라
-  // 순수 파생값(useMemo)으로는 못 옮기지만, "prop/id가 바뀔 때 리셋"과 같은 모양이라 렌더 중
-  // 조정 패턴을 쓴다 — effect 안 동기 setState(react-hooks/set-state-in-effect)를 피한다.
-  const [prevDayIndexesKey, setPrevDayIndexesKey] = useState(dayIndexesKey);
-  if (dayIndexesKey !== prevDayIndexesKey) {
-    setPrevDayIndexesKey(dayIndexesKey);
-    setVisibleDayIndexes((current) => {
-      if (dayIndexes.length === 0) return current.size === 0 ? current : new Set();
-
-      const retained = dayIndexes.filter((dayIndex) => current.has(dayIndex));
-      const nextIndexes = current.size === 0 || retained.length === 0 ? dayIndexes : retained;
-      if (
-        nextIndexes.length === current.size &&
-        nextIndexes.every((dayIndex) => current.has(dayIndex))
-      ) {
-        return current;
-      }
-      return new Set(nextIndexes);
-    });
-  }
+  const { visibleDayIndexes, setVisibleDayIndexes } = useDayVisibility(dayIndexes);
 
   const allMapPoints = useMemo(() => (view ? tripDaysToMapPoints(view.days) : []), [view]);
   // 장소 검색 지역 편향 — 이 여행의 장소 범위가 먼저, 장소가 없으면 지금 지도 화면(2026-11-02 결정).
@@ -645,30 +654,21 @@ export function TripDetail({ tripId }: TripDetailProps) {
     return map;
   }, [allMapPoints]);
 
-  const selectedDay = view?.days.find((day) => day.day_index === selectedDayIndex) ?? null;
-  const selectedPoi =
-    selectedDay?.pois.find((poi) => poi.poi_id === selectedPoiId) ??
-    view?.days.flatMap((day) => day.pois).find((poi) => poi.poi_id === selectedPoiId) ??
-    null;
+  const { selectedDay, selectedPoi } = selectedTripItems(view, selectedDayIndex, selectedPoiId);
   const onlinePresence = Array.from(presence.values()).filter((entry) => entry.isOnline);
   const holidayMap = useMemo(() => holidaysByDate(view?.days ?? []), [view?.days]);
   const realtimeLabel = REALTIME_STATUS_LABEL[realtimeStatus];
   const realtimeDetail = realtimeStatusDetail(realtimeStatus, realtimeCloseInfo);
-  const nextDayIndex = view ? nextAvailableDayIndex(view) : 1;
-  const nextDayDate = view ? plannedDateForDay(view, nextDayIndex) : null;
-  const addDayDisabledReason = view ? addDayValidation(view, nextDayIndex) : null;
-  const canAddDay = addDayDisabledReason == null;
-  const addDayLabel = `${nextDayIndex}일차 추가`;
-  const addDayTitle = addDayDisabledReason ?? addDayLabel;
-  const visibleLayerCount =
-    view?.days.filter((day) => visibleDayIndexes.size === 0 || visibleDayIndexes.has(day.day_index))
-      .length ?? 0;
-  const showRealtimeBackoffNotice =
-    realtimeStatus === 'connection-limited' ||
-    realtimeStatus === 'rate-limited' ||
-    (realtimeStatus === 'reconnecting' &&
-      (realtimeCloseInfo?.category === 'connection-limited' ||
-        realtimeCloseInfo?.category === 'rate-limited'));
+  const {
+    nextDayIndex,
+    nextDayDate,
+    addDayDisabledReason,
+    canAddDay,
+    addDayLabel,
+    addDayTitle,
+    visibleLayerCount,
+  } = tripDayAvailability(view, visibleDayIndexes);
+  const showRealtimeBackoffNotice = realtimeBackoffNotice(realtimeStatus, realtimeCloseInfo);
 
   const openTripConflict = (patch: TripUpdate, latest: TripView | null) => {
     const latestTrip = latest?.trip ?? view?.trip ?? null;
@@ -700,8 +700,12 @@ export function TripDetail({ tripId }: TripDetailProps) {
       title: latestPoi.title ?? latestPoi.feature_id ?? '장소',
       version: latestPoi.version,
       patch,
-      fields: buildPoiConflictFields(patch, latestPoi,
-        (latest ?? view)?.days.find((day) => day.pois.some((poi) => poi.poi_id === poiId))?.day_index ?? null),
+      fields: buildPoiConflictFields(
+        patch,
+        latestPoi,
+        (latest ?? view)?.days.find((day) => day.pois.some((poi) => poi.poi_id === poiId))
+          ?.day_index ?? null,
+      ),
     });
   };
 
@@ -949,7 +953,9 @@ export function TripDetail({ tripId }: TripDetailProps) {
     const currentSortById = new Map(selectedDay.pois.map((p) => [p.poi_id, p.sort_order]));
     const moves = reorderMoves(orderedPoiIds, currentSortById);
     if (moves.length === 0) return;
-    void runMutation(() => poiApi(apiClient).reorder(tripId, { moves, day_index: selectedDay.day_index }));
+    void runMutation(() =>
+      poiApi(apiClient).reorder(tripId, { moves, day_index: selectedDay.day_index }),
+    );
   };
 
   const handleEditPoi = (poi: { poi_id: string; version: number }, patch: PoiUpdate) => {
@@ -1258,33 +1264,11 @@ export function TripDetail({ tripId }: TripDetailProps) {
   };
 
   if (loading) {
-    return (
-      <div className="flex min-h-64 items-center justify-center rounded-sm border border-hairline bg-canvas text-sm text-muted">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-        불러오는 중…
-      </div>
-    );
+    return { renderBranch: 'render0' as const };
   }
 
   if (error || !view) {
-    return (
-      <div className="space-y-4">
-        <Link
-          href="/trips"
-          className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          여행 목록
-        </Link>
-        <p
-          role="alert"
-          className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
-          data-testid="trip-detail-error"
-        >
-          {error ?? '여행을 찾을 수 없습니다.'}
-        </p>
-      </div>
-    );
+    return { renderBranch: 'render1' as const, error };
   }
 
   const { trip, companions } = view;
@@ -1350,6 +1334,139 @@ export function TripDetail({ tripId }: TripDetailProps) {
         desktopPanelCollapsed ? 'lg:hidden' : 'lg:flex'
       }`;
 
+  return {
+    renderBranch: 'render2' as const,
+    activePanel,
+    addDayDisabledReason,
+    addDayLabel,
+    addDayTitle,
+    addNotice,
+    busy,
+    canAddDay,
+    cancelDayUpdate,
+    cancelTripEditAndClose,
+    closeTripEdit,
+    commentsRevision,
+    companions,
+    confirmForceDeleteDay,
+    conflict,
+    conflictError,
+    dayDeleteConfirm,
+    dayDeleteTriggerRef,
+    dayListRef,
+    desktopPanelCollapsed,
+    detailGridClassName,
+    detailPanelClassName,
+    editingPoiId,
+    getSearchBias,
+    handleAddDay,
+    handleAddFeature,
+    handleAddPlace,
+    handleApplyConflict,
+    handleCreateManualPoi,
+    handleCreatePoiAtCoordinate,
+    handleDelete,
+    handleDeleteDay,
+    handleEditPoi,
+    handleEditTrip,
+    handleKeepEditingConflict,
+    handleMarkerContextMenu,
+    handleReorder,
+    handleSelectDay,
+    handleSelectPoi,
+    handleUpdateDay,
+    handleUseServerConflict,
+    handleViewportBboxChange,
+    holidayMap,
+    manualPoiCoord,
+    manualPoiError,
+    mapPoints,
+    mobilePanelOpen,
+    mobileWebLayout,
+    mutationError,
+    onlinePresence,
+    openTripEdit,
+    panelScrollFocusable,
+    plannedFeatureIds,
+    realtimeClientRef,
+    realtimeDetail,
+    realtimeLabel,
+    realtimeStatus,
+    reload,
+    renderPanelTabs,
+    savingPoiId,
+    selectedDay,
+    selectedDayIndex,
+    selectedPoi,
+    selectedPoiId,
+    setDayDeleteConfirm,
+    setDesktopPanelCollapsed,
+    setEditingPoiId,
+    setManualPoiCoord,
+    setManualPoiError,
+    setMobilePanelOpen,
+    setPanelScrollElement,
+    setPanelScrollFocused,
+    showRealtimeBackoffNotice,
+    toggleDayVisibility,
+    totalPoiCount,
+    trip,
+    tripEditError,
+    tripEditOpen,
+    tripId,
+    view,
+    visibleDayIndexes,
+    visibleLayerCount,
+  };
+}
+function TripDetailView0() {
+  return (
+    <div className="flex min-h-64 items-center justify-center rounded-sm border border-hairline bg-canvas text-sm text-muted">
+      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+      불러오는 중…
+    </div>
+  );
+}
+
+type TripDetailView1Model = Extract<
+  ReturnType<typeof useTripDetailModel>,
+  { renderBranch: 'render1' }
+>;
+function TripDetailView1({ viewModel }: { viewModel: TripDetailView1Model }) {
+  const { error } = viewModel;
+  return (
+    <div className="space-y-4">
+      <Link
+        href="/trips"
+        className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        여행 목록
+      </Link>
+      <p
+        role="alert"
+        className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text"
+        data-testid="trip-detail-error"
+      >
+        {error ?? '여행을 찾을 수 없습니다.'}
+      </p>
+    </div>
+  );
+}
+
+type TripDetailView2Model = Extract<
+  ReturnType<typeof useTripDetailModel>,
+  { renderBranch: 'render2' }
+>;
+function TripDetailView2({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const {
+    conflict,
+    detailGridClassName,
+    manualPoiCoord,
+    mobileWebLayout,
+    selectedDay,
+    tripEditOpen,
+  } = viewModel;
   return (
     <div
       className={
@@ -1362,762 +1479,969 @@ export function TripDetail({ tripId }: TripDetailProps) {
       data-testid="trip-detail-shell"
     >
       {mobileWebLayout ? (
-        <header
-          className="pointer-events-none absolute left-2 right-2 top-2 z-40 space-y-2"
-          aria-label="여행 작업 패널"
-          data-testid="trip-top-panel"
-        >
-          <div className="pointer-events-auto flex h-12 items-center gap-1.5 rounded-sm border border-hairline bg-canvas/95 p-1.5 shadow-card backdrop-blur">
-            <Link
-              href="/trips"
-              className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
-              aria-label="여행 목록"
-              title="여행 목록"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            </Link>
-            <div className="min-w-0 flex-1 px-1">
-              <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                <h1 className="truncate text-sm font-bold text-ink">{trip.title}</h1>
-                <span className="hidden shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs font-semibold text-muted min-[390px]:inline">
-                  {STATUS_LABEL[trip.status]}
-                </span>
-              </div>
-              <p className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted">
-                <span className="shrink-0">
-                  {view.days.length}일 · {totalPoiCount}곳
-                </span>
-                <span className="truncate">
-                  {trip.region_hint ?? trip.primary_region_code ?? '지역 미정'}
-                </span>
-              </p>
-            </div>
-            {view.trip.trip_id === tripId && realtimeStatus !== 'permission-denied' && <TripExportButton key={tripId} view={view} compact />}
-            <button
-              type="button"
-              onClick={() => setMobilePanelOpen((open) => !open)}
-              aria-controls="trip-detail-panel"
-              aria-expanded={mobilePanelOpen}
-              aria-label={mobilePanelOpen ? '패널 닫기' : '패널 열기'}
-              title={mobilePanelOpen ? '패널 닫기' : '패널 열기'}
-              className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-ink hover:bg-surface-soft"
-            >
-              {mobilePanelOpen ? (
-                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
-              )}
-            </button>
-          </div>
-
-          {realtimeStatus === 'permission-denied' && (
-            <p
-              role="alert"
-              className="pointer-events-auto inline-flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
-              data-testid="trip-realtime-permission-lost"
-            >
-              여행 접근 권한이 사라져 실시간 연결을 종료했습니다.
-              <Link href="/trips" className="font-semibold underline">
-                여행 목록으로 이동
-              </Link>
-            </p>
-          )}
-          {showRealtimeBackoffNotice && (
-            <p
-              role="status"
-              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-sm bg-canvas/95 px-3 py-2 text-xs text-muted shadow-card"
-              data-testid="trip-realtime-backoff-notice"
-            >
-              실시간 연결을 잠시 늦춰 다시 시도합니다.
-            </p>
-          )}
-          {addDayDisabledReason && (
-            <span id="trip-layer-add-disabled-reason" className="sr-only">
-              {addDayDisabledReason}
-            </span>
-          )}
-        </header>
+        <TripDetailView2Part0 viewModel={viewModel} />
       ) : (
-        <header
-          className="z-20 border-b border-hairline bg-canvas"
-          aria-label="여행 작업 패널"
-          data-testid="trip-top-panel"
-        >
-          <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-5">
-            <div className="flex min-w-0 items-start gap-3">
-              <Link
-                href="/trips"
-                className="mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink"
-                aria-label="여행 목록"
-              >
-                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              </Link>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="truncate text-lg font-bold text-ink md:text-xl">{trip.title}</h1>
-                  <span className="shrink-0 rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
-                    {STATUS_LABEL[trip.status]}
-                  </span>
-                </div>
-                <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted md:text-sm">
-                  <span className="inline-flex items-center gap-1">
-                    <CalendarDays className="h-4 w-4" aria-hidden="true" />
-                    {formatTripDateRange(trip.start_date, trip.end_date, holidayMap)}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin className="h-4 w-4" aria-hidden="true" />
-                    {trip.region_hint ?? trip.primary_region_code ?? '지역 미정'}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Layers className="h-4 w-4" aria-hidden="true" />
-                    {view.days.length}일 · {totalPoiCount}개 장소
-                  </span>
-                  <span>업데이트 {formatTripDate(trip.updated_at)}</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0 [&>*]:shrink-0">
-              <button
-                type="button"
-                onClick={() => setDesktopPanelCollapsed((collapsed) => !collapsed)}
-                aria-controls="trip-detail-panel"
-                aria-expanded={!desktopPanelCollapsed}
-                className="hidden min-h-11 items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:inline-flex"
-              >
-                {desktopPanelCollapsed ? (
-                  <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
-                )}
-                {desktopPanelCollapsed ? '패널 열기' : '패널 접기'}
-              </button>
-              <button
-                type="button"
-                onClick={handleAddDay}
-                disabled={!canAddDay || busy}
-                title={addDayTitle}
-                aria-describedby={
-                  addDayDisabledReason ? 'trip-layer-add-disabled-reason' : undefined
-                }
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
-                data-testid="trip-add-layer"
-              >
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                {addDayLabel}
-              </button>
-              <button
-                type="button"
-                onClick={openTripEdit}
-                className="min-h-11 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
-              >
-                편집
-              </button>
-              {view.trip.trip_id === tripId && realtimeStatus !== 'permission-denied' && <TripExportButton key={tripId} view={view} />}
-              <TripActions tripId={tripId} />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2 border-t border-hairline px-4 py-2 md:flex-row md:items-center md:justify-between md:px-5">
-            <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="여행 작업 탭">
-              {renderPanelTabs()}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {addDayDisabledReason && (
-                <p id="trip-layer-add-disabled-reason" className="text-xs text-muted">
-                  {addDayDisabledReason}
-                </p>
-              )}
-              {view.broken_feature_count > 0 && (
-                <p className="inline-flex items-center gap-1.5 rounded-sm bg-error-bg px-2 py-1 text-xs text-error-text">
-                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                  정보 사용 불가 {view.broken_feature_count}곳
-                </p>
-              )}
-              <p
-                className="inline-flex flex-wrap items-center gap-1.5 rounded-sm bg-surface-soft px-2 py-1 text-xs text-muted"
-                data-testid="trip-realtime-status"
-              >
-                <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
-                실시간 {realtimeLabel} · 접속 {onlinePresence.length}명
-                {realtimeDetail && <span> · {realtimeDetail}</span>}
-                {onlinePresence.some((entry) => entry.viewingDay != null) && (
-                  <span>
-                    {' '}
-                    · 보는 일자{' '}
-                    {onlinePresence
-                      .map((entry) => entry.viewingDay)
-                      .filter((day): day is number => day != null)
-                      .join(', ')}
-                  </span>
-                )}
-              </p>
-              {(realtimeStatus === 'closed' || realtimeStatus === 'error') && (
-                <button
-                  type="button"
-                  onClick={() => realtimeClientRef.current?.reconnect()}
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
-                  data-testid="trip-realtime-reconnect"
-                >
-                  <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
-                  다시 연결
-                </button>
-              )}
-            </div>
-          </div>
-
-          {realtimeStatus === 'permission-denied' && (
-            <p
-              role="alert"
-              className="mx-4 mb-2 inline-flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text md:mx-5"
-              data-testid="trip-realtime-permission-lost"
-            >
-              여행 접근 권한이 사라져 실시간 연결을 종료했습니다.
-              <Link href="/trips" className="font-semibold underline">
-                여행 목록으로 이동
-              </Link>
-            </p>
-          )}
-          {showRealtimeBackoffNotice && (
-            <p
-              role="status"
-              className="mx-4 mb-2 inline-flex items-center gap-1.5 rounded-sm bg-surface-soft px-3 py-2 text-xs text-muted md:mx-5"
-              data-testid="trip-realtime-backoff-notice"
-            >
-              실시간 연결을 잠시 늦춰 다시 시도합니다. 화면 데이터는 저장된 변경 기준으로 계속
-              불러옵니다.
-            </p>
-          )}
-        </header>
+        <TripDesktopHeader viewModel={viewModel} />
       )}
 
       <div className={detailGridClassName}>
-        <aside
-          id="trip-detail-panel"
-          className={detailPanelClassName}
-          aria-label="여행 상세"
-          data-testid="trip-detail-panel"
-        >
-          {mobileWebLayout && (
-            <div className="shrink-0 border-b border-hairline bg-canvas p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-ink">{trip.title}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {formatTripDateRange(trip.start_date, trip.end_date, holidayMap)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setMobilePanelOpen(false)}
-                  aria-label="패널 닫기"
-                  className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
-                >
-                  <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={openTripEdit}
-                  className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
-                >
-                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                  편집
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAddDay}
-                  disabled={!canAddDay || busy}
-                  title={addDayTitle}
-                  aria-label={addDayLabel}
-                  aria-describedby={
-                    addDayDisabledReason ? 'trip-drawer-add-disabled-reason' : undefined
-                  }
-                  className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-ink px-2.5 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
-                  data-testid="trip-add-day-drawer"
-                >
-                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                  {addDayLabel}
-                </button>
-                <TripActions tripId={tripId} />
-              </div>
-              {addDayDisabledReason && (
-                <p id="trip-drawer-add-disabled-reason" className="mt-2 text-xs text-muted">
-                  {addDayDisabledReason}
-                </p>
-              )}
-              <div
-                className="mt-3 flex gap-1 overflow-x-auto"
-                role="tablist"
-                aria-label="여행 작업 탭"
-              >
-                {renderPanelTabs()}
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                {view.broken_feature_count > 0 && (
-                  <p className="inline-flex items-center gap-1.5 rounded-sm bg-error-bg px-2 py-1 text-xs text-error-text">
-                    <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                    정보 사용 불가 {view.broken_feature_count}곳
-                  </p>
-                )}
-                <p
-                  className="inline-flex flex-wrap items-center gap-1.5 rounded-sm bg-surface-soft px-2 py-1 text-xs text-muted"
-                  data-testid="trip-realtime-status"
-                >
-                  <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
-                  실시간 {realtimeLabel} · 접속 {onlinePresence.length}명
-                  {realtimeDetail && <span> · {realtimeDetail}</span>}
-                </p>
-                {(realtimeStatus === 'closed' || realtimeStatus === 'error') && (
-                  <button
-                    type="button"
-                    onClick={() => realtimeClientRef.current?.reconnect()}
-                    className="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
-                    data-testid="trip-realtime-reconnect"
-                  >
-                    <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
-                    다시 연결
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          {/* 데스크톱은 이 영역의 containing block이 되어야 한다 — 아니면 목록 안 absolute(sr-only 등)
-              요소가 스크롤 상자의 잘라내기를 벗어나 창 높이로 고정한 문서를 다시 늘린다(#704). */}
-          <div
-            ref={setPanelScrollElement}
-            className={
-              mobileWebLayout
-                ? 'min-h-0 flex-1 overflow-y-auto'
-                : // 초점 링은 안쪽에 — 바깥 outline은 이웃 지도 열·헤더·창 끝에 잘린다.
-                  'relative min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus'
-            }
-            // 데스크톱은 이 영역만 스크롤한다 — 넘칠 때만 키보드 스크롤용 초점을 받는다. group은
-            // landmark가 아니라 상세 패널(aside)과 겹치는 landmark를 만들지 않으면서 초점 때 이름을 읽힌다.
-            tabIndex={panelScrollFocusable ? 0 : undefined}
-            onFocus={(event) => {
-              if (event.target === event.currentTarget) setPanelScrollFocused(true);
-            }}
-            onBlur={(event) => {
-              if (event.target === event.currentTarget) setPanelScrollFocused(false);
-            }}
-            role={panelScrollFocusable ? 'group' : undefined}
-            aria-label={panelScrollFocusable ? '여행 상세 내용' : undefined}
-            data-testid="trip-detail-panel-scroll"
-          >
-            {activePanel === 'plan' && (
-              <div
-                id="trip-panel-plan"
-                role="tabpanel"
-                aria-label="일정"
-                className={mobileWebLayout ? 'space-y-3 p-3' : 'space-y-4 p-4 md:p-5'}
-              >
-                {/* TD-04/TD-05: 일자 추가는 헤더(데스크톱)·드로어 헤더(모바일) 1곳으로, 개수는
-                    헤더 요약과 탭 배지가 정본이다 — 같은 수치를 칩으로 4중 표기하지 않는다. */}
-                {!mobileWebLayout && addDayDisabledReason && (
-                  <p id="trip-plan-add-disabled-reason" className="text-xs text-muted">
-                    {addDayDisabledReason}
-                  </p>
-                )}
+        <TripSidePanel viewModel={viewModel} />
 
-                <section
-                  ref={dayListRef}
-                  tabIndex={-1}
-                  className="space-y-3 outline-hidden"
-                  aria-label="일자 목록"
-                  data-testid="trip-layer-list"
-                >
-                  {view.days.length > 0 && (
-                    <div
-                      className="divide-y divide-hairline border-y border-hairline"
-                      role="tablist"
-                      aria-label="일자 목록"
-                    >
-                      {view.days.map((day) => {
-                        const active = day.day_index === selectedDayIndex;
-                        const visible =
-                          visibleDayIndexes.size === 0 || visibleDayIndexes.has(day.day_index);
-                        const dayLabel = day.title ?? `${day.day_index}일차`;
-                        const dayHolidayLabel = holidayLabel(day.holidays);
-                        return (
-                          <article
-                            key={day.day_index}
-                            // 패널 안 카드 금지(DESIGN.md Workbench 컨테인먼트 1층) — 리스트 row로
-                            // 강등하고 선택은 accent ring이 아니라 ink rule + 중립 surface로 표시한다.
-                            className={
-                              active
-                                ? 'border-l-2 border-ink bg-surface-soft'
-                                : 'border-l-2 border-transparent'
-                            }
-                          >
-                            <div className="flex items-start gap-3 p-3">
-                              <input
-                                type="checkbox"
-                                checked={visible}
-                                onChange={() => toggleDayVisibility(day.day_index)}
-                                disabled={visible && visibleLayerCount <= 1}
-                                aria-label={`${dayLabel} 표시`}
-                                className="mt-1 h-4 w-4 rounded border-hairline text-primary focus:ring-primary"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-start gap-2">
-                                  <button
-                                    type="button"
-                                    role="tab"
-                                    aria-label={dayLabel}
-                                    aria-selected={active}
-                                    onClick={() => handleSelectDay(day.day_index)}
-                                    className="min-w-0 flex-1 text-left"
-                                  >
-                                    <span className="flex min-w-0 items-center gap-2">
-                                      <span className="truncate text-sm font-bold text-ink">
-                                        {dayLabel}
-                                      </span>
-                                      <span className="shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs font-semibold text-muted">
-                                        {day.pois.length}곳
-                                      </span>
-                                    </span>
-                                    <span className="mt-1 block text-xs text-muted">
-                                      {/* ADR-055: date는 override-only → effective_date 표시. */}
-                                      {formatTripDate(day.effective_date ?? day.date)} ·{' '}
-                                      {visible ? '표시' : '숨김'}
-                                    </span>
-                                    {day.out_of_range && (
-                                      <span
-                                        className="mt-1 inline-flex w-fit items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
-                                        data-testid="trip-day-out-of-range"
-                                        title="이 일자의 날짜가 여행 기간을 벗어났습니다."
-                                      >
-                                        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                                        기간 벗어남
-                                      </span>
-                                    )}
-                                    {dayHolidayLabel && (
-                                      <span
-                                        className="mt-1 inline-flex w-fit rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
-                                        data-testid="trip-day-holiday"
-                                      >
-                                        {dayHolidayLabel}
-                                      </span>
-                                    )}
-                                  </button>
-                                  <TripDayControls
-                                    selectedDay={day}
-                                    onAdd={handleAddDay}
-                                    onUpdate={handleUpdateDay}
-                                    onDelete={handleDeleteDay}
-                                    showAdd={false}
-                                    busy={busy}
-                                    onCancelBusy={cancelDayUpdate}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {active ? (
-                              <div className="space-y-3 px-3 pb-3">
-                                {/* 일자 탭이 이미 날짜/공휴일/기간-벗어남을 보이므로 여기선 일출/일몰만. */}
-                                <TripDayHeader day={day} showSummary={false} />
-                                <TripWeatherSummary
-                                  weather={
-                                    day.pois[0]?.feature_id
-                                      ? (day.weather_by_feature_id[day.pois[0].feature_id] ?? null)
-                                      : null
-                                  }
-                                  weatherCards={day.weather_cards}
-                                  date={day.effective_date}
-                                  label="날짜 날씨"
-                                  compact={mobileWebLayout}
-                                />
-                                <TripAttachments
-                                  tripId={tripId}
-                                  dayIndex={day.day_index}
-                                  title={`${day.day_index}일차 파일`}
-                                  compact
-                                />
-                                <MapSearchBox onSelect={handleAddPlace} getBias={getSearchBias} />
-                                <TripDayOptimize
-                                  tripId={tripId}
-                                  dayIndex={day.day_index}
-                                  poiCount={day.pois.length}
-                                  onApplied={reload}
-                                />
-                                {mutationError && (
-                                  <p
-                                    role="alert"
-                                    className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
-                                    data-testid="poi-mutation-error"
-                                  >
-                                    {mutationError}
-                                  </p>
-                                )}
-                                {addNotice && !mutationError && (
-                                  <p
-                                    role="status"
-                                    className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-ink"
-                                    data-testid="poi-add-notice"
-                                  >
-                                    {addNotice}
-                                  </p>
-                                )}
-                                <TripPoiList
-                                  pois={day.pois}
-                                  dayIndex={day.day_index}
-                                  selectedPoiId={selectedPoiId}
-                                  onSelectPoi={handleSelectPoi}
-                                  tripId={tripId}
-                                  dayDate={day.effective_date}
-                                  weatherCards={day.weather_cards}
-                                  weatherByFeatureId={day.weather_by_feature_id}
-                                  showInlineAttachments
-                                  showWeather
-                                  compact={mobileWebLayout}
-                                  editable={!busy}
-                                  onReorder={handleReorder}
-                                  onEditPoi={handleEditPoi}
-                                  dayOptions={view.days.map((day) => ({ day_index: day.day_index, title: day.title }))}
-                                  onDelete={handleDelete}
-                                  savingPoiId={savingPoiId}
-                                  editingPoiId={editingPoiId}
-                                  onEditToggle={setEditingPoiId}
-                                />
-                              </div>
-                            ) : (
-                              <div className="space-y-1 px-3 pb-2">
-                                {day.pois.length > 0 &&
-                                  day.pois.slice(0, 4).map((poi, index) => (
-                                    <button
-                                      key={poi.poi_id}
-                                      type="button"
-                                      onClick={() => handleSelectPoi(poi.poi_id)}
-                                      className="flex w-full items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-surface-soft"
-                                    >
-                                      <span
-                                        // 마커 팔레트 인라인 색 위 숫자라 순백이 맞다(T-313 예외).
-                                        // eslint-disable-next-line no-restricted-syntax
-                                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                                        style={{ backgroundColor: paletteHex(poi.marker_color) }}
-                                        aria-hidden="true"
-                                      >
-                                        {index + 1}
-                                      </span>
-                                      <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
-                                        {poi.title ?? poi.feature_id ?? '장소'}
-                                      </span>
-                                    </button>
-                                  ))}
-                                {day.pois.length > 4 && (
-                                  <p className="pl-7 text-xs text-muted">
-                                    외 {day.pois.length - 4}곳
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                          </article>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
-              </div>
-            )}
-
-            {activePanel === 'files' && (
-              <div
-                id="trip-panel-files"
-                role="tabpanel"
-                aria-label="파일"
-                className="space-y-4 p-4 md:p-5"
-              >
-                {selectedDay && (
-                  <TripAttachments
-                    tripId={tripId}
-                    dayIndex={selectedDay.day_index}
-                    title={`${selectedDay.day_index}일차 파일`}
-                  />
-                )}
-                {selectedPoi && (
-                  <TripAttachments
-                    tripId={tripId}
-                    poiId={selectedPoi.poi_id}
-                    title={`${selectedPoi.title ?? '선택 장소'} 파일`}
-                  />
-                )}
-                <TripAttachments tripId={tripId} />
-              </div>
-            )}
-
-            {activePanel === 'share' && (
-              <div
-                id="trip-panel-share"
-                role="tabpanel"
-                aria-label="공유"
-                className="space-y-4 p-4 md:p-5"
-              >
-                <div id="trip-share-section">
-                  <TripShareLinks
-                    tripId={tripId}
-                    shareLinks={view.share_links}
-                    onChanged={reload}
-                  />
-                </div>
-                <TripTelegramTargets tripId={tripId} dayIndexes={view.days.map(day => day.day_index)} />
-              </div>
-            )}
-
-            {activePanel === 'people' && (
-              <div
-                id="trip-panel-people"
-                role="tabpanel"
-                aria-label="동행"
-                className="space-y-4 p-4 md:p-5"
-              >
-                <TripCompanions tripId={tripId} companions={companions} onChanged={reload} />
-              </div>
-            )}
-
-            {activePanel === 'comments' && (
-              <div
-                id="trip-panel-comments"
-                role="tabpanel"
-                aria-label="댓글"
-                className="space-y-4 p-4 md:p-5"
-              >
-                <TripComments tripId={tripId} ownerUserId={view.trip.owner_user_id} refreshKey={commentsRevision} />
-              </div>
-            )}
-          </div>
-        </aside>
-
-        <section
-          id="trip-map-canvas"
-          data-map-fit-boundary=""
-          className={
-            mobileWebLayout
-              ? 'relative min-h-0 flex-1 bg-canvas'
-              : // lg는 남은 높이를 그대로 쓴다 — 바닥을 두면 상단 패널이 높은 창(1024x560 긴 제목)에서 문서가
-                // 다시 스크롤된다. 낮은 지도는 맞춤 여백(mapFitPadding의 낮은 지도 경로)이 처리한다.
-                'relative min-h-[calc(100svh-10rem)] flex-1 bg-canvas lg:h-full lg:min-h-0'
-          }
-          aria-label="여행 지도"
-          data-testid="trip-detail-map"
-        >
-          <TripMapView
-            // 장소 검색과 교통 정보 컨트롤을 한 세로 스택에 둔다 — 따로 띄우면 교통 패널이 검색창을
-            // 덮는다(2026-11-02 prod e2e).
-            overlayTopLeft={
-              <div
-                className="rounded-sm border border-hairline bg-canvas/95 p-2 shadow-card backdrop-blur"
-                data-testid="trip-map-place-search"
-              >
-                {selectedDay ? (
-                  <MapSearchBox onSelect={handleAddPlace} getBias={getSearchBias} />
-                ) : (
-                  <p className="px-2 py-1 text-sm text-muted">선택된 일자가 없습니다.</p>
-                )}
-              </div>
-            }
-            overlayTopLeftClassName={
-              mobileWebLayout
-                ? 'pointer-events-none absolute left-2 right-2 top-20 z-10 max-h-[calc(100%-6rem)] overflow-y-auto'
-                : 'pointer-events-none absolute left-3 right-3 top-3 z-10 max-h-[calc(100%-1.5rem)] overflow-y-auto md:left-4 md:right-auto md:w-[min(560px,calc(100%-2rem))]'
-            }
-            apiKey={VWORLD_API_KEY}
-            points={mapPoints}
-            selectedPoiId={selectedPoiId}
-            showFeatures
-            hiddenFeatureIds={plannedFeatureIds}
-            transportLayers
-            onViewportBboxChange={handleViewportBboxChange}
-            canAddFeature={selectedDay != null && !busy}
-            onSelectPoi={handleSelectPoi}
-            onMarkerContextMenu={handleMarkerContextMenu}
-            onAddFeature={handleAddFeature}
-            onCreatePoiAtCoordinate={handleCreatePoiAtCoordinate}
-            showNavigationControls={!mobileWebLayout}
-            className="h-full"
-            chrome="flush"
-          />
-          <div
-            data-testid="trip-map-stats"
-            data-map-fit-bottom=""
-            className={
-              mobileWebLayout
-                ? 'pointer-events-none absolute bottom-16 left-3 z-10 flex flex-wrap gap-2'
-                : 'pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap gap-2 md:bottom-4 md:left-4'
-            }
-          >
-            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
-              {visibleLayerCount}일 표시
-            </span>
-            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
-              장소 {mapPoints.length}곳
-            </span>
-          </div>
-        </section>
+        <TripDetailSection2_0 viewModel={viewModel} />
       </div>
 
-      {tripEditOpen && (
-        <TripEditDialog
-          trip={trip}
-          saving={busy}
-          error={tripEditError}
-          onSave={handleEditTrip}
-          onClose={closeTripEdit}
-          onCancelBusy={cancelTripEditAndClose}
-        />
-      )}
+      {tripEditOpen && <TripSettingsDialog viewModel={viewModel} />}
 
-      {manualPoiCoord && selectedDay && (
-        <TripManualPoiDialog
-          coord={manualPoiCoord}
-          dayLabel={selectedDay.title ?? `${selectedDay.day_index}일차`}
-          saving={busy}
-          error={manualPoiError}
-          onClose={() => {
-            setManualPoiError(null);
-            setManualPoiCoord(null);
-          }}
-          onCreate={handleCreateManualPoi}
-        />
-      )}
+      {manualPoiCoord && selectedDay && <ManualPlaceDialog viewModel={viewModel} />}
 
-      {conflict && (
-        <ConflictDialog
-          key={`${conflict.target}-${conflict.target === 'poi' ? conflict.poiId : tripId}-${conflict.version}`}
-          title={conflict.target === 'trip' ? '여행 정보 충돌' : `${conflict.title} 편집 충돌`}
-          description="다른 변경이 먼저 저장되었습니다. 각 필드에서 서버 값 또는 내 값을 고른 뒤 저장할 수 있습니다."
-          fields={conflict.fields}
-          saving={busy}
-          error={conflictError}
-          onApply={handleApplyConflict}
-          onUseServer={handleUseServerConflict}
-          onKeepEditing={handleKeepEditingConflict}
-        />
-      )}
+      {conflict && <TripConflictDialog viewModel={viewModel} />}
 
       {/* ADR-055 F2: POI가 있는 일자 삭제 경고 — 확인 시 force로 함께 삭제. */}
-      <ConfirmDialog
-        open={dayDeleteConfirm != null}
-        tone="danger"
-        title={`${dayDeleteConfirm?.dayIndex ?? ''}일차를 삭제할까요?`}
-        description={
-          dayDeleteConfirm
-            ? `이 일자에는 POI ${dayDeleteConfirm.poiCount}곳이 있습니다. 삭제하면 함께 제거되며 되돌릴 수 없습니다.`
-            : undefined
-        }
-        confirmLabel="일자와 POI 삭제"
-        cancelLabel="취소"
-        busy={busy}
-        onConfirm={confirmForceDeleteDay}
-        onCancel={() => setDayDeleteConfirm(null)}
-        // 트리거(일자 삭제)는 busy로 disabled된 채 이 다이얼로그가 열리므로 직전 포커스가 body다.
-        // 닫힐 때 돌아갈 자리를 명시한다(T-315 3차 리뷰).
-        returnFocusRef={dayDeleteTriggerRef}
-        testId="day-delete-confirm"
-      />
+      <DeleteTripDayDialog viewModel={viewModel} />
     </div>
+  );
+}
+
+function TripDetailSection2_0({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const {
+    busy,
+    getSearchBias,
+    handleAddFeature,
+    handleAddPlace,
+    handleCreatePoiAtCoordinate,
+    handleMarkerContextMenu,
+    handleSelectPoi,
+    handleViewportBboxChange,
+    mapPoints,
+    mobileWebLayout,
+    plannedFeatureIds,
+    selectedDay,
+    selectedPoiId,
+    visibleLayerCount,
+  } = viewModel;
+  return (
+    <section
+      id="trip-map-canvas"
+      data-map-fit-boundary=""
+      className={
+        mobileWebLayout
+          ? 'relative min-h-0 flex-1 bg-canvas'
+          : // lg는 남은 높이를 그대로 쓴다 — 바닥을 두면 상단 패널이 높은 창(1024x560 긴 제목)에서 문서가
+            // 다시 스크롤된다. 낮은 지도는 맞춤 여백(mapFitPadding의 낮은 지도 경로)이 처리한다.
+            'relative min-h-[calc(100svh-10rem)] flex-1 bg-canvas lg:h-full lg:min-h-0'
+      }
+      aria-label="여행 지도"
+      data-testid="trip-detail-map"
+    >
+      <TripMapView
+        // 장소 검색과 교통 정보 컨트롤을 한 세로 스택에 둔다 — 따로 띄우면 교통 패널이 검색창을
+        // 덮는다(2026-11-02 prod e2e).
+        overlayTopLeft={
+          <div
+            className="rounded-sm border border-hairline bg-canvas/95 p-2 shadow-card backdrop-blur"
+            data-testid="trip-map-place-search"
+          >
+            {selectedDay ? (
+              <MapSearchBox onSelect={handleAddPlace} getBias={getSearchBias} />
+            ) : (
+              <p className="px-2 py-1 text-sm text-muted">선택된 일자가 없습니다.</p>
+            )}
+          </div>
+        }
+        overlayTopLeftClassName={
+          mobileWebLayout
+            ? 'pointer-events-none absolute left-2 right-2 top-20 z-10 max-h-[calc(100%-6rem)] overflow-y-auto'
+            : 'pointer-events-none absolute left-3 right-3 top-3 z-10 max-h-[calc(100%-1.5rem)] overflow-y-auto md:left-4 md:right-auto md:w-[min(560px,calc(100%-2rem))]'
+        }
+        apiKey={VWORLD_API_KEY}
+        points={mapPoints}
+        selectedPoiId={selectedPoiId}
+        showFeatures
+        hiddenFeatureIds={plannedFeatureIds}
+        transportLayers
+        onViewportBboxChange={handleViewportBboxChange}
+        canAddFeature={selectedDay != null && !busy}
+        onSelectPoi={handleSelectPoi}
+        onMarkerContextMenu={handleMarkerContextMenu}
+        onAddFeature={handleAddFeature}
+        onCreatePoiAtCoordinate={handleCreatePoiAtCoordinate}
+        showNavigationControls={!mobileWebLayout}
+        className="h-full"
+        chrome="flush"
+      />
+      <div
+        data-testid="trip-map-stats"
+        data-map-fit-bottom=""
+        className={
+          mobileWebLayout
+            ? 'pointer-events-none absolute bottom-16 left-3 z-10 flex flex-wrap gap-2'
+            : 'pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap gap-2 md:bottom-4 md:left-4'
+        }
+      >
+        <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+          {visibleLayerCount}일 표시
+        </span>
+        <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+          장소 {mapPoints.length}곳
+        </span>
+      </div>
+    </section>
+  );
+}
+
+function TripDetailView2Part0({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const {
+    trip,
+    view,
+    totalPoiCount,
+    tripId,
+    realtimeStatus,
+    setMobilePanelOpen,
+    mobilePanelOpen,
+    showRealtimeBackoffNotice,
+    addDayDisabledReason,
+  } = viewModel;
+  return (
+    <header
+      className="pointer-events-none absolute left-2 right-2 top-2 z-40 space-y-2"
+      aria-label="여행 작업 패널"
+      data-testid="trip-top-panel"
+    >
+      <div className="pointer-events-auto flex h-12 items-center gap-1.5 rounded-sm border border-hairline bg-canvas/95 p-1.5 shadow-card backdrop-blur">
+        <Link
+          href="/trips"
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
+          aria-label="여행 목록"
+          title="여행 목록"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        </Link>
+        <div className="min-w-0 flex-1 px-1">
+          <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+            <h1 className="truncate text-sm font-bold text-ink">{trip.title}</h1>
+            <span className="hidden shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs font-semibold text-muted min-[390px]:inline">
+              {STATUS_LABEL[trip.status]}
+            </span>
+          </div>
+          <p className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted">
+            <span className="shrink-0">
+              {view.days.length}일 · {totalPoiCount}곳
+            </span>
+            <span className="truncate">
+              {trip.region_hint ?? trip.primary_region_code ?? '지역 미정'}
+            </span>
+          </p>
+        </div>
+        {view.trip.trip_id === tripId && realtimeStatus !== 'permission-denied' && (
+          <TripExportButton key={tripId} view={view} compact />
+        )}
+        <button
+          type="button"
+          onClick={() => setMobilePanelOpen((open) => !open)}
+          aria-controls="trip-detail-panel"
+          aria-expanded={mobilePanelOpen}
+          aria-label={mobilePanelOpen ? '패널 닫기' : '패널 열기'}
+          title={mobilePanelOpen ? '패널 닫기' : '패널 열기'}
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-ink hover:bg-surface-soft"
+        >
+          {mobilePanelOpen ? (
+            <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+          )}
+        </button>
+      </div>
+
+      {realtimeStatus === 'permission-denied' && (
+        <p
+          role="alert"
+          className="pointer-events-auto inline-flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
+          data-testid="trip-realtime-permission-lost"
+        >
+          여행 접근 권한이 사라져 실시간 연결을 종료했습니다.
+          <Link href="/trips" className="font-semibold underline">
+            여행 목록으로 이동
+          </Link>
+        </p>
+      )}
+      {showRealtimeBackoffNotice && (
+        <p
+          role="status"
+          className="pointer-events-auto inline-flex items-center gap-1.5 rounded-sm bg-canvas/95 px-3 py-2 text-xs text-muted shadow-card"
+          data-testid="trip-realtime-backoff-notice"
+        >
+          실시간 연결을 잠시 늦춰 다시 시도합니다.
+        </p>
+      )}
+      {addDayDisabledReason && (
+        <span id="trip-layer-add-disabled-reason" className="sr-only">
+          {addDayDisabledReason}
+        </span>
+      )}
+    </header>
+  );
+}
+
+function TripDetailView2Part1({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const {
+    trip,
+    holidayMap,
+    view,
+    totalPoiCount,
+    setDesktopPanelCollapsed,
+    desktopPanelCollapsed,
+    handleAddDay,
+    canAddDay,
+    busy,
+    addDayTitle,
+    addDayDisabledReason,
+    addDayLabel,
+    openTripEdit,
+    tripId,
+    realtimeStatus,
+  } = viewModel;
+  return (
+    <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-5">
+      <div className="flex min-w-0 items-start gap-3">
+        <Link
+          href="/trips"
+          className="mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-surface-soft hover:text-ink"
+          aria-label="여행 목록"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        </Link>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-lg font-bold text-ink md:text-xl">{trip.title}</h1>
+            <span className="shrink-0 rounded-sm bg-surface-soft px-2 py-1 text-xs font-semibold text-muted">
+              {STATUS_LABEL[trip.status]}
+            </span>
+          </div>
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted md:text-sm">
+            <span className="inline-flex items-center gap-1">
+              <CalendarDays className="h-4 w-4" aria-hidden="true" />
+              {formatTripDateRange(trip.start_date, trip.end_date, holidayMap)}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <MapPin className="h-4 w-4" aria-hidden="true" />
+              {trip.region_hint ?? trip.primary_region_code ?? '지역 미정'}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Layers className="h-4 w-4" aria-hidden="true" />
+              {view.days.length}일 · {totalPoiCount}개 장소
+            </span>
+            <span>업데이트 {formatTripDate(trip.updated_at)}</span>
+          </p>
+        </div>
+      </div>
+
+      <div className="flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0 [&>*]:shrink-0">
+        <button
+          type="button"
+          onClick={() => setDesktopPanelCollapsed((collapsed) => !collapsed)}
+          aria-controls="trip-detail-panel"
+          aria-expanded={!desktopPanelCollapsed}
+          className="hidden min-h-11 items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft lg:inline-flex"
+        >
+          {desktopPanelCollapsed ? (
+            <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+          )}
+          {desktopPanelCollapsed ? '패널 열기' : '패널 접기'}
+        </button>
+        <button
+          type="button"
+          onClick={handleAddDay}
+          disabled={!canAddDay || busy}
+          title={addDayTitle}
+          aria-describedby={addDayDisabledReason ? 'trip-layer-add-disabled-reason' : undefined}
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-sm bg-ink px-3 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
+          data-testid="trip-add-layer"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          {addDayLabel}
+        </button>
+        <button
+          type="button"
+          onClick={openTripEdit}
+          className="min-h-11 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+        >
+          편집
+        </button>
+        {view.trip.trip_id === tripId && realtimeStatus !== 'permission-denied' && (
+          <TripExportButton key={tripId} view={view} />
+        )}
+        <TripActions tripId={tripId} />
+      </div>
+    </div>
+  );
+}
+
+function TripDetailView2Part2({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const {
+    renderPanelTabs,
+    addDayDisabledReason,
+    view,
+    realtimeLabel,
+    onlinePresence,
+    realtimeDetail,
+    realtimeStatus,
+    realtimeClientRef,
+  } = viewModel;
+  return (
+    <div className="flex flex-col gap-2 border-t border-hairline px-4 py-2 md:flex-row md:items-center md:justify-between md:px-5">
+      <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="여행 작업 탭">
+        {renderPanelTabs()}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {addDayDisabledReason && (
+          <p id="trip-layer-add-disabled-reason" className="text-xs text-muted">
+            {addDayDisabledReason}
+          </p>
+        )}
+        {view.broken_feature_count > 0 && (
+          <p className="inline-flex items-center gap-1.5 rounded-sm bg-error-bg px-2 py-1 text-xs text-error-text">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            정보 사용 불가 {view.broken_feature_count}곳
+          </p>
+        )}
+        <p
+          className="inline-flex flex-wrap items-center gap-1.5 rounded-sm bg-surface-soft px-2 py-1 text-xs text-muted"
+          data-testid="trip-realtime-status"
+        >
+          <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
+          실시간 {realtimeLabel} · 접속 {onlinePresence.length}명
+          {realtimeDetail && <span> · {realtimeDetail}</span>}
+          {onlinePresence.some((entry) => entry.viewingDay != null) && (
+            <span>
+              {' '}
+              · 보는 일자{' '}
+              {onlinePresence
+                .map((entry) => entry.viewingDay)
+                .filter((day): day is number => day != null)
+                .join(', ')}
+            </span>
+          )}
+        </p>
+        {(realtimeStatus === 'closed' || realtimeStatus === 'error') && (
+          <button
+            type="button"
+            onClick={() => realtimeClientRef.current?.reconnect()}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
+            data-testid="trip-realtime-reconnect"
+          >
+            <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
+            다시 연결
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TripDetailView2Part3({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const {
+    trip,
+    holidayMap,
+    setMobilePanelOpen,
+    openTripEdit,
+    handleAddDay,
+    canAddDay,
+    busy,
+    addDayTitle,
+    addDayLabel,
+    addDayDisabledReason,
+    tripId,
+    renderPanelTabs,
+    view,
+    realtimeLabel,
+    onlinePresence,
+    realtimeDetail,
+    realtimeStatus,
+    realtimeClientRef,
+  } = viewModel;
+  return (
+    <div className="shrink-0 border-b border-hairline bg-canvas p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-ink">{trip.title}</p>
+          <p className="mt-1 text-xs text-muted">
+            {formatTripDateRange(trip.start_date, trip.end_date, holidayMap)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setMobilePanelOpen(false)}
+          aria-label="패널 닫기"
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
+        >
+          <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={openTripEdit}
+          className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
+        >
+          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+          편집
+        </button>
+        <button
+          type="button"
+          onClick={handleAddDay}
+          disabled={!canAddDay || busy}
+          title={addDayTitle}
+          aria-label={addDayLabel}
+          aria-describedby={addDayDisabledReason ? 'trip-drawer-add-disabled-reason' : undefined}
+          className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-ink px-2.5 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
+          data-testid="trip-add-day-drawer"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          {addDayLabel}
+        </button>
+        <TripActions tripId={tripId} />
+      </div>
+      {addDayDisabledReason && (
+        <p id="trip-drawer-add-disabled-reason" className="mt-2 text-xs text-muted">
+          {addDayDisabledReason}
+        </p>
+      )}
+      <div className="mt-3 flex gap-1 overflow-x-auto" role="tablist" aria-label="여행 작업 탭">
+        {renderPanelTabs()}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {view.broken_feature_count > 0 && (
+          <p className="inline-flex items-center gap-1.5 rounded-sm bg-error-bg px-2 py-1 text-xs text-error-text">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            정보 사용 불가 {view.broken_feature_count}곳
+          </p>
+        )}
+        <p
+          className="inline-flex flex-wrap items-center gap-1.5 rounded-sm bg-surface-soft px-2 py-1 text-xs text-muted"
+          data-testid="trip-realtime-status"
+        >
+          <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
+          실시간 {realtimeLabel} · 접속 {onlinePresence.length}명
+          {realtimeDetail && <span> · {realtimeDetail}</span>}
+        </p>
+        {(realtimeStatus === 'closed' || realtimeStatus === 'error') && (
+          <button
+            type="button"
+            onClick={() => realtimeClientRef.current?.reconnect()}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-sm border border-hairline px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
+            data-testid="trip-realtime-reconnect"
+          >
+            <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
+            다시 연결
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TripDetailView2Part4({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const { selectedDay, tripId, selectedPoi } = viewModel;
+  return (
+    <div id="trip-panel-files" role="tabpanel" aria-label="파일" className="space-y-4 p-4 md:p-5">
+      {selectedDay && (
+        <TripAttachments
+          tripId={tripId}
+          dayIndex={selectedDay.day_index}
+          title={`${selectedDay.day_index}일차 파일`}
+        />
+      )}
+      {selectedPoi && (
+        <TripAttachments
+          tripId={tripId}
+          poiId={selectedPoi.poi_id}
+          title={`${selectedPoi.title ?? '선택 장소'} 파일`}
+        />
+      )}
+      <TripAttachments tripId={tripId} />
+    </div>
+  );
+}
+
+function TripDesktopHeader({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const { realtimeStatus, showRealtimeBackoffNotice } = viewModel;
+  return (
+    <header
+      className="z-20 border-b border-hairline bg-canvas"
+      aria-label="여행 작업 패널"
+      data-testid="trip-top-panel"
+    >
+      <TripDetailView2Part1 viewModel={viewModel} />
+
+      <TripDetailView2Part2 viewModel={viewModel} />
+
+      {realtimeStatus === 'permission-denied' && (
+        <p
+          role="alert"
+          className="mx-4 mb-2 inline-flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text md:mx-5"
+          data-testid="trip-realtime-permission-lost"
+        >
+          여행 접근 권한이 사라져 실시간 연결을 종료했습니다.
+          <Link href="/trips" className="font-semibold underline">
+            여행 목록으로 이동
+          </Link>
+        </p>
+      )}
+      {showRealtimeBackoffNotice && (
+        <p
+          role="status"
+          className="mx-4 mb-2 inline-flex items-center gap-1.5 rounded-sm bg-surface-soft px-3 py-2 text-xs text-muted md:mx-5"
+          data-testid="trip-realtime-backoff-notice"
+        >
+          실시간 연결을 잠시 늦춰 다시 시도합니다. 화면 데이터는 저장된 변경 기준으로 계속
+          불러옵니다.
+        </p>
+      )}
+    </header>
+  );
+}
+
+function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const {
+    addDayDisabledReason,
+    addNotice,
+    busy,
+    cancelDayUpdate,
+    dayListRef,
+    editingPoiId,
+    getSearchBias,
+    handleAddDay,
+    handleAddPlace,
+    handleDelete,
+    handleDeleteDay,
+    handleEditPoi,
+    handleReorder,
+    handleSelectDay,
+    handleSelectPoi,
+    handleUpdateDay,
+    mobileWebLayout,
+    mutationError,
+    reload,
+    savingPoiId,
+    selectedDayIndex,
+    selectedPoiId,
+    setEditingPoiId,
+    toggleDayVisibility,
+    tripId,
+    view,
+    visibleDayIndexes,
+    visibleLayerCount,
+  } = viewModel;
+  return (
+    <div
+      id="trip-panel-plan"
+      role="tabpanel"
+      aria-label="일정"
+      className={mobileWebLayout ? 'space-y-3 p-3' : 'space-y-4 p-4 md:p-5'}
+    >
+      {/* TD-04/TD-05: 일자 추가는 헤더(데스크톱)·드로어 헤더(모바일) 1곳으로, 개수는
+                    헤더 요약과 탭 배지가 정본이다 — 같은 수치를 칩으로 4중 표기하지 않는다. */}
+      {!mobileWebLayout && addDayDisabledReason && (
+        <p id="trip-plan-add-disabled-reason" className="text-xs text-muted">
+          {addDayDisabledReason}
+        </p>
+      )}
+
+      <section
+        ref={dayListRef}
+        tabIndex={-1}
+        className="space-y-3 outline-hidden"
+        aria-label="일자 목록"
+        data-testid="trip-layer-list"
+      >
+        {view.days.length > 0 && (
+          <div
+            className="divide-y divide-hairline border-y border-hairline"
+            role="tablist"
+            aria-label="일자 목록"
+          >
+            {view.days.map((day) => {
+              const active = day.day_index === selectedDayIndex;
+              const visible = visibleDayIndexes.size === 0 || visibleDayIndexes.has(day.day_index);
+              const dayLabel = day.title ?? `${day.day_index}일차`;
+              const dayHolidayLabel = holidayLabel(day.holidays);
+              return (
+                <article
+                  key={day.day_index}
+                  // 패널 안 카드 금지(DESIGN.md Workbench 컨테인먼트 1층) — 리스트 row로
+                  // 강등하고 선택은 accent ring이 아니라 ink rule + 중립 surface로 표시한다.
+                  className={
+                    active
+                      ? 'border-l-2 border-ink bg-surface-soft'
+                      : 'border-l-2 border-transparent'
+                  }
+                >
+                  <div className="flex items-start gap-3 p-3">
+                    <input
+                      type="checkbox"
+                      checked={visible}
+                      onChange={() => toggleDayVisibility(day.day_index)}
+                      disabled={visible && visibleLayerCount <= 1}
+                      aria-label={`${dayLabel} 표시`}
+                      className="mt-1 h-4 w-4 rounded border-hairline text-primary focus:ring-primary"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start gap-2">
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-label={dayLabel}
+                          aria-selected={active}
+                          onClick={() => handleSelectDay(day.day_index)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="truncate text-sm font-bold text-ink">{dayLabel}</span>
+                            <span className="shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs font-semibold text-muted">
+                              {day.pois.length}곳
+                            </span>
+                          </span>
+                          <span className="mt-1 block text-xs text-muted">
+                            {/* ADR-055: date는 override-only → effective_date 표시. */}
+                            {formatTripDate(day.effective_date ?? day.date)} ·{' '}
+                            {visible ? '표시' : '숨김'}
+                          </span>
+                          {day.out_of_range && (
+                            <span
+                              className="mt-1 inline-flex w-fit items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
+                              data-testid="trip-day-out-of-range"
+                              title="이 일자의 날짜가 여행 기간을 벗어났습니다."
+                            >
+                              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                              기간 벗어남
+                            </span>
+                          )}
+                          {dayHolidayLabel && (
+                            <span
+                              className="mt-1 inline-flex w-fit rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
+                              data-testid="trip-day-holiday"
+                            >
+                              {dayHolidayLabel}
+                            </span>
+                          )}
+                        </button>
+                        <TripDayControls
+                          selectedDay={day}
+                          onAdd={handleAddDay}
+                          onUpdate={handleUpdateDay}
+                          onDelete={handleDeleteDay}
+                          showAdd={false}
+                          busy={busy}
+                          onCancelBusy={cancelDayUpdate}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {active ? (
+                    <div className="space-y-3 px-3 pb-3">
+                      {/* 일자 탭이 이미 날짜/공휴일/기간-벗어남을 보이므로 여기선 일출/일몰만. */}
+                      <TripDayHeader day={day} showSummary={false} />
+                      <TripWeatherSummary
+                        weather={
+                          day.pois[0]?.feature_id
+                            ? (day.weather_by_feature_id[day.pois[0].feature_id] ?? null)
+                            : null
+                        }
+                        weatherCards={day.weather_cards}
+                        date={day.effective_date}
+                        label="날짜 날씨"
+                        compact={mobileWebLayout}
+                      />
+                      <TripAttachments
+                        tripId={tripId}
+                        dayIndex={day.day_index}
+                        title={`${day.day_index}일차 파일`}
+                        compact
+                      />
+                      <MapSearchBox onSelect={handleAddPlace} getBias={getSearchBias} />
+                      <TripDayOptimize
+                        tripId={tripId}
+                        dayIndex={day.day_index}
+                        poiCount={day.pois.length}
+                        onApplied={reload}
+                      />
+                      {mutationError && (
+                        <p
+                          role="alert"
+                          className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text"
+                          data-testid="poi-mutation-error"
+                        >
+                          {mutationError}
+                        </p>
+                      )}
+                      {addNotice && !mutationError && (
+                        <p
+                          role="status"
+                          className="rounded-sm bg-surface-soft px-3 py-2 text-sm text-ink"
+                          data-testid="poi-add-notice"
+                        >
+                          {addNotice}
+                        </p>
+                      )}
+                      <TripPoiList
+                        pois={day.pois}
+                        dayIndex={day.day_index}
+                        selectedPoiId={selectedPoiId}
+                        onSelectPoi={handleSelectPoi}
+                        tripId={tripId}
+                        dayDate={day.effective_date}
+                        weatherCards={day.weather_cards}
+                        weatherByFeatureId={day.weather_by_feature_id}
+                        showInlineAttachments
+                        showWeather
+                        compact={mobileWebLayout}
+                        editable={!busy}
+                        onReorder={handleReorder}
+                        onEditPoi={handleEditPoi}
+                        dayOptions={view.days.map((day) => ({
+                          day_index: day.day_index,
+                          title: day.title,
+                        }))}
+                        onDelete={handleDelete}
+                        savingPoiId={savingPoiId}
+                        editingPoiId={editingPoiId}
+                        onEditToggle={setEditingPoiId}
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1 px-3 pb-2">
+                      {day.pois.length > 0 &&
+                        day.pois.slice(0, 4).map((poi, index) => (
+                          <button
+                            key={poi.poi_id}
+                            type="button"
+                            onClick={() => handleSelectPoi(poi.poi_id)}
+                            className="flex w-full items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-surface-soft"
+                          >
+                            <span
+                              // 마커 팔레트 인라인 색 위 숫자라 순백이 맞다(T-313 예외).
+                              // eslint-disable-next-line no-restricted-syntax
+                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                              style={{ backgroundColor: paletteHex(poi.marker_color) }}
+                              aria-hidden="true"
+                            >
+                              {index + 1}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
+                              {poi.title ?? poi.feature_id ?? '장소'}
+                            </span>
+                          </button>
+                        ))}
+                      {day.pois.length > 4 && (
+                        <p className="pl-7 text-xs text-muted">외 {day.pois.length - 4}곳</p>
+                      )}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function TripSettingsDialog({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const { busy, cancelTripEditAndClose, closeTripEdit, handleEditTrip, trip, tripEditError } =
+    viewModel;
+  return (
+    <TripEditDialog
+      trip={trip}
+      saving={busy}
+      error={tripEditError}
+      onSave={handleEditTrip}
+      onClose={closeTripEdit}
+      onCancelBusy={cancelTripEditAndClose}
+    />
+  );
+}
+
+function ManualPlaceDialog({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const {
+    busy,
+    handleCreateManualPoi,
+    manualPoiCoord,
+    manualPoiError,
+    selectedDay,
+    setManualPoiCoord,
+    setManualPoiError,
+  } = viewModel;
+  if (!manualPoiCoord || !selectedDay) return null;
+  return (
+    <TripManualPoiDialog
+      coord={manualPoiCoord}
+      dayLabel={selectedDay.title ?? `${selectedDay.day_index}일차`}
+      saving={busy}
+      error={manualPoiError}
+      onClose={() => {
+        setManualPoiError(null);
+        setManualPoiCoord(null);
+      }}
+      onCreate={handleCreateManualPoi}
+    />
+  );
+}
+
+function TripConflictDialog({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const {
+    busy,
+    conflict,
+    conflictError,
+    handleApplyConflict,
+    handleKeepEditingConflict,
+    handleUseServerConflict,
+    tripId,
+  } = viewModel;
+  if (!conflict) return null;
+  return (
+    <ConflictDialog
+      key={`${conflict.target}-${conflict.target === 'poi' ? conflict.poiId : tripId}-${conflict.version}`}
+      title={conflict.target === 'trip' ? '여행 정보 충돌' : `${conflict.title} 편집 충돌`}
+      description="다른 변경이 먼저 저장되었습니다. 각 필드에서 서버 값 또는 내 값을 고른 뒤 저장할 수 있습니다."
+      fields={conflict.fields}
+      saving={busy}
+      error={conflictError}
+      onApply={handleApplyConflict}
+      onUseServer={handleUseServerConflict}
+      onKeepEditing={handleKeepEditingConflict}
+    />
+  );
+}
+
+function DeleteTripDayDialog({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const {
+    busy,
+    confirmForceDeleteDay,
+    dayDeleteConfirm,
+    dayDeleteTriggerRef,
+    setDayDeleteConfirm,
+  } = viewModel;
+  if (!dayDeleteConfirm) return null;
+  return (
+    <ConfirmDialog
+      open={dayDeleteConfirm != null}
+      tone="danger"
+      title={`${dayDeleteConfirm?.dayIndex ?? ''}일차를 삭제할까요?`}
+      description={
+        dayDeleteConfirm
+          ? `이 일자에는 POI ${dayDeleteConfirm.poiCount}곳이 있습니다. 삭제하면 함께 제거되며 되돌릴 수 없습니다.`
+          : undefined
+      }
+      confirmLabel="일자와 POI 삭제"
+      cancelLabel="취소"
+      busy={busy}
+      onConfirm={confirmForceDeleteDay}
+      onCancel={() => setDayDeleteConfirm(null)}
+      // 트리거(일자 삭제)는 busy로 disabled된 채 이 다이얼로그가 열리므로 직전 포커스가 body다.
+      // 닫힐 때 돌아갈 자리를 명시한다(T-315 3차 리뷰).
+      returnFocusRef={dayDeleteTriggerRef}
+      testId="day-delete-confirm"
+    />
+  );
+}
+
+function TripSidePanel({ viewModel }: { viewModel: TripDetailView2Model }) {
+  const {
+    activePanel,
+    commentsRevision,
+    companions,
+    detailPanelClassName,
+    mobileWebLayout,
+    panelScrollFocusable,
+    reload,
+    setPanelScrollElement,
+    setPanelScrollFocused,
+    tripId,
+    view,
+  } = viewModel;
+  return (
+    <aside
+      id="trip-detail-panel"
+      className={detailPanelClassName}
+      aria-label="여행 상세"
+      data-testid="trip-detail-panel"
+    >
+      {mobileWebLayout && <TripDetailView2Part3 viewModel={viewModel} />}
+      {/* 데스크톱은 이 영역의 containing block이 되어야 한다 — 아니면 목록 안 absolute(sr-only 등)
+              요소가 스크롤 상자의 잘라내기를 벗어나 창 높이로 고정한 문서를 다시 늘린다(#704). */}
+      <div
+        ref={setPanelScrollElement}
+        className={
+          mobileWebLayout
+            ? 'min-h-0 flex-1 overflow-y-auto'
+            : // 초점 링은 안쪽에 — 바깥 outline은 이웃 지도 열·헤더·창 끝에 잘린다.
+              'relative min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus'
+        }
+        // 데스크톱은 이 영역만 스크롤한다 — 넘칠 때만 키보드 스크롤용 초점을 받는다. group은
+        // landmark가 아니라 상세 패널(aside)과 겹치는 landmark를 만들지 않으면서 초점 때 이름을 읽힌다.
+        tabIndex={panelScrollFocusable ? 0 : undefined}
+        onFocus={(event) => {
+          if (event.target === event.currentTarget) setPanelScrollFocused(true);
+        }}
+        onBlur={(event) => {
+          if (event.target === event.currentTarget) setPanelScrollFocused(false);
+        }}
+        role={panelScrollFocusable ? 'group' : undefined}
+        aria-label={panelScrollFocusable ? '여행 상세 내용' : undefined}
+        data-testid="trip-detail-panel-scroll"
+      >
+        {activePanel === 'plan' && <TripPlanPanel viewModel={viewModel} />}
+
+        {activePanel === 'files' && <TripDetailView2Part4 viewModel={viewModel} />}
+
+        {activePanel === 'share' && (
+          <div
+            id="trip-panel-share"
+            role="tabpanel"
+            aria-label="공유"
+            className="space-y-4 p-4 md:p-5"
+          >
+            <div id="trip-share-section">
+              <TripShareLinks tripId={tripId} shareLinks={view.share_links} onChanged={reload} />
+            </div>
+            <TripTelegramTargets
+              tripId={tripId}
+              dayIndexes={view.days.map((day) => day.day_index)}
+            />
+          </div>
+        )}
+
+        {activePanel === 'people' && (
+          <div
+            id="trip-panel-people"
+            role="tabpanel"
+            aria-label="동행"
+            className="space-y-4 p-4 md:p-5"
+          >
+            <TripCompanions tripId={tripId} companions={companions} onChanged={reload} />
+          </div>
+        )}
+
+        {activePanel === 'comments' && (
+          <div
+            id="trip-panel-comments"
+            role="tabpanel"
+            aria-label="댓글"
+            className="space-y-4 p-4 md:p-5"
+          >
+            <TripComments
+              tripId={tripId}
+              ownerUserId={view.trip.owner_user_id}
+              refreshKey={commentsRevision}
+            />
+          </div>
+        )}
+      </div>
+    </aside>
   );
 }

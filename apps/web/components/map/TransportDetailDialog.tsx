@@ -1,14 +1,10 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { FeatureDetailModal } from '@/components/map/FeatureDetailModal';
+import { isAbortError } from '@/lib/abort';
+import { apiClient } from '@/lib/api';
+import type { TransportDetailTarget } from '@/lib/useTransportLayers';
 import { ApiError, transportApi } from '@pinvi/api-client';
-import type {
-  FuelPriceHistoryResponse,
-  FuelStationItem,
-  TransportDetailResponse,
-  TransportFreshness,
-  TransportItem,
-} from '@pinvi/schemas';
 import {
   formatFuelPrice,
   fuelProductLabel,
@@ -17,10 +13,14 @@ import {
   transportItemTitle,
   transportLayerLabel,
 } from '@pinvi/domain';
-import { FeatureDetailModal } from '@/components/map/FeatureDetailModal';
-import { apiClient } from '@/lib/api';
-import { isAbortError } from '@/lib/abort';
-import type { TransportDetailTarget } from '@/lib/useTransportLayers';
+import type {
+  FuelPriceHistoryResponse,
+  FuelStationItem,
+  TransportDetailResponse,
+  TransportFreshness,
+  TransportItem,
+} from '@pinvi/schemas';
+import { useEffect, useState, type ReactNode } from 'react';
 
 const HISTORY_DAYS = 30;
 const HISTORY_ROWS_PER_PRODUCT = 7;
@@ -69,7 +69,9 @@ function Freshness({
   label?: string;
 }) {
   // 대화상자는 열린 동안만 산다 — 받은 시각 기준 나이로 충분하다(Map age_seconds + 0).
-  const text = transportFreshnessLabel(transportFreshnessAgeSeconds(freshness, receivedAt, receivedAt));
+  const text = transportFreshnessLabel(
+    transportFreshnessAgeSeconds(freshness, receivedAt, receivedAt),
+  );
   return (
     <p className="text-xs text-muted" data-testid="transport-detail-freshness">
       {label ? `${label} ` : ''}
@@ -195,78 +197,113 @@ function FuelStationBody({ item }: { item: FuelStationItem }) {
   );
 }
 
-function ItemBody({ item }: { item: TransportItem }) {
+function ItemBody(...args: Parameters<typeof useItemBodyModel>) {
+  const viewModel = useItemBodyModel(...args);
+  if (viewModel.renderBranch === 'render0') return <ItemBodyView0 viewModel={viewModel} />;
+  if (viewModel.renderBranch === 'render1') return <ItemBodyView1 viewModel={viewModel} />;
+  if (viewModel.renderBranch === 'render2') return <ItemBodyView2 viewModel={viewModel} />;
+  if (viewModel.renderBranch === 'render3') return <ItemBodyView3 viewModel={viewModel} />;
+  return null;
+}
+
+function useItemBodyModel({ item }: { item: TransportItem }) {
   switch (item.layer) {
     case 'fuel_station':
-      return <FuelStationBody item={item} />;
+      return { renderBranch: 'render0' as const, item };
     case 'rest_area': {
       const prices = item.fuel_prices;
-      return (
-        <>
-          {prices && (
-            <div className="rounded-sm border border-hairline p-2" data-testid="transport-fuel-prices">
-              <ul className="text-sm">
-                <li className="flex justify-between py-0.5">
-                  <span className="text-body">휘발유</span>
-                  <span className="font-semibold text-ink">{formatFuelPrice(prices.gasoline_price)}</span>
-                </li>
-                <li className="flex justify-between py-0.5">
-                  <span className="text-body">경유</span>
-                  <span className="font-semibold text-ink">{formatFuelPrice(prices.diesel_price)}</span>
-                </li>
-                {prices.lpg_price != null && (
-                  <li className="flex justify-between py-0.5">
-                    <span className="text-body">LPG</span>
-                    <span className="font-semibold text-ink">{formatFuelPrice(prices.lpg_price)}</span>
-                  </li>
-                )}
-              </ul>
-              {prices.oil_company && <p className="text-xs text-muted">{prices.oil_company}</p>}
-            </div>
-          )}
-          <dl>
-            {item.route_name && (
-              <Row label="노선">
-                {item.route_name}
-                {item.direction ? ` (${item.direction} 방향)` : ''}
-              </Row>
-            )}
-            {yesNo(item.has_gas_station) && <Row label="주유소">{yesNo(item.has_gas_station)}</Row>}
-            {yesNo(item.has_lpg_station) && <Row label="LPG 충전">{yesNo(item.has_lpg_station)}</Row>}
-            {yesNo(item.has_ev_charger) && <Row label="전기차 충전">{yesNo(item.has_ev_charger)}</Row>}
-          </dl>
-        </>
-      );
+      return { renderBranch: 'render1' as const, item, prices };
     }
     case 'highway_incident':
-      return (
-        <dl>
-          {item.incident_type && <Row label="유형">{item.incident_type}</Row>}
-          {item.process_status && <Row label="처리 상태">{item.process_status}</Row>}
-          {item.route_name && (
-            <Row label="노선">
-              {item.route_name}
-              {item.direction ? ` (${item.direction} 방향)` : ''}
-            </Row>
-          )}
-          {item.point_name && <Row label="위치">{item.point_name}</Row>}
-          {item.congestion_length != null && <Row label="정체">{item.congestion_length} km</Row>}
-          {kstText(item.occurred_at) && <Row label="발생">{kstText(item.occurred_at)}</Row>}
-          {item.message && <Row label="내용">{item.message}</Row>}
-        </dl>
-      );
+      return { renderBranch: 'render2' as const, item };
     case 'airport':
-      return (
-        <dl>
-          <Row label="영문명">{item.name_english}</Row>
-          <Row label="코드">
-            {item.iata_code}
-            {item.icao_code ? ` / ${item.icao_code}` : ''}
-          </Row>
-          {item.municipality && <Row label="지역">{item.municipality}</Row>}
-        </dl>
-      );
+      return { renderBranch: 'render3' as const, item };
   }
+}
+
+type ItemBodyView0Model = Extract<ReturnType<typeof useItemBodyModel>, { renderBranch: 'render0' }>;
+function ItemBodyView0({ viewModel }: { viewModel: ItemBodyView0Model }) {
+  const { item } = viewModel;
+  return <FuelStationBody item={item} />;
+}
+
+type ItemBodyView1Model = Extract<ReturnType<typeof useItemBodyModel>, { renderBranch: 'render1' }>;
+function ItemBodyView1({ viewModel }: { viewModel: ItemBodyView1Model }) {
+  const { item, prices } = viewModel;
+  return (
+    <>
+      {prices && (
+        <div className="rounded-sm border border-hairline p-2" data-testid="transport-fuel-prices">
+          <ul className="text-sm">
+            <li className="flex justify-between py-0.5">
+              <span className="text-body">휘발유</span>
+              <span className="font-semibold text-ink">
+                {formatFuelPrice(prices.gasoline_price)}
+              </span>
+            </li>
+            <li className="flex justify-between py-0.5">
+              <span className="text-body">경유</span>
+              <span className="font-semibold text-ink">{formatFuelPrice(prices.diesel_price)}</span>
+            </li>
+            {prices.lpg_price != null && (
+              <li className="flex justify-between py-0.5">
+                <span className="text-body">LPG</span>
+                <span className="font-semibold text-ink">{formatFuelPrice(prices.lpg_price)}</span>
+              </li>
+            )}
+          </ul>
+          {prices.oil_company && <p className="text-xs text-muted">{prices.oil_company}</p>}
+        </div>
+      )}
+      <dl>
+        {item.route_name && (
+          <Row label="노선">
+            {item.route_name}
+            {item.direction ? ` (${item.direction} 방향)` : ''}
+          </Row>
+        )}
+        {yesNo(item.has_gas_station) && <Row label="주유소">{yesNo(item.has_gas_station)}</Row>}
+        {yesNo(item.has_lpg_station) && <Row label="LPG 충전">{yesNo(item.has_lpg_station)}</Row>}
+        {yesNo(item.has_ev_charger) && <Row label="전기차 충전">{yesNo(item.has_ev_charger)}</Row>}
+      </dl>
+    </>
+  );
+}
+
+type ItemBodyView2Model = Extract<ReturnType<typeof useItemBodyModel>, { renderBranch: 'render2' }>;
+function ItemBodyView2({ viewModel }: { viewModel: ItemBodyView2Model }) {
+  const { item } = viewModel;
+  return (
+    <dl>
+      {item.incident_type && <Row label="유형">{item.incident_type}</Row>}
+      {item.process_status && <Row label="처리 상태">{item.process_status}</Row>}
+      {item.route_name && (
+        <Row label="노선">
+          {item.route_name}
+          {item.direction ? ` (${item.direction} 방향)` : ''}
+        </Row>
+      )}
+      {item.point_name && <Row label="위치">{item.point_name}</Row>}
+      {item.congestion_length != null && <Row label="정체">{item.congestion_length} km</Row>}
+      {kstText(item.occurred_at) && <Row label="발생">{kstText(item.occurred_at)}</Row>}
+      {item.message && <Row label="내용">{item.message}</Row>}
+    </dl>
+  );
+}
+
+type ItemBodyView3Model = Extract<ReturnType<typeof useItemBodyModel>, { renderBranch: 'render3' }>;
+function ItemBodyView3({ viewModel }: { viewModel: ItemBodyView3Model }) {
+  const { item } = viewModel;
+  return (
+    <dl>
+      <Row label="영문명">{item.name_english}</Row>
+      <Row label="코드">
+        {item.iata_code}
+        {item.icao_code ? ` / ${item.icao_code}` : ''}
+      </Row>
+      {item.municipality && <Row label="지역">{item.municipality}</Row>}
+    </dl>
+  );
 }
 
 function addressOf(item: TransportItem): string | null {
@@ -285,7 +322,15 @@ export interface TransportDetailDialogProps {
 }
 
 /** transport 항목 상세(ADR-076 D6). feature 상세 셸(`FeatureDetailModal`)을 그대로 쓴다. */
-export function TransportDetailDialog({ target, onClose }: TransportDetailDialogProps) {
+export function TransportDetailDialog(...args: Parameters<typeof useTransportDetailDialogModel>) {
+  const viewModel = useTransportDetailDialogModel(...args);
+  if (viewModel.renderBranch === 'render0') return <TransportDetailDialogView0 />;
+  if (viewModel.renderBranch === 'render1')
+    return <TransportDetailDialogView1 viewModel={viewModel} />;
+  return null;
+}
+
+function useTransportDetailDialogModel({ target, onClose }: TransportDetailDialogProps) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const key = target ? `${target.layer}:${target.featureId}` : null;
@@ -313,10 +358,22 @@ export function TransportDetailDialog({ target, onClose }: TransportDetailDialog
     return () => controller.abort();
   }, [target]);
 
-  if (!target) return null;
+  if (!target) return { renderBranch: 'render0' as const };
   const item = loaded?.data.item ?? null;
   const address = item ? addressOf(item) : null;
   const phone = item ? phoneOf(item) : null;
+  return { renderBranch: 'render1' as const, address, error, item, loaded, onClose, phone, target };
+}
+function TransportDetailDialogView0() {
+  return null;
+}
+
+type TransportDetailDialogView1Model = Extract<
+  ReturnType<typeof useTransportDetailDialogModel>,
+  { renderBranch: 'render1' }
+>;
+function TransportDetailDialogView1({ viewModel }: { viewModel: TransportDetailDialogView1Model }) {
+  const { address, error, item, loaded, onClose, phone, target } = viewModel;
   return (
     <FeatureDetailModal
       open

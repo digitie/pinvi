@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import { Play, RefreshCw } from 'lucide-react';
 import { AdminPage } from '@/components/admin/AdminPage';
+import { ApiClient, ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Play, RefreshCw } from 'lucide-react';
+import { useState, type FormEvent } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -13,6 +13,7 @@ const apiClient = new ApiClient({
 const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 
 export default function AdminResetPage() {
+  const queryClient = useQueryClient();
   const [confirm, setConfirm] = useState('');
   const [accessReason, setAccessReason] = useState('');
   const [includeSeed, setIncludeSeed] = useState(true);
@@ -51,6 +52,7 @@ export default function AdminResetPage() {
       setMutationError(error instanceof ApiError ? error.message : 'reset dry-run에 실패했습니다.');
     },
     onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.auditAll() });
       setMutationNotice(`reset dry-run 감사 로그 #${result.audit_log_id} 기록 완료`);
     },
   });

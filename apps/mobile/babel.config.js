@@ -1,7 +1,7 @@
-// Expo + NativeWind babel preset. expo-router 진입은 babel-preset-expo가 처리한다.
+// NativeWind5는 Metro 통합을 사용한다. Expo Router의 Babel 설정은 유지한다.
 module.exports = function (api) {
   api.cache(true);
   return {
-    presets: [['babel-preset-expo', { jsxImportSource: 'nativewind' }], 'nativewind/babel'],
+    presets: ['babel-preset-expo'],
   };
 };

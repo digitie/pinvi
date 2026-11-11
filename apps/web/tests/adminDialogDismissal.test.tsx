@@ -27,7 +27,7 @@ function Harness({
 }) {
   return (
     <Dialog open hasUnsavedInput={hasUnsavedInput} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="panel" viewportProps={{ 'data-testid': 'viewport' }}>
+      <DialogContent data-testid="panel">
         <DialogTitle>제목</DialogTitle>
         <input aria-label="이름" defaultValue="" />
       </DialogContent>
@@ -55,7 +55,9 @@ describe('admin Dialog — 미저장 폼 입력 보호', () => {
     const onOpenChange = vi.fn();
     render(<Harness hasUnsavedInput onOpenChange={onOpenChange} />);
 
-    await user.click(screen.getByTestId('viewport'));
+    await user.click(
+      document.querySelector<HTMLElement>('[data-slot="dialog-overlay"][data-state="open"]')!,
+    );
 
     expect(onOpenChange.mock.calls.filter(([open]) => open === false)).toHaveLength(0);
   });
@@ -69,6 +71,18 @@ describe('admin Dialog — 미저장 폼 입력 보호', () => {
     await user.keyboard('{Escape}');
 
     expect(screen.getByLabelText('이름')).toHaveValue('설악산');
+  });
+
+  it('기본값에서는 실제 공통 overlay 클릭으로 닫힌다', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(<Harness onOpenChange={onOpenChange} />);
+    const overlay = document.querySelector<HTMLElement>(
+      '[data-slot="dialog-overlay"][data-state="open"]',
+    );
+    expect(overlay).toBeInTheDocument();
+    await user.click(overlay!);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
   it('기본값(폼 아님)에서는 Escape로 닫힌다 — 전부 막으면 사용자가 갇힌다', async () => {

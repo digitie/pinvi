@@ -9,24 +9,26 @@ React Native 앱이다.
 [ADR-043](../../docs/decisions.md) / [ADR-044](../../docs/decisions.md) /
 [ADR-045](../../docs/decisions.md)를 본다.
 
-## 현재 의존성 기준 (SDK57 패치)
+## 현재 의존성 기준 (SDK58)
 
-현재 manifest와 root Expo pin은 모두 SDK57 `57.0.32`다. 이 문서의 SDK56 활성화 이력은 당시 기록이며 현재 설치 버전은 `package.json`·루트 `package-lock.json`을 기준으로 한다. 변경 후 설치는 저장소 지정 Node `22.23.1`과 npm `12.0.1`로 루트에서 `npm ci --no-audit --no-fund`를 실행한다. 루트 Expo와 앱 Expo는 함께 맞춰야 native module 중복 설치를 막을 수 있다. React/RN 고정과 기존 Expo 진단 제외 항목은 유지한다.
+현재 manifest/root Expo는58.0.24, RN0.88.1이다. NativeWind5.0.0-rc.1/react-native-css3.1.0-rc.1과 Tailwind/PostCSS4.3.5, 원본 수정 Lightning CSS1.33.0+nativecss.fix.4을 exact 사용한다. root/web/mobile이 apps/web/vendor의 동일 tgz를 공유하며 원장·lock SHA512를 검사한다. 지도 core1.0.1/web1.0.3/RN1.0.1은 같은 GitHub source9a 산출물이다. .native는 RN public adapter, .web은 SSR 이후 web public adapter를 선택한다.
 
-## 현재 상태 — 활성화됨 (Sprint M-1, 2026-06-16)
+저장소 지정 Node22.23.1/npm12.0.1에서 root npm ci --no-audit --no-fund로 설치한다. Babel7.29.7은 SDK58 공식 preset의 Babel7 peer 때문에 유지한다. 상세 peer 근거와 실제 검증은 [이관 보고서](../../docs/reports/mobile-nativewind5-20261111.md)를 따른다.
 
-이 디렉터리는 **활성화된 Expo SDK 56 앱**이다(구조 스캐폴드 → 활성화). 다음이 반영됐다:
+## 활성화와 현재 검증
+
+이 디렉터리는 **활성화된 Expo SDK58 앱**이다. 최초 활성화는2026-06-16 SDK56에서 진행했으며 현재 설치 버전은 위 기준과 manifest/lock이 정본이다:
 
 1. **root `package.json`의 `workspaces`에 `apps/mobile` 등록.**
-2. **Expo SDK 56 의존성 설치 + `package-lock.json` 갱신** (`expo install --check` 정합 — 네이티브
-   모듈 전부 SDK 56 정렬).
+2. **Expo SDK58 의존성 설치 + `package-lock.json` 갱신** (`expo install --check` 정합 — 네이티브
+   모듈 전부 SDK58 정렬).
 3. **`tsc --noEmit` 통과** — 루트 `npm run typecheck`(전 workspace)에 `apps/mobile`이 포함된다.
 
 > CI(`web.yml`)의 `npm ci`가 이제 Expo 트리를 설치하고 typecheck에 `apps/mobile`을 포함한다
 > (ADR-041 활성화 — 의도적 CI-safe 유예 종료, web CI가 다소 무거워짐). `apps/mobile`은
-> `lint`(`eslint . --max-warnings 0`, Expo 표준 `eslint-config-expo` flat config, issue #215)와
+> `lint`(`eslint . --max-warnings 0`, ESLint10 지원 typescript-eslint/react-hooks flat config)와
 > `typecheck` 스크립트를 갖고, 전용 `mobile.yml`에서 `mobile-typecheck` + `mobile-lint`가 Aggregate
-> gate 필수 check다(`mobile-doctor`는 `expo-doctor` 정보성). `build` 스크립트는 없어 루트
+> gate 필수 check다. React Doctor의 full/warning gate는 mobile-typecheck에서 실행하고, mobile-export와 mobile-wasm-macos도 필수다(`mobile-doctor`는 별도의 `expo-doctor` 정보성). `build` 스크립트는 없어 루트
 > `npm run build --if-present`에서는 건너뛴다.
 
 남은 작업: development build 생성(아래) + 화면 구현(`docs/architecture/expo-implementation-plan.md`).
@@ -80,15 +82,15 @@ apps/mobile/
 │   ├── location.ts          # expo-location → @pinvi/hooks LocationAdapter
 │   ├── storage.ts           # AsyncStorage → zustand StateStorage
 │   └── stores.ts            # createAuthStore(AsyncStorage 주입)
-├── vendor/                  # vworld-map-{core,rn} tarball (ADR-044, file: 핀)
+├── components/VWorldMap.*    # .native RN / .web lazy web public adapter (공유 tarball은 ../web/vendor)
 ├── app.json                 # Expo Dev Client / New Architecture / minSdk 24 / VWorld 설정
 ├── eas.json                 # EAS Build profile (developmentClient=true)
-├── babel.config.js          # babel-preset-expo + nativewind
-├── metro.config.js          # monorepo watchFolders + NativeWind
-├── tailwind.config.js       # @pinvi/design-tokens preset + NativeWind preset
-├── global.css               # Tailwind directives
+├── babel.config.js          # babel-preset-expo (NativeWind5는 Metro 통합)
+├── metro.config.js          # monorepo watchFolders + NativeWind5
+├── postcss.config.mjs       # @tailwindcss/postcss4.3.5
+├── global.css               # Tailwind4 layer + 생성된 Pinvi CSS 테마
 ├── tsconfig.json            # ../../tsconfig.base.json 확장
-└── package.json             # Expo SDK 56 + @pinvi/* (설치 완료)
+└── package.json             # Expo SDK58 + @pinvi/* (설치 완료)
 ```
 
 공용 로직·데이터(스키마/ API 클라이언트/ 상태/ 디자인 토큰/ hook/ i18n)는 새로 쓰지 않고
@@ -99,8 +101,7 @@ apps/mobile/
 
 1. ~~root `workspaces`에 `apps/mobile` 추가~~ — ✅ 완료(2026-06-16).
 2. ~~의존성 설치 + 버전 정합~~ — ✅ 완료(2026-06-16 기준 `expo-doctor` 21/21). `package-lock.json`
-   갱신(web CI `npm ci`에 포함). **현재 `expo-doctor`는 3건 실패**(SDK-56 patch 드리프트 · Hermes V1
-   회귀 · react 중복) — informational job이며 정리는 T-311이 맡는다.
+   갱신(web CI `npm ci`에 포함). **당시 SDK56 `expo-doctor`의 3건 실패**(patch 드리프트 · Hermes V1 회귀 · react 중복)는 과거 기록이다. 현재 SDK58 설치와 검사 결과는 위 이관 보고서를 따른다.
 3. **Development build 생성 (EAS) — Expo 계정 로그인 필요(인터랙티브, 사용자 수행).**
    ```bash
    cd apps/mobile
@@ -152,3 +153,15 @@ API(`12801`)는 WSL에서 `127.0.0.1`(IPv4)로 바인딩되므로 `10.0.2.2:1280
 > clean npm ci에서는 실제 CLI → router-server → `expo-router/_ctx-shared` 해석과 Android Metro export를
 > 수동 symlink 없이 확인했다. 예전 symlink 우회는 추가하지 않는다. 이 확인은 native Dev Client의
 > 기기 실행 성공을 뜻하지 않는다. 지도 표면 확인에는 서버의 `PINVI_VWORLD_API_KEY`가 필요하다.
+
+## NativeWind5 RC 이관
+
+NativeWind5.0.0-rc.1/react-native-css3.1.0-rc.1, Tailwind/PostCSS4.3.5 exact를 사용한다. [이관·검증 기록](../../docs/reports/mobile-nativewind5-20261111.md)을 참고한다. `npm run check:styling`·`npm run doctor`·`npm run export:web`·`npm run export:android`·`npm run export:ios`로 검사한다. c8/fix.4로 Android/iOS/Web SSR 및 별도 빈 cache의 Linux 강제WASM iOS export가 통과했다. N150 SDK58 웹375/1280px 스모크PASS이며 macOS/EAS/네이티브 실기기는 미실행이다.
+
+## SDK patch 진단 gate — 2026-11-12
+
+Expo58.0.24·Constants58.0.16·Linking58.0.17·Router58.0.31 exact를 사용하고 C11은 유지한다.
+React Doctor는 doctor script의 React 코드 검사다. 별도 SDK 진단은 apps/mobile에서
+npx --yes expo-doctor@1.20.2 "$PWD"를 실행한다. 실제20/20 확인 후 mobile-doctor를 aggregate 필수 검사로 승격했다.
+새 SDK export·font·375/1280px smoke·macOS 강제WASM과 새 main web 전체는 hosted CI 증거로 확인한다.
+[현재 SDK 기록](../../docs/reports/pinvi-expo-sdk-patches-20261112.json)을 따른다.

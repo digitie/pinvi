@@ -1,0 +1,416 @@
+{
+  "baselineHead": "328c7b634e34d56a1be4067b222e87ed3ae0ebf5",
+  "verifiedAtUtc": "2026-11-11T19:41:56.733463+00:00",
+  "parentLatestRegistryProof": "validation/pinvi-expo-registry-latest-20261112.json",
+  "parentLatestRegistryProofSha256": "f112bda93f59cca127e26fabe966d2c79c5c781991261158d4c9dd77b366767a",
+  "sdk": {
+    "expo": {
+      "before": "58.0.23",
+      "after": "58.0.24",
+      "engines": {
+        "node": "^22.13.0 || ^24.3.0 || ^26.0.0 || >=27.0.0"
+      },
+      "peers": {
+        "react": "*",
+        "react-dom": "*",
+        "react-native": "*",
+        "react-native-web": "*",
+        "@expo/dom-webview": "*",
+        "@expo/metro-runtime": "*",
+        "react-native-webview": "*"
+      },
+      "integrity": "sha512-EPgijeqjnK+eaoA9VzJvvodmKBxEcfNlRBxyZr5s1dmvjgF13p3HfEr6eRjsTtnXdz/GlKn2uffTM1uHZeaSVQ=="
+    },
+    "expo-constants": {
+      "before": "58.0.15",
+      "after": "58.0.16",
+      "engines": null,
+      "peers": {
+        "expo": "*",
+        "react-native": "*"
+      },
+      "integrity": "sha512-sVETnE1ktBMclc2Ve3qNrHhOCCio75a9JdghnJYGbqblmKfrrfE+lO9K4g9kNtmslIBLTK9Dyty6PbubkXs3Yw=="
+    },
+    "expo-linking": {
+      "before": "58.0.16",
+      "after": "58.0.17",
+      "engines": null,
+      "peers": {
+        "expo": "*",
+        "react": "*",
+        "react-native": "*"
+      },
+      "integrity": "sha512-NFOt1L+FdW1uwjnwvvW+1oZ8j0W1IpYydKKuqny7tCiDVmHLxDYiYgXbyuHNAMLdQYjCBknq4910DmTM1x/XGw=="
+    },
+    "expo-router": {
+      "before": "58.0.30",
+      "after": "58.0.31",
+      "engines": null,
+      "peers": {
+        "expo": "*",
+        "react": "*",
+        "@expo/ui": "^58.0.28",
+        "react-dom": "*",
+        "expo-linking": "^58.0.17",
+        "expo-symbols": "^58.0.5",
+        "react-native": "*",
+        "@expo/log-box": "^58.0.15",
+        "expo-constants": "^58.0.16",
+        "react-native-web": "*",
+        "@expo/metro-runtime": "^58.0.17",
+        "react-native-screens": "^4.30.1 || ^5.0.0-alpha.3",
+        "react-native-worklets": "*",
+        "react-native-reanimated": "*",
+        "react-server-dom-webpack": "~19.0.4 || ~19.1.5 || ~19.2.4 || ~19.3.0",
+        "react-native-gesture-handler": "*",
+        "@testing-library/react-native": ">= 14.0.0",
+        "react-native-safe-area-context": ">= 5.4.0"
+      },
+      "integrity": "sha512-ERucCp882Yo3wDUZ/MKwW22UF5MtQxDFIQzWWnFXlqe9gfOnWN/smBcNNhQiVW5je3nX5OOd4o5RlTCojvCIrA=="
+    }
+  },
+  "actual": {
+    "sdk": {
+      "expo": "58.0.24",
+      "expo-constants": "58.0.16",
+      "expo-linking": "58.0.17",
+      "expo-router": "58.0.31"
+    },
+    "c11Packages": {
+      "@kor-travel/tokens": {
+        "files": 25,
+        "sha256": "7e88aaf70b93fed953198779fd17a003e327499e686794fd5f647b23cc325ad3",
+        "sameC11Bytes": true
+      },
+      "@kor-travel/ui": {
+        "files": 94,
+        "sha256": "16b4c213453fb02b527f8e4ae673a703e4ba3808538ae6fb24f70bdda770d213",
+        "sameC11Bytes": true
+      },
+      "lightningcss": {
+        "files": 19,
+        "sha256": "12c8326428a56e38231f7b5b376df0c6882e3492da794f3499269628edcaccf0",
+        "sameC11Bytes": true
+      },
+      "vworld-map-core": {
+        "files": 25,
+        "sha256": "36d3ba16a3ba65f7a460db6027c07e29821f2795b15a526413949210f0ce92b6",
+        "sameC11Bytes": true
+      },
+      "vworld-map-rn": {
+        "files": 34,
+        "sha256": "352307615edad047cc100cff6a39c625e778f77434b48475c9930e25ca7b6404",
+        "sameC11Bytes": true
+      },
+      "vworld-map-web": {
+        "files": 85,
+        "sha256": "1ab9af8794979a5a19e5ac635cd04a9e87b9847058eaf4e9df743143b8ad4104",
+        "sameC11Bytes": true
+      },
+      "@radix-ui/react-focus-scope": {
+        "files": 15,
+        "sha256": "1ca04870692565c243130d99c3dba91f3ac853ab2ec9538fc7b658b17fb7b49a",
+        "sameC11Bytes": true
+      }
+    },
+    "c11ArchiveFiles": 297
+  },
+  "mainMerge": {
+    "base": "328c7b634e34d56a1be4067b222e87ed3ae0ebf5",
+    "main": "476b8b8100986d904c207140eefc986ee2a78991",
+    "mergeHead": "cad9e6b6a9d1c8c79b8ed70a522661c996965201",
+    "mergeTree": "be3ef0f8fa34b40428b4a82dc821c1f5f048f14a",
+    "sameAsPreviousMobileCiMergeTree": true,
+    "incomingPaths": [
+      "apps/web/components/map/TransportLayerControls.tsx",
+      "apps/web/components/trips/TripMapView.tsx",
+      "apps/web/e2e-live/specs/nearby/trip-map.live.spec.ts",
+      "apps/web/e2e/trip-detail.e2e.ts",
+      "apps/web/tests/TransportLayerControls.test.tsx"
+    ],
+    "wipPatchSha256": "75f306a6e8116e4c24f7e841ec54631f07308f8f20efd6ab29b566de01b70de1",
+    "wipReapplied": true,
+    "mergeBase": "d42ac95300749df955ce9e2bb63ea62eba36da09",
+    "incomingBlobProof": [
+      {
+        "path": "apps/web/components/map/TransportLayerControls.tsx",
+        "base": "7d6e936201ccaf1afbdbbba8be19b91479569602",
+        "ours": "7d6e936201ccaf1afbdbbba8be19b91479569602",
+        "main": "852b6fe4722ad5fe0d0ecdc66ee00ca6945bec49",
+        "merged": "852b6fe4722ad5fe0d0ecdc66ee00ca6945bec49",
+        "priorCiMerge": "852b6fe4722ad5fe0d0ecdc66ee00ca6945bec49",
+        "sameAsMainBlob": true
+      },
+      {
+        "path": "apps/web/components/trips/TripMapView.tsx",
+        "base": "e8cb9699dd91490c3e39b5df358d6acd4639ed15",
+        "ours": "af84583442da3801107b280d3b5b3a9110132b48",
+        "main": "d7342daffa5f23bd27a84b0fd99ef4451e0c17e7",
+        "merged": "bb9142eee2b221e3bc9c45edb6b15652e57b4390",
+        "priorCiMerge": "bb9142eee2b221e3bc9c45edb6b15652e57b4390",
+        "sameAsMainBlob": false
+      },
+      {
+        "path": "apps/web/e2e-live/specs/nearby/trip-map.live.spec.ts",
+        "base": "fd251e0309c2bf28d0431feebb4a42516143388d",
+        "ours": "fd251e0309c2bf28d0431feebb4a42516143388d",
+        "main": "5e763b965beb7743d2f27ae74bc140cb73d7679e",
+        "merged": "5e763b965beb7743d2f27ae74bc140cb73d7679e",
+        "priorCiMerge": "5e763b965beb7743d2f27ae74bc140cb73d7679e",
+        "sameAsMainBlob": true
+      },
+      {
+        "path": "apps/web/e2e/trip-detail.e2e.ts",
+        "base": "297e8c032655ebbc0541ccc2173f6c5e9a1a6202",
+        "ours": "297e8c032655ebbc0541ccc2173f6c5e9a1a6202",
+        "main": "8377d35a7f39084a826fcd2f8dbd8281bb5f2337",
+        "merged": "8377d35a7f39084a826fcd2f8dbd8281bb5f2337",
+        "priorCiMerge": "8377d35a7f39084a826fcd2f8dbd8281bb5f2337",
+        "sameAsMainBlob": true
+      },
+      {
+        "path": "apps/web/tests/TransportLayerControls.test.tsx",
+        "base": "f3ec95db2dbd946f4f04cabc1e317ecfdfa97791",
+        "ours": "f3ec95db2dbd946f4f04cabc1e317ecfdfa97791",
+        "main": "6efd8ac967fb6f8ba0735c07ed906922b8f9cc89",
+        "merged": "6efd8ac967fb6f8ba0735c07ed906922b8f9cc89",
+        "priorCiMerge": "6efd8ac967fb6f8ba0735c07ed906922b8f9cc89",
+        "sameAsMainBlob": true
+      }
+    ],
+    "allIncomingMatchPriorSyntheticCi": true
+  },
+  "baselineCISyntheticTreeEqual": false,
+  "newMainMergeSameAsPriorCiTree": true,
+  "baselineC11WebCI": "explicit328:527unit+core138+marker24/full209PASS4SKIP/canvas3/restore2/imageboot PASS",
+  "baselineC11MobileCI": "synthetic2ce8198:exports/fonts/macOSWASM PASS; ExpoDoctor informational19/20 FAIL",
+  "newSdkDoctor": {
+    "version": "1.20.2",
+    "explicitPhysicalProject": "apps/mobile",
+    "passed": 20,
+    "total": 20,
+    "excludeChanged": false
+  },
+  "reactDoctor": {
+    "mobileIssues": 0
+  },
+  "localGates": {
+    "web-guard": 0,
+    "mobile-guard": 0,
+    "lock": 0,
+    "mobile-type": 0,
+    "mobile-lint": 0,
+    "mobile-react-doctor": 0
+  },
+  "commonAxesOrSevenPacksOrLedgersChanged": false,
+  "ciCoverage": {
+    "cleanTracked328": "1FAIL/3PASS",
+    "fixed": "4PASS",
+    "before": ".git/sdk-ci-trigger-clean-before.log",
+    "after": ".git/sdk-ci-trigger-clean-after.log",
+    "cause": "untracked local vendor masked absent clean-checkout path"
+  },
+  "requiredSdkGate": {
+    "job": "mobile-doctor",
+    "continueOnError": false,
+    "aggregateRequired": true
+  },
+  "freshHostedValidation": "커밋 시점 대기: 새 exact HEAD의 WebSSR/Android/iOS/font/smoke/macOSWASM 및 web 전체. 최종 결과는 tested head 보존을 위해 PR·root 인계에 추가 기록한다.",
+  "n150HeavyJobs": 0,
+  "productionMutated": false,
+  "lockVersionDelta": [
+    {
+      "path": "node_modules/@expo/cli",
+      "before": "58.1.19",
+      "after": "58.1.20"
+    },
+    {
+      "path": "node_modules/@expo/cli/node_modules/@expo/code-signing-certificates",
+      "before": "0.0.7",
+      "after": null
+    },
+    {
+      "path": "node_modules/@expo/cli/node_modules/@expo/inline-modules",
+      "before": "0.2.10",
+      "after": null
+    },
+    {
+      "path": "node_modules/@expo/cli/node_modules/@expo/metro-file-map",
+      "before": "58.0.6",
+      "after": null
+    },
+    {
+      "path": "node_modules/@expo/cli/node_modules/@expo/prebuild-config",
+      "before": "58.0.20",
+      "after": null
+    },
+    {
+      "path": "node_modules/@expo/cli/node_modules/@expo/router-server",
+      "before": "58.0.21",
+      "after": null
+    },
+    {
+      "path": "node_modules/@expo/cli/node_modules/expo-modules-autolinking",
+      "before": "58.1.0",
+      "after": null
+    },
+    {
+      "path": "node_modules/@expo/code-signing-certificates",
+      "before": null,
+      "after": "0.0.7"
+    },
+    {
+      "path": "node_modules/@expo/env",
+      "before": "2.5.4",
+      "after": "2.6.0"
+    },
+    {
+      "path": "node_modules/@expo/fingerprint",
+      "before": "0.21.9",
+      "after": "0.21.10"
+    },
+    {
+      "path": "node_modules/@expo/inline-modules",
+      "before": null,
+      "after": "0.2.10"
+    },
+    {
+      "path": "node_modules/@expo/metro-config",
+      "before": "58.0.21",
+      "after": "58.0.22"
+    },
+    {
+      "path": "node_modules/@expo/metro-file-map",
+      "before": null,
+      "after": "58.0.6"
+    },
+    {
+      "path": "node_modules/@expo/modules-macros-linux-arm64",
+      "before": "0.29.0",
+      "after": "0.33.0"
+    },
+    {
+      "path": "node_modules/@expo/modules-macros-linux-x64",
+      "before": "0.29.0",
+      "after": "0.33.0"
+    },
+    {
+      "path": "node_modules/@expo/modules-macros-win32-arm64",
+      "before": "0.29.0",
+      "after": "0.33.0"
+    },
+    {
+      "path": "node_modules/@expo/modules-macros-win32-x64",
+      "before": "0.29.0",
+      "after": "0.33.0"
+    },
+    {
+      "path": "node_modules/@expo/prebuild-config",
+      "before": null,
+      "after": "58.0.20"
+    },
+    {
+      "path": "node_modules/@expo/router-server",
+      "before": null,
+      "after": "58.0.22"
+    },
+    {
+      "path": "node_modules/@types/react-test-renderer",
+      "before": "19.3.0",
+      "after": "19.3.1"
+    },
+    {
+      "path": "node_modules/expo",
+      "before": "58.0.23",
+      "after": "58.0.24"
+    },
+    {
+      "path": "node_modules/expo-asset",
+      "before": "58.0.20",
+      "after": "58.0.21"
+    },
+    {
+      "path": "node_modules/expo-constants",
+      "before": "58.0.15",
+      "after": "58.0.16"
+    },
+    {
+      "path": "node_modules/expo-linking",
+      "before": "58.0.16",
+      "after": "58.0.17"
+    },
+    {
+      "path": "node_modules/expo-modules-autolinking",
+      "before": "58.0.17",
+      "after": "58.1.0"
+    },
+    {
+      "path": "node_modules/expo-modules-cli",
+      "before": "0.4.0",
+      "after": "0.5.0"
+    },
+    {
+      "path": "node_modules/expo-modules-core",
+      "before": "58.0.30",
+      "after": "58.1.0"
+    },
+    {
+      "path": "node_modules/expo-modules-macros",
+      "before": "0.29.0",
+      "after": "0.33.0"
+    },
+    {
+      "path": "node_modules/expo-router",
+      "before": "58.0.30",
+      "after": "58.0.31"
+    },
+    {
+      "path": "node_modules/getenv",
+      "before": "2.0.0",
+      "after": null
+    },
+    {
+      "path": "node_modules/glob",
+      "before": "13.0.7",
+      "after": null
+    },
+    {
+      "path": "node_modules/minipass",
+      "before": "7.1.3",
+      "after": null
+    },
+    {
+      "path": "node_modules/path-scurry",
+      "before": "2.0.2",
+      "after": null
+    },
+    {
+      "path": "node_modules/path-scurry/node_modules/lru-cache",
+      "before": "11.5.3",
+      "after": null
+    },
+    {
+      "path": "node_modules/react-native-gesture-handler",
+      "before": "3.4.0",
+      "after": "3.5.0"
+    }
+  ],
+  "incomingTransportFocusedUnitPassed": 10,
+  "webTypesAfterMain": "PASS",
+  "ciConfiguration": {
+    "mobileDoctorJobName": "mobile-doctor",
+    "continueOnErrorPresent": false,
+    "aggregateWaitsForMobileDoctor": true,
+    "SDKPathExplicit": true
+  },
+  "stylingGuardCorrection": {
+    "beforeHead": "d4187761a8f77bfae189cceb0ae21f611bfee9db",
+    "cause": "oldExpo58.0.23 exact; omitted local styling guard while SDK4 upgraded",
+    "freshHostedSdkDoctor": "20/20 SUCCESS job130764005230",
+    "beforeLog": ".git/sdk-style-before.log",
+    "afterLog": ".git/sdk-style-after.log",
+    "exactSDK4NowAllChecked": true,
+    "result": "PASS",
+    "runtimeSourceChanged": false
+  }
+}

@@ -27,7 +27,7 @@
  */
 import * as React from 'react';
 
-import { toneBadgeVariant } from '@/components/admin/status-badge-variants';
+import { toneBadgeTone } from '@/components/admin/status-badge-variants';
 import { Badge } from '@/components/admin/ui/badge';
 import { cn } from '@/lib/admin/cn';
 import { NULL_GLYPH } from '@/lib/admin/format';
@@ -57,7 +57,7 @@ export function StatusBadge({
     <Badge
       className={cn('gap-1.5', className)}
       data-tone={resolvedTone}
-      variant={toneBadgeVariant(resolvedTone)}
+      tone={toneBadgeTone(resolvedTone)}
       {...props}
     >
       {hideDot ? null : (

@@ -23,16 +23,28 @@
 // 보존한 것(계약): `admin-stat-<라벨>` testid 9개, 라벨/hint 문구, 값 포맷,
 // 카드 배열 순서, 나머지 Section 구조.
 
-import { useEffect, useState } from 'react';
+import { AdminPage, Section } from '@/components/admin/AdminPage';
+import { StatStrip } from '@/components/admin/stat-strip';
+import { apiClient } from '@/lib/api';
 import { ApiError, adminApi } from '@pinvi/api-client';
 import type {
   AdminStatsOverview,
   AdminSystemServiceStatus,
   AdminSystemSummary,
 } from '@pinvi/schemas';
-import { AdminPage, Section } from '@/components/admin/AdminPage';
-import { StatStrip } from '@/components/admin/stat-strip';
-import { apiClient } from '@/lib/api';
+import { useEffect, useState } from 'react';
+
+const displayFormatter1 = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const displayFormatter2 = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  hour: '2-digit',
+});
 
 const formatNumber = (value: number | null | undefined) =>
   value === null || value === undefined ? '—' : value.toLocaleString('ko-KR');
@@ -54,14 +66,7 @@ const formatBytes = (value: number | null | undefined) => {
   return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
 };
 const formatDateTime = (value: string | undefined) =>
-  value
-    ? new Intl.DateTimeFormat('ko-KR', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(new Date(value))
-    : '—';
+  value ? displayFormatter1.format(new Date(value)) : '—';
 const ratioPercent = (used: number | null | undefined, total: number | null | undefined) => {
   if (!used || !total || total <= 0) return 0;
   return Math.min(100, Math.round((used / total) * 100));
@@ -207,16 +212,12 @@ export default function AdminDashboardPage() {
   ];
   const series = stats?.series_24h ?? [];
   const seriesLabels = series.map((bucket) => ({
-    label: new Intl.DateTimeFormat('ko-KR', { hour: '2-digit' }).format(
-      new Date(bucket.bucket_start),
-    ),
+    label: displayFormatter2.format(new Date(bucket.bucket_start)),
     primary: bucket.api_calls,
     secondary: bucket.api_failures,
   }));
   const growthLabels = series.map((bucket) => ({
-    label: new Intl.DateTimeFormat('ko-KR', { hour: '2-digit' }).format(
-      new Date(bucket.bucket_start),
-    ),
+    label: displayFormatter2.format(new Date(bucket.bucket_start)),
     primary: bucket.users_created,
     secondary: bucket.trips_created,
   }));

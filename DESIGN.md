@@ -333,22 +333,20 @@ There are no progressive elevation tiers — the system either has the one shado
 (사용자 표면 한정 — 밀도 규칙이 다른 `(admin)`·`components/admin`은 제외). 규칙을 바꾸려면 이 문서와
 가드를 함께 고친다.
 
-**모달 계약**(T-315/T-316, `components/ui/Dialog` + `lib/useModalDialog`): **사용자 표면**의 모달은
-전부 이 프리미티브로 뜬다.
+**모달 계약**(T-315/T-316, 2026-11-12 공통 이관): 공개 Dialog/ConfirmDialog와 관리자
+어댑터 모두 `@kor-travel/ui`의 shadcn Radix를 사용한다. 공개 center/sheet 디자인과 관리자 밀도는
+각 어댑터의 표현 계약이다. 자체 portal·focus trap·inert snapshot·scroll lock·전역 dismiss 엔진을
+구현하거나 공통으로 복사하지 않는다. AppShell의 더보기도 공통 비모달 Popover를 사용한다.
 
-> **admin 예외**(T-356): `(admin)`·`components/admin`은 이 계약에서 제외한다. admin 표면은
-> kor-travel-map admin 규약에 정렬하며 `components/admin/ui/{dialog,alert-dialog,popover,tooltip}`
-> (base-ui 기반)을 쓴다. 아래 격리·포커스·busy 규칙은 그쪽 프리미티브가 자체 구현으로 만족시킨다.
-> 두 스택이 공존하지만 표면이 갈라져 있어 한 화면에서 섞이지 않는다 — 섞으면 focus trap과 `inert`
-> 스냅샷이 서로를 덮으므로, admin 페이지에서 `components/ui/Dialog`를 새로 쓰지 않는다.
-
-- **격리**: body 직계 컨테이너로 portal하고, 스택 최상단 모달의 컨테이너만 남긴 채 나머지 body 자식에
-  `inert`를 건다. `aria-hidden`은 걸지 않는다(inert가 이미 접근성 트리에서 제거하고, focused 요소의
-  조상에 aria-hidden을 거는 것은 ARIA 위반이다). 원복 스냅샷은 전역 1개 — 인스턴스별로 두면 중첩에서
-  아래 모달이 먼저 닫히며 배경을 풀어 버린다.
-- **키보드/포커스**: 스택 최상단 하나만 Escape/Tab을 처리한다. 포커스는 패널 안에 격납되고(버튼이
-  disabled/언마운트돼 body로 떨어지면 회수), 닫을 때는 직전 포커스 → 남은 최상단 모달 → `returnFocusRef`
-  순으로 복원한다. 트리거가 액션으로 사라지는 화면(삭제 등)은 목록·섹션 ref를 폴백으로 넘긴다.
+- **격리**: portal·배경 접근성 트리/포인터 격리·스크롤 잠금은 Radix가 소유한다. 자체 body 자식
+  inert 스냅샷을 추가하지 않는다. 중첩/해제 순서에 따른 배경 복원도 같은 엔진에 맡긴다.
+- **키보드/포커스**: 최상단 Radix FocusScope만 키를 처리한다. 공개 어댑터는 초기 패널/입력 대상과
+  직전 opener·비활성/삭제된 trigger의 returnFocusRef 폴백만 생명주기에 연결한다. 일반 Tab 양방향
+  순환·중첩 Escape·닫기 복귀를 실제 동작 테스트로 유지한다. 패널 초기 포커스의 역방향 진입은
+  현재 Radix에서 재현된 별도 회귀이며 기대를 낮추지 않고 공통 수정과 최종 브라우저 검증을 요구한다.
+- **바깥 클릭**: 공개 scrim은 완성된 click만 취소 의도로 받는다. 패널↔scrim drag나 pointerdown
+  한 번만으로 닫히지 않는다. Radix의 outside 기본 동작을 취소하고 단일 overlay 클릭 정책으로
+  연결하며 별도 포인터 리스너/스택은 만들지 않는다.
 - **busy(저장 중)**: 실수 경로(Escape·backdrop)는 **항상** 잠근다. 명시적 닫기(×)는 `onCancelBusy`를
   준 다이얼로그만 열려 있고, 그 콜백이 **in-flight 요청을 취소한 뒤** 닫는다(탈출구는 취소와 함께 준다).
   취소가 서버 처리를 되돌리지 못하는 비멱등 POST는 닫은 뒤 호출부가 재조회·불확실성 안내를 책임진다.

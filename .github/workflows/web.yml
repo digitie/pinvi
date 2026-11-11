@@ -16,13 +16,13 @@ on:
       - 'tsconfig.base.json'
       - '.github/workflows/web.yml'
       - '.github/workflows/aggregate-ci.yml'
-      # deps 스테이지가 **모든** workspace manifest와 vendored tarball로 `npx --yes npm@12.0.1 ci`를
-      # 돈다. 이 둘이 빠져 있으면 이미지 빌드 입력이 바뀌는데 `docker-image`가
-      # 돌지 않는다 — 방금 닫은 이중 선언을 CI 트리거로 옮겨 놓는 셈이다.
+      # deps 스테이지가 모든 workspace manifest와 공유 vendor로 설치한다.
+      # 모바일 manifest도 감시한다. 공유 vendor는 위 apps/web/**가 포함한다.
       - 'apps/mobile/package.json'
-      - 'apps/mobile/vendor/**'
       - '.dockerignore'
       - 'scripts/validate-image-provenance.sh'
+      - 'scripts/check_web_image_provenance.py'
+      - 'scripts/tests/test_web_image_provenance.py'
   push:
     branches: [main]
     paths:
@@ -39,13 +39,13 @@ on:
       - 'tsconfig.base.json'
       - '.github/workflows/web.yml'
       - '.github/workflows/aggregate-ci.yml'
-      # deps 스테이지가 **모든** workspace manifest와 vendored tarball로 `npx --yes npm@12.0.1 ci`를
-      # 돈다. 이 둘이 빠져 있으면 이미지 빌드 입력이 바뀌는데 `docker-image`가
-      # 돌지 않는다 — 방금 닫은 이중 선언을 CI 트리거로 옮겨 놓는 셈이다.
+      # deps 스테이지가 모든 workspace manifest와 공유 vendor로 설치한다.
+      # 모바일 manifest도 감시한다. 공유 vendor는 위 apps/web/**가 포함한다.
       - 'apps/mobile/package.json'
-      - 'apps/mobile/vendor/**'
       - '.dockerignore'
       - 'scripts/validate-image-provenance.sh'
+      - 'scripts/check_web_image_provenance.py'
+      - 'scripts/tests/test_web_image_provenance.py'
 
 concurrency:
   group: web-${{ github.ref }}
@@ -64,7 +64,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.23.1"
+          node-version: '22.23.1'
           cache: npm
 
       # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.
@@ -80,6 +80,12 @@ jobs:
 
       - name: Install dependencies
         run: npx --yes npm@12.0.1 ci --no-audit --no-fund
+
+      - name: Check common dependencies
+        run: npm run check:dependencies --workspace @pinvi/web
+
+      - name: React Doctor (web)
+        run: npm run doctor --workspace @pinvi/web
 
       - name: Lint (workspaces)
         run: npm run lint
@@ -111,20 +117,62 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Resolve and verify actual checkout revision
+        id: source
+        env:
+          EXPECTED_SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          revision="$(git rev-parse --verify HEAD^{commit})"
+          test "$revision" = "$EXPECTED_SOURCE_REVISION"
+          printf 'revision=%s\n' "$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Image provenance negative controls
+        run: python3 -m unittest discover -s scripts/tests -p test_web_image_provenance.py -v
+
       - name: Build the production web image
+        env:
+          PINVI_CI_SOURCE_REVISION: ${{ steps.source.outputs.revision }}
         run: >-
           docker build --file apps/web/Dockerfile
           --build-arg PINVI_BUILD_ENVIRONMENT=production
-          --build-arg PINVI_SOURCE_REVISION="${GITHUB_SHA}"
-          --tag "pinvi-web-ci:${GITHUB_SHA}" .
+          --build-arg PINVI_SOURCE_REVISION="${PINVI_CI_SOURCE_REVISION}"
+          --tag "pinvi-web-ci:${PINVI_CI_SOURCE_REVISION}" .
+
+      - name: Verify built OCI revision and ENV against checkout
+        env:
+          PINVI_CI_SOURCE_REVISION: ${{ steps.source.outputs.revision }}
+        run: |
+          docker image inspect "pinvi-web-ci:${PINVI_CI_SOURCE_REVISION}" > "$RUNNER_TEMP/web-image-inspect.json"
+          python3 scripts/check_web_image_provenance.py --expected-revision "$PINVI_CI_SOURCE_REVISION" "$RUNNER_TEMP/web-image-inspect.json"
+
+      - name: Reject a different valid commit label on the built metadata
+        env:
+          PINVI_CI_SOURCE_REVISION: ${{ steps.source.outputs.revision }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"])
+          image = json.loads((root / "web-image-inspect.json").read_text())
+          expected = os.environ["PINVI_CI_SOURCE_REVISION"]
+          wrong = "0" * 40 if expected != "0" * 40 else "1" * 40
+          image[0]["Config"]["Labels"]["org.opencontainers.image.revision"] = wrong
+          (root / "web-image-wrong-label.json").write_text(json.dumps(image))
+          PY
+          if python3 scripts/check_web_image_provenance.py --expected-revision "$PINVI_CI_SOURCE_REVISION" "$RUNNER_TEMP/web-image-wrong-label.json"; then
+            echo "different valid commit label was incorrectly accepted" >&2
+            exit 1
+          fi
 
       # `next`는 항상 루트로 hoist되므로 그 해석을 확인하는 것은 아무것도 증명하지
       # 않는다 — 깨진 Dockerfile로도 통과한다(적대 리뷰 MAJOR-4). 빌드 실패 자체가
       # 그 결함의 게이트이고(실측: 수정 전 Dockerfile은 `docker build`에서 죽는다),
       # 빌드가 증명하지 못하는 것은 **이미지가 실제로 서는가**다.
       - name: The built image boots and answers
+        env:
+          PINVI_CI_SOURCE_REVISION: ${{ steps.source.outputs.revision }}
         run: |
-          docker run -d --name web-ci -p 3000:3000 "pinvi-web-ci:${GITHUB_SHA}"
+          docker run -d --name web-ci -p 3000:3000 "pinvi-web-ci:${PINVI_CI_SOURCE_REVISION}"
           for _ in $(seq 1 60); do
             code="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/ || true)"
             # 백엔드 없이 도는 확인이라 2xx를 요구하지 않는다. HTTP 응답이 왔다는
@@ -142,7 +190,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     # T-323: aggregate-ci.yml waits for this exact GitHub Actions check on Web changes.
     steps:
@@ -153,7 +201,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.23.1"
+          node-version: '22.23.1'
           cache: npm
 
       # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.
@@ -184,6 +232,18 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:13805
         run: npx playwright test
+
+      - name: Run VWorld canvas with local tile and icon fixtures
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:13805
+        run: npm run test:e2e:map-canvas
+
+      - name: Run restore UI with isolated mocked API
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:13805
+        run: npm run test:e2e:restore
 
       - name: Upload e2e traces
         if: failure()

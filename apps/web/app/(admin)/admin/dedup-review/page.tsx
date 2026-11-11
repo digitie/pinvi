@@ -1,7 +1,12 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AdminPage } from '@/components/admin/AdminPage';
+import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
+import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import {
   ApiClient,
   ApiError,
@@ -10,14 +15,9 @@ import {
   type AdminDedupReviewListParams,
 } from '@pinvi/api-client';
 import type { AdminDedupDecision, AdminDedupReviewRecord } from '@pinvi/schemas';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, GitMerge, RefreshCw, Search, X } from 'lucide-react';
-import { AdminPage } from '@/components/admin/AdminPage';
-import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
-import { FilterActions, FilterBar, FilterField } from '@/components/admin/filter-bar';
-import { Button } from '@/components/admin/ui/button';
-import { Input } from '@/components/admin/ui/input';
-import { NativeSelect } from '@/components/admin/ui/native-select';
-import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
+import { useMemo, useState, type FormEvent } from 'react';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -50,7 +50,7 @@ const DECISION_OPTIONS = [
 const inputClass = 'rounded-sm border border-hairline px-2 py-1 text-sm';
 
 function formatDateTime(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString('ko-KR') : '—';
+  return value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '—';
 }
 
 function score(value: number) {
@@ -61,7 +61,16 @@ function featureLabel(item: AdminDedupReviewRecord['feature_a']) {
   return `${item.name} (${item.kind}/${item.category})`;
 }
 
-export default function AdminDedupReviewPage() {
+export default function AdminDedupReviewPage(
+  ...args: Parameters<typeof useAdminDedupReviewPageModel>
+) {
+  const viewModel = useAdminDedupReviewPageModel(...args);
+  if (viewModel.renderBranch === 'render0')
+    return <AdminDedupReviewPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function useAdminDedupReviewPageModel() {
   const queryClient = useQueryClient();
   const [queryInput, setQueryInput] = useState('');
   const [submittedQ, setSubmittedQ] = useState('');
@@ -224,6 +233,54 @@ export default function AdminDedupReviewPage() {
     decisionMutation.mutate({ item: selected });
   };
 
+  return {
+    renderBranch: 'render0' as const,
+    accessReason,
+    columns,
+    data,
+    decision,
+    decisionMutation,
+    error,
+    mapReason,
+    masterFeatureId,
+    minScore,
+    mutationError,
+    mutationNotice,
+    onSearch,
+    queryInput,
+    reviewsQuery,
+    selected,
+    setAccessReason,
+    setDecision,
+    setMapReason,
+    setMasterFeatureId,
+    setMinScore,
+    setMutationError,
+    setQueryInput,
+    setSelectedId,
+    setStatusFilter,
+    statusFilter,
+    submitDecision,
+  };
+}
+
+type AdminDedupReviewPageView0Model = Extract<
+  ReturnType<typeof useAdminDedupReviewPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminDedupReviewPageView0({ viewModel }: { viewModel: AdminDedupReviewPageView0Model }) {
+  const {
+    data,
+    minScore,
+    onSearch,
+    queryInput,
+    reviewsQuery,
+    setMinScore,
+    setQueryInput,
+    setSelectedId,
+    setStatusFilter,
+    statusFilter,
+  } = viewModel;
   return (
     <AdminPage
       title="Dedup review"
@@ -300,157 +357,218 @@ export default function AdminDedupReviewPage() {
         </span>
       </FilterBar>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
-        <AdminTable
-          columns={columns}
-          rows={data?.items ?? []}
-          loading={reviewsQuery.isLoading || reviewsQuery.isPlaceholderData}
-          isError={reviewsQuery.isError}
-          error={error ? { message: error } : null}
-          onRetry={() => reviewsQuery.refetch()}
-          rowKey={(item) => item.review_id}
-          rowTestId={(item) => `admin-dedup-row-${item.review_id}`}
-          onRowClick={(item) => setSelectedId(item.review_id)}
-          empty="dedup 후보가 없습니다."
-        />
-        <section
-          className="space-y-4 rounded-sm border border-hairline bg-canvas p-4 text-sm"
-          data-testid="admin-dedup-detail"
-        >
-          {selected ? (
-            <>
-              <div>
-                <h2 className="text-sm font-semibold text-ink">{selected.review_id}</h2>
-                <p className="text-xs text-muted">
-                  total {score(selected.total_score)} / name {score(selected.name_score)} / spatial{' '}
-                  {score(selected.spatial_score)}
-                </p>
-              </div>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2">
-                <dt className="text-muted">A</dt>
-                <dd>{featureLabel(selected.feature_a)}</dd>
-                <dt className="text-muted">B</dt>
-                <dd>{featureLabel(selected.feature_b)}</dd>
-                <dt className="text-muted">provider</dt>
-                <dd>
-                  {selected.feature_a.provider ?? '—'}/{selected.feature_a.dataset_key ?? '—'} ·{' '}
-                  {selected.feature_b.provider ?? '—'}/{selected.feature_b.dataset_key ?? '—'}
-                </dd>
-                <dt className="text-muted">reviewed</dt>
-                <dd>{formatDateTime(selected.reviewed_at)}</dd>
-                <dt className="text-muted">reason</dt>
-                <dd>{selected.decision_reason ?? '—'}</dd>
-              </dl>
-              {selected.status === 'pending' ? (
-                <form
-                  className="space-y-3 border-t border-hairline pt-3"
-                  onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                    event.preventDefault();
-                    submitDecision();
-                  }}
-                >
-                  <label className="block text-xs text-muted">
-                    verdict
-                    <select
-                      value={decision}
-                      onChange={(event) => {
-                        setDecision(event.target.value as AdminDedupDecision);
-                        setMutationError(null);
-                      }}
-                      className={`${inputClass} mt-1 w-full`}
-                      data-testid="admin-dedup-decision"
-                    >
-                      {DECISION_OPTIONS.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {decision === 'merged' && (
-                    <fieldset className="space-y-2 text-xs text-muted">
-                      <legend>master feature</legend>
-                      {[selected.feature_a, selected.feature_b].map((feature) => (
-                        <label key={feature.feature_id} className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="admin-dedup-master"
-                            value={feature.feature_id}
-                            checked={masterFeatureId === feature.feature_id}
-                            onChange={(event) => setMasterFeatureId(event.target.value)}
-                            data-testid={`admin-dedup-master-${feature.feature_id}`}
-                          />
-                          <span className="break-all">
-                            {feature.name} / {feature.feature_id}
-                          </span>
-                        </label>
-                      ))}
-                    </fieldset>
-                  )}
-                  <label className="block text-xs text-muted">
-                    운영 사유 (Pinvi audit)
-                    <textarea
-                      value={accessReason}
-                      onChange={(event) => setAccessReason(event.target.value)}
-                      className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
-                      rows={2}
-                      data-testid="admin-dedup-access-reason"
-                    />
-                  </label>
-                  <label className="block text-xs text-muted">
-                    kor_travel_map 전달 사유
-                    <textarea
-                      value={mapReason}
-                      onChange={(event) => setMapReason(event.target.value)}
-                      className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
-                      rows={2}
-                      data-testid="admin-dedup-map-reason"
-                    />
-                  </label>
-                  {mutationError && (
-                    <p
-                      role="alert"
-                      className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
-                      data-testid="admin-dedup-mutation-error"
-                    >
-                      {mutationError}
-                    </p>
-                  )}
-                  {mutationNotice && (
-                    <p
-                      className="rounded-sm bg-surface-soft p-3 text-sm text-body"
-                      data-testid="admin-dedup-mutation-notice"
-                    >
-                      {mutationNotice}
-                    </p>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={decisionMutation.isPending}
-                    className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
-                    data-testid="admin-dedup-submit-verdict"
-                  >
-                    {decision === 'merged' ? (
-                      <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
-                    ) : decision === 'rejected' || decision === 'ignored' ? (
-                      <X className="h-3.5 w-3.5" aria-hidden="true" />
-                    ) : (
-                      <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                    )}
-                    반영
-                  </button>
-                </form>
-              ) : (
-                <p className="border-t border-hairline pt-3 text-muted">
-                  이 후보는 이미 처리되었습니다.
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-muted">후보를 선택하면 양쪽 feature 요약이 표시됩니다.</p>
-          )}
-        </section>
-      </section>
+      <AdminDedupReviewPageSection0_0 viewModel={viewModel} />
     </AdminPage>
+  );
+}
+
+function AdminDedupReviewPageSection0_0({
+  viewModel,
+}: {
+  viewModel: AdminDedupReviewPageView0Model;
+}) {
+  const { columns, data, error, reviewsQuery, setSelectedId } = viewModel;
+  return (
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
+      <AdminTable
+        columns={columns}
+        rows={data?.items ?? []}
+        loading={reviewsQuery.isLoading || reviewsQuery.isPlaceholderData}
+        isError={reviewsQuery.isError}
+        error={error ? { message: error } : null}
+        onRetry={() => reviewsQuery.refetch()}
+        rowKey={(item) => item.review_id}
+        rowTestId={(item) => `admin-dedup-row-${item.review_id}`}
+        onRowClick={(item) => setSelectedId(item.review_id)}
+        empty="dedup 후보가 없습니다."
+      />
+      <AdminDedupReviewPageSection0_0Part0 viewModel={viewModel} />
+    </section>
+  );
+}
+
+function AdminDedupReviewPageSection0_0Part0({
+  viewModel,
+}: {
+  viewModel: AdminDedupReviewPageView0Model;
+}) {
+  const { selected } = viewModel;
+  return (
+    <section
+      className="space-y-4 rounded-sm border border-hairline bg-canvas p-4 text-sm"
+      data-testid="admin-dedup-detail"
+    >
+      {selected ? (
+        <>
+          <div>
+            <h2 className="text-sm font-semibold text-ink">{selected.review_id}</h2>
+            <p className="text-xs text-muted">
+              total {score(selected.total_score)} / name {score(selected.name_score)} / spatial{' '}
+              {score(selected.spatial_score)}
+            </p>
+          </div>
+          <AdminDedupReviewPageSection0_0Part0Part0 viewModel={viewModel} />
+          {selected.status === 'pending' ? (
+            <AdminDedupReviewPageSection0_0Part0Part1 viewModel={viewModel} />
+          ) : (
+            <p className="border-t border-hairline pt-3 text-muted">
+              이 후보는 이미 처리되었습니다.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-muted">후보를 선택하면 양쪽 feature 요약이 표시됩니다.</p>
+      )}
+    </section>
+  );
+}
+
+function AdminDedupReviewPageSection0_0Part0Part0({
+  viewModel,
+}: {
+  viewModel: AdminDedupReviewPageView0Model;
+}) {
+  const { selected } = viewModel;
+  if (!selected) return null;
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2">
+      <dt className="text-muted">A</dt>
+      <dd>{featureLabel(selected.feature_a)}</dd>
+      <dt className="text-muted">B</dt>
+      <dd>{featureLabel(selected.feature_b)}</dd>
+      <dt className="text-muted">provider</dt>
+      <dd>
+        {selected.feature_a.provider ?? '—'}/{selected.feature_a.dataset_key ?? '—'} ·{' '}
+        {selected.feature_b.provider ?? '—'}/{selected.feature_b.dataset_key ?? '—'}
+      </dd>
+      <dt className="text-muted">reviewed</dt>
+      <dd>{formatDateTime(selected.reviewed_at)}</dd>
+      <dt className="text-muted">reason</dt>
+      <dd>{selected.decision_reason ?? '—'}</dd>
+    </dl>
+  );
+}
+
+function AdminDedupReviewPageSection0_0Part0Part1({
+  viewModel,
+}: {
+  viewModel: AdminDedupReviewPageView0Model;
+}) {
+  const {
+    submitDecision,
+    decision,
+    setDecision,
+    setMutationError,
+    selected,
+    masterFeatureId,
+    setMasterFeatureId,
+    accessReason,
+    setAccessReason,
+    mapReason,
+    setMapReason,
+    mutationError,
+    mutationNotice,
+    decisionMutation,
+  } = viewModel;
+  if (!selected) return null;
+  return (
+    <form
+      className="space-y-3 border-t border-hairline pt-3"
+      onSubmit={(event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        submitDecision();
+      }}
+    >
+      <label className="block text-xs text-muted">
+        verdict
+        <select
+          value={decision}
+          onChange={(event) => {
+            setDecision(event.target.value as AdminDedupDecision);
+            setMutationError(null);
+          }}
+          className={`${inputClass} mt-1 w-full`}
+          data-testid="admin-dedup-decision"
+        >
+          {DECISION_OPTIONS.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {decision === 'merged' && (
+        <fieldset className="space-y-2 text-xs text-muted">
+          <legend>master feature</legend>
+          {[selected.feature_a, selected.feature_b].map((feature) => (
+            <label key={feature.feature_id} className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="admin-dedup-master"
+                value={feature.feature_id}
+                checked={masterFeatureId === feature.feature_id}
+                onChange={(event) => setMasterFeatureId(event.target.value)}
+                data-testid={`admin-dedup-master-${feature.feature_id}`}
+              />
+              <span className="break-all">
+                {feature.name} / {feature.feature_id}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <label className="block text-xs text-muted">
+        운영 사유 (Pinvi audit)
+        <textarea
+          value={accessReason}
+          onChange={(event) => setAccessReason(event.target.value)}
+          className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+          rows={2}
+          data-testid="admin-dedup-access-reason"
+        />
+      </label>
+      <label className="block text-xs text-muted">
+        kor_travel_map 전달 사유
+        <textarea
+          value={mapReason}
+          onChange={(event) => setMapReason(event.target.value)}
+          className="mt-1 w-full rounded-sm border border-hairline px-2 py-1 text-sm"
+          rows={2}
+          data-testid="admin-dedup-map-reason"
+        />
+      </label>
+      {mutationError && (
+        <p
+          role="alert"
+          className="rounded-sm bg-error-bg p-3 text-sm text-error-text"
+          data-testid="admin-dedup-mutation-error"
+        >
+          {mutationError}
+        </p>
+      )}
+      {mutationNotice && (
+        <p
+          className="rounded-sm bg-surface-soft p-3 text-sm text-body"
+          data-testid="admin-dedup-mutation-notice"
+        >
+          {mutationNotice}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={decisionMutation.isPending}
+        className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-ink px-3 py-1 text-sm text-canvas disabled:opacity-50"
+        data-testid="admin-dedup-submit-verdict"
+      >
+        {decision === 'merged' ? (
+          <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : decision === 'rejected' || decision === 'ignored' ? (
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
+        반영
+      </button>
+    </form>
   );
 }

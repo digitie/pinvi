@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { toWeatherPoints } from '@/lib/weatherMapPoints';
 import type { WeatherMarkersInBoundsResponse } from '@pinvi/schemas';
-import { toWeatherPoints } from '@/components/map/FeatureMapView';
+import { describe, expect, it } from 'vitest';
 
 /**
  * `FeatureMapView`는 VWorld/MapLibre 의존성 때문에 컴포넌트 전체를 렌더 테스트하지

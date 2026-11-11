@@ -6,79 +6,61 @@ Pinvi 지도는 **내부 라이브러리 `maplibre-vworld-react`**를 사용한�
 MapLibre GL JS 채택 결정은 유지하되, 기존 Web 의존성 `maplibre-vworld-js` /
 `maplibre-vworld`는 ADR-046으로 대체됐다.
 
-> **상태**: `maplibre-vworld-react` 본체는 `F:\dev\maplibre-vworld-react` (별 저장소).
-> Pinvi는 npm 발행 없이 `apps/{web,mobile}/vendor/*.tgz` vendored tarball을 `file:`로
+> **상태**: 원본은 GitHub digitie/maplibre-vworld-react 별도 저장소이며 Linux 격리 clone에서 검증한다.
+> Pinvi는 npm 발행 없이 공유 `apps/web/vendor/*.tgz` vendored tarball을 `file:`로
 > 핀한다. 본 문서는 (a) Pinvi에서 어떻게 사용할지, (b) 어떤 기능이 부족해서
 > 라이브러리에 보강해야 할지 정리.
 
 ## 1. 라이브러리 식별자
 
-| 항목          | 값                                                            |
-| ------------- | ------------------------------------------------------------- |
-| 저장소        | `maplibre-vworld-react`                                       |
-| Web 패키지    | `vworld-map-web`                                              |
-| 공통 패키지   | `vworld-map-core`                                             |
-| Mobile 패키지 | `vworld-map-rn`                                               |
-| 의존 (peer)   | `react`, `react-dom`, `maplibre-gl`, `zod@^4.4.3`             |
-| 라이선스      | MIT                                                           |
-| 빌드 산출     | 각 package tarball을 Pinvi `apps/{web,mobile}/vendor/`에 보관 |
+| 항목          | 값                                                   |
+| ------------- | ---------------------------------------------------- |
+| 저장소        | `maplibre-vworld-react`                              |
+| Web 패키지    | `vworld-map-web`                                     |
+| 공통 패키지   | `vworld-map-core`                                    |
+| Mobile 패키지 | `vworld-map-rn`                                      |
+| 의존 (peer)   | `react`, `react-dom`, `maplibre-gl`, `zod@^4.4.3`    |
+| 라이선스      | GPL-3.0-only                                         |
+| 빌드 산출     | 각 package tarball을 Pinvi `apps/web/vendor/`에 보관 |
 
 설치 (Pinvi `apps/web/package.json`):
 
 ```json
 {
   "dependencies": {
-    "vworld-map-core": "file:../mobile/vendor/vworld-map-core-1.0.0.tgz",
-    "vworld-map-web": "file:vendor/vworld-map-web-1.0.2.tgz",
-    "maplibre-gl": "^6.9.0",
-    "zod": "^4.4.3"
+    "vworld-map-core": "file:vendor/vworld-map-core-1.0.1.tgz",
+    "vworld-map-web": "file:vendor/vworld-map-web-1.0.3.tgz",
+    "maplibre-gl": "6.17.0",
+    "zod": "4.6.7"
   }
 }
 ```
 
 ### 1.1 vendored tarball 갱신 절차
 
-`maplibre-vworld-react` 저장소(`F:\dev\maplibre-vworld-react`)는 npm에 발행하지
-않으므로, 최신화는 항상 다음 순서로 한다(2026-09-11, T-VWORLD-V6 기준 확립):
+2026-11-11 통합 기준은 immutable GitHub source9a7a348b02d61969b394c681b024d5851eef836b의 core1.0.1/web1.0.3/RN1.0.1이다. 원본 담당이 Linux 격리 clone에서 build/type/lint/tests 후 pack한다. GPL LICENSE/NOTICE·실제src·tsconfig를 동봉하고 원장의 SHA512를 확인한다. 기존 golden core1.0.0 bytes는 덮어쓰거나 같은 정식 버전으로 재발행하지 않는다. 같은 버전 후보 재pack은 미릴리스 통합 단계에만 허용하며 최종 freeze 때 단일 파일로 정산한다.
+
+소비자는 전달받은 동일3종 tgz를 apps/web/vendor에 복사한다. 웹의 spec은 file:vendor/..., 모바일은 file:../web/vendor/...이다. root core direct spec과 $vworld-map-core override도 동일 물리 파일로 맞춰 미공개 core의 registry pull을 막는다. 각 원장은 실제 file 참조·버전·SHA512를 기록한다. 다른 공통 패키지 entry는 해당 tarball까지 함께 갱신할 때만 변경한다.
+
+manifest와 원장 갱신 뒤 frontend cwd에서 명시 설치하여 같은 버전 후보의 이전 integrity가 lock에 남지 않게 한다. 다음은 웹 명령이다.
 
 ```bash
-# 1) trunk를 건드리지 않고 origin/main만 클린 클론해서 빌드한다
-#    (trunk 워킹트리는 다른 세션의 WIP로 dirty할 수 있다 — 커밋된 origin/main이
-#    "최신 레포"의 기준이다)
-git clone --branch main https://github.com/digitie/maplibre-vworld-react.git /tmp/mvr-build
-cd /tmp/mvr-build && npm install && npm run build && npm run typecheck && npm run lint && npm run test
-
-# 2) 각 패키지를 pack해서 tarball 생성
-mkdir -p /tmp/mvr-tarballs
-(cd packages/vworld-map-core && npm pack --pack-destination /tmp/mvr-tarballs)
-(cd packages/vworld-map-web  && npm pack --pack-destination /tmp/mvr-tarballs)
-(cd packages/vworld-map-rn   && npm pack --pack-destination /tmp/mvr-tarballs)
-
-# 3) Pinvi vendor 디렉터리에 같은 파일명으로 덮어쓴다 (버전이 1.0.0에 고정돼 있어도 무방 —
-#    npm이 신경 쓰는 건 tarball 내용의 해시지 파일명이 아니다)
-cp /tmp/mvr-tarballs/vworld-map-core-1.0.0.tgz apps/mobile/vendor/
-cp /tmp/mvr-tarballs/vworld-map-rn-1.0.0.tgz   apps/mobile/vendor/
-cp /tmp/mvr-tarballs/vworld-map-web-1.0.2.tgz  apps/web/vendor/
-
-# 4) package-lock.json을 완전히 지우고 node_modules 없는 상태에서 처음부터 재설치한다.
-#    `npm install`/`--package-lock-only`를 lockfile이 남은 채로 돌리면 npm이 file:
-#    tarball의 integrity를 재계산하지 않고 그대로 둔다(캐시를 지워도 재현) —
-#    `docs/agent-failure-patterns.md` §9 "패턴 F" 참고.
-rm -f package-lock.json
-npm install
-node scripts/check-lockfile-integrity.mjs   # 100%에 가까워야 정상
-npm ci                                       # EINTEGRITY 없이 통과해야 검증 완료
+npx --yes npm@12.0.1 install vworld-map-core@file:apps/web/vendor/vworld-map-core-1.0.1.tgz
+cd apps/web
+npx --yes npm@12.0.1 install vworld-map-web@file:vendor/vworld-map-web-1.0.3.tgz
+cd ../..
+node scripts/check-lockfile-integrity.mjs
+npx --yes npm@12.0.1 ci --no-audit --no-fund
 ```
+
+root override를 적용한 core는 루트에서 고유 파일을 명시한다. 같은 대상을 workspace CLI에도 명시하면 npm12가 root file 경로를 중복해석하는 ENOENT가 생길 수 있다. lock을 삭제하거나 force/legacy-peer-deps를 사용하지 않는다. 공통 guard로 manifest·실제tgz·lock·canonical 원장을 대조하고 빈 빌드 디렉터리에서 다시 검증한다. 모바일도 RN/core/web의 public package와 원장을 함께 맞춘다. Android/iOS export·Expo web SSR·N150 브라우저 검사와 네이티브 실기기 검증은 결과를 구분해 보고한다.
 
 peer dependency(`maplibre-gl`, `@maplibre/maplibre-react-native` 등)의 요구 범위가
 바뀌었으면 Pinvi `apps/web`·`apps/mobile`의 `package.json`도 함께 올리고, `npm run
 typecheck`로 breaking change(예: named/default export 전환)를 잡는다. 지도는 시각적
 핵심 기능이므로 로컬 게이트 통과 후 **N150 e2e(`test:e2e:map` 포함)까지 통과한 뒤 머지**한다.
 
-**web tarball만 갱신할 때**(core 불변)는 lockfile 전체를 다시 만들지 않고
-`node_modules/vworld-map-web`의 `integrity`만 새 tarball의
-`sha512-<base64(sha512(tgz))>`로 바꾼 뒤 `npm ci`로 EINTEGRITY 없이 통과하는지 확인한다
-(전체 재생성은 무관한 의존성까지 움직인다).
+web tarball만 바뀌어도 위 명시 file 설치로 lock을 갱신한다. integrity를 손으로 바꾸거나 다른 패키지의 해시를 덮어쓰지 않는다. 최종 후보는 빈 빌드 디렉터리에서 재검증한다.
 
 갱신 이력:
 

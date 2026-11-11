@@ -1,13 +1,7 @@
 'use client';
 
-import { HelpTip } from '@/components/admin/ui/help-tip';
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-  FieldMessage,
-} from '@/components/admin/ui/field';
+import { Field } from '@/components/admin/ui/field';
+import { FieldCaption, FieldFeedback } from '@/components/admin/ui/form-field-parts';
 import {
   describedBy,
   type FieldShellProps,
@@ -54,13 +48,13 @@ function FormSelect({
       data-disabled={selectProps.disabled ? true : undefined}
       data-invalid={error ? true : undefined}
     >
-      <FieldLabel className={labelClassName} htmlFor={fieldId}>
-        {label}
-        {required ? <span aria-hidden="true"> *</span> : null}
-        {help !== undefined ? (
-          <HelpTip label={typeof label === 'string' ? label : '이 필드'}>{help}</HelpTip>
-        ) : null}
-      </FieldLabel>
+      <FieldCaption
+        label={label}
+        required={required}
+        help={help}
+        fieldId={fieldId}
+        labelClassName={labelClassName}
+      />
       <NativeSelect
         aria-describedby={describedBy(
           ariaDescribedBy,
@@ -77,15 +71,14 @@ function FormSelect({
       >
         {children}
       </NativeSelect>
-      {showMessage ? (
-        <FieldMessage>
-          {error ? (
-            <FieldError id={errorId}>{error}</FieldError>
-          ) : showHint ? (
-            <FieldDescription id={hintId}>{hint}</FieldDescription>
-          ) : null}
-        </FieldMessage>
-      ) : null}
+      <FieldFeedback
+        showMessage={showMessage}
+        error={error}
+        showHint={showHint}
+        hint={hint}
+        errorId={errorId}
+        hintId={hintId}
+      />
     </Field>
   );
 }

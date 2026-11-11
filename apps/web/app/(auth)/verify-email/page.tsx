@@ -1,9 +1,9 @@
 'use client';
 
 import { ButtonLink } from '@/components/ui/Button';
+import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
-import { ApiClient, ApiError, authApi } from '@pinvi/api-client';
 
 const apiClient = new ApiClient({
   baseUrl: process.env.NEXT_PUBLIC_PINVI_API_URL ?? 'http://localhost:12801',
@@ -44,13 +44,15 @@ function VerifyEmailContent() {
       return;
     }
 
+    let active = true;
     void (async () => {
       try {
         await authApi(apiClient).verifyEmail({ token });
+        if (!active) return;
         setStatus('success');
         // 인증 완료 3초 후 홈으로(로그인은 별도) — 안내 문구와 동일.
-        setTimeout(() => router.push('/'), 3000);
       } catch (err) {
+        if (!active) return;
         setStatus('error');
         if (err instanceof ApiError) {
           setError(
@@ -61,7 +63,16 @@ function VerifyEmailContent() {
         }
       }
     })();
-  }, [token, router]);
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (status !== 'success') return;
+    const timer = setTimeout(() => router.push('/'), 3000);
+    return () => clearTimeout(timer);
+  }, [status, router]);
 
   return (
     <div className="space-y-6">

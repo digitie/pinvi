@@ -5,15 +5,17 @@
  * pre-emit critique: P4 H4 E4 S4 R5 V4 */
 
 /* Pretendard Variable — npm `pretendard` dynamic subset(한글 서브셋 분할, font-display: swap). 외부 CDN·render-blocking @import 없음. */
-@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
+@import '@kor-travel/tokens/font.css';
 
 @import 'tailwindcss';
 @import '@kor-travel/tokens/theme.css';
+@import '@kor-travel/tokens/radix.css';
+@import '@pinvi/design-tokens/theme.css';
 @import '@kor-travel/ui/dagster.css';
 @source '../../../node_modules/@kor-travel/ui/dist';
 
 /* Tailwind v4에서도 토큰 정본은 `@pinvi/design-tokens`의 v3 preset 하나다(ADR: 웹만 v4, 모바일은
-   NativeWind 4 + Tailwind v3 유지). `@config`로 그 preset을 그대로 읽어 토큰 정의가 웹/모바일로
+   NativeWind5 + Tailwind4 CSS 생성). `@config`로 그 preset을 그대로 읽어 토큰 정의가 웹/모바일로
    갈라지지 않게 한다 — `@theme`로 옮겨 적으면 두 곳이 조용히 드리프트한다. */
 @config '../tailwind.config.ts';
 
@@ -307,4 +309,37 @@ body {
    마커끼리 순서는 그대로이고, popup(z20)·앱 패널(z10)·dialog는 항상 모든 마커 위다. */
 .maplibregl-canvas-container {
   isolation: isolate;
+}
+
+/* 공통 Radix 프리미티브의 의미 이름을 Pinvi 팔레트에 연결한다.
+   기존 primary/muted 유틸 값은 사용자 웹과 공유하므로 재정의하지 않는다. */
+@theme inline {
+  --color-background: var(--color-canvas);
+  --color-foreground: var(--color-ink);
+  --color-card: var(--color-canvas);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-canvas);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary-foreground: var(--color-on-primary);
+  --color-secondary: var(--color-admin-subtle);
+  --color-secondary-foreground: var(--color-ink);
+  --color-muted-foreground: var(--color-body);
+  --color-accent: var(--color-admin-brand-tint);
+  --color-accent-foreground: var(--color-primary);
+  --color-border: var(--color-admin-line);
+  --color-input: var(--color-admin-control-line);
+  --color-ring: var(--color-focus);
+  --color-destructive: var(--color-error-text);
+  --color-surface-subtle: var(--color-admin-subtle);
+}
+[data-pv-surface='admin'] .bg-muted {
+  background-color: var(--color-admin-subtle);
+}
+
+/* 관리자만 공통 부품의 radius를 밀도 프로필에 맞춘다. */
+[data-pv-surface='admin'] {
+  --radius-sm: var(--radius-control);
+  --radius-md: var(--radius-control);
+  --radius-lg: var(--radius-panel);
+  --radius-xl: var(--radius-panel);
 }

@@ -1,16 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
-import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
-import type { AdminEmailDeliverability, AdminEmailEntry } from '@pinvi/schemas';
 import { AdminPage, Section } from '@/components/admin/AdminPage';
 import { AdminTable, type AdminTableColumn } from '@/components/admin/AdminTable';
 import { FilterBar, FilterField } from '@/components/admin/filter-bar';
 import { NativeSelect } from '@/components/admin/ui/native-select';
 import { NativeSelectOption } from '@/components/admin/ui/native-select-option';
 import { apiClient } from '@/lib/api';
+import { ApiError, adminApi, queryKeys } from '@pinvi/api-client';
+import type { AdminEmailDeliverability, AdminEmailEntry } from '@pinvi/schemas';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+
+const displayFormatter1 = new Intl.NumberFormat('ko-KR');
 
 const STATUSES = [
   { value: '', label: '전체' },
@@ -25,7 +27,7 @@ const STATUSES = [
 ];
 
 function formatMetric(value: number | null | undefined) {
-  return new Intl.NumberFormat('ko-KR').format(value ?? 0);
+  return displayFormatter1.format(value ?? 0);
 }
 
 function statusClass(status: AdminEmailDeliverability['status']) {
@@ -59,7 +61,18 @@ function MetricBox({
   );
 }
 
-export default function AdminEmailsPage() {
+export default function AdminEmailsPage(...args: Parameters<typeof useAdminEmailsPageModel>) {
+  const viewModel = useAdminEmailsPageModel(...args);
+  if (viewModel.renderBranch === 'render0') return <AdminEmailsPageView0 viewModel={viewModel} />;
+  return null;
+}
+
+function queueError(query: { isError: boolean; error: unknown }, fallback: string) {
+  if (!query.isError) return null;
+  return query.error instanceof ApiError ? query.error.message : fallback;
+}
+
+function useAdminEmailsPageModel() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -79,19 +92,10 @@ export default function AdminEmailsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.admin.emailsAll() }),
   });
 
-  const error = emailsQuery.isError
-    ? emailsQuery.error instanceof ApiError
-      ? emailsQuery.error.message
-      : '조회 실패'
-    : deliverabilityQuery.isError
-      ? deliverabilityQuery.error instanceof ApiError
-        ? deliverabilityQuery.error.message
-        : 'deliverability 조회 실패'
-      : resendMutation.isError
-        ? resendMutation.error instanceof ApiError
-          ? resendMutation.error.message
-          : '재발송 실패'
-        : null;
+  const error =
+    queueError(emailsQuery, '조회 실패') ??
+    queueError(deliverabilityQuery, 'deliverability 조회 실패') ??
+    queueError(resendMutation, '재발송 실패');
 
   const resendingId = resendMutation.isPending ? resendMutation.variables : null;
   const deliverability = deliverabilityQuery.data ?? null;
@@ -138,7 +142,7 @@ export default function AdminEmailsPage() {
       header: '예약',
       sortable: true,
       sortValue: (r) => new Date(r.scheduled_at).getTime(),
-      cell: (r) => new Date(r.scheduled_at).toLocaleString('ko-KR'),
+      cell: (r) => new Date(r.scheduled_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
     },
     {
       key: 'action',
@@ -160,6 +164,26 @@ export default function AdminEmailsPage() {
     },
   ];
 
+  return {
+    renderBranch: 'render0' as const,
+    columns,
+    deliverability,
+    emailsQuery,
+    error,
+    refresh,
+    resendMutation,
+    setStatusFilter,
+    statusFilter,
+  };
+}
+
+type AdminEmailsPageView0Model = Extract<
+  ReturnType<typeof useAdminEmailsPageModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminEmailsPageView0({ viewModel }: { viewModel: AdminEmailsPageView0Model }) {
+  const { columns, emailsQuery, error, refresh, resendMutation, setStatusFilter, statusFilter } =
+    viewModel;
   return (
     <AdminPage
       title="이메일 큐"
@@ -176,88 +200,7 @@ export default function AdminEmailsPage() {
         </button>
       }
     >
-      <Section title="Deliverability">
-        <div className="grid gap-3 text-sm lg:grid-cols-4" data-testid="admin-email-deliverability">
-          <MetricBox
-            label="status"
-            value={deliverability?.status}
-            testId="admin-email-deliverability-status"
-          />
-          <MetricBox label="from domain" value={deliverability?.domain.from_domain} />
-          <MetricBox
-            label="domain"
-            value={deliverability?.domain.domain_status ?? deliverability?.domain.error_class}
-            testId="admin-email-domain-status"
-          />
-          <MetricBox
-            label="active suppressions"
-            value={deliverability?.suppression.active_suppressions}
-            testId="admin-email-suppression-count"
-          />
-        </div>
-
-        <div className="mt-3 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-sm border border-hairline p-3">
-            <div className="mb-2 flex items-center gap-2 font-semibold text-ink">
-              {deliverability?.status === 'ok' ? (
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-              )}
-              <span
-                className={`rounded-sm px-2 py-1 text-xs ${statusClass(deliverability?.status ?? 'unknown')}`}
-              >
-                {deliverability?.status ?? 'unknown'}
-              </span>
-            </div>
-            <div className="grid gap-1 text-xs text-muted">
-              <div>api {deliverability?.resend_api_configured ? 'configured' : 'missing'}</div>
-              <div>console {deliverability?.console_mode ? 'on' : 'off'}</div>
-              <div>sending {deliverability?.domain.sending_capability ?? '-'}</div>
-            </div>
-          </div>
-
-          <div className="rounded-sm border border-hairline p-3">
-            <div className="mb-2 text-sm font-semibold text-ink">Webhook</div>
-            <div className="grid gap-1 text-xs text-muted">
-              <div>
-                signature {deliverability?.webhook.signature_configured ? 'configured' : 'missing'}
-              </div>
-              <div>
-                unsigned {deliverability?.webhook.unsigned_allowed ? 'allowed' : 'disabled'}
-              </div>
-              <div>
-                bounced {formatMetric(deliverability?.webhook.recent_events['email.bounced'])}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-sm border border-hairline p-3">
-            <div className="mb-2 text-sm font-semibold text-ink">Queue</div>
-            <div className="grid grid-cols-2 gap-1 text-xs text-muted">
-              <div>pending {formatMetric(deliverability?.queue.pending)}</div>
-              <div>failed {formatMetric(deliverability?.queue.failed)}</div>
-              <div>delayed {formatMetric(deliverability?.queue.delivery_delayed)}</div>
-              <div>suppressed {formatMetric(deliverability?.queue.suppressed)}</div>
-            </div>
-          </div>
-
-          <div className="rounded-sm border border-hairline p-3">
-            <div className="mb-2 text-sm font-semibold text-ink">Checks</div>
-            <div className="flex flex-wrap gap-1" data-testid="admin-email-checks">
-              {(deliverability?.checks ?? []).map((check) => (
-                <span
-                  key={check.key}
-                  className={`rounded-sm px-2 py-1 text-xs ${checkClass(check.status)}`}
-                  title={check.message ?? undefined}
-                >
-                  {check.label}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Section>
+      <AdminEmailsPageSection0_0 viewModel={viewModel} />
 
       <FilterBar>
         <FilterField htmlFor="admin-emails-status-filter" label="상태">
@@ -294,5 +237,91 @@ export default function AdminEmailsPage() {
         rowTestId={(r) => `admin-emails-row-${r.email_id}`}
       />
     </AdminPage>
+  );
+}
+
+function AdminEmailsPageSection0_0({ viewModel }: { viewModel: AdminEmailsPageView0Model }) {
+  const { deliverability } = viewModel;
+  return (
+    <Section title="Deliverability">
+      <div className="grid gap-3 text-sm lg:grid-cols-4" data-testid="admin-email-deliverability">
+        <MetricBox
+          label="status"
+          value={deliverability?.status}
+          testId="admin-email-deliverability-status"
+        />
+        <MetricBox label="from domain" value={deliverability?.domain.from_domain} />
+        <MetricBox
+          label="domain"
+          value={deliverability?.domain.domain_status ?? deliverability?.domain.error_class}
+          testId="admin-email-domain-status"
+        />
+        <MetricBox
+          label="active suppressions"
+          value={deliverability?.suppression.active_suppressions}
+          testId="admin-email-suppression-count"
+        />
+      </div>
+
+      <div className="mt-3 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-sm border border-hairline p-3">
+          <div className="mb-2 flex items-center gap-2 font-semibold text-ink">
+            {deliverability?.status === 'ok' ? (
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            )}
+            <span
+              className={`rounded-sm px-2 py-1 text-xs ${statusClass(deliverability?.status ?? 'unknown')}`}
+            >
+              {deliverability?.status ?? 'unknown'}
+            </span>
+          </div>
+          <div className="grid gap-1 text-xs text-muted">
+            <div>api {deliverability?.resend_api_configured ? 'configured' : 'missing'}</div>
+            <div>console {deliverability?.console_mode ? 'on' : 'off'}</div>
+            <div>sending {deliverability?.domain.sending_capability ?? '-'}</div>
+          </div>
+        </div>
+
+        <div className="rounded-sm border border-hairline p-3">
+          <div className="mb-2 text-sm font-semibold text-ink">Webhook</div>
+          <div className="grid gap-1 text-xs text-muted">
+            <div>
+              signature {deliverability?.webhook.signature_configured ? 'configured' : 'missing'}
+            </div>
+            <div>unsigned {deliverability?.webhook.unsigned_allowed ? 'allowed' : 'disabled'}</div>
+            <div>
+              bounced {formatMetric(deliverability?.webhook.recent_events['email.bounced'])}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-sm border border-hairline p-3">
+          <div className="mb-2 text-sm font-semibold text-ink">Queue</div>
+          <div className="grid grid-cols-2 gap-1 text-xs text-muted">
+            <div>pending {formatMetric(deliverability?.queue.pending)}</div>
+            <div>failed {formatMetric(deliverability?.queue.failed)}</div>
+            <div>delayed {formatMetric(deliverability?.queue.delivery_delayed)}</div>
+            <div>suppressed {formatMetric(deliverability?.queue.suppressed)}</div>
+          </div>
+        </div>
+
+        <div className="rounded-sm border border-hairline p-3">
+          <div className="mb-2 text-sm font-semibold text-ink">Checks</div>
+          <div className="flex flex-wrap gap-1" data-testid="admin-email-checks">
+            {(deliverability?.checks ?? []).map((check) => (
+              <span
+                key={check.key}
+                className={`rounded-sm px-2 py-1 text-xs ${checkClass(check.status)}`}
+                title={check.message ?? undefined}
+              >
+                {check.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Section>
   );
 }

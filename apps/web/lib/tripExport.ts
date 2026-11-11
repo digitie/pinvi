@@ -1,5 +1,15 @@
-import type { TripView } from '@pinvi/schemas';
 import { tripDaysToMapPoints, type TripMapPoint } from '@pinvi/domain';
+import type { TripView } from '@pinvi/schemas';
+
+const displayFormatter1 = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
 
 export type TripExportSource = Pick<TripView, 'trip' | 'days'>;
 export interface ExportPoi {
@@ -214,15 +224,5 @@ export function buildTripCalendar(
 
 export function formatExportTime(value: string | null): string {
   if (!knownStamp(value)) return '미정';
-  return (
-    new Intl.DateTimeFormat('ko-KR', {
-      timeZone: 'Asia/Seoul',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(new Date(value)) + ' KST'
-  );
+  return displayFormatter1.format(new Date(value)) + ' KST';
 }

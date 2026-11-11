@@ -1,3 +1,25 @@
+## 2026-11-12 — 이미지 source provenance 동등성 수정
+
+원 A의328 image OCI/ENV가 synthetic2ce였던 오류를 재현했다. 실제 HEAD 단일 output·예상PRhead 대조·실제 built inspect 비교·서로 다른 유효40hex negative control을 연결했다.6 contract/clean CI trigger4검사 PASS. 원 B obsolete vendor CI 경로는 이미 수정됐고5cb full required API CI도 SUCCESS다. SDK4·main476·C11은 보존하고 새 immutable input의 실제 CI와 원 A/B closure를 확인한다. [기록](reports/pinvi-image-provenance-20261112.json).
+
+## 2026-11-12 — SDK patch 후 hosted 검증
+
+SDK4 latest exact patch를 strict 설치하고 물리 Expo Doctor20/20·React Doctor0·type/lint/guard를 확인했다. main476의5파일을 먼저 병합해 기존 synthetic CI tree와 같음을 확인하고 SDK WIP를 복원했다. 깨끗한 CI 경로 회귀1FAIL/3PASS→4PASS이며 SDK 진단을 aggregate 필수로 연결했다. C11 bytes/원장·328 baseline/batch2는 보존한다. 새SDK exports/smoke 및 새main web 전체는 hosted CI 확인 대상이다. N150·운영 변경은 없다. [기록](reports/pinvi-expo-sdk-patches-20261112.json).
+
+## 2026-11-12 — C11 격리 최종 검증 완료
+
+C10 f3d4ddd8을 보존하고 소유권을 인계받았다. C11 사용7종297파일·3원장·lock·canonical 웹/모바일 검사를 통과했다. 기존521+새 경계6건=unit527·양쪽 타입/Doctor0·mobile lint0을 확인했다. 웹 lint는 기존 인증 경고1이다. 새 production 전체browser209PASS/0FAIL/기존flagSKIP4와 각 flag의 별도build canvas3PASS/restore2PASS를 완료했다. 이전 C9/C10 실패 기록·native fix4 승인 증거는 보존했다. 최종 소비자2리뷰·정확 HEAD CI·merge·부모 go 전에는 배포하지 않는다. [최신 보고서](reports/common-unification-20261111.md)를 따른다.
+
+## 2026-11-11 — 공통 UI·모바일 통합 후보 진행
+
+2026-11-12 공개 UI 공통화 후속: Dialog/ConfirmDialog 자체 모달 엔진을 공통 Radix 어댑터로 이관하고 useModalDialog를 정리했다. 기존14행동cases와 추가회귀 유지, AppShell 더보기 common Popover6casesPASS. 새공통overlayProps/unstyled pack 대기 및 실제브라우저 initial-panel ShiftTab 회귀1건이 남는다. 과거전체493/1·203/6/4는 최종PASS가 아니며 새pack후전체재검증필수. 상세 docs/reports/common-unification-20261111.md.
+
+2026-11-11 공통 이관 checkpoint: 지도 source9a의 core1.0.1/web1.0.3/RN1.0.1과 Lightning CSS1.33.0+nativecss.fix.3 동일 tgz 실제 설치·lock/원장 SHA512 일치. 웹/모바일 타입·lint 및 Doctor482/45files 진단0. Android/iOS/Web export와 SDK58 N150375/1280px 로그인·글꼴 스모크PASS. 웹 unit493PASS/1FAIL은 최종 common LoginForm 자동완성 수정 pack 대기. 최종 common 정책·clean ci/build/e2e·독립2리뷰 미완료이며 push/배포 대기. 후속 N150 production buildPASS/E2E203PASS6FAIL(긴 공통Dialog)4SKIP, 별도 실제 canvas3casesPASS. ESLint도 전이까지10.14.0 하나로 정리했다. 상세는 docs/reports/common-unification-20261111.md.
+
+Pinvi 소유 branch는 agent/codex-common-unification-20261111, 기준선 d42ac953이다. Concierge는 별도 전담이며 수정하지 않는다. 관리자 VirtualTable/Radix, 공통 로그인과 직접 RHF/Zod 폼, Zustand/Pretendard 실제 사용, NativeWind5RC/Tailwind4·Expo58/RN0.88 이관을 구현했다. 현재 후보는 완료/배포 상태가 아니다.
+
+다음 작업은 부모의 최종 common UI/tokens와 GPL LICENSE/NOTICE/실제 소스를 포함한 vworld core/RN1.0.1·web1.0.3, 별도 worker의 Lightning CSS1.33 원본 fix를 같은 artifact 원장으로 통합하는 것이다. common Dialog overlay props API가 앱 타입3건·단위1건·build를 막는다. 모바일 Web SSR은 RN 지도 정적 native import 문제를 부모에게 전달했다. 마지막 전체 검사·두 독립 적대 리뷰·CI·merge·부모 go를 거쳐 [이미지 배포 계획](reports/common-unification-deploy-plan-20261111.md)을 실행한다. DB/RustFS 수명주기는 변경하지 않는다.
+
 ## #621 잔여 복원력 (2026-11-09)
 
 PR claude/621-dependency-resilience: Map 표면별 bulkhead·geo/weather/Telegram 상한 settings화, 외부 호출 전 읽기 트랜잭션 해제(위치 동의·내 POI·require_role), pool overflow 기본 5, edge HTTP/2 확인(h2).
@@ -71,7 +93,6 @@ Draft/Closes616/Refs621/Refs643유지, ready/merge는메인담당이다.
 ### 원격 기존 공유 URL 회귀 기대값 동기화
 
 dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 웹 경로 기대값1건을 포착했다(255통과/1실패). API 공개 read/comment/edit 경로와 혼동하지 않고 기존 검사의 발급 웹 URL 기대값만 실제 정본 /shared/{trip_id}/{token}에 맞춰 전체 URL로 강화했다. 제품 source는 dff 그대로다. 보완 후 WSL 실제 PG의 해당 검사·신규 링크 회귀·기존 공유권한 합계9검사가18.70초에 통과했다. 최신 workspace타입/lint(기존5warning)·Ruff/format도 통과했다. 정확 최종 문서/테스트 후보의 원격 CI는 별도 확인한다.
-
 
 ## 2026-11-05 — #641 여행 내보내기 초안 착수
 
@@ -304,7 +325,6 @@ dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 �
 - 기존 원시 popup 상세가 Map4초 지연 때3초 뒤에도 loading인 것을 재현했다. 동일한 detail-card 예산·취소·오류/부분 상태를 popup에 연결하며 modal과 동시 중복 조회하지 않는다. 새 빌드의 제한된 popup 검증은 진행 중이다.
 - 검색·본문·팝업의 실제 feature ID를 회귀 단언에 연결했다. 웹 전체339·타입·lint(기존5경고)를 확인했다.
 
-
 ## 2026-11-04 — #669 병렬 보강·검색 선택 경계 구현
 
 - 수정 전 동시 시작/빠른 두 번째 결과/취소 회귀3개와 잘못된 provider 응답3개 실패를 확인했다.
@@ -313,14 +333,12 @@ dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 �
 - 검색어 변경 즉시 이전 결과를 제거·취소하고 취소를 무시하는 응답도 버린다. 좌표 없는 feature는 정본 상세로 연결하고 실행할 위치·상세가 없는 행은 비활성화한다. 검색 회귀8개·웹 타입·lint를 확인했다.
 - 근처 교통 E2E는 현재 응답의 좌표 있는 정확 일치 결과를 고르고 실제 카메라 zoom/중심 완료를 기다린다. 모바일 맞춤·popup 가림 실제 UI는 진행 중이다.
 
-
 ## 2026-11-04 — #635 완료·#669/#674 지도 회귀 시작
 
 - #635는 PR665(613a055)로 완료했다. 독립 리뷰2인·최종 CI16상태와 WSL API2765/12skip·웹333·실제 UI14흐름을 확인했다.
 - 사용자 지시로 다른 Code가 담당하는671/672를 건너뛰고 중복 draft676을 닫았다. 로컬 미완 수정은 stash로 보관했으며 구현을 머지하지 않았다.
 - 다음은669/674의 병렬 상세 보강과 지도 이동·모바일 맞춤·popup 가림 재현이다. 계획은 docs/execplan/issues-669-674-map-detail-regressions.md에 둔다.
 - #643 최신 후속8개와650재오픈은 반영하되671/672는 외부 담당으로 추적한다. 운영 접근·배포·검증은 수행하지 않는다.
-
 
 ## 2026-11-04 — #635 실제 선·면 UI와 카탈로그 보강
 
@@ -329,7 +347,6 @@ dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 �
 - 추적된 catalogue helper를 직접 실행했다. 목록 DOM을 남기고 native layer를 지우면 canvas 단언이 실패한다. 상세는 fallback 제목 대신 정확한 HTTP200·ID/kind·렌더된 본문을 검증한다.
 - 웹 전체333·타입·lint(기존 경고5개)를 통과했다. API 전체2765 통과·12 제외와 공용 스키마23개를 확인했다. 최종 두 리뷰·CI·머지는 별도다.
 - 운영 검증은 하지 않았다. 안전한 증거는 docs/reviews/pinvi-635-geometry-local-live.json에 둔다.
-
 
 - #654~#662 리뷰 지적 수정 + live e2e 카탈로그(TRIP-043 휴지통 복원, 수정 이슈 test.fail 해제) 를 한 PR 로 묶었다.
 - Map admin OpenAPI 재vendor 는 Map 리뷰 PR 머지 뒤 최종 Map SHA 로 같은 PR 에 넣는다(회전 preflight digest 일치).
@@ -350,20 +367,20 @@ dff 원격 integration4가 기존 test_share_link_uses_web_base_url의 구형 �
 - 이 커밋은 provenance/테스트 핀/문서만 바꾸며 제품은 679ca7a와 같다. 그 제품의 전체 WSL API 2,740개·웹 282개·실제 지연 UI 10항목 및 두 독립 리뷰를 완료했다.
 - 최종 Docker 설치 검증·두 exact HEAD 리뷰·CI를 마친 뒤 #662를 병합하고 최신 #643/#1444를 갱신한다. 운영 접속·배포·검증은 하지 않는다.
 
-
 - Map #1447을 7ee94fb로 일반 병합했다. exact b778c097의 독립 리뷰 두 명과 최종 CI 전체를 확인했다. CI 단위/lint 3,643개·API 1,600개·Dagster 920개, PG 1,622개를 통과했다.
 - 세 OpenAPI profile은 검토된 바이트와 동일하다. Pinvi의 service/admin 실행 revision을 실제 Map 병합 커밋으로 맞췄고 capability generation과 M05 기존 attestation/체크섬은 보존했다.
 - 소비자 계약 318개 통과·조건부 9개 skip, 독립 설치 wheel의 packaged JSON·SHA·runtime revision·capability 대조를 통과했다.
 - 이 커밋은 provenance/테스트 핀/문서만 바꾸며 제품은 679ca7a와 같다. 그 제품의 전체 WSL API 2,740개·웹 282개·실제 지연 UI 10항목 및 두 독립 리뷰를 완료했다.
 - 최종 Docker 설치 검증·두 exact HEAD 리뷰·CI를 마친 뒤 #662를 병합하고 최신 #643/#1444를 갱신한다. 운영 접속·배포·검증은 하지 않는다.
 
-
 ## 2026-11-04 — #635 HTTP 계약 구현 완료·지도 UI 진행
+
 - 네 종류 geometry와 truncated를 보존하고 zoom14 이상 opt-in 요청을 전달한다. 수정 전 API6·웹6 실패를 확인했고 관련 API104·웹14·기반 계약33·mypy256을 통과했다.
 - Map dd0238c의 immutable 계약/provenance를 동기화했고 service/user bytes 및 M05 envelope·조건부 키를 유지했다.
 - 초안 #665에서 두 지도 레이어·선택·토글·stale 응답 경계·새 카탈로그를 이어 구현한다. 운영 접근 없음.
 
 ## 2026-11-04 — #635 경로·영역 지도 레이어 초안
+
 - #643 본문·댓글과 Map #1444를 다시 읽었다. Map #1448(dd0238c) 및 SDK #20이 머지됐으며 Map 묶음은 완료됐다.
 - 최신 main7479bbe의 새 live E2E 카탈로그 #664(346건)를 기준으로 작업한다. 완료된 #643 항목의 카탈로그 기대값도 실제 동작 근거에 맞춰 확인한다.
 - 탐색·소유자 여행 지도에 경로/영역 토글을 추가하고 기존 vworld-map-web 선·면 컴포넌트로 LineString/MultiLineString/Polygon/MultiPolygon과 내부 구멍을 보존한다. 기존 팔레트·마커 톤은 유지한다.
@@ -687,9 +704,9 @@ webserver statement timeout(15초)과 PinVi probe timeout(2초)을 넘긴 것이
      `~/install-mgr.sh <sha>` → rebind.
   3. 그 뒤 pair 하나를 회전해 재구축 한 번 — C6c 세 검사(`pinvi_etl_summary`·`pinvi_provider_sync`·나머지)가
      모두 green이어야 수용이고, 이 PR의 몫은 그 중 `pinvi_etl_summary`의 `pinvi.status=ok`·정수 count다.
-  회전 전에 n150에서 재시도 경로(첫 시도 2초 → 남은 예산 재시도)를 **부하가 있는 cold 상태에서 세 번 이상**
-  읽기 전용으로 측정한다(`docker exec pinvi-api-latest python -`, 운영 상수 그대로). 재시도가 cold에서도 10초
-  안에 못 들면 2번(Manager 판정)이 필수가 된다. 커밋 시점 측정: 08:16Z(swap 4.3 GB 사용, iowait 55–69 %) 첫 시도의 2초 ReadTimeout이 호스트 정지로 10초 예산이 다 지난 뒤에야 올라와 재시도 예산이 0이었다(운영 코드의 `remaining <= 0` 가드가 그대로 "시간 초과"로 보고하는 경우) — 즉 cold + 정지 상태에서 재시도가 구해 주는 것은 아직 실측되지 않았고, 2번이 필수일 가능성이 높다. 08:17:49Z(load 11.2, iowait 33 %, warm) server_info 0.04초 + 새 문서 0.282/0.128/0.103초, 모두 200·errors 없음·sensor tick 18건.
+     회전 전에 n150에서 재시도 경로(첫 시도 2초 → 남은 예산 재시도)를 **부하가 있는 cold 상태에서 세 번 이상**
+     읽기 전용으로 측정한다(`docker exec pinvi-api-latest python -`, 운영 상수 그대로). 재시도가 cold에서도 10초
+     안에 못 들면 2번(Manager 판정)이 필수가 된다. 커밋 시점 측정: 08:16Z(swap 4.3 GB 사용, iowait 55–69 %) 첫 시도의 2초 ReadTimeout이 호스트 정지로 10초 예산이 다 지난 뒤에야 올라와 재시도 예산이 0이었다(운영 코드의 `remaining <= 0` 가드가 그대로 "시간 초과"로 보고하는 경우) — 즉 cold + 정지 상태에서 재시도가 구해 주는 것은 아직 실측되지 않았고, 2번이 필수일 가능성이 높다. 08:17:49Z(load 11.2, iowait 33 %, warm) server_info 0.04초 + 새 문서 0.282/0.128/0.103초, 모두 200·errors 없음·sensor tick 18건.
 
 ## 2026-10-13 (claude) — `/admin/provider-sync` 502 수정 (브랜치 `fix/ops-grid-refresh-policy-provider-dataset-id`)
 
@@ -712,8 +729,8 @@ loc·규칙 문구와 함께 로그하며, 소비 스키마 34쌍의 property/en
      스모크 뒤에야 pinvi-web/pinvi-dagster를 재생성하므로 pinvi-web이 0058369c에 남는다.
   4. 과제 1 fix 포함 PinVi sha + Map `c4d17343` pair를 chain17로 전진 → C6c `pinvi_etl_summary`·`pinvi_provider_sync` 통과와
      pinvi-web 재생성을 확인한다.
-  그 전까지 prod `/admin/provider-sync`는 모든 요청이 502다(policy 행 삭제로 우회하지 말 것 — ADR-108 SLA 무력화).
-  열린 소유자 결정: `_CanonicalModel.extra` forbid 유지 vs ignore 전환(journal 결정 기록).
+     그 전까지 prod `/admin/provider-sync`는 모든 요청이 502다(policy 행 삭제로 우회하지 말 것 — ADR-108 SLA 무력화).
+     열린 소유자 결정: `_CanonicalModel.extra` forbid 유지 vs ignore 전환(journal 결정 기록).
 
 ## 2026-10-13 (claude) — Map admin OpenAPI 재vendor `c4d17343` (브랜치 `chore/revendor-map-admin-c4d17343`)
 
@@ -758,7 +775,6 @@ Common a960bdb, Map 1a3c467, PinVi 0058369의 제품113파일 두 독립 FULL �
 ## 2026-10-05 — T-371 Map paired 재구축·공통 HTTP (진행 중)
 
 [공통 Dagster 가이드](runbooks/common-dagster.md)에 따라 Common bounded HTTP를 PinVi API에 적용했다. JSON 객체 계약과 기존 공통 UI·ETL을 유지한다. Map 신규 관리자 snapshot 재vendor·M05 pair 갱신 후 2인 독립 리뷰·실제 paired 재구축·live·CI·PR merge를 수행한다. [검증 기록](reviews/common-map-rebuild-2026-10-05/README.md)에 실패와 성공을 분리한다.
-
 
 ## 2026-10-05 — T-370 Common Dagster 채택
 
@@ -837,7 +853,7 @@ Pinvi PR #561, kor-travel-docker-manager PR #366(ADR-46, 원래 ADR-45로 작성
 - Manager 쪽은 새 `kor-travel-shared-db-init-pinvi` + `pinvi-shared-db-runtime-role`
   (profile bootstrap) one-shot, `pinvi-api`/`pinvi-dagster*`/`pinvi-admin-bootstrap`의
   DSN 포트를 `KOR_TRAVEL_SHARED_DB_PORT`(11000)로 전환, `ktdctl pinvi-pair
-  rebuild-pinned`의 C6c 계약(`c6c_deployment.py`) 확장까지 포함했다.
+rebuild-pinned`의 C6c 계약(`c6c_deployment.py`) 확장까지 포함했다.
 - **N150 실제 fresh bootstrap 실행은 아직 안 했다** — 다음에 이 영역을 만질
   사람이 할 일: (1) `kor-travel-shared-db-init-pinvi` 최초 실행(pinvi db만
   생성됨), (2) `pinvi-shared-db-runtime-role` 수동 실행(`--profile bootstrap`,
@@ -873,6 +889,7 @@ Pinvi PR #561, kor-travel-docker-manager PR #366(ADR-46, 원래 ADR-45로 작성
   plan의 마지막 미체크 항목).
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - `docs/platform-topology.md` §5에 `pinvi`·`geo` 둘 다 code-server 분리를
   마친 것으로 기록돼 있다 — `map`/`conc`는 아직이다. 같은 패턴을 다른
   프로젝트에 적용할 때는 그 프로젝트의 network 모델(host vs bridge)을 먼저
@@ -910,6 +927,7 @@ Pinvi PR #561, kor-travel-docker-manager PR #366(ADR-46, 원래 ADR-45로 작성
   저장소는 건드리지 않았다.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - 이번 변경은 문서 전용이다 — 커밋 전 별도 테스트 불필요, 다만 pre-push
   보안 스캔은 여전히 표준 절차대로 수행할 것.
 - M05 activation을 실제로 트리거할지는 여전히 사용자 판단 대기 중이다.
@@ -985,8 +1003,9 @@ mobile-doctor CI 경고(expo SDK 57 패키지 버전 드리프트)를 `npx expo 
 §1.2/§4.2.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - G-1/G-3 재실측 방법은 N150 SSH → `docker exec -u postgres
-  kor-travel-weather-db-1 psql -U weather -d weather`로 직접 쿼리하는
+kor-travel-weather-db-1 psql -U weather -d weather`로 직접 쿼리하는
   것이다(자세한 명령은 journal.md 참조). WSL2에서 SSH 연결이 간헐적으로
   끊긴다("No route to host") — 재시도하면 대개 붙는다.
 - T-367 가드가 실제 스케줄대로 돌기 시작하면(배포 확인 필요) G-3 재실측을
@@ -1004,6 +1023,7 @@ weather marker가 운영에서 이미 하나도 안 보이고 있었다는 사�
 상세는 `docs/journal.md` 최신 항목.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **weather marker 표시는 flag `pinvi_kor_travel_weather_map_markers_enabled`
   (기본 off)에 달려 있다** — 지금 켜도 관측상 아무 변화가 없다(이전에도 아무도
   못 보고 있었으므로). 검증 후 켜는 결정은 아직 안 내려졌다.
@@ -1033,12 +1053,13 @@ weather marker가 운영에서 이미 하나도 안 보이고 있었다는 사�
 게이트(G-1·G-3)에 막혀 있다.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - T-363의 **코드**(startWeatherProxy, flag-on sub-test, 런북 절)는 전부
   완성돼 있다 — 실행만 T-365 flag-on 직전으로 미뤘을 뿐, 아무것도 되돌리지
   않았다.
 - T-368(미정) 투자 착수 여부는 아직 사용자 확인 대기 중이다. 투자 착수 시
   참고할 단서: `kor-travel-weather`의 vendored OpenAPI 스펙에 `GET
-  /v1/weather/nearby?lat=&lon=&radius_km=&limit=`(반경 기반, bbox 아님,
+/v1/weather/nearby?lat=&lon=&radius_km=&limit=`(반경 기반, bbox 아님,
   limit≤100, `NearbyOut`에 위치+현재값 포함)가 이미 존재한다 —
   `FeatureMapView.tsx`의 `WeatherMarker` 위치 공급원 대체 후보로 유력하지만
   아직 정식 설계는 없다.
@@ -1056,6 +1077,7 @@ T-359~T-367 실행 계획(`docs/execplan/t-359-weather-source-cutover.md`)의
 Pinvi 소관 항목은 이것으로 전부 끝났다.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **T-367은 게이트 G-3을 해소하지 않는다** — `kor-travel-weather` 실효 보존이
   실제로 15일 이상이 되기 전까지는 이 가드가 **항상 실패한다**(현재 2일).
   이건 버그가 아니라 설계 의도다. G-3 자체(15일 연장)는 그 서비스 소관의
@@ -1070,7 +1092,7 @@ Pinvi 소관 항목은 이것으로 전부 끝났다.
   만드는 패턴을 따를 것(`KasiResource`와 동일 원칙).
 - **`mypy --strict`는 개별 파일 지정 실행보다 패키지 전체 실행이 더
   엄격하다** — 개별 파일만 돌려 통과했다고 끝내지 말고, `mypy --strict
-  pinvi/`(apps/etl) 또는 대응 전체 경로로 한 번 더 돌려 새로 만든 코드가
+pinvi/`(apps/etl) 또는 대응 전체 경로로 한 번 더 돌려 새로 만든 코드가
   아니라 사전 존재 오류인지 확인할 것(이번에 `sensors.py`/`pinvi_pii_retention.py`
   등에서 이 작업과 무관한 사전 존재 오류 9건을 발견 — `git stash`로
   baseline 재현 후 손대지 않고 넘어갔다).
@@ -1092,6 +1114,7 @@ T-366(P7)을 완료했다 — 컴플라이언스 문서(`data-policy.md` §3-1,
 남는다.**
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - 국외 상용 provider(OpenWeatherMap/WeatherAPI.com/Open-Meteo/wttr.in)의
   정확한 소재국은 확인하지 않고 **[변호사 검토 필요]**로 남겨 뒀다 — 프로젝트의
   기존 관례(단정하지 않기)를 그대로 따른 것이며, 실제 국외 이전 고지 문구
@@ -1116,6 +1139,7 @@ kor-travel-map fixture 부재로 남아 있다(`docs/tasks.md` "T-363 e2e 실행
 검증" 항목).
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **squash-merge 예정 브랜치 위에 스택 PR을 쌓지 말 것 — 부득이하면 머지 직후
   즉시 cherry-pick으로 재배치할 준비를 해 둘 것.** GitHub는 base 브랜치가
   삭제되면 스택 PR을 자동 closed시키고, closed PR은 base를 바꿀 수 없으며,
@@ -1144,11 +1168,12 @@ T-363의 e2e 코드(live-mutating weather proxy + flag-on sub-test + 런북)를 
 SHA-256 해시로만 있어(원문은 admin BFF만 앎) 관리자가 직접 만들어야 한다.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **N150(`digitie@192.168.1.14`)은 SSH로 접근 가능하고 완전한 운영 스택이다** —
   pinvi/kor-travel-map/kor-travel-weather/kor-travel-geo/kor-travel-concierge/
   kor-travel-airport가 전부 실제로 떠 있다. `kor-travel-map-postgres`는 포트
   `12700`(기본 5432 아님)에서 리슨하며 `docker exec kor-travel-map-postgres psql -p
-  12700 -U kor_travel_map -d kor_travel_map`으로 trust auth 조회가 된다(비밀번호
+12700 -U kor_travel_map -d kor_travel_map`으로 trust auth 조회가 된다(비밀번호
   불필요) — 읽기 전용 조회 용도로 유용하다.
 - **kor-travel-map 운영 DB는 `place` feature 1047개뿐이고 weather 데이터가
   0행이다.** 즉 이 환경에서 실 weather 값을 요구하는 어떤 검증(flag off든 on이든)도
@@ -1156,9 +1181,9 @@ SHA-256 해시로만 있어(원문은 admin BFF만 앎) 관리자가 직접 만�
   상태를 별도로 확인할 필요가 있어 보인다(T-363 범위 밖).
 - **kor-travel-map의 manual feature 생성/상태 전환 API는 의도적으로 프로그램적
   우회를 막아 뒀다** — `POST /v1/admin/features`는 `X-Kor-Travel-Map-Admin-Proxy-Secret`
-  + `X-Kor-Travel-Map-Admin-Feature-Create-Token`(서버는 SHA-256 해시만 보관) +
-  trusted proxy CIDR 3중 검증이다. 이런 건 시크릿을 캐내서 우회하지 말고 관리자에게
-  직접 요청할 것.
+  - `X-Kor-Travel-Map-Admin-Feature-Create-Token`(서버는 SHA-256 해시만 보관) +
+    trusted proxy CIDR 3중 검증이다. 이런 건 시크릿을 캐내서 우회하지 말고 관리자에게
+    직접 요청할 것.
 - e2e 코드 자체(`startWeatherProxy`, flag-on sub-test)는 `PINVI_LIVE_WEATHER_TRIP_VIEW_E2E=1`
   로 게이트돼 있고 기존 fixture(found/retired/suppressed/missing/weatherFeature)를
   그대로 재사용하므로, fixture 2개(retired 1·suppressed 1)만 Admin UI에서 만들어
@@ -1184,6 +1209,7 @@ feature batch와 아무 것도 주고받지 않는 완전 독립 함수로 다�
 상태를 아예 참조하지 않는다.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **trip view weather는 feature batch와 완전히 독립이다(T-363부터).** T-362
   (단건)와 다르다 — 단건은 POI 문맥이 없어 `kor_travel_map.get_feature`로 좌표를
   얻을 수밖에 없지만, trip view는 POI가 이미 `feature_snapshot.coord`를 들고
@@ -1220,6 +1246,7 @@ flag(기본 `false`)로 전환할 수 있게 했다. `apps/api/app/services/weat
 → provider 우선순위 dedupe → metric key 안전 정규화 → alert→advisory 투영.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **weather 관련 새 dependency는 반드시 optional로 선언할 것.** 필수로 선언하면
   flag off인 기존 테스트까지 dependency resolution 단계에서 503을 맞는다(이 테스트
   스위트는 `ASGITransport`로 lifespan을 안 태우고 명시 override에만 의존한다) —
@@ -1247,6 +1274,7 @@ flag(기본 `false`)로 전환할 수 있게 했다. `apps/api/app/services/weat
 **아직 어떤 라우터도 안 쓴다.**
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - `kor-travel-weather`의 `/resolve`는 반경 내 매치가 없으면 **404**를 준다 —
   OpenAPI 스펙에는 선언 안 돼 있는 실제 동작이다(재vendor해도 이 사실은 스펙에 안
   나온다). `KorTravelWeatherNotFound`로 이미 매핑돼 있으니 그대로 잡아 쓰면 된다.
@@ -1303,6 +1331,7 @@ vendored OpenAPI 스냅샷 SHA-256 드리프트 게이트. **어디에도 배선
 `main.py` lifespan 등록도 안 했다. 운영 날씨는 여전히 100% `kor-travel-map`에서 온다.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - client 메서드는 설계 문서 §2.1의 4개뿐이다. `nearby`/`get_location`/`list_locations`/
   admin 표면은 **의도적으로 안 만들었다** — Pinvi가 쓸 계획이 없다.
 - `markers`의 500개 상한은 OpenAPI 스키마에 없다(서버 코드 전용 422). 재vendor해도
@@ -1335,6 +1364,7 @@ location 해석기. **`source_location_ids` 전체를 저장·합산해야 한�
 - 일출/일몰(KASI)과 `apps/mobile`은 이관 대상이 **아니다**(모바일엔 날씨 코드 자체가 없다).
 
 **사용자 결정 완료(2026-09-17)** (설계 §7):
+
 1. 과거 날씨 = **C(대상 서비스 보존 연장)**. Pinvi 스냅샷 테이블은 만들지 않는다 →
    게이트 **G-3**. 보존은 **소급되지 않으므로** G-1을 기다리지 말고 지금 요청해 두는
    편이 낫다 — 늦을수록 영구히 잃는 과거 구간이 길어진다.
@@ -1356,6 +1386,7 @@ location 해석기. **`source_location_ids` 전체를 저장·합산해야 한�
 정확한 SHA(`bc8fd49...`)로 고정했다. 상세는 `docs/journal.md` 같은 날 엔트리.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **pinvi가 직접 소비하는 `python-*-api`는 `python-kasi-api` 하나뿐이다.**
   나머지(`python-krforest-api`, `python-visitkorea-api` 등)는 전부
   `kor-travel-map`이 provider 통합으로 소유한다 — pinvi에서 건드리지 않는다.
@@ -1376,6 +1407,7 @@ v5 → v6). CI가 로컬에서 안 보이던 lockfile 불일치 2건을 잡아 �
 `docs/journal.md` 2026-09-11 엔트리.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **vendored tarball 갱신 절차는 `docs/integrations/maplibre-vworld.md` §1.1에 문서화돼 있다.**
   트렁크(`F:\dev\maplibre-vworld-react`)가 dirty해도 건드리지 않고 clean clone으로 빌드한다.
 - **lockfile을 크게 바꿀 땐 `npm ci`(npm 11)만으로 안심하지 않는다.** Docker build(npm 10,
@@ -1393,6 +1425,7 @@ npm 11을 상시 버전으로 고정하고, T-352가 넣었던 lockfile 무결�
 (100% → 4.8% → **99.5%**). 상세는 `docs/tasks-done.md` 2026-09-05와 `docs/journal.md` 같은 날.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **npm은 11 이상이어야 한다.** `engines.npm >= 11`이고 CI도 `npm@11.19.1`로 고정한다.
   npm 10.9.7은 lockfile 없는 설치에서 arborist 버그로 죽는다.
 - **`package-lock.json`을 재생성할 땐 `node_modules`를 먼저 치운다.** 남아 있으면 npm이 디스크에서
@@ -1412,6 +1445,7 @@ npm 11을 상시 버전으로 고정하고, T-352가 넣었던 lockfile 무결�
 상세는 `docs/tasks-done.md` 2026-09-05와 `docs/journal.md` 같은 날 엔트리.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **`apps/mobile`의 reanimated/worklets는 이제 명시 선언이다.** 전에는 전이 의존으로만 떠 있어
   npm이 늘 최신을 골랐고 그게 T-353의 1차 원인이었다. 버전을 바꿀 땐 root `overrides`의
   `react-native` / `react-native-reanimated` / `react-native-worklets`도 **같이** 움직여야 한다 —
@@ -1445,6 +1479,7 @@ TanStack Table은 `sortDescFirst:false` + `enableSortingRemoval` 기본값(true)
 회귀 테스트는 **수정을 되돌려 실제로 실패하는 것을 확인**하고 넣었다.
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **`Section`은 이제 `SectionCard`(KTM 카드 언어)다.** 자식 간격은 `CardContent`의
   `space-y-4`가 소유한다 — 자식에 `mb-3`/`mt-3`을 직접 달면 28px로 겹친다(T-357에서 4곳 제거).
 - **헤더에 버튼이 필요한 패널은 `Section`의 `actions`를 쓴다.** 이 슬롯이 막혀 있어서
@@ -1466,6 +1501,7 @@ API pytest unit 1333, 모바일 tsc clean, **N150 격리 컨테이너 e2e 169 pa
 전문 리뷰어 2명 적대적 리뷰 + 교차검증 2회(2차 NO-GO → P0/P1 수정 후 해소).
 
 다음에 이 영역을 만질 사람이 알아야 할 것:
+
 - **모달 스택이 둘이다.** admin은 base-ui(`components/admin/ui/dialog` 등), 사용자 표면은
   `lib/useModalDialog`. 한 화면에서 섞으면 focus trap과 `inert` 스냅샷이 서로를 덮는다.
   DESIGN.md에 명문화했고 현재 혼용 0건이며, T-357에서 `eslint.config.mjs`의
@@ -1719,6 +1755,7 @@ CI gate가 가장 느린 shard까지 정확히 기다려 통과 확인 후 머�
 `.test_durations` 캐시를 만들어(`pytest --store-durations`) T-351의 count 기반 분할을
 duration 기반으로 재분배(현재도 정상 동작하지만 shard 3가 유독 오래 걸림 — 5m24s~5m28s,
 1번은 2m36s~2m53s로 편차가 큼).
+
 ## 2026-08-26 (codex) — PR487 리뷰 차단 해소 진행
 
 exact head `e442cc63`에 대한 두 전문 리뷰에서 외부 DB 주입, fresh-stack 재사용, 포트 검증,
@@ -1744,6 +1781,7 @@ git이 자동 병합했다. 병합 뒤 `apps/web` typecheck·lint(경고 4건, �
 막혀 있고 T-350도 끝났다. 남은 열린 T-3xx는 `T-351`(통합 테스트 스위트 CI job 샤딩 — 스코프가
 커서 별도 설계 필요)뿐이다. `T-VN-M05-ACTIVATION`(codex 선점) 또는 `T-353`(Expo 업스트림)이
 풀리면 그쪽을 우선 재개한다.
+
 ## 2026-08-26 (codex) — PR487 운영 게이트 보완 및 Odroid 퇴역 결정
 
 PR #477의 후속 운영 게이트 PR #487을 최신 `origin/main`에 리베이스했다. exported Compose
@@ -2000,6 +2038,7 @@ Zod 미러 3곳(detail-card는 각각 5·7 arm 동시)에서 제거했다. 저�
 
 **다음 한 작업**: T-273(v1.0.0 E2E/Live gate) — 남은 hard blocker는 geofence 운영 설정이다.
 모바일 후속(T-311/T-318/T-319/T-320)과 T-321(vitest 조용한 누락)은 별도 PR로 분리해 뒀다.
+
 ## 2026-08-21 (codex) — T-VN-M05 runtime DB owner 분리
 
 M05 evidence는 runtime non-owner/non-superuser login에서만 API/Dagster가 접근한다. owner URL은
@@ -2091,7 +2130,6 @@ Map API가 떠 있는 compatible draft pair가 없으므로 N150 UI E2E는 아�
 
 **다음 한 작업**: draft PR #458의 rebased-head provenance CI와 전문 적대 재심을 통과시킨다. 그 뒤
 compatible draft pair로 N150 격리 UI E2E를 실행한다.
-
 
 ## 2026-08-19 (codex) — T-VN-42 Admin 계약 소비 폐쇄
 

@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { SettingsSection } from '@/components/app/SettingsSurface';
+import { buttonClassName } from '@/components/ui/button-styles';
+import { apiClient } from '@/lib/api';
 import { ApiError, telegramApi } from '@pinvi/api-client';
 import type { TelegramPreferences, TelegramTarget } from '@pinvi/schemas';
-import { apiClient } from '@/lib/api';
-import { SettingsSection } from '@/components/app/SettingsSurface';
-import { buttonClassName } from '@/components/ui/Button';
+import { useEffect, useState, type FormEvent } from 'react';
 import { TelegramNotificationHistory } from './TelegramNotificationHistory';
 
 export function TelegramNotificationPreferences({ targets }: { targets: TelegramTarget[] }) {
@@ -54,7 +54,8 @@ export function TelegramNotificationPreferences({ targets }: { targets: Telegram
         </p>
         <p className="mb-3 text-sm text-muted">
           특보는 예약 시각과 별개로 여행 기간·대표 지역이 확인되고 여행에 연결된 대상으로 보냅니다.
-          켠 뒤의 최근 공식 발표만 알리며 일부 구역은 확인되지 않습니다. 현재 안전 상태를 보장하지 않습니다.
+          켠 뒤의 최근 공식 발표만 알리며 일부 구역은 확인되지 않습니다. 현재 안전 상태를 보장하지
+          않습니다.
         </p>
         {error && (
           <p role="alert" className="mb-3 rounded-sm bg-error-bg p-3 text-sm text-error-text">

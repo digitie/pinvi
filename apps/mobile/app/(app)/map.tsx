@@ -1,9 +1,11 @@
+import type { RefObject } from 'react';
+import type { MapCamera } from '../../lib/cameraBbox';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
-import { VWorldMapView, type VWorldMapHandle } from 'vworld-map-rn';
+import { VWorldMapView, type VWorldMapHandle } from '../../components/VWorldMap';
 import { useUserLocation } from '@pinvi/hooks';
 import {
   AUTO_CENTER_ZOOM,
@@ -23,17 +25,16 @@ import {
   TransportChips,
   TransportItemCard,
   useMobileTransport,
-  type MapCamera,
 } from '../../components/TransportLayers';
 import type { TransportItem } from '@pinvi/schemas';
 
 /**
- * 지도 화면 — VWorld + MapLibre (`vworld-map-rn`). VWorld 키는 앱에 번들하지 않고
+ * 지도 화면 — VWorld + MapLibre의 플랫폼별 공개 어댑터. VWorld 키는 앱에 번들하지 않고
  * `GET /mobile/vworld/token`으로 server-issued 발급받아 `apiKey`로 주입한다(ADR-043).
  * 내 위치 마커 + "현재 위치로" 카메라 이동(`VWorldMapHandle.flyTo`).
  *
- * 네이티브 모듈(`@maplibre/maplibre-react-native`)이 필요하므로 Expo Dev Client(EAS) 빌드에서만
- * 동작한다(Expo Go 미사용, ADR-043).
+ * Android/iOS는 네이티브 모듈(`@maplibre/maplibre-react-native`)이 포함된 Expo Dev Client(EAS)를
+ * 사용한다(Expo Go 미사용, ADR-043). 웹은 public web 어댑터를 SSR 이후에 로드한다.
  */
 /**
  * 자동 센터링 결정이 늦어도 지도가 영원히 placeholder로 남지 않게 하는 상한.
@@ -65,12 +66,7 @@ export default function MapScreen() {
    * map-ready 콜백도 노출하지 않으므로, 웹처럼 선언형으로 카메라를 옮길 수 없다.
    * 그래서 **결정이 끝날 때까지 지도 mount 자체를 미룬다** — 확정된 중심점으로 한 번에 마운트한다.
    */
-  const [autoCenter, setAutoCenter] = useState<{
-    resolved: boolean;
-    center: [number, number];
-    zoom: number;
-    outOfServiceArea: boolean;
-  }>({
+  const [autoCenter, setAutoCenter] = useState<AutoCenterState>({
     resolved: false,
     center: [...DEFAULT_MAP_CENTER] as [number, number],
     zoom: DEFAULT_MAP_ZOOM,
@@ -116,85 +112,17 @@ export default function MapScreen() {
    * **뒤늦게 도착한 좌표를 버리지 않고** 카메라로 옮긴다 — `initialCenter`는 mount 시 1회만
    * 읽히므로 그때는 명령형 `flyTo`가 유일한 수단이다.
    */
-  useEffect(() => {
-    if (autoCenterStartedRef.current) return;
-    // 동의 판정이 끝나야 게이트를 통과시킬 수 있다. 늦어지면 아래 타임아웃이 지도를 먼저 띄운다.
-    if (consent.status === 'loading') return;
-    autoCenterStartedRef.current = true;
-
-    let resolvedOnce = false;
-
-    const settle = (coord: { lon: number; lat: number } | null) => {
-      if (unmountedRef.current) return;
-      const outcome = resolveMapCenter({ deviceCoord: coord });
-      if (resolvedOnce) {
-        // 이미 지도가 떠 있다 — 늦게 온 좌표는 카메라 이동으로 반영한다.
-        if (outcome.source === 'device') {
-          mapRef.current?.flyTo({ center: outcome.center, zoom: AUTO_CENTER_ZOOM });
-        }
-        return;
-      }
-      resolvedOnce = true;
-      setAutoCenter({
-        resolved: true,
-        center: outcome.center,
-        zoom: outcome.source === 'device' ? AUTO_CENTER_ZOOM : DEFAULT_MAP_ZOOM,
-        outOfServiceArea: outcome.source === 'default' && outcome.outOfServiceArea,
-      });
-    };
-
-    // 결정이 늦어도 지도는 뜬다.
-    const timeout = setTimeout(() => settle(null), AUTO_CENTER_TIMEOUT_MS);
-
-    void (async () => {
-      const permission = (await expoLocationAdapter.getPermissionState?.()) ?? 'prompt';
-      if (unmountedRef.current) return;
-
-      const gate = shouldAutoLocate({
-        permission,
-        consent: consent.status,
-        gate: { alreadyResolved: false, userInteracted: false },
-      });
-      if (!gate.proceed) {
-        clearTimeout(timeout);
-        settle(null);
-        return;
-      }
-
-      // 권한·동의를 모두 통과한 뒤에만 세션 캐시를 본다 — 캐시가 게이트를 우회하면 안 된다.
-      if (autoCenterSession?.done) {
-        clearTimeout(timeout);
-        settle(autoCenterSession.coord);
-        return;
-      }
-
-      try {
-        // 최근 위치가 있으면 그것으로 즉시 확정해 진입을 지연시키지 않는다.
-        const cached = await expoLocationAdapter.getCachedPosition?.(300_000);
-        const loc =
-          cached ?? (await expoLocationAdapter.getCurrentPosition({ high_accuracy: false }));
-        if (unmountedRef.current) return;
-        const outcome = resolveMapCenter({ deviceCoord: loc.coord });
-        // 국내 좌표만 캐시한다 — 국외 좌표를 캐시하면 재진입 때 안내 없이 조용히 넘어간다.
-        autoCenterSession = {
-          done: true,
-          coord: outcome.source === 'device' ? loc.coord : null,
-        };
-        clearTimeout(timeout);
-        settle(loc.coord);
-      } catch {
-        if (unmountedRef.current) return;
-        // 자동 경로는 재시도하지 않는다. "현재 위치로" 버튼은 언제든 쓸 수 있다.
-        autoCenterSession = { done: true, coord: null };
-        clearTimeout(timeout);
-        settle(null);
-      }
-    })();
-
-    return () => {
-      clearTimeout(timeout);
-    };
-  }, [consent.status]);
+  useEffect(
+    () =>
+      beginAutoCenter({
+        consentStatus: consent.status,
+        autoCenterStartedRef,
+        unmountedRef,
+        mapRef,
+        setAutoCenter,
+      }),
+    [consent.status],
+  );
 
   const onMyLocation = useCallback(() => {
     if (consent.status === 'granted') {
@@ -315,35 +243,167 @@ export default function MapScreen() {
               onClose={() => setSelectedTransportId(null)}
             />
           ) : null}
-          {error ? (
-            <Card className="gap-1">
-              <Body className="text-error-text">
-                {error.code === 'PERMISSION_DENIED'
-                  ? '위치 권한이 거부되었습니다. 설정에서 허용해 주세요.'
-                  : '위치를 가져오지 못했습니다.'}
-              </Body>
-            </Card>
-          ) : null}
-          {autoCenter.outOfServiceArea ? (
-            <Card className="gap-1">
-              <Muted>현재 위치가 국내 서비스 범위 밖이라 기본 위치(서울)를 표시합니다.</Muted>
-            </Card>
-          ) : null}
-          {consent.status === 'missing' ? (
-            <Card className="gap-1">
-              <Muted>
-                위치 동의가 없어 내 위치 기능이 꺼져 있습니다. 버튼을 눌러 동의할 수 있습니다.
-              </Muted>
-            </Card>
-          ) : null}
-          {/* 지도가 아직 mount되지 않았으면 `flyTo`가 무음 no-op이 된다 — 그동안은 눌리지 않게 한다. */}
-          <Button
-            label="현재 위치로"
-            onPress={onMyLocation}
-            loading={loading || granting || consent.status === 'loading' || !autoCenter.resolved}
+          <MapLocationControls
+            error={error}
+            outOfServiceArea={autoCenter.outOfServiceArea}
+            resolved={autoCenter.resolved}
+            consentStatus={consent.status}
+            loading={loading}
+            granting={granting}
+            onMyLocation={onMyLocation}
           />
         </View>
       </View>
     </SafeAreaView>
+  );
+}
+
+type AutoCenterState = {
+  resolved: boolean;
+  center: [number, number];
+  zoom: number;
+  outOfServiceArea: boolean;
+};
+
+/** 권한·세션 캐시·측위 제한시간의 순서를 지도 렌더와 분리한다. */
+function beginAutoCenter({
+  consentStatus,
+  autoCenterStartedRef,
+  unmountedRef,
+  mapRef,
+  setAutoCenter,
+}: {
+  consentStatus: ReturnType<typeof useLocationConsent>['status'];
+  autoCenterStartedRef: RefObject<boolean>;
+  unmountedRef: RefObject<boolean>;
+  mapRef: RefObject<VWorldMapHandle | null>;
+  setAutoCenter: (state: AutoCenterState) => void;
+}) {
+  if (autoCenterStartedRef.current) return;
+  // 동의 판정이 끝나야 게이트를 통과시킬 수 있다. 늦어지면 아래 타임아웃이 지도를 먼저 띄운다.
+  if (consentStatus === 'loading') return;
+  autoCenterStartedRef.current = true;
+
+  let resolvedOnce = false;
+
+  const settle = (coord: { lon: number; lat: number } | null) => {
+    if (unmountedRef.current) return;
+    const outcome = resolveMapCenter({ deviceCoord: coord });
+    if (resolvedOnce) {
+      // 이미 지도가 떠 있다 — 늦게 온 좌표는 카메라 이동으로 반영한다.
+      if (outcome.source === 'device') {
+        mapRef.current?.flyTo({ center: outcome.center, zoom: AUTO_CENTER_ZOOM });
+      }
+      return;
+    }
+    resolvedOnce = true;
+    setAutoCenter({
+      resolved: true,
+      center: outcome.center,
+      zoom: outcome.source === 'device' ? AUTO_CENTER_ZOOM : DEFAULT_MAP_ZOOM,
+      outOfServiceArea: outcome.source === 'default' && outcome.outOfServiceArea,
+    });
+  };
+
+  // 결정이 늦어도 지도는 뜬다.
+  const timeout = setTimeout(() => settle(null), AUTO_CENTER_TIMEOUT_MS);
+
+  void (async () => {
+    const permission = (await expoLocationAdapter.getPermissionState?.()) ?? 'prompt';
+    if (unmountedRef.current) return;
+
+    const gate = shouldAutoLocate({
+      permission,
+      consent: consentStatus,
+      gate: { alreadyResolved: false, userInteracted: false },
+    });
+    if (!gate.proceed) {
+      clearTimeout(timeout);
+      settle(null);
+      return;
+    }
+
+    // 권한·동의를 모두 통과한 뒤에만 세션 캐시를 본다 — 캐시가 게이트를 우회하면 안 된다.
+    if (autoCenterSession?.done) {
+      clearTimeout(timeout);
+      settle(autoCenterSession.coord);
+      return;
+    }
+
+    try {
+      // 최근 위치가 있으면 그것으로 즉시 확정해 진입을 지연시키지 않는다.
+      const cached = await expoLocationAdapter.getCachedPosition?.(300_000);
+      const loc =
+        cached ?? (await expoLocationAdapter.getCurrentPosition({ high_accuracy: false }));
+      if (unmountedRef.current) return;
+      const outcome = resolveMapCenter({ deviceCoord: loc.coord });
+      // 국내 좌표만 캐시한다 — 국외 좌표를 캐시하면 재진입 때 안내 없이 조용히 넘어간다.
+      autoCenterSession = {
+        done: true,
+        coord: outcome.source === 'device' ? loc.coord : null,
+      };
+      clearTimeout(timeout);
+      settle(loc.coord);
+    } catch {
+      if (unmountedRef.current) return;
+      // 자동 경로는 재시도하지 않는다. "현재 위치로" 버튼은 언제든 쓸 수 있다.
+      autoCenterSession = { done: true, coord: null };
+      clearTimeout(timeout);
+      settle(null);
+    }
+  })();
+
+  return () => {
+    clearTimeout(timeout);
+  };
+}
+
+function MapLocationControls({
+  error,
+  outOfServiceArea,
+  resolved,
+  consentStatus,
+  loading,
+  granting,
+  onMyLocation,
+}: {
+  error: ReturnType<typeof useUserLocation>['error'];
+  outOfServiceArea: boolean;
+  resolved: boolean;
+  consentStatus: ReturnType<typeof useLocationConsent>['status'];
+  loading: boolean;
+  granting: boolean;
+  onMyLocation: () => void;
+}) {
+  return (
+    <>
+      {error ? (
+        <Card className="gap-1">
+          <Body className="text-error-text">
+            {error.code === 'PERMISSION_DENIED'
+              ? '위치 권한이 거부되었습니다. 설정에서 허용해 주세요.'
+              : '위치를 가져오지 못했습니다.'}
+          </Body>
+        </Card>
+      ) : null}
+      {outOfServiceArea ? (
+        <Card className="gap-1">
+          <Muted>현재 위치가 국내 서비스 범위 밖이라 기본 위치(서울)를 표시합니다.</Muted>
+        </Card>
+      ) : null}
+      {consentStatus === 'missing' ? (
+        <Card className="gap-1">
+          <Muted>
+            위치 동의가 없어 내 위치 기능이 꺼져 있습니다. 버튼을 눌러 동의할 수 있습니다.
+          </Muted>
+        </Card>
+      ) : null}
+      {/* 지도가 아직 mount되지 않았으면 `flyTo`가 무음 no-op이 된다 — 그동안은 눌리지 않게 한다. */}
+      <Button
+        label="현재 위치로"
+        onPress={onMyLocation}
+        loading={loading || granting || consentStatus === 'loading' || !resolved}
+      />
+    </>
   );
 }

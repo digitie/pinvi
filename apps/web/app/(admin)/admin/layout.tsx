@@ -1,10 +1,10 @@
 'use client';
 
+import { ADMIN_MAIN_CONTENT_ID, AdminSkipLink } from '@/components/admin/admin-shell-parts';
+import { AdminQueryProvider } from '@/components/admin/AdminQueryProvider';
 import { AppMenu, type AppMenuGroup, type AppMenuLinkProps } from '@kor-travel/ui';
-import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState, type ReactNode } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, ApiError, authApi, queryKeys } from '@pinvi/api-client';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   Archive,
@@ -14,12 +14,13 @@ import {
   ChevronsLeft,
   ChevronsRight,
   ClipboardCheck,
-  GitCompare,
   Gavel,
+  GitCompare,
   HardDrive,
   KeyRound,
   LayoutDashboard,
   Lightbulb,
+  LogOut,
   Mail,
   MapPin,
   Newspaper,
@@ -36,13 +37,12 @@ import {
   Sprout,
   Tags,
   UserRound,
-  LogOut,
   Users,
   Workflow,
   type LucideIcon,
 } from 'lucide-react';
-import { ADMIN_MAIN_CONTENT_ID, AdminSkipLink } from '@/components/admin/admin-shell-parts';
-import { AdminQueryProvider } from '@/components/admin/AdminQueryProvider';
+import { redirect, usePathname, useRouter } from 'next/navigation';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 // 좌측 메뉴 이동 중 RSC/client transition 실패가 Next 기본 오류 화면으로 새지 않도록
 // document navigation으로 이동한다 (kor-travel-geo T-278 이식).
 import { DocumentNavLink } from '@/components/navigation/DocumentNavLink';
@@ -108,6 +108,23 @@ const NAV_GROUPS: {
 ];
 const ADMIN_ROLES = new Set(['admin', 'operator', 'cpo']);
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'pinvi.admin.sidebar.collapsed';
+const SIDEBAR_CHANGED_EVENT = 'pinvi-admin-sidebar-change';
+function readSidebarCollapsed() {
+  return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1';
+}
+function subscribeSidebar(callback: () => void) {
+  window.addEventListener('storage', callback);
+  window.addEventListener(SIDEBAR_CHANGED_EVENT, callback);
+  return () => {
+    window.removeEventListener('storage', callback);
+    window.removeEventListener(SIDEBAR_CHANGED_EVENT, callback);
+  };
+}
+function toggleSidebarCollapsed() {
+  window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, readSidebarCollapsed() ? '0' : '1');
+  window.dispatchEvent(new Event(SIDEBAR_CHANGED_EVENT));
+}
+
 const COMMON_MENU_GROUPS: AppMenuGroup[] = NAV_GROUPS.map((group) => ({
   id: group.title,
   label: group.title,
@@ -128,18 +145,43 @@ function CommonDocumentLink({ href, children, ...props }: AppMenuLinkProps) {
 }
 
 /** 권한 가드 + 사이드바 — Query provider 내부에서 me()를 useQuery로 확인한다. */
-function AdminGuard({ children }: { children: ReactNode }) {
+function AdminGuard(...args: Parameters<typeof useAdminGuardModel>) {
+  const viewModel = useAdminGuardModel(...args);
+  if (viewModel.renderBranch === 'render0') return <AdminGuardView0 viewModel={viewModel} />;
+  if (viewModel.renderBranch === 'render1') return <AdminGuardView1 />;
+  if (viewModel.renderBranch === 'render2') return <AdminGuardView2 viewModel={viewModel} />;
+  if (viewModel.renderBranch === 'render3') return <AdminGuardView3 />;
+  if (viewModel.renderBranch === 'render4') return <AdminGuardView4 viewModel={viewModel} />;
+  return null;
+}
+
+function adminLoginDestination(
+  isLoginPage: boolean,
+  query: { isError: boolean; isSuccess: boolean; error: unknown },
+  hasMe: boolean,
+  hasAdmin: boolean,
+) {
+  if (isLoginPage) return null;
+  if (
+    query.isError &&
+    query.error instanceof ApiError &&
+    (query.error.status === 401 || query.error.status === 404)
+  )
+    return '/admin/login';
+  if (query.isSuccess && hasMe && !hasAdmin) return '/admin/login?reason=forbidden';
+  return null;
+}
+
+function useAdminGuardModel({ children }: { children: ReactNode }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const pathname = usePathname();
-  // 최초 렌더에서 lazy initializer로 한 번만 읽는다 — sidebar 마크업은 meQuery가
-  // pending인 동안(SSR·hydration 포함) 렌더되지 않으므로 여기서 window 접근이 안전하다.
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(
-    () =>
-      typeof window !== 'undefined' &&
-      window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1',
+  const sidebarCollapsed = useSyncExternalStore(
+    subscribeSidebar,
+    readSidebarCollapsed,
+    () => false,
   );
   // login 페이지 자체는 가드 적용 X (무한 redirect 방지)
   const isLoginPage = pathname === '/admin/login';
@@ -155,24 +197,8 @@ function AdminGuard({ children }: { children: ReactNode }) {
   const me = meQuery.data ?? null;
   const hasAdmin = me ? me.roles.some((r) => ADMIN_ROLES.has(r)) : false;
 
-  useEffect(() => {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, sidebarCollapsed ? '1' : '0');
-  }, [sidebarCollapsed]);
-
-  useEffect(() => {
-    if (isLoginPage) return;
-    if (meQuery.isError) {
-      const err = meQuery.error;
-      if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
-        router.replace('/admin/login');
-      }
-      return;
-    }
-    if (meQuery.isSuccess && me && !hasAdmin) {
-      // 사용자 존재해도 admin role 없으면 login으로 강제 이동
-      router.replace('/admin/login?reason=forbidden');
-    }
-  }, [isLoginPage, meQuery.isError, meQuery.isSuccess, meQuery.error, me, hasAdmin, router]);
+  const destination = adminLoginDestination(isLoginPage, meQuery, Boolean(me), hasAdmin);
+  if (destination) redirect(destination);
 
   async function logout() {
     if (loggingOut) return;
@@ -189,27 +215,69 @@ function AdminGuard({ children }: { children: ReactNode }) {
   }
 
   if (isLoginPage) {
-    return <div className="min-h-dvh bg-surface-soft">{children}</div>;
+    return { renderBranch: 'render0' as const, children };
   }
   if (meQuery.isPending) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center text-sm text-muted">
-        권한 확인 중…
-      </div>
-    );
+    return { renderBranch: 'render1' as const };
   }
   if (meQuery.isError) {
-    return (
-      <div className="p-8" role="alert">
-        권한을 확인하지 못했습니다.
-        <button type="button" onClick={() => void meQuery.refetch()} className="ml-3 underline">
-          다시 확인
-        </button>
-      </div>
-    );
+    return { renderBranch: 'render2' as const, meQuery };
   }
-  if (!me || !hasAdmin) return null;
+  if (!me || !hasAdmin) return { renderBranch: 'render3' as const };
 
+  return {
+    renderBranch: 'render4' as const,
+    children,
+    loggingOut,
+    logout,
+    logoutError,
+    me,
+    pathname,
+    sidebarCollapsed,
+  };
+}
+
+type AdminGuardView0Model = Extract<
+  ReturnType<typeof useAdminGuardModel>,
+  { renderBranch: 'render0' }
+>;
+function AdminGuardView0({ viewModel }: { viewModel: AdminGuardView0Model }) {
+  const { children } = viewModel;
+  return <div className="min-h-dvh bg-surface-soft">{children}</div>;
+}
+function AdminGuardView1() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center text-sm text-muted">
+      권한 확인 중…
+    </div>
+  );
+}
+
+type AdminGuardView2Model = Extract<
+  ReturnType<typeof useAdminGuardModel>,
+  { renderBranch: 'render2' }
+>;
+function AdminGuardView2({ viewModel }: { viewModel: AdminGuardView2Model }) {
+  const { meQuery } = viewModel;
+  return (
+    <div className="p-8" role="alert">
+      권한을 확인하지 못했습니다.
+      <button type="button" onClick={() => void meQuery.refetch()} className="ml-3 underline">
+        다시 확인
+      </button>
+    </div>
+  );
+}
+function AdminGuardView3() {
+  return null;
+}
+
+type AdminGuardView4Model = Extract<
+  ReturnType<typeof useAdminGuardModel>,
+  { renderBranch: 'render4' }
+>;
+function AdminGuardView4({ viewModel }: { viewModel: AdminGuardView4Model }) {
+  const { children, loggingOut, logout, logoutError, me, pathname, sidebarCollapsed } = viewModel;
   return (
     <div className="pinvi-admin-shell flex min-h-dvh min-w-0 max-w-full flex-col overflow-x-clip bg-canvas lg:flex-row">
       {/* 좌측 rail은 nav 항목이 30개가 넘는다 — 키보드/스크린리더 사용자가 매 페이지마다 그걸
@@ -247,7 +315,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
             aria-pressed={sidebarCollapsed}
             data-testid="admin-sidebar-toggle"
             className="hidden size-9 shrink-0 items-center justify-center rounded-control text-muted hover:bg-admin-subtle hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary lg:flex"
-            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            onClick={toggleSidebarCollapsed}
           >
             {sidebarCollapsed ? (
               <ChevronsRight className="size-4" aria-hidden="true" />
