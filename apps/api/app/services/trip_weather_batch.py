@@ -80,6 +80,7 @@ from app.services.weather_location_resolver import (
 )
 from app.services.weather_map_resolver import resolve_many_via_map
 from app.services.weather_map_state import bundle_values, fetch_alerts, fetch_location_bundles
+from app.services.weather_markers_cache import cached_markers
 from app.services.weather_metrics import (
     WeatherFact,
     dedupe_by_provider_priority,
@@ -362,7 +363,7 @@ async def _build_trip_weather(
     try:
         async with asyncio.timeout_at(deadline):
             for chunk in _chunked(bundles.location_ids, _MARKERS_CHUNK_SIZE):
-                markers = await weather_client.markers(chunk)
+                markers = await cached_markers(weather_client, chunk)
                 for marker in markers:
                     values_by_location[marker.location_id].extend(marker.latest)
                     values_by_location[marker.location_id].extend(marker.alerts)
@@ -479,23 +480,33 @@ async def build_trip_weather_via_kor_travel_map(
         if daily_dates:
             sections.append("daily_summaries")
 
+        # 특보(weather `/markers`)는 Map 값과 함께 출발하지만 따로 기다린다(#621). 특보만 예산을 넘기면 특보 실패와
+        # 같은 규칙으로 특보 없이 Map 값으로 응답한다 — 공유 조회는 뒤에서 끝나 markers 캐시를 채운다.
+        alerts_task = asyncio.ensure_future(fetch_alerts(weather_client, bundles.location_ids))
         try:
             async with asyncio.timeout_at(deadline):
-                batch, alerts = await asyncio.gather(
-                    fetch_location_bundles(
-                        map_client,
-                        bundles.location_ids,
-                        sections=sections,
-                        # 지금보다 이른 `from`은 Map이 지금으로 당긴다(지난 예보 시각은 주지 않는다).
-                        forecast_from=range_from,
-                        forecast_to=range_to,
-                    ),
-                    fetch_alerts(weather_client, bundles.location_ids),
+                batch = await fetch_location_bundles(
+                    map_client,
+                    bundles.location_ids,
+                    sections=sections,
+                    # 지금보다 이른 `from`은 Map이 지금으로 당긴다(지난 예보 시각은 주지 않는다).
+                    forecast_from=range_from,
+                    forecast_to=range_to,
                 )
         except TimeoutError:
+            alerts_task.cancel()
             logger.error("trip_weather_batch.map_budget_exceeded — 미결 weather를 unavailable 처리")
             pending.mark(list(found), "unavailable", overwrite=False)
             return pending.result()
+        except BaseException:
+            alerts_task.cancel()
+            raise
+        try:
+            async with asyncio.timeout_at(deadline):
+                alerts = await alerts_task
+        except TimeoutError:
+            logger.warning("trip_weather_batch.alerts_budget_exceeded — 특보 없이 진행")
+            alerts = {}
 
         values_by_location: dict[str, list[WeatherFact]] = {}
         location_failed: dict[str, bool] = {}

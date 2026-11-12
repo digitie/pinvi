@@ -954,6 +954,25 @@ class Settings(BaseSettings):
     # 직접 경로의 사용자 카드와 관리자 진단 예산을 분리한다(#621).
     pinvi_kor_travel_weather_request_budget_seconds: float = Field(default=4.0, gt=0, le=60)
     pinvi_kor_travel_weather_admin_request_budget_seconds: float = Field(default=10.0, gt=0, le=60)
+    # #621 weather `/markers`(현재값+특보) 결과의 프로세스 캐시. 키는 정규화한 location 집합이다(PinVi는
+    # `kind`를 보내지 않는다). 성공만 담고 TTL 0이면 끈다. 항목 수와 담긴 location 수 합으로 메모리를 묶는다
+    # (지점당 ~2 KB). 공유 조회는 요청 예산과 별개인 자기 예산으로 끝까지 가서 캐시를 채운다.
+    pinvi_kor_travel_weather_markers_cache_ttl_seconds: float = Field(
+        default=90.0, ge=0, le=600, allow_inf_nan=False
+    )
+    pinvi_kor_travel_weather_markers_cache_max_entries: int = Field(default=512, ge=1, le=100_000)
+    pinvi_kor_travel_weather_markers_cache_max_locations: int = Field(
+        default=20_000, ge=1, le=1_000_000
+    )
+    pinvi_kor_travel_weather_markers_fetch_budget_seconds: float = Field(
+        default=8.0, gt=0, le=60, allow_inf_nan=False
+    )
+    # #621 trip view(소유자·공유 view)가 weather를 기다리는 전체 예산. 넘기면 weather만 `unavailable`이고
+    # view의 나머지는 그대로 응답한다. Map 경로에서 특보(`/markers`)만 늦으면 특보 없이 Map 값으로 응답한다
+    # (특보 실패와 같은 규칙) — 늦은 특보 조회는 뒤에서 끝나 markers 캐시를 채운다.
+    pinvi_trip_view_weather_budget_seconds: float = Field(
+        default=1.5, gt=0, le=60, allow_inf_nan=False
+    )
     # T-368. 기본값 off. on이면 `GET /weather/markers-in-bounds`가 지도 weather
     # marker를 `kor-travel-weather`의 `/nearby`로 직접 조회해 노출한다 — `kor-travel-map`을
     # 전혀 거치지 않는다(위 세 flag의 "완전 분리"를 지도 marker 표면까지 확장, T-363과

@@ -180,6 +180,21 @@ def kor_travel_weather_call_deadline(
         _call_scope.reset(token)
 
 
+@contextmanager
+def kor_travel_weather_detached_call_deadline(deadline: float) -> Iterator[None]:
+    """바깥 범위와 **무관한** 새 deadline 범위를 연다(#621 markers 공유 조회).
+
+    여러 요청이 기다리는 공유 조회는 그것을 처음 시작한 요청의 짧은 view 예산에 묶이면 안 된다 — 그 요청이
+    예산을 넘겨 떠나도 조회는 끝까지 가서 캐시를 채워야 한다. 그래서 중첩 규칙(더 이른 deadline·공유 집계)을
+    따르지 않고 자기 deadline과 자기 집계 상태를 쓴다. 회로·bulkhead는 client가 그대로 적용한다.
+    """
+    token = _call_scope.set(_CallScope(deadline=deadline, state=_ScopeState()))
+    try:
+        yield
+    finally:
+        _call_scope.reset(token)
+
+
 def _cap(value: float | None, remaining: float) -> float:
     return remaining if value is None else min(value, remaining)
 

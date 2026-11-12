@@ -48,7 +48,6 @@ from app.services.trip_weather_batch import (
 )
 
 logger = logging.getLogger(__name__)
-_WEATHER_BATCH_VIEW_BUDGET_SECONDS = 10.0
 
 
 async def build_trip_view(
@@ -290,7 +289,7 @@ async def build_trip_view(
             day_effective_date=day_effective_date,
             map_client=create_map_weather_client(kor_travel_map_client),
             weather_client=weather_client,
-            budget_seconds=_WEATHER_BATCH_VIEW_BUDGET_SECONDS,
+            budget_seconds=settings.pinvi_trip_view_weather_budget_seconds,
         )
     elif weather_client is not None and not settings.pinvi_kor_travel_map_weather_enabled:
         (
@@ -301,7 +300,7 @@ async def build_trip_view(
             pois=pois,
             day_effective_date=day_effective_date,
             weather_client=weather_client,
-            budget_seconds=_WEATHER_BATCH_VIEW_BUDGET_SECONDS,
+            budget_seconds=settings.pinvi_trip_view_weather_budget_seconds,
         )
     else:
         # weather 소스 미주입(직접 경로: weather_client 없음, Map 경로: kor_travel_map_client 없음 — MCP 도구 등
