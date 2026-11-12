@@ -1,3 +1,8 @@
+## 2026-11-13 — Common 실제 merge36 guard 연결 후 최종 검토 대기
+
+실제 merged Common36e4d285의 code/data ref를 연결하고 web/mobile functional 필터에 guard·도구 selector 경로를 포함한 최종 소스를 동결한다. private root Node22.23.1/npm12.0.1과 USER node/cache 후보의 코드·graph 범위는 b771 그대로다.
+다음 gate는 동일 최종 source의 원2 검토·정확 cloud CI·새 image의 non-root/cache/native runtime 확인이다. 앞선 cloud CI나 정적 guard를 실제 이미지 수용으로 바꾸지 않는다. 운영·native 실기기/EAS/store는 NOT_RUN이다. 아래 b771 단락은 작성 당시의 pending 기록으로 보존한다.
+
 ## 2026-11-13 — build/test Node/npm root anchor 후보
 
 최신 main `b9dcf3c3` 기반 `agent/build-rules-pinvi-20261113`에서 Node22.23.1/npm12.0.1 선택을 root private anchor·engine-strict와 CLI 호출에 결박한다. lock은 root engines metadata만 변경하며 C11·NativeWind5RC/Tailwind4·앱 코드는 보존한다. fresh runtime의 `CMD npx next`도 ambient npm에 의존하지 않도록 global npm12.0.1 pin을 추가했다. 후보3은 CI-33의 `USER node`와 image 내부 Next/npm cache 소유권만 추가하며 실제 새 이미지의 non-root 시작·쓰기/읽기·native module 검증은 아직 NOT_RUN이다. Common 새 guard의 실제 ref/input 연결과 설치·build 검증은 대기 중이며 push/PR·운영 적용은 하지 않았다. CI 순서/needs/fail-fast 정비와 physical/EAS/store는 이 후보의 완료 범위가 아니다.

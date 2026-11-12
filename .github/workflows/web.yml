@@ -15,6 +15,9 @@ on:
       - 'package-lock.json'
       - 'tsconfig.base.json'
       - '.github/workflows/web.yml'
+      - '.github/workflows/common-frontend-policy.yml'
+      - '.npmrc'
+      - '.nvmrc'
       - '.github/workflows/aggregate-ci.yml'
       # deps 스테이지가 모든 workspace manifest와 공유 vendor로 설치한다.
       # 모바일 manifest도 감시한다. 공유 vendor는 위 apps/web/**가 포함한다.
@@ -38,6 +41,9 @@ on:
       - 'package-lock.json'
       - 'tsconfig.base.json'
       - '.github/workflows/web.yml'
+      - '.github/workflows/common-frontend-policy.yml'
+      - '.npmrc'
+      - '.nvmrc'
       - '.github/workflows/aggregate-ci.yml'
       # deps 스테이지가 모든 workspace manifest와 공유 vendor로 설치한다.
       # 모바일 manifest도 감시한다. 공유 vendor는 위 apps/web/**가 포함한다.

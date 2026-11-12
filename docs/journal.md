@@ -1,3 +1,8 @@
+## 2026-11-13 — 실제 merged Common guard 연결 후보
+
+Common PR51의 실제 merge36e4d285를 reusable uses/common-ref 양쪽에 고정하고 root anchor와 생산 Node Dockerfile 목록을 전달한다. web/mobile functional PR·main push 필터는 guard 파일과 Node/npm selector·설정 변경도 감지한다. 기존 step 순서나 needs/fail-fast는 바꾸지 않는다.
+이하 b771은 초기 후보 작성 당시 기록이다. 최종 원2 검토·정확 cloud CI와 새 image의 non-root/cache/native runtime 수용은 별도 gate이며 운영 적용·native 실기기/EAS/store는 하지 않는다.
+
 ## 2026-11-13 — build/test Node/npm root anchor 후보
 
 최신 main `b9dcf3c3` 기반 `agent/build-rules-pinvi-20261113`에서 Node22.23.1/npm12.0.1 선택을 root private anchor·engine-strict와 CLI 호출에 결박한다. lock은 root engines metadata만 변경하며 C11·NativeWind5RC/Tailwind4·앱 코드는 보존한다. fresh runtime의 `CMD npx next`도 ambient npm에 의존하지 않도록 global npm12.0.1 pin을 추가했다. 후보3은 CI-33의 `USER node`와 image 내부 Next/npm cache 소유권만 추가하며 실제 새 이미지의 non-root 시작·쓰기/읽기·native module 검증은 아직 NOT_RUN이다. Common 새 guard의 실제 ref/input 연결과 설치·build 검증은 대기 중이며 push/PR·운영 적용은 하지 않았다. CI 순서/needs/fail-fast 정비와 physical/EAS/store는 이 후보의 완료 범위가 아니다.
