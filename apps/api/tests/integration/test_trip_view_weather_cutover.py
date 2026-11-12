@@ -38,7 +38,7 @@ from app.clients.kor_travel_weather import (
     WeatherValueOut,
     kor_travel_weather_timeout,
 )
-from app.core.config import Settings
+from app.core.config import Settings, settings
 from app.services.weather_resolve_worker import (
     close_weather_resolve_worker,
     get_weather_resolve_worker,
@@ -851,9 +851,7 @@ async def test_syn_drop_with_cache_misses_returns_unavailable_within_budget(  # 
     변경 전에는 resolve 호출이 예산·try 밖이라 `KorTravelWeatherUnavailable`이 그대로 올라가
     라우트 catch-all 500이 됐다.
     """
-    monkeypatch.setattr(
-        "app.services.trip_view_builder._WEATHER_BATCH_VIEW_BUDGET_SECONDS", _SCALED_BUDGET_SECONDS
-    )
+    monkeypatch.setattr(settings, "pinvi_trip_view_weather_budget_seconds", _SCALED_BUDGET_SECONDS)
     eff_date = date(2026, 10, 1)
     hit = f"hit_{uuid.uuid4().hex[:8]}"
     miss1 = f"miss1_{uuid.uuid4().hex[:8]}"
@@ -1004,9 +1002,7 @@ async def test_hanging_upstream_opens_breaker_after_three_views(  # type: ignore
     실패로 세지 않으므로, client 호출 deadline이 attempt timeout을 깎아 예산 안에서 **실패로**
     끝나게 해야 view 3회 뒤 회로가 열린다.
     """
-    monkeypatch.setattr(
-        "app.services.trip_view_builder._WEATHER_BATCH_VIEW_BUDGET_SECONDS", _SCALED_BUDGET_SECONDS
-    )
+    monkeypatch.setattr(settings, "pinvi_trip_view_weather_budget_seconds", _SCALED_BUDGET_SECONDS)
     eff_date = date(2026, 10, 1)
     transport = _HangingTransport()
     http = httpx.AsyncClient(
@@ -1094,9 +1090,7 @@ async def test_slow_but_healthy_upstream_keeps_breaker_closed(  # type: ignore[n
 ) -> None:
     """느리지만 살아 있는 피호출자(지연 ≈ 예산의 0.55배) + location 4개 — view 예산 끝에서 병렬
     forecast 4개가 함께 끊겨도 회로는 닫힌 채다. 그것은 "호출자 예산 소진"이지 장애가 아니다."""
-    monkeypatch.setattr(
-        "app.services.trip_view_builder._WEATHER_BATCH_VIEW_BUDGET_SECONDS", _SCALED_BUDGET_SECONDS
-    )
+    monkeypatch.setattr(settings, "pinvi_trip_view_weather_budget_seconds", _SCALED_BUDGET_SECONDS)
     eff_date = date(2026, 10, 1)
     latency = 0.55 * _SCALED_BUDGET_SECONDS
     calls: dict[str, int] = {}
@@ -1153,9 +1147,7 @@ async def test_concurrent_views_breaker_counts_per_endpoint(  # type: ignore[no-
        1회다 — view 3개 뒤 forecast 회로만 열리고 markers는 계속 transport에 닿는다. 대가: 예산보다
        느릴 뿐인 forecast도 이렇게 실패로 센다(`docs/integrations/kor-travel-weather.md` §8.3).
     """
-    monkeypatch.setattr(
-        "app.services.trip_view_builder._WEATHER_BATCH_VIEW_BUDGET_SECONDS", _SCALED_BUDGET_SECONDS
-    )
+    monkeypatch.setattr(settings, "pinvi_trip_view_weather_budget_seconds", _SCALED_BUDGET_SECONDS)
     eff_date = date(2026, 10, 1)
     calls: dict[str, int] = {}
     fast_forecast = frozenset(f"/v1/weather/locations/cfast-{i}/forecast" for i in range(3))
