@@ -817,11 +817,11 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     create: () => Promise<PoiResponse>,
     options?: MutationOptions,
   ): Promise<boolean> => {
-    const createdIds: string[] = [];
+    const createdIds = new Set<string>();
     return runMutation(async () => {
       const created = await create();
       const createdId = created.attachment_id;
-      createdIds.push(createdId);
+      createdIds.add(createdId);
       // 지금까지 출발한 조회는 이 POI를 모른다 — 그 결과에는 끼우고, 이후 출발한 조회는 서버 결과만 쓴다.
       const seq = reloader.startedFetches();
       setPendingCreatedPois((current) => [
@@ -830,9 +830,9 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
       ]);
       return created;
     }, options).finally(() => {
-      if (createdIds.length === 0) return;
+      if (createdIds.size === 0) return;
       setPendingCreatedPois((current) =>
-        current.filter((pending) => !createdIds.includes(pending.poi.attachment_id)),
+        current.filter((pending) => !createdIds.has(pending.poi.attachment_id)),
       );
     });
   };
