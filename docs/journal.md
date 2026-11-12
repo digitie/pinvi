@@ -1,3 +1,9 @@
+## 2026-11-13 — web 경고0 gate와 Expo 패치 후보
+
+원 B의9fdb 조건부 지적에 따라 web lint에 --max-warnings 0을 추가하고 설정 규칙·ignore는 유지한다. 실제 ESLint10.14.0의 경고1개/오류0개 대조는 old exit0→new exit1이다. 첫 정상 lint는401 로그인 복귀 경고1건으로 실패해 원문을 보존했다. 갱신 실패 뒤에는 인증된 JS 상태·캐시를 폐기해야 하므로 해당 href 한 줄에 근거 있는 규칙 예외만 두고 문서 reload 동작은 바꾸지 않았다. 새 정상 web 전체 lint와 기존 인증 복귀·갱신 회귀는 통과했다. Expo 패치cd6618a5의 실제 Expo Doctor20/20은 별도 보존한다. 최종 새 head의 원2 검토·전체 CI·이미지 runtime 수용은 대기이며 Common36/C11과 운영 미실행 상태는 유지한다.
+
+이하 앞선 후보·실행 당시 기록:
+
 ## 2026-11-13 — Expo SDK 패치 CI 실패 후속 후보
 
 9fdb의 Expo Doctor19/20·1FAIL 원문과 web/API/공통정책 성공을 보존한다. 공식 registry와 Expo58.0.25의 bundledNativeModules 기준으로 root/mobile Expo58.0.25·Dev Client58.0.20·Location58.0.22를 exact 적용하고 Dev Launcher58.0.20 전이만 함께 갱신한다. 제외·재시도로 실패를 성공화하지 않는다. lock의 그 외 항목과 Common36/C11/NativeWind5RC/Tailwind4·앱 코드는 동일하다. 새 정확 소스 검토와 cloud CI는 대기이며 native 실기기/EAS/store 및 운영은 NOT_RUN이다.

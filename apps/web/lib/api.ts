@@ -9,6 +9,7 @@ export function redirectToLogin(): void {
   if (typeof window !== 'undefined') {
     // 복귀 경로에서 공유·저장소 토큰과 비밀 query를 지운다(#671) — `/login?next=`는 로그·Referer로 퍼진다.
     const next = safeLoginReturnTo(window.location.pathname + window.location.search + window.location.hash);
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- 갱신 실패401 뒤에는 인증된 JS 상태·캐시도 폐기하도록 문서 전체를 다시 로드한다.
     window.location.href = '/login?next=' + encodeURIComponent(next);
   }
 }
