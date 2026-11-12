@@ -797,6 +797,97 @@ test('여행 지도는 feature를 보이고 빈 좌표에서 주소 포함 POI�
   });
 });
 
+// #733: 장소 추가 뒤 목록 행은 POST 응답으로 곧바로 보여야 한다. 그 뒤의 `GET /trips/{id}` 재조회는
+// weather 보강을 기다려 운영에서 2~7 s(겹치면 15 s 이상) 걸린다 — 여기서는 그 재조회를 붙잡아 둔다.
+test('검색 결과로 장소를 추가하면 느린 재조회를 기다리지 않고 목록에 곧바로 나타난다', async ({ page }) => {
+  const addedPoiId = '44444444-4444-4444-8444-444444444451';
+  let created = false;
+  let releaseReload: () => void = () => undefined;
+  const reloadHeld = new Promise<void>((resolve) => {
+    releaseReload = resolve;
+  });
+
+  await mockTripDetailRoutes(page);
+  // 이 route가 mockTripDetailRoutes의 trip GET보다 나중에 등록돼 먼저 처리된다.
+  await page.route(/.*\/trips\/[0-9a-f-]{36}$/, async (route, request) => {
+    if (!isFetch(request.resourceType()) || !created) return route.fallback();
+    await reloadHeld;
+    await route.fallback().catch(() => undefined);
+  });
+  await page.route(/.*\/search(\?.*)?$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.fallback();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          results: [
+            {
+              source: 'feature',
+              name: '광안리 해수욕장',
+              coord: { lon: 129.118, lat: 35.153 },
+              feature_id: 'feat-gwangalli',
+              category: 'beach',
+              category_label: '해수욕장',
+              marker_color: 'P-07',
+              marker_icon: 'swimming',
+            },
+          ],
+          degraded_sources: [],
+        },
+      }),
+    });
+  });
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/pois$/, async (route, request) => {
+    if (!isFetch(request.resourceType()) || request.method() !== 'POST') return route.fallback();
+    const body = request.postDataJSON() as Record<string, unknown>;
+    created = true;
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          attachment_id: addedPoiId,
+          trip_id: tripId,
+          day_index: body.day_index,
+          sort_order: body.sort_order,
+          feature_id: body.feature_id,
+          feature_link_broken_at: null,
+          feature_snapshot: body.feature_snapshot,
+          custom_marker_color: null,
+          custom_marker_icon: null,
+          source: 'feature',
+          external_ref: null,
+          planned_arrival_at: null,
+          planned_departure_at: null,
+          user_note: null,
+          budget_amount: null,
+          actual_amount: null,
+          currency: 'KRW',
+          user_url: null,
+          rise_set: null,
+          version: 1,
+          created_at: '2026-11-11T12:06:31Z',
+          updated_at: '2026-11-11T12:06:31Z',
+        },
+      }),
+    });
+  });
+
+  try {
+    await page.goto(`/trips/${tripId}`);
+    const rows = page.getByTestId('trip-poi-list').locator('> li');
+    await expect(rows).toHaveCount(1);
+    const search = page.getByTestId('trip-map-place-search').getByTestId('map-search');
+    await search.getByRole('textbox', { name: '장소·주소 검색' }).fill('광안리');
+    await search.getByTestId('map-search-result-feature').first().click();
+
+    await expect(rows).toHaveCount(2, { timeout: 5_000 });
+    await expect(page.getByTestId('trip-poi-list')).toContainText('광안리 해수욕장');
+  } finally {
+    releaseReload();
+  }
+});
+
 test('여행 기간보다 많은 일자는 추가할 수 없다', async ({ page }) => {
   await mockTripDetailRoutes(page, {
     ...TRIP_VIEW,

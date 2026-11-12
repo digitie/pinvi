@@ -23,7 +23,7 @@ import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { apiClient, redirectToLogin } from '@/lib/api';
 import { hasPatchFields, pickConflictPatch, resolveConflictKeys } from '@/lib/conflictResolution';
-import { createLatestReload } from '@/lib/latestReload';
+import { createSequencedReload } from '@/lib/latestReload';
 import { pickSearchBias, tripSearchBias } from '@/lib/searchBias';
 import {
   buildPoiConflictFields,
@@ -37,6 +37,7 @@ import {
   holidayLabel,
   holidaysByDate,
 } from '@/lib/tripDateLabels';
+import { type PendingCreatedPoi, withCreatedPois } from '@/lib/tripViewCreatedPoi';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import {
   ApiError,
@@ -54,6 +55,7 @@ import { appendRank, paletteHex, reorderMoves, tripDaysToMapPoints } from '@pinv
 import type {
   FeatureSummary,
   PlaceSearchResult,
+  PoiResponse,
   PoiUpdate,
   TripDayUpdate,
   TripStatus,
@@ -461,7 +463,20 @@ function usePanelScrollAccess(mobileWebLayout: boolean) {
 
 function useTripDetailModel({ tripId }: TripDetailProps) {
   const mobileWebLayout = useMobileWebLayout();
-  const [view, setView] = useState<TripView | null>(null);
+  // 서버 조회 결과와 그 조회의 출발 순번. 화면의 `view`는 그 결과에, 이 조회가 출발한 뒤 POST로 만들어진
+  // POI를 끼운 값이다(#733) — 이 조회보다 늦게 출발한 조회가 끝나면 서버 결과만 쓴다.
+  const [loaded, setLoaded] = useState<{ view: TripView; seq: number } | null>(null);
+  const [pendingCreatedPois, setPendingCreatedPois] = useState<PendingCreatedPoi[]>([]);
+  const view = useMemo(
+    () =>
+      loaded == null
+        ? null
+        : withCreatedPois(
+            loaded.view,
+            pendingCreatedPois.filter((pending) => pending.seq >= loaded.seq).map((p) => p.poi),
+          ),
+    [loaded, pendingCreatedPois],
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<TripRealtimeStatus>('idle');
@@ -517,12 +532,13 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
   // 저장 직후 `reload()`가 그보다 먼저 출발한 실시간 재조회에 합류하면 낡은 view로 끝난다(#699 — 내보내기
   // 미리보기가 방금 저장한 메모를 빠뜨렸다). 진행 중이면 끝난 뒤 한 번 더 읽는다. 여행마다 새 loader라 다른
   // 여행의 진행 중 조회에도 합류하지 않는다.
-  const reload = useMemo(
+  // 조회마다 출발 순번을 매긴다(#733) — 새 POI가 어느 조회보다 늦게 만들어졌는지 가린다.
+  const reloader = useMemo(
     () =>
-      createLatestReload(async (): Promise<TripView | null> => {
+      createSequencedReload(async (seq): Promise<TripView | null> => {
         try {
           const res = await tripApi(apiClient).get(tripId);
-          setView(res);
+          setLoaded({ view: res, seq });
           setError(null);
           return res;
         } catch (err) {
@@ -532,6 +548,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
       }),
     [tripId],
   );
+  const reload = reloader.reload;
 
   useEffect(() => {
     let cancelled = false;
@@ -793,6 +810,33 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     [reload],
   );
 
+  // 장소 추가: POST 응답으로 행을 곧바로 그리고, 뒤따르는 재조회(weather 보강 포함)가 서버 값으로
+  // 덮어쓴다(#733). POST보다 먼저 출발한 진행 중 조회의 결과가 행을 지우지 않게, POST 뒤에 출발한
+  // 조회(runMutation이 기다리는 재조회)가 끝날 때까지 pending에 둔다.
+  const runMutationShowingCreatedPoi = (
+    create: () => Promise<PoiResponse>,
+    options?: MutationOptions,
+  ): Promise<boolean> => {
+    const createdIds = new Set<string>();
+    return runMutation(async () => {
+      const created = await create();
+      const createdId = created.attachment_id;
+      createdIds.add(createdId);
+      // 지금까지 출발한 조회는 이 POI를 모른다 — 그 결과에는 끼우고, 이후 출발한 조회는 서버 결과만 쓴다.
+      const seq = reloader.startedFetches();
+      setPendingCreatedPois((current) => [
+        ...current.filter((pending) => pending.poi.attachment_id !== createdId),
+        { poi: created, seq },
+      ]);
+      return created;
+    }, options).finally(() => {
+      if (createdIds.size === 0) return;
+      setPendingCreatedPois((current) =>
+        current.filter((pending) => !createdIds.has(pending.poi.attachment_id)),
+      );
+    });
+  };
+
   // 공용 POI 생성 — feature marker(handleAddFeature)와 검색 결과(handleAddPlace)가 함께 쓴다.
   const addPoiToSelectedDay = (input: {
     feature_id: string | null;
@@ -812,7 +856,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     if (selectedDay == null) return Promise.resolve(false);
     setAddNotice(null);
     const last = selectedDay.pois[selectedDay.pois.length - 1]?.sort_order ?? null;
-    return runMutation(() =>
+    return runMutationShowingCreatedPoi(() =>
       poiApi(apiClient).create(tripId, {
         day_index: selectedDay.day_index,
         sort_order: appendRank(last),
@@ -925,7 +969,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     }
     setManualPoiError(null);
     const last = selectedDay.pois[selectedDay.pois.length - 1]?.sort_order ?? null;
-    return runMutation(
+    return runMutationShowingCreatedPoi(
       async () => {
         const created = await poiApi(apiClient).create(tripId, {
           day_index: selectedDay.day_index,
@@ -939,6 +983,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
         });
         setSelectedDayIndex(selectedDay.day_index);
         setSelectedPoiId(created.attachment_id);
+        return created;
       },
       // 이 다이얼로그가 자기 오류를 소유한다(전역 배너는 scrim 뒤라 읽히지 않는다).
       { captureError: setManualPoiError },

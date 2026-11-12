@@ -31,3 +31,18 @@ export function createLatestReload<T>(fetchOnce: () => Promise<T>): () => Promis
     return next;
   };
 }
+
+/**
+ * `createLatestReload`에 조회 출발 순번을 붙인다(#733). 순번은 1부터 출발 순서대로 늘고, `startedFetches()`는
+ * 지금까지 출발한 조회 수다 — 어떤 변경이 어느 조회보다 늦게 끝났는지(그 조회 결과가 변경을 모르는지) 가린다.
+ */
+export function createSequencedReload<T>(
+  fetchOnce: (seq: number) => Promise<T>,
+): { reload: () => Promise<T>; startedFetches: () => number } {
+  let started = 0;
+  const reload = createLatestReload(() => {
+    started += 1;
+    return fetchOnce(started);
+  });
+  return { reload, startedFetches: () => started };
+}
