@@ -1,3 +1,8 @@
+## #621 markers 캐시·view weather 예산 (2026-11-12)
+
+PR feat/621-weather-markers-cache: weather `/markers` 90 s 캐시(single-flight)와 trip view weather 예산 1.5 s.
+다음: 회전 배포 뒤 trip view 30회를 재측정한다. p95 ≤3 s이고 bulkhead 거부가 0이면 #621을 닫는다.
+
 ## #733 장소 추가 직후 목록 행 (2026-11-12)
 
 PR fix/733-add-poi-immediate: POST 응답으로 임시 POI 행을 곧바로 그리고, 재조회가 덮어쓴다(NEAR beforeAll flake 원인).
