@@ -1,3 +1,9 @@
+## 2026-11-13 — 규칙 예외 없는 같은 origin의401 문서 복귀
+
+c412의 인라인 ESLint 예외는 preserve-ignores 요구와 맞지 않아 후속 commit으로 제거한다. 표준 URL로 현재 origin·포트를 보존한 절대 로그인 주소를 만들고 기존 location.href 문서 reload와 safeLoginReturnTo 정리를 유지한다. config·ignore·규칙 예외 추가0이며 실제 전체 web lint 경고0, 경고1개 대조 old exit0→new exit1, 기존 인증·복귀 경로와 새 origin/포트 회귀를 확인했다. c412의 CI 성공·부적합 소스와9fdb Doctor 실패 이력은 별도 보존한다. Expo3patch/launcher·Common36/C11은 동일하며 최종 새 정확 CI와 원2 검토·이미지 runtime 수용은 대기다. 운영·native 실기기/EAS/store는 NOT_RUN이다.
+
+이하 앞선 후보·실행 당시 기록:
+
 ## 2026-11-13 — web 경고0 gate와 Expo 패치 후보
 
 원 B의9fdb 조건부 지적에 따라 web lint에 --max-warnings 0을 추가하고 설정 규칙·ignore는 유지한다. 실제 ESLint10.14.0의 경고1개/오류0개 대조는 old exit0→new exit1이다. 첫 정상 lint는401 로그인 복귀 경고1건으로 실패해 원문을 보존했다. 갱신 실패 뒤에는 인증된 JS 상태·캐시를 폐기해야 하므로 해당 href 한 줄에 근거 있는 규칙 예외만 두고 문서 reload 동작은 바꾸지 않았다. 새 정상 web 전체 lint와 기존 인증 복귀·갱신 회귀는 통과했다. Expo 패치cd6618a5의 실제 Expo Doctor20/20은 별도 보존한다. 최종 새 head의 원2 검토·전체 CI·이미지 runtime 수용은 대기이며 Common36/C11과 운영 미실행 상태는 유지한다.
