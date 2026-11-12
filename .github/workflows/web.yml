@@ -79,7 +79,7 @@ jobs:
         run: node scripts/check-lockfile-integrity.mjs
 
       - name: Install dependencies
-        run: npx --yes npm@12.0.1 ci --no-audit --no-fund
+        run: npx --yes npm@12.0.1 ci --no-audit --no-fund --engine-strict
 
       - name: Check common dependencies
         run: npm run check:dependencies --workspace @pinvi/web
@@ -210,7 +210,7 @@ jobs:
         run: npm install -g npm@12.0.1
 
       - name: Install dependencies
-        run: npx --yes npm@12.0.1 ci --no-audit --no-fund
+        run: npx --yes npm@12.0.1 ci --no-audit --no-fund --engine-strict
 
       # 실제 mutation은 N150 격리 stack에서만 허용하지만, 두 pinned suite의 탐색 가능성은 PR CI에서 고정한다.
       - name: Verify M04/M05 live-mutating E2E catalog

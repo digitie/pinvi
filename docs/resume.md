@@ -1,3 +1,7 @@
+## 2026-11-13 — build/test Node/npm root anchor 후보
+
+최신 main `b9dcf3c3` 기반 `agent/build-rules-pinvi-20261113`에서 Node22.23.1/npm12.0.1 선택을 root private anchor·engine-strict와 CLI 호출에 결박한다. lock은 root engines metadata만 변경하며 C11·NativeWind5RC/Tailwind4·앱 코드는 보존한다. fresh runtime의 `CMD npx next`도 ambient npm에 의존하지 않도록 global npm12.0.1 pin을 추가했다. 후보3은 CI-33의 `USER node`와 image 내부 Next/npm cache 소유권만 추가하며 실제 새 이미지의 non-root 시작·쓰기/읽기·native module 검증은 아직 NOT_RUN이다. Common 새 guard의 실제 ref/input 연결과 설치·build 검증은 대기 중이며 push/PR·운영 적용은 하지 않았다. CI 순서/needs/fail-fast 정비와 physical/EAS/store는 이 후보의 완료 범위가 아니다.
+
 ## #621 markers 캐시·view weather 예산 (2026-11-12)
 
 PR feat/621-weather-markers-cache: weather `/markers` 90 s 캐시(single-flight)와 trip view weather 예산 1.5 s.
