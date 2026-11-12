@@ -1036,11 +1036,19 @@ async def test_trip_view_flag_on_slow_map_batch_is_unavailable_within_budget(
     base = _nearest_then_batch()
 
     async def slow(request: httpx.Request) -> httpx.Response:
+        if not request.url.path.startswith("/v1/service/weather/"):
+            return httpx.Response(503, json=fx.problem_body(503, "UNAVAILABLE"))
         if request.url.path == "/v1/service/weather/locations/batch":
-            await asyncio.sleep(6.0)
+            await asyncio.sleep(4.0)
         return base(request)
 
-    fake = _Map(slow)  # type: ignore[arg-type]
+    fake = _Map(_nearest_then_batch())
+    fake.client = KorTravelMapClient(
+        httpx.AsyncClient(base_url="http://map.test", transport=httpx.MockTransport(slow)),
+        service_token="svc",
+        max_attempts=1,
+        backoff_base_seconds=0.0,
+    )
     feature_id = f"fs_{uuid.uuid4().hex[:8]}"
     loop = asyncio.get_running_loop()
     started = loop.time()
@@ -1049,7 +1057,11 @@ async def test_trip_view_flag_on_slow_map_batch_is_unavailable_within_budget(
     )
     elapsed = loop.time() - started
     assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "unavailable"}
-    assert elapsed < 4.0, elapsed
+    assert elapsed < 3.5, elapsed
+    # 값 조회는 view와 분리돼 끝까지 간다(회로가 결과를 센다) — 테스트 루프가 닫히기 전에 회수한다.
+    from app.services import trip_weather_batch
+
+    await asyncio.gather(*trip_weather_batch._DETACHED, return_exceptions=True)
 
 
 async def test_trip_view_flag_on_slow_alerts_keep_map_values_and_fill_the_cache(
@@ -1067,19 +1079,29 @@ async def test_trip_view_flag_on_slow_alerts_keep_map_values_and_fill_the_cache(
 
     started = loop.time()
     first = await _trip_view(
-        session_factory, pois=[(1, today, feature_id)], map_client=fake.client, weather_client=weather
+        session_factory,
+        pois=[(1, today, feature_id)],
+        map_client=fake.client,
+        weather_client=weather,
     )
     assert loop.time() - started < 3.0
     state = _day(first, 1)["weather_by_feature_id"][feature_id]
     assert state["state"] == "found"
-    first_keys = {m["metric_key"] for m in _day(first, 1)["weather_cards"][state["card_key"]]["metrics"]}
+    first_keys = {
+        m["metric_key"] for m in _day(first, 1)["weather_cards"][state["card_key"]]["metrics"]
+    }
     assert "ALERT" not in first_keys
 
     await weather_markers_cache().wait_idle()
     second = await _trip_view(
-        session_factory, pois=[(1, today, feature_id)], map_client=fake.client, weather_client=weather
+        session_factory,
+        pois=[(1, today, feature_id)],
+        map_client=fake.client,
+        weather_client=weather,
     )
     state2 = _day(second, 1)["weather_by_feature_id"][feature_id]
-    keys2 = {m["metric_key"] for m in _day(second, 1)["weather_cards"][state2["card_key"]]["metrics"]}
+    keys2 = {
+        m["metric_key"] for m in _day(second, 1)["weather_cards"][state2["card_key"]]["metrics"]
+    }
     assert "ALERT" in keys2
     assert weather.calls == ["markers"]  # 두 번째 view는 캐시 적중

@@ -1289,11 +1289,14 @@ async def kor_travel_weather_client_lifespan(app: FastAPI) -> AsyncIterator[None
         yield
     finally:
         # worker가 client 타입을 참조하므로 순환 import를 피하고, 전송 종료 전에 작업을 회수한다.
+        from app.services.weather_markers_cache import reset_weather_markers_cache
         from app.services.weather_resolve_worker import close_weather_resolve_worker
 
         try:
             await close_weather_resolve_worker(client)
         finally:
+            # #621 markers 캐시의 진행 중 공유 조회를 취소하고 비운다(닫힌 전송을 쓰지 않게).
+            reset_weather_markers_cache()
             await client.aclose()
             app.state.kor_travel_weather_client = None
 

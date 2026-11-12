@@ -191,10 +191,11 @@ async def test_ttl_zero_disables_caching() -> None:
 
 def test_cached_values_carry_only_public_weather_fields() -> None:
     """캐시는 사용자 사이에 공유된다 — 담기는 타입에 사용자·여행 식별 필드가 없어야 한다."""
-    forbidden = ("user", "owner", "trip", "email", "session", "token", "poi", "request")
+    forbidden = ("user", "owner", "trip", "email", "session", "token", "poi", "request", "users")
     for cls in (WeatherMarkerOut, WeatherValueOut, MeasurementPointOut):
         names = [f.name for f in dataclasses.fields(cls)]
-        leaked = [n for n in names if any(word in n for word in forbidden)]
+        # 이름 조각 단위로 본다(`measurement_point`의 "point"가 "poi"로 걸리지 않게).
+        leaked = [n for n in names if any(word in n.split("_") for word in forbidden)]
         assert leaked == [], (cls.__name__, leaked)
         assert cls.__dataclass_params__.frozen, cls.__name__  # type: ignore[attr-defined]
     assert {f.name for f in dataclasses.fields(WeatherMarkerOut)} == {
@@ -216,3 +217,34 @@ async def test_module_level_cache_follows_settings_and_resets() -> None:
     wmc.reset_weather_markers_cache()
     await wmc.cached_markers(weather, ["m"])  # type: ignore[arg-type]
     assert len(weather.calls) == 2
+
+
+async def test_fresh_bypasses_the_cache_for_admin_diagnostics() -> None:
+    weather = _Weather()
+    await wmc.cached_markers(weather, ["f"])  # type: ignore[arg-type]
+    await wmc.cached_markers(weather, ["f"], fresh=True)  # type: ignore[arg-type]
+    assert len(weather.calls) == 2
+
+
+async def test_different_clients_do_not_share_entries_or_fetches() -> None:
+    cache = _cache(_Clock())
+    first, second = _Weather(), _Weather()
+    await cache.get(first, ["c"])  # type: ignore[arg-type]
+    await cache.get(second, ["c"])  # type: ignore[arg-type]
+    assert first.calls == [["c"]] and second.calls == [["c"]]
+
+
+async def test_shared_fetch_does_not_inherit_the_callers_context() -> None:
+    import contextvars
+
+    marker: contextvars.ContextVar[str | None] = contextvars.ContextVar("marker", default=None)
+    seen: list[str | None] = []
+
+    class _Probe(_Weather):
+        async def markers(self, location_ids: Sequence[str]) -> tuple[WeatherMarkerOut, ...]:
+            seen.append(marker.get())
+            return await super().markers(location_ids)
+
+    marker.set("request-1")
+    await _cache(_Clock()).get(_Probe(), ["ctx"])  # type: ignore[arg-type]
+    assert seen == [None]

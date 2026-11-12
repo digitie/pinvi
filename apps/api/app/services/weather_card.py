@@ -226,6 +226,7 @@ async def resolve_and_collect_deduped_values_via_map(
     map_client: KorTravelMapWeatherClient,
     weather_client: KorTravelWeatherClient | None,
     budget_seconds: float = 5.0,
+    fresh_alerts: bool = False,
 ) -> tuple[list[WeatherFact], datetime | None]:
     """`resolve_and_collect_deduped_values`의 Map 경로(ADR-077, 플래그 on).
 
@@ -253,6 +254,7 @@ async def resolve_and_collect_deduped_values_via_map(
                 window=window,
                 map_client=map_client,
                 weather_client=weather_client,
+                fresh_alerts=fresh_alerts,
             )
     except TimeoutError:
         logger.warning(
@@ -271,6 +273,7 @@ async def _collect_via_map(
     window: _AsofWindow,
     map_client: KorTravelMapWeatherClient,
     weather_client: KorTravelWeatherClient | None,
+    fresh_alerts: bool = False,
 ) -> tuple[list[WeatherFact], datetime | None]:
     try:
         resolution = await resolve_weather_location_via_map(
@@ -295,7 +298,8 @@ async def _collect_via_map(
             forecast_from=window.from_,
             forecast_to=window.to,
         ),
-        fetch_alerts(weather_client, location_ids),
+        # 관리자 진단(`fresh_alerts`)은 #621 markers 캐시를 거치지 않는다 — 최대 90 s 묵은 특보를 보여주지 않게.
+        fetch_alerts(weather_client, location_ids, fresh=fresh_alerts),
     )
     all_values: list[WeatherFact] = [
         value for bundle in batch.bundles.values() for value in bundle_values(bundle)
@@ -319,6 +323,7 @@ async def collect_weather_values(
     map_weather_client: KorTravelMapWeatherClient | None = None,
     map_budget_seconds: float = 5.0,
     direct_budget_seconds: float | None = None,
+    fresh_alerts: bool = False,
 ) -> tuple[Sequence[WeatherFact], datetime | None]:
     """사용자·관리자가 같은 소스 선택·예산·취소 경계로 정본 사실을 읽는다."""
     deduped: Sequence[WeatherFact]
@@ -332,6 +337,7 @@ async def collect_weather_values(
             map_client=map_weather_client,
             weather_client=weather_client,
             budget_seconds=map_budget_seconds,
+            fresh_alerts=fresh_alerts,
         )
     else:
         if weather_client is None:

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
@@ -32,7 +33,8 @@ from app.clients.kor_travel_weather import (
 )
 from app.core.config import settings
 
-#: hit=캐시 적중, miss=upstream 조회 시작, coalesced=진행 중 조회에 합류, error=공유 조회 실패(캐시 안 함).
+#: hit=캐시 적중, miss=upstream 조회 시작, coalesced=진행 중 조회에 합류, error=공유 조회 실패(캐시 안 함),
+#: bypass=관리자 진단처럼 캐시를 거치지 않은 호출.
 MARKERS_CACHE_REQUESTS = Counter(
     "pinvi_api_weather_markers_cache_requests_total",
     "kor-travel-weather /markers cache lookups by outcome.",
@@ -43,7 +45,9 @@ MARKERS_CACHE_ENTRIES = Gauge(
     "Entries currently held in the kor-travel-weather /markers cache.",
 )
 
-_Key = tuple[str, ...]
+# (client 식별, 정렬한 location id들). 운영은 lifespan당 client 하나다 — client를 키에 넣는 것은 닫힌 client의
+# 진행 중 조회에 새 client 요청이 합류하지 않게 하려는 것이다.
+_Key = tuple[int, tuple[str, ...]]
 _Markers = tuple[WeatherMarkerOut, ...]
 
 
@@ -78,12 +82,11 @@ class WeatherMarkersCache:
     def location_count(self) -> int:
         return self._locations
 
-    async def get(
-        self, client: KorTravelWeatherClient, location_ids: Sequence[str]
-    ) -> _Markers:
-        key: _Key = tuple(sorted(set(location_ids)))
-        if not key:
+    async def get(self, client: KorTravelWeatherClient, location_ids: Sequence[str]) -> _Markers:
+        ids = tuple(sorted(set(location_ids)))
+        if not ids:
             raise ValueError("location_ids는 최소 1개 이상이어야 합니다.")
+        key: _Key = (id(client), ids)
         entry = self._entries.get(key)
         if entry is not None:
             if entry.expires_at > self._clock():
@@ -94,7 +97,10 @@ class WeatherMarkersCache:
         task = self._inflight.get(key)
         if task is None:
             MARKERS_CACHE_REQUESTS.labels(outcome="miss").inc()
-            task = asyncio.create_task(self._fetch(client, key))
+            # 공유 조회는 처음 요청한 쪽의 문맥(request_id·deadline 범위)을 물려받지 않는다.
+            task = asyncio.get_running_loop().create_task(
+                self._fetch(client, ids), context=contextvars.Context()
+            )
             self._inflight[key] = task
             task.add_done_callback(lambda done: self._finish(key, done))
         else:
@@ -102,28 +108,30 @@ class WeatherMarkersCache:
         # 기다리던 요청이 취소돼도(view 예산) 공유 조회는 계속된다.
         return await asyncio.shield(task)
 
-    async def _fetch(self, client: KorTravelWeatherClient, key: _Key) -> _Markers:
+    async def _fetch(self, client: KorTravelWeatherClient, ids: tuple[str, ...]) -> _Markers:
         deadline = asyncio.get_running_loop().time() + self._fetch_budget
         with kor_travel_weather_detached_call_deadline(deadline):
-            return await client.markers(list(key))
+            return await client.markers(list(ids))
 
     def _finish(self, key: _Key, task: asyncio.Task[_Markers]) -> None:
         if self._inflight.get(key) is task:
             del self._inflight[key]
         if task.cancelled():
             return
-        exc = task.exception()  # 기다리던 요청이 모두 떠났어도 '회수 안 된 예외' 경고를 남기지 않는다.
+        exc = (
+            task.exception()
+        )  # 기다리던 요청이 모두 떠났어도 '회수 안 된 예외' 경고를 남기지 않는다.
         if exc is not None:
             MARKERS_CACHE_REQUESTS.labels(outcome="error").inc()
             return
         self._store(key, task.result())
 
     def _store(self, key: _Key, value: _Markers) -> None:
-        if self._ttl <= 0 or len(key) > self._max_locations:
+        if self._ttl <= 0 or len(key[1]) > self._max_locations:
             return
         self._drop(key)
         self._entries[key] = _Entry(expires_at=self._clock() + self._ttl, value=value)
-        self._locations += len(key)
+        self._locations += len(key[1])
         while self._entries and (
             len(self._entries) > self._max_entries or self._locations > self._max_locations
         ):
@@ -133,7 +141,7 @@ class WeatherMarkersCache:
 
     def _drop(self, key: _Key) -> None:
         if self._entries.pop(key, None) is not None:
-            self._locations -= len(key)
+            self._locations -= len(key[1])
             MARKERS_CACHE_ENTRIES.set(len(self._entries))
 
     async def wait_idle(self) -> None:
@@ -177,6 +185,10 @@ def reset_weather_markers_cache() -> None:
 
 
 async def cached_markers(
-    client: KorTravelWeatherClient, location_ids: Sequence[str]
+    client: KorTravelWeatherClient, location_ids: Sequence[str], *, fresh: bool = False
 ) -> _Markers:
+    """캐시를 거친 `/markers`. `fresh=True`(관리자 진단)는 캐시를 읽지도 채우지도 않고 바로 부른다."""
+    if fresh:
+        MARKERS_CACHE_REQUESTS.labels(outcome="bypass").inc()
+        return await client.markers(location_ids)
     return await weather_markers_cache().get(client, location_ids)
