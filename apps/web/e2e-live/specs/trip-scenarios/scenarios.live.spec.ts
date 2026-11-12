@@ -77,13 +77,21 @@ const CHECK_ORDER: ScenarioCheck['kind'][] = [
 ];
 
 /**
+ * Names are compared without whitespace: the same place is stored as '호미곶 해맞이광장' by one source
+ * and '호미곶해맞이광장' by another, and Map's same-name fold (#1495) may surface either one.
+ */
+const compactName = (s: string): string => s.replace(/\s+/g, '');
+const nameContains = (actual: string, expected: string): boolean =>
+  compactName(actual).includes(compactName(expected));
+
+/**
  * Name-based pick: a Map feature row (badge '장소' on its own line, never Kakao/Naver/주소/내 여행) whose
  * name line contains `expect_name_contains`. The loader only accepts `source: feature`.
  */
 function pickByName(place: ScenarioPlace): (rowText: string) => boolean {
   return (rowText) => {
     const lines = rowText.split('\n').map((l) => l.trim());
-    if (!(lines[0] ?? '').includes(place.expect_name_contains)) return false;
+    if (!nameContains(lines[0] ?? '', place.expect_name_contains)) return false;
     return lines.includes('장소') && pickFeature(rowText);
   };
 }
@@ -132,7 +140,10 @@ async function addPlaces(page: Page, s: TripScenario): Promise<Map<number, strin
       const msg = (err as Error).message.split('\n')[0];
       throw new Error(`${s.id} day ${place.day} '${place.query}' → no ${place.source} row named '${place.expect_name_contains}' (${msg})`);
     }
-    expect(name, `${s.id}: picked row for '${place.query}'`).toContain(place.expect_name_contains);
+    expect(
+      nameContains(name, place.expect_name_contains),
+      `${s.id}: picked row '${name}' for '${place.query}' contains '${place.expect_name_contains}'`,
+    ).toBe(true);
     perDay.set(place.day, [...(perDay.get(place.day) ?? []), name]);
     if (PLACE_THROTTLE_MS > 0) await page.waitForTimeout(PLACE_THROTTLE_MS);
   }
@@ -146,7 +157,10 @@ async function expectDays(page: Page, s: TripScenario, perDay: Map<number, strin
     await expect(poiRows(page), `${s.id} day ${day} place count`).toHaveCount(expected.length);
     const titles = await poiTitles(page);
     for (let i = 0; i < expected.length; i += 1) {
-      expect(titles[i] ?? '', `${s.id} day ${day} row ${i + 1}`).toContain(expected[i]!);
+      expect(
+        nameContains(titles[i] ?? '', expected[i]!),
+        `${s.id} day ${day} row ${i + 1}: '${titles[i] ?? ''}' contains '${expected[i]}'`,
+      ).toBe(true);
     }
     expect(perDay.get(day)?.length ?? 0).toBe(expected.length);
   }
