@@ -23,7 +23,7 @@ import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { apiClient, redirectToLogin } from '@/lib/api';
 import { hasPatchFields, pickConflictPatch, resolveConflictKeys } from '@/lib/conflictResolution';
-import { createLatestReload } from '@/lib/latestReload';
+import { createSequencedReload } from '@/lib/latestReload';
 import { pickSearchBias, tripSearchBias } from '@/lib/searchBias';
 import {
   buildPoiConflictFields,
@@ -533,22 +533,21 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
   // 미리보기가 방금 저장한 메모를 빠뜨렸다). 진행 중이면 끝난 뒤 한 번 더 읽는다. 여행마다 새 loader라 다른
   // 여행의 진행 중 조회에도 합류하지 않는다.
   // 조회마다 출발 순번을 매긴다(#733) — 새 POI가 어느 조회보다 늦게 만들어졌는지 가린다.
-  const reloader = useMemo(() => {
-    let startedFetches = 0;
-    const load = createLatestReload(async (): Promise<TripView | null> => {
-      const seq = (startedFetches += 1);
-      try {
-        const res = await tripApi(apiClient).get(tripId);
-        setLoaded({ view: res, seq });
-        setError(null);
-        return res;
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : '여행을 불러오지 못했습니다.');
-        return null;
-      }
-    });
-    return { reload: load, startedFetches: () => startedFetches };
-  }, [tripId]);
+  const reloader = useMemo(
+    () =>
+      createSequencedReload(async (seq): Promise<TripView | null> => {
+        try {
+          const res = await tripApi(apiClient).get(tripId);
+          setLoaded({ view: res, seq });
+          setError(null);
+          return res;
+        } catch (err) {
+          setError(err instanceof ApiError ? err.message : '여행을 불러오지 못했습니다.');
+          return null;
+        }
+      }),
+    [tripId],
+  );
   const reload = reloader.reload;
 
   useEffect(() => {
@@ -818,25 +817,23 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     create: () => Promise<PoiResponse>,
     options?: MutationOptions,
   ): Promise<boolean> => {
-    let createdId: string | null = null;
+    const createdIds: string[] = [];
     return runMutation(async () => {
       const created = await create();
-      const createdIdNow = created.attachment_id;
-      createdId = createdIdNow;
+      const createdId = created.attachment_id;
+      createdIds.push(createdId);
       // 지금까지 출발한 조회는 이 POI를 모른다 — 그 결과에는 끼우고, 이후 출발한 조회는 서버 결과만 쓴다.
       const seq = reloader.startedFetches();
       setPendingCreatedPois((current) => [
-        ...current.filter((pending) => pending.poi.attachment_id !== createdIdNow),
+        ...current.filter((pending) => pending.poi.attachment_id !== createdId),
         { poi: created, seq },
       ]);
       return created;
     }, options).finally(() => {
-      const id = createdId;
-      if (id) {
-        setPendingCreatedPois((current) =>
-          current.filter((pending) => pending.poi.attachment_id !== id),
-        );
-      }
+      if (createdIds.length === 0) return;
+      setPendingCreatedPois((current) =>
+        current.filter((pending) => !createdIds.includes(pending.poi.attachment_id)),
+      );
     });
   };
 

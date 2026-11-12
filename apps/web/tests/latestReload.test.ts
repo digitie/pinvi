@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { createLatestReload } from '../lib/latestReload';
+import { createLatestReload, createSequencedReload } from '../lib/latestReload';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -55,4 +55,24 @@ it('진행 중 조회가 실패해도 대기한 reload는 새로 읽는다', asy
   await vi.waitFor(() => expect(calls).toHaveLength(2));
   calls[1]!.resolve('복구');
   expect(await queued).toBe('복구');
+});
+
+// #733: 조회마다 출발 순번을 받고, startedFetches()는 지금까지 출발한 조회 수다.
+it('createSequencedReload는 출발 순서대로 순번을 매긴다', async () => {
+  const calls: { seq: number; call: ReturnType<typeof deferred<number>> }[] = [];
+  const loader = createSequencedReload((seq) => {
+    const call = deferred<number>();
+    calls.push({ seq, call });
+    return call.promise;
+  });
+  expect(loader.startedFetches()).toBe(0);
+  const first = loader.reload();
+  expect(loader.startedFetches()).toBe(1);
+  const queued = loader.reload(); // 진행 중 → 끝난 뒤 한 번 더
+  expect(loader.startedFetches()).toBe(1);
+  calls[0]!.call.resolve(calls[0]!.seq);
+  expect(await first).toBe(1);
+  await vi.waitFor(() => expect(loader.startedFetches()).toBe(2));
+  calls[1]!.call.resolve(calls[1]!.seq);
+  expect(await queued).toBe(2);
 });
