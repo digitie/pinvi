@@ -54,8 +54,9 @@ location이 하나라도 있으면 `unavailable`(모른다를 `no_data`로 지�
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
@@ -87,6 +88,25 @@ from app.services.weather_metrics import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 분리한 task의 강한 참조 — 이벤트 루프는 task를 약하게만 잡는다.
+_DETACHED: set[asyncio.Task[Any]] = set()
+
+
+def _detached[T](coro: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
+    """요청 문맥(request_id·deadline 범위)과 분리된 task로 돌린다. 예외는 여기서 회수한다(경고 방지)."""
+    task = asyncio.get_running_loop().create_task(coro, context=contextvars.Context())
+    _DETACHED.add(task)
+
+    def done(finished: asyncio.Task[T]) -> None:
+        _DETACHED.discard(finished)
+        if not finished.cancelled() and finished.exception() is not None:
+            logger.warning("trip_weather_batch.detached_failed: %r", finished.exception())
+
+    task.add_done_callback(done)
+    return task
+
+
 _SEOUL = ZoneInfo("Asia/Seoul")
 
 # markers 1회당 최대 location_id 개수(client가 강제하는 서버 상한과 동일, 안전하게 청크).
@@ -479,23 +499,35 @@ async def build_trip_weather_via_kor_travel_map(
         if daily_dates:
             sections.append("daily_summaries")
 
+        # #621: view 예산(1.5 s)은 Map client의 read timeout(3 s)보다 짧다. view가 Map 값 조회를 직접 취소하면
+        # 그 취소는 회로에서 '결과 없음'이라 매달린 Map weather를 view 트래픽이 영영 세지 못한다. 그래서 값 조회는
+        # 자기 task(요청 문맥과 분리)로 끝까지 가서 회로에 성공·실패를 남기고, view는 예산만큼만 기다린다.
+        # 특보(weather `/markers`)는 캐시 공유 조회라 같은 이유로 이미 분리돼 있다 — 특보만 늦으면 특보 실패와 같은
+        # 규칙으로 특보 없이 Map 값으로 응답한다.
+        batch_task = _detached(
+            fetch_location_bundles(
+                map_client,
+                bundles.location_ids,
+                sections=sections,
+                # 지금보다 이른 `from`은 Map이 지금으로 당긴다(지난 예보 시각은 주지 않는다).
+                forecast_from=range_from,
+                forecast_to=range_to,
+            )
+        )
+        alerts_task = _detached(fetch_alerts(weather_client, bundles.location_ids))
         try:
             async with asyncio.timeout_at(deadline):
-                batch, alerts = await asyncio.gather(
-                    fetch_location_bundles(
-                        map_client,
-                        bundles.location_ids,
-                        sections=sections,
-                        # 지금보다 이른 `from`은 Map이 지금으로 당긴다(지난 예보 시각은 주지 않는다).
-                        forecast_from=range_from,
-                        forecast_to=range_to,
-                    ),
-                    fetch_alerts(weather_client, bundles.location_ids),
-                )
+                batch = await asyncio.shield(batch_task)
         except TimeoutError:
             logger.error("trip_weather_batch.map_budget_exceeded — 미결 weather를 unavailable 처리")
             pending.mark(list(found), "unavailable", overwrite=False)
             return pending.result()
+        try:
+            async with asyncio.timeout_at(deadline):
+                alerts = await asyncio.shield(alerts_task)
+        except TimeoutError:
+            logger.warning("trip_weather_batch.alerts_budget_exceeded — 특보 없이 진행")
+            alerts = {}
 
         values_by_location: dict[str, list[WeatherFact]] = {}
         location_failed: dict[str, bool] = {}

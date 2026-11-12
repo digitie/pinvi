@@ -1,3 +1,24 @@
+## 2026-11-12 — #621 weather markers 캐시·trip view weather 예산 1.5 s
+
+- 11-11 재측정에서 trip view p95가 3.58 s였다. 시간의 대부분이 weather `/markers`였고, 같은 trip을 반복 조회해도 매번 다시 불렀다.
+- 소유자 승인으로 두 가지를 넣었다.
+  1. **markers 캐시**(`app/services/weather_markers_cache.py`)
+     - 키는 정규화한 location 집합, TTL 90 s다. 성공만 담는다.
+     - 메모리는 LRU로 묶는다(항목 512개·location 20,000개).
+     - 같은 키의 동시 요청은 공유 조회 하나를 기다린다(single-flight).
+     - 공유 조회는 호출자 deadline과 분리된 8 s 예산으로 끝까지 가서 캐시를 채운다.
+     - 값은 공개 weather 필드뿐이다. 단위 테스트가 필드 목록을 고정한다.
+     - 지표: `pinvi_api_weather_markers_cache_requests_total{outcome}`, `..._entries`.
+  2. **trip view weather 예산** 10 s → `PINVI_TRIP_VIEW_WEATHER_BUDGET_SECONDS`=1.5.
+     - 예산을 넘기면 weather만 `unavailable`이고 view의 나머지는 그대로 응답한다.
+     - Map 경로에서 특보만 늦으면 특보 없이 Map 값으로 응답한다. 늦은 조회는 뒤에서 캐시를 채운다.
+- 적대 리뷰를 반영했다.
+  - 짧은 예산이 #703/#717 회로 집계를 무력화하지 않게, Map 값 조회와 특보 조회는 요청과 분리된 task로 끝까지 간다. 회로가 결과를 세고, view는 1.5 s만 기다린다.
+  - 직접 경로(플래그 off)는 회로 집계가 긴 예산에 기대므로 10 s를 유지하고 캐시도 쓰지 않는다.
+  - 관리자 진단은 캐시를 거치지 않는다.
+  - 공유 조회는 요청 문맥을 물려받지 않는다. client별로 키를 나누고, 종료할 때 캐시를 비운다.
+- 실패 먼저: 단위 12건, 통합 3건. 배포 뒤 같은 방식으로 재측정한다.
+
 ## 2026-11-12 — #733 장소 추가 직후 목록 행·#621 재측정
 
 - **#733**: 2026-11-11 live e2e `trip-map.live.spec.ts:95` beforeAll 실패 3건(03:46·04:00·12:04 run)을 조사했다. 세 번 모두 POI는 DB에 저장됐다. UI만 15 s 안에 행을 그리지 못했다.

@@ -25,3 +25,13 @@ def _reset_category_label_cache() -> Iterator[None]:
     reset_category_label_cache()
     yield
     reset_category_label_cache()
+
+
+@pytest.fixture(autouse=True)
+def _reset_weather_markers_cache() -> Iterator[None]:
+    """weather `/markers` 프로세스 캐시(#621)가 테스트 사이에 새지 않게 한다."""
+    from app.services.weather_markers_cache import reset_weather_markers_cache
+
+    reset_weather_markers_cache()
+    yield
+    reset_weather_markers_cache()

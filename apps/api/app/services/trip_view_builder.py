@@ -48,6 +48,8 @@ from app.services.trip_weather_batch import (
 )
 
 logger = logging.getLogger(__name__)
+# 직접 경로(플래그 off, 운영 미사용)의 view 예산. 그 회로 집계(#703/#717 — deadline이 깎은 timeout은 정상 read의
+# 절반 이상을 받았을 때만 실패)가 이 길이에 기대므로 #621의 짧은 view 예산은 Map 경로에만 적용한다.
 _WEATHER_BATCH_VIEW_BUDGET_SECONDS = 10.0
 
 
@@ -290,7 +292,7 @@ async def build_trip_view(
             day_effective_date=day_effective_date,
             map_client=create_map_weather_client(kor_travel_map_client),
             weather_client=weather_client,
-            budget_seconds=_WEATHER_BATCH_VIEW_BUDGET_SECONDS,
+            budget_seconds=settings.pinvi_trip_view_weather_budget_seconds,
         )
     elif weather_client is not None and not settings.pinvi_kor_travel_map_weather_enabled:
         (

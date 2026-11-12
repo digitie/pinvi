@@ -1006,3 +1006,102 @@ async def test_legacy_selection_cache_refreshes_only_after_success(
         if failed
         else {"resolved_via": "kor_travel_map", "selection_version": 2}
     )
+
+
+# ── #621 trip view weather 예산(약 1.5 s)과 markers 캐시 ─────────────────────────────
+
+
+class _SlowWeather(_Weather):
+    """특보(`/markers`)가 view 예산보다 느린 weather 대역."""
+
+    def __init__(self, *, delay: float, alerts_for: str | None = None) -> None:
+        super().__init__(alerts_for=alerts_for)
+        self.delay = delay
+
+    async def markers(self, location_ids: list[str]) -> tuple[WeatherMarkerOut, ...]:
+        await asyncio.sleep(self.delay)
+        return await super().markers(location_ids)
+
+
+def test_trip_view_weather_budget_default_is_about_one_and_a_half_seconds() -> None:
+    assert settings.pinvi_trip_view_weather_budget_seconds == 1.5
+
+
+async def test_trip_view_flag_on_slow_map_batch_is_unavailable_within_budget(
+    session_factory: Any,
+) -> None:
+    """Map 값 조회가 예산을 넘기면 weather만 `unavailable`이고 view는 예산 안에 돌아온다."""
+    settings.pinvi_kor_travel_map_weather_enabled = True
+    today = datetime.now(KST).date()
+    base = _nearest_then_batch()
+
+    async def slow(request: httpx.Request) -> httpx.Response:
+        if not request.url.path.startswith("/v1/service/weather/"):
+            return httpx.Response(503, json=fx.problem_body(503, "UNAVAILABLE"))
+        if request.url.path == "/v1/service/weather/locations/batch":
+            await asyncio.sleep(4.0)
+        return base(request)
+
+    fake = _Map(_nearest_then_batch())
+    fake.client = KorTravelMapClient(
+        httpx.AsyncClient(base_url="http://map.test", transport=httpx.MockTransport(slow)),
+        service_token="svc",
+        max_attempts=1,
+        backoff_base_seconds=0.0,
+    )
+    feature_id = f"fs_{uuid.uuid4().hex[:8]}"
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    view = await _trip_view(
+        session_factory, pois=[(1, today, feature_id)], map_client=fake.client, weather_client=None
+    )
+    elapsed = loop.time() - started
+    assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "unavailable"}
+    assert elapsed < 3.5, elapsed
+    # 값 조회는 view와 분리돼 끝까지 간다(회로가 결과를 센다) — 테스트 루프가 닫히기 전에 회수한다.
+    from app.services import trip_weather_batch
+
+    await asyncio.gather(*trip_weather_batch._DETACHED, return_exceptions=True)
+
+
+async def test_trip_view_flag_on_slow_alerts_keep_map_values_and_fill_the_cache(
+    session_factory: Any,
+) -> None:
+    """특보만 느리면 Map 값으로 응답하고(특보 없이), 뒤에서 끝난 특보 조회가 다음 view를 채운다."""
+    from app.services.weather_markers_cache import weather_markers_cache
+
+    settings.pinvi_kor_travel_map_weather_enabled = True
+    today = datetime.now(KST).date()
+    fake = _Map(_nearest_then_batch(nearest=fx.nearest_split_bundle(), near=_SPLIT_NEAR))
+    weather = _SlowWeather(delay=3.0, alerts_for=fx.LOC_KMA)
+    feature_id = f"fa_{uuid.uuid4().hex[:8]}"
+    loop = asyncio.get_running_loop()
+
+    started = loop.time()
+    first = await _trip_view(
+        session_factory,
+        pois=[(1, today, feature_id)],
+        map_client=fake.client,
+        weather_client=weather,
+    )
+    assert loop.time() - started < 3.0
+    state = _day(first, 1)["weather_by_feature_id"][feature_id]
+    assert state["state"] == "found"
+    first_keys = {
+        m["metric_key"] for m in _day(first, 1)["weather_cards"][state["card_key"]]["metrics"]
+    }
+    assert "ALERT" not in first_keys
+
+    await weather_markers_cache().wait_idle()
+    second = await _trip_view(
+        session_factory,
+        pois=[(1, today, feature_id)],
+        map_client=fake.client,
+        weather_client=weather,
+    )
+    state2 = _day(second, 1)["weather_by_feature_id"][feature_id]
+    keys2 = {
+        m["metric_key"] for m in _day(second, 1)["weather_cards"][state2["card_key"]]["metrics"]
+    }
+    assert "ALERT" in keys2
+    assert weather.calls == ["markers"]  # 두 번째 view는 캐시 적중

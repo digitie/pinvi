@@ -62,6 +62,7 @@ from app.clients.kor_travel_weather import (
     WeatherValueOut,
 )
 from app.core.time import KST
+from app.services.weather_markers_cache import cached_markers
 from app.services.weather_metrics import provider_rank
 
 logger = logging.getLogger(__name__)
@@ -680,7 +681,10 @@ async def fetch_location_bundles(
 
 
 async def fetch_alerts(
-    weather_client: KorTravelWeatherClient | None, location_ids: Sequence[str]
+    weather_client: KorTravelWeatherClient | None,
+    location_ids: Sequence[str],
+    *,
+    fresh: bool = False,
 ) -> dict[str, list[WeatherValueOut]]:
     """특보는 Map에 없다 — kor-travel-weather `/markers`의 `alerts`만 읽는다(위치 id별).
 
@@ -692,7 +696,7 @@ async def fetch_alerts(
         return out
     try:
         for chunk in chunked(ids, _ALERT_MARKERS_CHUNK):
-            for marker in await weather_client.markers(chunk):
+            for marker in await cached_markers(weather_client, chunk, fresh=fresh):
                 if marker.alerts:
                     out.setdefault(marker.location_id, []).extend(marker.alerts)
     except KorTravelWeatherError as exc:

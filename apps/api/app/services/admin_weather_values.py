@@ -60,6 +60,7 @@ async def build_admin_feature_weather_values(
         map_weather_client=map_weather_client,
         map_budget_seconds=map_budget_seconds,
         direct_budget_seconds=settings.pinvi_kor_travel_weather_admin_request_budget_seconds,
+        fresh_alerts=True,
     )
     if not deduped:
         return AdminFeatureWeatherValuesResponse(feature_id=feature_id, asof=asof)
