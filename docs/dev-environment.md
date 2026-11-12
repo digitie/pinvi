@@ -157,9 +157,12 @@ cd apps/api
 UV_PYTHON=3.12 uv sync --locked --extra dev
 . .venv/bin/activate
 
-# Node — npm 11이 필요하다 (아래 참고)
+# Node/npm — root workspace anchor를 선택한다 (아래 참고)
 cd /mnt/f/dev/pinvi-codex
-npm install
+nvm install
+nvm use
+npm install --global npm@12.0.1
+npm ci --engine-strict
 ```
 
 ### Python 의존성 — uv.lock
@@ -184,17 +187,31 @@ npm install
   로컬에서 같은 일을 하려면 두 디렉터리에서 `uv lock --upgrade` 후(ETL은 Dagster 계열을
   `uv lock --upgrade-package dagster==<현재 버전> ...`으로 되돌린다) 브랜치·PR로 낸다.
 
-### npm은 11 이상이어야 한다 (T-358)
+### Node/npm 선택 — root workspace anchor (T-358 후속)
 
-`package.json`의 `engines.npm`이 `>=11`이고 CI도 `npm@11.19.1`로 고정한다.
-npm 10.9.7은 **lockfile 없이** 의존성을 처음부터 풀 때 arborist 버그로 죽는다
-(`Cannot read properties of null (reading 'edgesOut')`). `npm ci`는 npm 10에서도
-동작하지만, 로컬과 CI가 다른 메이저면 `npm install`이 lockfile을 건드릴 때 해석이 갈린다.
+build/test 선택은 Node `22.23.1`·npm `12.0.1`이다. 저장소 root의 `.nvmrc`,
+private `package.json`의 `packageManager`·`engines`와 `.npmrc`의
+`engine-strict=true`를 함께 사용한다. `apps/web`·`apps/mobile`·`packages/*`는
+이 workspace root anchor를 따른다. 공개 library manifest나 native 의존성 목록을
+이 선택에 맞춘다는 이유로 변경하지 않는다.
 
 ```bash
-npm -v                                  # 11.x 여야 한다
-npx -y npm@11 install -g npm@11.19.1    # 올릴 때. npm 자기 자신을 교체하면 경합으로 실패한다
+nvm install
+nvm use
+node --version                           # v22.23.1
+npm install --global npm@12.0.1
+npm --version                            # 12.0.1
+npm ci --engine-strict
 ```
+
+CI의 Node job은 npm `12.0.1`을 명시 선택한다. Docker의 fresh build stage도
+같은 버전의 CLI로 build한다. `npx npm@12.0.1 ci`는 그 호출만 고정하므로 다른
+bare `npm` 명령의 버전을 고정하는 것으로 간주하지 않는다. 기존 Node image의
+배포판·libc·digest는 유지한다.
+
+이 toolchain metadata 변경만으로 lock 의존성 graph/version/SRI를 재생성하지 않는다.
+NativeWind5 RC·Tailwind4·C11 packages와 physical device/EAS/store `NOT_RUN`은
+그대로다. toolchain 실제 설치·native/웹 전체 build 검증은 별도 슬롯에서 수행한다.
 
 ### `package-lock.json`을 다시 만들어야 한다면
 

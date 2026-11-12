@@ -423,7 +423,7 @@ docker_args+=(
   -lc
   'set -euo pipefail
 if [[ "${PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI:-0}" != "1" ]]; then
-  npx --yes npm@12.0.1 ci --no-audit --no-fund
+  npx --yes npm@12.0.1 ci --no-audit --no-fund --engine-strict
 fi
 test_status=0
 "$@" || test_status=$?

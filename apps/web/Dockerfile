@@ -14,7 +14,7 @@ WORKDIR /repo
 # `npm install`이 lockfile 트리를 **조용히 버리고** 다시 푼다. 루트
 # `package.json`의 `workspaces` glob과 이 목록이 갈라져도 아무도 알려주지
 # 않는 이중 선언이었다. glob에서 직접 유도한다(`--parents`, 1.7-labs).
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY --parents apps/*/package.json packages/*/package.json ./
 # 이 glob이 **하나도** 매치하지 않으면 COPY는 조용히 넘어가지 않고 죽는다.
 # vendored tarball을 레지스트리로 옮기거나 확장자를 `.tar.gz`로 바꾸면
@@ -23,7 +23,7 @@ COPY --parents apps/*/vendor/ ./
 
 # `npm install`이 아니라 `npx --yes npm@12.0.1 ci`다. manifest와 lockfile이 어긋나면 조용히
 # 다른 트리를 만드는 대신 **실패한다**. 위 누락이 바로 그렇게 숨었다.
-RUN npx --yes npm@12.0.1 ci --no-audit --no-fund
+RUN npx --yes npm@12.0.1 ci --no-audit --no-fund --engine-strict
 
 # ─────────────────────────────────────────────
 FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS build
@@ -49,10 +49,11 @@ ENV NEXT_PUBLIC_GRAFANA_URL=${NEXT_PUBLIC_GRAFANA_URL}
 ENV NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=${NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH}
 ENV NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=${NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED}
 ENV NEXT_PUBLIC_VWORLD_API_KEY=${NEXT_PUBLIC_VWORLD_API_KEY}
-RUN npm --workspace apps/web run build
+RUN npx --yes npm@12.0.1 --workspace apps/web run build
 
 # ─────────────────────────────────────────────
 FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS runtime
+RUN npm install --global npm@12.0.1
 WORKDIR /app
 
 ARG PINVI_BUILD_ENVIRONMENT=development
@@ -98,6 +99,13 @@ COPY --from=build /repo/apps/web/next.config.mjs ./next.config.mjs
 # 이 자리의 손수 병합이 아니라 Next `output: 'standalone'`이다 — 추적된
 # 의존만 그대로 담아 이 문제와 이미지 크기를 함께 없앤다.
 COPY --from=build /repo/node_modules ./node_modules
+
+# Next의 이미지/fetch·응답 캐시와 npx 캐시만 runtime 사용자에게 쓰기를 허용한다.
+# 앱 루트·정적 파일·전체 node_modules는 기존 root 소유/읽기 권한을 유지한다.
+ENV NPM_CONFIG_CACHE=/home/node/.npm
+RUN mkdir -p .next/cache .next/server/app .next/server/pages .next/server/route-cache "$NPM_CONFIG_CACHE" \
+    && chown -R node:node .next/cache .next/server/app .next/server/pages .next/server/route-cache "$NPM_CONFIG_CACHE"
+USER node
 
 EXPOSE 3000
 

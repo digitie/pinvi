@@ -1,3 +1,30 @@
+## 2026-11-13 — 규칙 예외 없는 같은 origin의401 문서 복귀
+
+c412의 인라인 ESLint 예외는 preserve-ignores 요구와 맞지 않아 후속 commit으로 제거한다. 표준 URL로 현재 origin·포트를 보존한 절대 로그인 주소를 만들고 기존 location.href 문서 reload와 safeLoginReturnTo 정리를 유지한다. config·ignore·규칙 예외 추가0이며 실제 전체 web lint 경고0, 경고1개 대조 old exit0→new exit1, 기존 인증·복귀 경로와 새 origin/포트 회귀를 확인했다. c412의 CI 성공·부적합 소스와9fdb Doctor 실패 이력은 별도 보존한다. Expo3patch/launcher·Common36/C11은 동일하며 최종 새 정확 CI와 원2 검토·이미지 runtime 수용은 대기다. 운영·native 실기기/EAS/store는 NOT_RUN이다.
+
+이하 앞선 후보·실행 당시 기록:
+
+## 2026-11-13 — web 경고0 gate와 Expo 패치 후보
+
+원 B의9fdb 조건부 지적에 따라 web lint에 --max-warnings 0을 추가하고 설정 규칙·ignore는 유지한다. 실제 ESLint10.14.0의 경고1개/오류0개 대조는 old exit0→new exit1이다. 첫 정상 lint는401 로그인 복귀 경고1건으로 실패해 원문을 보존했다. 갱신 실패 뒤에는 인증된 JS 상태·캐시를 폐기해야 하므로 해당 href 한 줄에 근거 있는 규칙 예외만 두고 문서 reload 동작은 바꾸지 않았다. 새 정상 web 전체 lint와 기존 인증 복귀·갱신 회귀는 통과했다. Expo 패치cd6618a5의 실제 Expo Doctor20/20은 별도 보존한다. 최종 새 head의 원2 검토·전체 CI·이미지 runtime 수용은 대기이며 Common36/C11과 운영 미실행 상태는 유지한다.
+
+이하 앞선 후보·실행 당시 기록:
+
+## 2026-11-13 — Expo SDK 패치 CI 실패 후속 후보
+
+9fdb의 Expo Doctor19/20·1FAIL 원문과 web/API/공통정책 성공을 보존한다. 공식 registry와 Expo58.0.25의 bundledNativeModules 기준으로 root/mobile Expo58.0.25·Dev Client58.0.20·Location58.0.22를 exact 적용하고 Dev Launcher58.0.20 전이만 함께 갱신한다. 제외·재시도로 실패를 성공화하지 않는다. lock의 그 외 항목과 Common36/C11/NativeWind5RC/Tailwind4·앱 코드는 동일하다. 새 정확 소스 검토와 cloud CI는 대기이며 native 실기기/EAS/store 및 운영은 NOT_RUN이다.
+
+이하 앞선 후보·실행 당시 기록:
+
+## 2026-11-13 — 실제 merged Common guard 연결 후보
+
+Common PR51의 실제 merge36e4d285를 reusable uses/common-ref 양쪽에 고정하고 root anchor와 생산 Node Dockerfile 목록을 전달한다. web/mobile functional PR·main push 필터는 guard 파일과 Node/npm selector·설정 변경도 감지한다. 기존 step 순서나 needs/fail-fast는 바꾸지 않는다.
+이하 b771은 초기 후보 작성 당시 기록이다. 최종 원2 검토·정확 cloud CI와 새 image의 non-root/cache/native runtime 수용은 별도 gate이며 운영 적용·native 실기기/EAS/store는 하지 않는다.
+
+## 2026-11-13 — build/test Node/npm root anchor 후보
+
+최신 main `b9dcf3c3` 기반 `agent/build-rules-pinvi-20261113`에서 Node22.23.1/npm12.0.1 선택을 root private anchor·engine-strict와 CLI 호출에 결박한다. lock은 root engines metadata만 변경하며 C11·NativeWind5RC/Tailwind4·앱 코드는 보존한다. fresh runtime의 `CMD npx next`도 ambient npm에 의존하지 않도록 global npm12.0.1 pin을 추가했다. 후보3은 CI-33의 `USER node`와 image 내부 Next/npm cache 소유권만 추가하며 실제 새 이미지의 non-root 시작·쓰기/읽기·native module 검증은 아직 NOT_RUN이다. Common 새 guard의 실제 ref/input 연결과 설치·build 검증은 대기 중이며 push/PR·운영 적용은 하지 않았다. CI 순서/needs/fail-fast 정비와 physical/EAS/store는 이 후보의 완료 범위가 아니다.
+
 ## 2026-11-12 — #621 weather markers 캐시·trip view weather 예산 1.5 s
 
 - 11-11 재측정에서 trip view p95가 3.58 s였다. 시간의 대부분이 weather `/markers`였고, 같은 trip을 반복 조회해도 매번 다시 불렀다.

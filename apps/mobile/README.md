@@ -11,7 +11,7 @@ React Native 앱이다.
 
 ## 현재 의존성 기준 (SDK58)
 
-현재 manifest/root Expo는58.0.24, RN0.88.1이다. NativeWind5.0.0-rc.1/react-native-css3.1.0-rc.1과 Tailwind/PostCSS4.3.5, 원본 수정 Lightning CSS1.33.0+nativecss.fix.4을 exact 사용한다. root/web/mobile이 apps/web/vendor의 동일 tgz를 공유하며 원장·lock SHA512를 검사한다. 지도 core1.0.1/web1.0.3/RN1.0.1은 같은 GitHub source9a 산출물이다. .native는 RN public adapter, .web은 SSR 이후 web public adapter를 선택한다.
+현재 manifest/root Expo는58.0.25, RN0.88.1이다. NativeWind5.0.0-rc.1/react-native-css3.1.0-rc.1과 Tailwind/PostCSS4.3.5, 원본 수정 Lightning CSS1.33.0+nativecss.fix.4을 exact 사용한다. root/web/mobile이 apps/web/vendor의 동일 tgz를 공유하며 원장·lock SHA512를 검사한다. 지도 core1.0.1/web1.0.3/RN1.0.1은 같은 GitHub source9a 산출물이다. .native는 RN public adapter, .web은 SSR 이후 web public adapter를 선택한다.
 
 저장소 지정 Node22.23.1/npm12.0.1에서 root npm ci --no-audit --no-fund로 설치한다. Babel7.29.7은 SDK58 공식 preset의 Babel7 peer 때문에 유지한다. 상세 peer 근거와 실제 검증은 [이관 보고서](../../docs/reports/mobile-nativewind5-20261111.md)를 따른다.
 
@@ -165,3 +165,9 @@ React Doctor는 doctor script의 React 코드 검사다. 별도 SDK 진단은 ap
 npx --yes expo-doctor@1.20.2 "$PWD"를 실행한다. 실제20/20 확인 후 mobile-doctor를 aggregate 필수 검사로 승격했다.
 새 SDK export·font·375/1280px smoke·macOS 강제WASM과 새 main web 전체는 hosted CI 증거로 확인한다.
 [현재 SDK 기록](../../docs/reports/pinvi-expo-sdk-patches-20261112.json)을 따른다.
+
+## SDK patch 진단 후속 — 2026-11-13
+
+9fdb의 mobile CI에서 Expo Doctor는19/20, SDK patch 일치1건 FAIL이었다. 공식 npm latest와 Expo58.0.25의 bundledNativeModules를 대조하여 Expo58.0.25·Dev Client58.0.20·Location58.0.22를 root/mobile에 exact 적용한다. Dev Client가 요구하는 Dev Launcher58.0.20만 추가 전이 변경이며 나머지 lock 항목은 동일하다. 앞선2026-11-12의20/20은 당시 결과로 보존하고 새 정확 CI는 별도 확인한다. 제외 목록·doctor 명령은 변경하지 않는다.
+
+[공식 업그레이드 절차](https://docs.expo.dev/workflow/upgrading-expo-sdk-walkthrough/)의 SDK 호환 진단을 유지한다. Common36과 C11 tgz·원장·NativeWind5RC/Tailwind4는 그대로이며 실제 native/EAS/스토어·운영 적용은 NOT_RUN이다.
