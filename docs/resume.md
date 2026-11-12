@@ -1,3 +1,9 @@
+## 2026-11-13 — Expo SDK 패치 CI 실패 후속 후보
+
+9fdb의 Expo Doctor19/20·1FAIL 원문과 web/API/공통정책 성공을 보존한다. 공식 registry와 Expo58.0.25의 bundledNativeModules 기준으로 root/mobile Expo58.0.25·Dev Client58.0.20·Location58.0.22를 exact 적용하고 Dev Launcher58.0.20 전이만 함께 갱신한다. 제외·재시도로 실패를 성공화하지 않는다. lock의 그 외 항목과 Common36/C11/NativeWind5RC/Tailwind4·앱 코드는 동일하다. 새 정확 소스 검토와 cloud CI는 대기이며 native 실기기/EAS/store 및 운영은 NOT_RUN이다.
+
+이하 앞선 후보·실행 당시 기록:
+
 ## 2026-11-13 — Common 실제 merge36 guard 연결 후 최종 검토 대기
 
 실제 merged Common36e4d285의 code/data ref를 연결하고 web/mobile functional 필터에 guard·도구 selector 경로를 포함한 최종 소스를 동결한다. private root Node22.23.1/npm12.0.1과 USER node/cache 후보의 코드·graph 범위는 b771 그대로다.

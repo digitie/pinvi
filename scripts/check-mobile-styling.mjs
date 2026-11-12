@@ -9,7 +9,7 @@ const mobile = json('apps/mobile/package.json'),
   web = json('apps/web/package.json'),
   lock = json('package-lock.json');
 const wanted = {
-  expo: '58.0.24',
+  expo: '58.0.25',
   'expo-constants': '58.0.16',
   'expo-linking': '58.0.17',
   'expo-router': '58.0.31',
