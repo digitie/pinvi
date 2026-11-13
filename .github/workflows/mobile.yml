@@ -14,6 +14,7 @@ on:
       - '.npmrc'
       - '.nvmrc'
       - 'scripts/check-mobile-styling.mjs'
+      - 'scripts/check-lockfile-integrity.mjs'
       - 'scripts/mobile-web-smoke.mjs'
       - 'scripts/serve-mobile-export.py'
   push:
@@ -30,6 +31,7 @@ on:
       - '.npmrc'
       - '.nvmrc'
       - 'scripts/check-mobile-styling.mjs'
+      - 'scripts/check-lockfile-integrity.mjs'
       - 'scripts/mobile-web-smoke.mjs'
       - 'scripts/serve-mobile-export.py'
 
@@ -50,6 +52,9 @@ jobs:
         with:
           node-version: '22.23.1'
           cache: npm
+
+      - name: Check lockfile integrity coverage
+        run: node scripts/check-lockfile-integrity.mjs
 
       # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.
       # `npx --yes npm@12.0.1 ci`만 쓰는 job도 로컬(npm 12)과 해석이 갈리지 않도록 같은 버전으로 맞춘다.
@@ -72,6 +77,7 @@ jobs:
         run: npm --workspace @pinvi/mobile run typecheck
 
   mobile-export:
+    needs: [mobile-typecheck, mobile-lint, mobile-doctor]
     name: mobile-export
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -108,6 +114,7 @@ jobs:
 
   # Linux native와 같은 tarball의 macOS 자동 WASM 경로를 실제 Expo export로 검증한다.
   mobile-wasm-macos:
+    needs: [mobile-typecheck, mobile-lint, mobile-doctor]
     name: mobile-wasm-macos
     runs-on: macos-latest
     timeout-minutes: 20

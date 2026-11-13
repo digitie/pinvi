@@ -25,6 +25,7 @@ on:
       - '.dockerignore'
       - 'scripts/validate-image-provenance.sh'
       - 'scripts/check_web_image_provenance.py'
+      - 'scripts/check-lockfile-integrity.mjs'
       - 'scripts/tests/test_web_image_provenance.py'
   push:
     branches: [main]
@@ -51,6 +52,7 @@ on:
       - '.dockerignore'
       - 'scripts/validate-image-provenance.sh'
       - 'scripts/check_web_image_provenance.py'
+      - 'scripts/check-lockfile-integrity.mjs'
       - 'scripts/tests/test_web_image_provenance.py'
 
 concurrency:
@@ -58,7 +60,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 로컬 Common·lock·Doctor·lint·타입 검사를 한 번 통과한 뒤 큰 작업을 병렬 실행한다.
+  frontend-static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Web 검사는 merge ref가 아니라 exact PR head를 검증한다.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.1'
+          cache: npm
+
+      # T-358 — lockfile을 node_modules가 있는 상태에서 재생성하면 npm이 디스크에서
+      # 트리를 읽어 `integrity`를 적지 않는다. T-352에서 실제로 보유율이 100% -> 4.8%로
+      # 떨어진 채 머지됐고 어떤 게이트도 잡지 못했다. lockfile만 읽으므로 설치 전에 둔다.
+      - name: Check lockfile integrity coverage
+        run: node scripts/check-lockfile-integrity.mjs
+
+      # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.
+      # `npx --yes npm@12.0.1 ci`만 쓰는 job도 로컬(npm 12)과 해석이 갈리지 않도록 같은 버전으로 맞춘다.
+      - name: Pin npm 12.0.1
+        run: npm install -g npm@12.0.1
+
+      - name: Install dependencies
+        run: npx --yes npm@12.0.1 ci --no-audit --no-fund --engine-strict
+
+      - name: Check common dependencies
+        run: npm run check:dependencies --workspace @pinvi/web
+
+      - name: React Doctor (web)
+        run: npm run doctor --workspace @pinvi/web
+
+      - name: Lint (workspaces)
+        run: npm run lint
+
+      - name: Typecheck (workspaces)
+        run: npm run typecheck
+
   lint-typecheck-build:
+    needs: frontend-static
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -78,26 +123,8 @@ jobs:
       - name: Pin npm 12.0.1
         run: npm install -g npm@12.0.1
 
-      # T-358 — lockfile을 node_modules가 있는 상태에서 재생성하면 npm이 디스크에서
-      # 트리를 읽어 `integrity`를 적지 않는다. T-352에서 실제로 보유율이 100% -> 4.8%로
-      # 떨어진 채 머지됐고 어떤 게이트도 잡지 못했다. lockfile만 읽으므로 설치 전에 둔다.
-      - name: Check lockfile integrity coverage
-        run: node scripts/check-lockfile-integrity.mjs
-
       - name: Install dependencies
         run: npx --yes npm@12.0.1 ci --no-audit --no-fund --engine-strict
-
-      - name: Check common dependencies
-        run: npm run check:dependencies --workspace @pinvi/web
-
-      - name: React Doctor (web)
-        run: npm run doctor --workspace @pinvi/web
-
-      - name: Lint (workspaces)
-        run: npm run lint
-
-      - name: Typecheck (workspaces)
-        run: npm run typecheck
 
       # 루트 test는 `--workspaces --if-present`라 apps/web + packages/{domain,schemas}를 모두 돈다.
       # 이전에는 @pinvi/web만 호출해 packages의 24파일 104테스트가 CI에서 한 번도 실행되지 않았다(T-321).
@@ -110,6 +137,7 @@ jobs:
         run: npm run build
 
   docker-image:
+    needs: frontend-static
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -195,6 +223,7 @@ jobs:
           exit 1
 
   e2e:
+    needs: frontend-static
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
