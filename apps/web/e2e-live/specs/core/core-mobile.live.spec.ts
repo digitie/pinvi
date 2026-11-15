@@ -1,7 +1,7 @@
 /**
  * CORE — mobile UX (runs under the 390x844 project; desktop project skips where noted).
  * Selectors verified against PinVi origin/main b1cef056: components/ui/Dialog.tsx (variant="sheet"),
- * lib/useModalDialog.ts (scroll lock = overflow:clip, focus trap), components/trips/TripDetail.tsx
+ * 공통 Radix Dialog(#732, scroll lock = body[data-scroll-locked] → overflow hidden), components/trips/TripDetail.tsx
  * (mobile header '패널 열기/닫기', aside#trip-detail-panel, day tabs), components/app/AppShell.tsx.
  */
 import { expect, test } from '@playwright/test';
@@ -15,6 +15,12 @@ import {
   waitForMapCanvas,
   type Box,
 } from '../../helpers/core';
+
+/** 배경 스크롤 잠금 상태 — Radix(react-remove-scroll)의 표식과 그 계산된 효과. */
+const bodyScrollLock = () => ({
+  locked: document.body.hasAttribute('data-scroll-locked'),
+  overflowY: getComputedStyle(document.body).overflowY,
+});
 
 test.describe('CORE mobile', () => {
   test.beforeEach(async ({ page }) => {
@@ -35,8 +41,9 @@ test.describe('CORE mobile', () => {
     const modal = page.getByTestId('feature-detail-modal');
     await expect(modal).toBeVisible({ timeout: 15_000 });
     await expect(modal).toHaveAttribute('role', 'dialog');
-    // body scroll lock (useModalDialog): overflow clip on html/body while open
-    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('clip');
+    // body scroll lock (#732 공통 Radix Dialog → react-remove-scroll): body에 data-scroll-locked가
+    // 붙고 그 스타일 규칙이 실제로 배경 스크롤을 막는다(계산된 overflow-y=hidden). 표식만이 아니라 효과를 본다.
+    await expect.poll(() => page.evaluate(bodyScrollLock)).toEqual({ locked: true, overflowY: 'hidden' });
     // sheet body is the scroll container; it must not overflow the viewport
     const sheet = (await modal.boundingBox()) as Box;
     const vp = page.viewportSize()!;
@@ -52,7 +59,8 @@ test.describe('CORE mobile', () => {
     // 1) Escape
     await page.keyboard.press('Escape');
     await expect(modal).toHaveCount(0);
-    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('clip');
+    await expect.poll(async () => (await page.evaluate(bodyScrollLock)).locked).toBe(false);
+    expect((await page.evaluate(bodyScrollLock)).overflowY).not.toBe('hidden');
     // 2) close button — the camera flies to the selected pin; wait for it to settle and re-pick a tappable pin
     const retap = async () => {
       await dismissFeaturePopup(page); // selection popup stays after the sheet closes and covers pins

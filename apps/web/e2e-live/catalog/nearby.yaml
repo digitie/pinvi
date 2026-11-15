@@ -489,8 +489,9 @@
     - data: NEAR-022와 같은 여행
   data_sources: [transport:incident]
   steps:
-    - 390 /trips/{id} → '교통 돌발'
+    - 390 /trips/{id} → '교통 돌발' → (돌발 있으면) 상태 줄 토글로 목록 펼침(#731 기본 접힘)
   expected:
+    - 돌발 목록은 기본 접힘(aria-expanded=false) → 토글 뒤 펼침
     - 스택 overflow-y:auto, 스택 하단 ≤ trip-map-surface 하단(전·후)
     - 패널 너비 ≤ 스택의 70%
   cleanup:

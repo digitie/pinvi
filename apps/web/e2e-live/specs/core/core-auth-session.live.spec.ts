@@ -11,6 +11,7 @@ import {
   e2ePrefix,
   loginAsUser,
   shot,
+  submitLogin,
 } from '../../helpers/live';
 import {
   annotate,
@@ -146,7 +147,10 @@ test.describe('CORE auth/session', () => {
       await expect(p.getByTestId('login-submit')).toBeEnabled();
       await p.getByTestId('login-email').fill(requireEnv('PINVI_E2E_USER_EMAIL'));
       await p.getByTestId('login-password').fill(requireEnv('PINVI_E2E_USER_PASSWORD'));
-      await p.getByTestId('login-submit').click();
+      // 폼 로그인은 auth 5/min 한도에 걸린다 — 2026-11-12 live 런에서 429('요청 한도를 초과했습니다')로
+      // /login?next=…에 머물렀다(제품의 next 처리 문제 아님). 스위트 공통 429 대기·재시도로 제출한다.
+      const loginRes = await submitLogin(p, p.getByTestId('login-submit'));
+      expect(loginRes?.status(), 'POST /auth/login').toBe(200);
       await shot(p, 'CORE-007', 'after-login');
       await expect(p).toHaveURL(new RegExp(`/trips/${id}`), { timeout: 20_000 });
       await fresh.close();

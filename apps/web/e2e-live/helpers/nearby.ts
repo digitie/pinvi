@@ -62,6 +62,8 @@ export const chip = (page: Page, layer: Layer): Locator =>
 export const stateLine = (page: Page, layer: Layer): Locator =>
   page.getByTestId(`transport-layer-state-${layer}`);
 export const incidentList = (page: Page): Locator => page.getByTestId('transport-incident-list');
+/** 여행 지도의 돌발 목록 접기/펴기 상태 줄(#731 `collapseIncidents`) — 목록은 기본 접혀 있다. */
+export const incidentToggle = (page: Page): Locator => page.getByTestId('transport-incident-toggle');
 export const legendMarkers = (page: Page, layer?: Layer): Locator =>
   layer
     ? page.locator(`[data-testid="transport-marker"][data-layer="${layer}"]`)
