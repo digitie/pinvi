@@ -95,9 +95,9 @@ Spec files: 58.
 | SRCH-010 | search | 121자 질의 → 서버 422를 alert로 표시, 앱 크래시 없음 | P3 | desktop, search | scripted | `specs/search/search-basic.live.spec.ts#SRCH-010` |
 | SRCH-011 | search | 결과 상한 — 페이지네이션/'더 보기' 없음, 소스별 limit 8 | P3 | desktop, search | scripted | `specs/search/search-basic.live.spec.ts#SRCH-011` |
 | SRCH-012 | search | 결과 선택 → 입력/목록 초기화, 지도 이동, 팝업에 '상세보기' | P1 | desktop, mobile, search, poi | scripted | `specs/search/search-basic.live.spec.ts#SRCH-012` |
-| SRCH-013 | search | 여행 장소 범위 안 결과가 먼저 온다 — 안동 여행에서 '카페' 검색 | P1 | desktop, search, mutating | scripted | `specs/search/search-region.live.spec.ts#SRCH-013` |
+| SRCH-013 | search | 여행 장소 범위가 편향 bbox로 간다 — 안동 여행에서 '카페' 검색 | P1 | desktop, search, mutating | scripted | `specs/search/search-region.live.spec.ts#SRCH-013` |
 | SRCH-014 | search | 지역 밖 정확 일치('성산일출봉')는 bias 아래서도 살아남는다(필터 아님) | P1 | desktop, search, mutating | scripted | `specs/search/search-region.live.spec.ts#SRCH-014` |
-| SRCH-015 | search | 지역 안 결과는 limit//2(=4)까지만 앞으로 — 지역 밖 결과가 뒤에 남는다 | P2 | desktop, search, mutating | scripted | `specs/search/search-region.live.spec.ts#SRCH-015` |
+| SRCH-015 | search | 편향은 필터가 아니다 — 지역 밖 결과도 응답·UI에 남는다 | P2 | desktop, search, mutating | scripted | `specs/search/search-region.live.spec.ts#SRCH-015` |
 | SRCH-016 | search | 장소 없는 여행에서는 지도 화면 bbox로 편향(여행 범위 → 화면 순서) | P3 | desktop, search, mutating | manual |  |
 | SRCH-017 | search | 검색 결과를 일자에 추가 → POI 목록 반영 | P1 | desktop, search, poi, mutating | scripted | `specs/search/search-region.live.spec.ts#SRCH-017` |
 | SRCH-018 | search | 내 여행 POI가 '내 여행' 배지로 검색된다(my_poi) | P2 | desktop, search, mutating | scripted | `specs/search/search-region.live.spec.ts#SRCH-018` |

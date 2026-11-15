@@ -82,8 +82,9 @@ test.describe('SRCH sources by category family (/map)', () => {
 
   test('SRCH-025 국가유산 소수서원', async ({ page }, ti) => {
     desktopOnly();
-    // /map biases toward the current (Seoul) viewport (#615, order-only): rows inside the bbox come
-    // first, so the exact match need not be row 1 — it must be present and open as a heritage card.
+    // /map sends the current (Seoul) viewport to Map as a bias bbox. Map weighs it only within a match stage, so a
+    // name match outside the viewport is not pushed below in-viewport similarity-only rows (the old client-side
+    // lift did that — SRCH-002). Row 1 is still not asserted here: present and opens as a heritage card.
     const probe = await runSearch(page, '소수서원');
     expect(featureRows(probe.rows).map((r) => r.name)).toContainEqual(expect.stringContaining('소수서원'));
     await familyCase(page, ti, 'SRCH-025', '소수서원', /국가유산|사적|기념물|전통사찰|관광|한옥/, /소수서원$/);

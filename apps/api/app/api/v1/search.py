@@ -42,7 +42,6 @@ from app.services.place_search import (
     kakao_document_to_result,
     my_poi_to_result,
     naver_item_to_result,
-    region_biased_items,
 )
 
 router = APIRouter(tags=["search"])
@@ -109,8 +108,6 @@ async def _search_my_pois(db: DbSession, *, user_id: uuid.UUID, q: str) -> list[
     return out
 
 
-# 편향이 있을 때 전국 검색에서 받는 후보 수 — 지역 안 장소가 상위 `limit`에 없더라도 끌어올 수 있게.
-_BIAS_CANDIDATES = 40
 _KOREA_LNG = (124.0, 132.0)
 _KOREA_LAT = (33.0, 43.0)
 
@@ -162,8 +159,8 @@ async def unified_search(
             max_length=100,
             description=(
                 "지역 편향 `lng_min,lat_min,lng_max,lat_max` — 여행 장소 범위 또는 지금 지도 화면(웹은 "
-                "소수 2자리로 거칠게 보낸다). 이 범위 안의 feature를 목록 절반까지 앞으로 당기고 밖의 결과도 "
-                "남긴다(필터 아님). 외부 provider(Kakao/Naver)에는 보내지 않는다. 탐색 지도 화면은 동의 후 "
+                "소수 2자리로 거칠게 보낸다). Map `/v1/features/search`에 bbox로 넘겨 Map이 일치 단계 안에서만 "
+                "범위 안을 앞에 둔다(필터 아님 — 범위 밖 이름 일치는 범위 안 유사도만 결과보다 앞). 외부 provider(Kakao/Naver)에는 보내지 않는다. 탐색 지도 화면은 동의 후 "
                 "기기 위치로 자동 센터링될 수 있으나 `/features/in-bounds`와 같은 수준의 화면 범위다."
             ),
         ),
@@ -193,22 +190,26 @@ async def unified_search(
     # feature(Map)와 address(geo)는 서로 독립인 HTTP 호출이라 동시에 보낸다 — 느린 소스 하나가 다른
     # 소스의 결과를 붙잡지 않는다. 표시 순서는 그대로 feature → address다.
     async def _feature_results() -> list[PlaceSearchResult] | None:
-        # 편향이 있으면 전국 검색을 한 번 넉넉히 받아(`_BIAS_CANDIDATES`) 지역 안을 앞으로 당긴다 —
-        # bbox 검색을 따로 보내지 않는다(Map 이름 검색은 bbox를 이름 매칭 뒤에 걸러 비용이 같고,
-        # 재시도 예산·호출 로그도 두 배가 된다 — #615 리뷰).
-        page_size = max(limit, _BIAS_CANDIDATES) if bias is not None else limit
+        # 편향 bbox는 Map에 그대로 넘기고 Map의 순서를 그대로 쓴다. Map은 bbox를 **일치 단계 안에서만**
+        # 가중한다(필터 아님 — 화면 밖 이름 일치가 화면 안 trigram 유사도만 행보다 앞, Map
+        # `test_bbox_never_lifts_a_similarity_only_row_over_a_name_match`). 예전에는 bbox 없이 전국 40건을
+        # 받아 화면 안 행을 클라이언트에서 앞으로 당겼는데, 일치 단계를 몰라 서울 화면의 "안동하회마을"
+        # 검색에서 서울 식당 "안동장"(유사도만)이 안동하회마을(이름 일치)보다 먼저 나왔다(live e2e SRCH-002).
         try:
             feature_data, labels = await asyncio.gather(
-                kor_travel_map.search_features(q=q, page_size=page_size),
+                kor_travel_map.search_features(
+                    q=q,
+                    page_size=limit,
+                    min_lon=bias.lng_min if bias is not None else None,
+                    min_lat=bias.lat_min if bias is not None else None,
+                    max_lon=bias.lng_max if bias is not None else None,
+                    max_lat=bias.lat_max if bias is not None else None,
+                ),
                 get_category_labels(kor_travel_map),
             )
         except KorTravelMapError:
             return None
-        items = region_biased_items(
-            list(feature_data.get("items") or []),
-            bbox=bias.as_tuple() if bias is not None else None,
-            limit=limit,
-        )
+        items = [item for item in feature_data.get("items") or [] if isinstance(item, dict)][:limit]
         return [r for item in items if (r := feature_item_to_result(item, labels)) is not None]
 
     async def _address_results() -> list[PlaceSearchResult] | None:

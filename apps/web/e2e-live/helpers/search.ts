@@ -402,8 +402,8 @@ async function keyboardPan(page: Page, dx: number, dy: number): Promise<Response
 }
 
 /**
- * Zoom out until the search bias bbox covers (clamped) Korea so Map's own order is preserved in the response
- * (region_biased_items: all rows inside → `[*first4, *rest]` == original order). Verified by the caller via
+ * Zoom out until the search bias bbox covers (clamped) Korea so the bias cannot reorder Map's results (every row
+ * is inside the bbox Map receives). Verified by the caller via
  * `outcome.bbox` width. Wheel-zoom out is capped by the VWorld style minZoom, which is national scale.
  */
 export async function zoomToNation(page: Page): Promise<void> {
