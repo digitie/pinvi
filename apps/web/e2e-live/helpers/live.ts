@@ -226,7 +226,7 @@ async function settleAfterRefresh(page: Page, first: Response, matches: (r: Resp
  * Clicks `submit` and resolves with the `POST /auth/login` response; on 429 waits for `Retry-After`
  * (default 61 s) and submits again — up to 3 attempts. The form keeps its values across a 429.
  */
-async function submitLogin(page: Page, submit: Locator): Promise<Response | null> {
+export async function submitLogin(page: Page, submit: Locator): Promise<Response | null> {
   for (let attempt = 1; ; attempt += 1) {
     const loginRes = page
       .waitForResponse((r) => r.request().method() === 'POST' && /\/auth\/login(\?|$)/.test(r.url()), {

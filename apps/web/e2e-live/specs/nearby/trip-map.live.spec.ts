@@ -39,6 +39,7 @@ import {
   detailDialog,
   expectLayerLineShape,
   incidentList,
+  incidentToggle,
   legendMarkers,
   markersBody,
   markersQuery,
@@ -363,7 +364,15 @@ test.describe('NEAR trip map — four-place trip', () => {
       expect(panelBox.width).toBeLessThanOrEqual(stackBox.width * 0.7 + 1); // w-64 max-w-[70%]
       const res = await toggleExpectingRequest(page, 'highway_incident');
       const inc = (await markersBody(res)).layers.find((l) => l.layer === 'highway_incident')!;
-      if (inc.status === 'ok' && inc.items.length > 0) await expect(incidentList(page)).toBeVisible();
+      if (inc.status === 'ok' && inc.items.length > 0) {
+        // 여행 지도는 돌발 목록을 접어 둔다(#731) — 실제 상태 줄 토글로 편 뒤 스택이 지도 안에 머무는지 본다.
+        const toggle = incidentToggle(page);
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(incidentList(page)).toHaveCount(0);
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        await expect(incidentList(page)).toBeVisible();
+      }
       const after = (await stack.boundingBox())!;
       expect(after.y + after.height).toBeLessThanOrEqual(surface.y + surface.height + 1);
       const overflowing = await stack.evaluate((el) => el.scrollHeight > el.clientHeight);

@@ -316,12 +316,12 @@
   steps:
     - /map(390x844) → 마커 탭 → 시트 검사 → 3가지 닫기
   expected:
-    - role=dialog, body overflow clip, 시트가 뷰포트 안, 본문 스크롤 가능하면 scrollTop>0
-    - 닫힌 뒤 overflow 해제
+    - role=dialog, body[data-scroll-locked] + 계산된 overflow-y hidden, 시트가 뷰포트 안, 본문 스크롤 가능하면 scrollTop>0
+    - 닫힌 뒤 data-scroll-locked 해제·overflow-y hidden 아님
   cleanup: [없음]
   automation: scripted
   spec: specs/core/core-mobile.live.spec.ts#CORE-019
-  notes: Dialog variant=sheet + useModalDialog.
+  notes: Dialog variant=sheet + 공통 Radix Dialog(#732, react-remove-scroll; useModalDialog 제거).
 
 - id: CORE-020
   title: 모바일 일자 패널 열기/일자 전환/닫기(스와이프 미구현 → 버튼 경로)

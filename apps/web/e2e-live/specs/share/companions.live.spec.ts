@@ -142,7 +142,13 @@ test.describe('SHR 동행 (desktop)', () => {
       await user2.page.getByTestId('trip-edit-save').click();
       await expect(user2.page.getByTestId('trip-edit-dialog').getByRole('alert')).toContainText('이 여행을 편집할 권한이 없습니다');
       await shot(user2.page, 'SHR-028', '01-viewer-edit-denied');
-      await expect(user2.page.getByRole('heading', { name: title }).first()).toBeVisible();
+      // 거부된 다이얼로그는 열린 채 남는다. #732 공통 Radix 모달은 열려 있는 동안 배경을 접근성 트리에서
+      // 숨기므로(aria-hidden) 다이얼로그를 닫은 뒤 제목이 바뀌지 않았는지 본다.
+      const editDialog = user2.page.getByTestId('trip-edit-dialog');
+      await editDialog.getByRole('button', { name: '취소' }).click();
+      await expect(editDialog).toHaveCount(0);
+      await expect(user2.page.getByRole('heading', { name: title, exact: true }).first()).toBeVisible();
+      await expect(user2.page.getByRole('heading', { name: `${title} viewer-edit` })).toHaveCount(0);
 
       // 동행 탭: viewer에게는 이메일(PII)이 가려진다(include_management=False). The viewer's tab may be
       // present but not actionable (prod 2026-11-03) — either way no companion email may be visible.

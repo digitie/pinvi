@@ -420,13 +420,13 @@
     - {day: 1, query: "가평휴게소", expect_name_contains: "가평휴게소", family: rest_area, source: feature}
     - {day: 1, query: "쁘띠프랑스", expect_name_contains: "쁘띠프랑스", family: culture, source: feature}
     - {day: 1, query: "남이섬", expect_name_contains: "남이섬", family: nature, source: feature}
-    - {day: 1, query: "가평 글램핑", expect_name_contains: "가평별빛누리글램핑", family: lodging, source: feature}
+    - {day: 1, query: "가평별빛누리글램핑", expect_name_contains: "가평별빛누리글램핑", family: lodging, source: feature}
     - {day: 2, query: "아침고요수목원", expect_name_contains: "아침고요수목원", family: park, source: feature}
     - {day: 2, query: "명동 닭갈비 골목", expect_name_contains: "명동 닭갈비 골목", family: food, source: feature}
   checks:
     - optimize_day: 1
     - weather_day: 1
-  notes: "휴게소 피처 포함"
+  notes: "휴게소 피처 포함 — 2026-11-16 Map 검색에서 '가평 글램핑' 상위 20행에 가평별빛누리글램핑이 없어 이름 그대로 질의(Map 1위 확인)"
 
 - id: TRS-CG-023
   title: "자라섬 캠핑 2박3일"
@@ -583,7 +583,7 @@
     - {day: 1, query: "더티트렁크", expect_name_contains: "더티 트렁크", family: cafe, source: feature}
     - {day: 2, query: "가평휴게소", expect_name_contains: "가평휴게소", family: rest_area, source: feature}
     - {day: 2, query: "남이섬", expect_name_contains: "남이섬", family: nature, source: feature}
-    - {day: 2, query: "가평 글램핑", expect_name_contains: "가평별빛누리글램핑", family: lodging, source: feature}
+    - {day: 2, query: "가평별빛누리글램핑", expect_name_contains: "가평별빛누리글램핑", family: lodging, source: feature}
     - {day: 3, query: "두물머리", expect_name_contains: "두물머리", family: nature, source: feature}
     - {day: 3, query: "용문사", expect_name_contains: "용문사", family: religious, source: feature}
     - {day: 3, query: "중미산자연휴양림", expect_name_contains: "중미산자연휴양림", family: lodging, source: feature}
@@ -594,7 +594,7 @@
     - optimize_day: 4
     - reorder_day: 3
     - copy_trip
-  notes: "숙소가 매일 바뀌는 이동형"
+  notes: "숙소가 매일 바뀌는 이동형 — 가평별빛누리글램핑은 이름 그대로 질의(2026-11-16, '가평 글램핑' 상위 20행 밖)"
 
 - id: TRS-CG-032
   title: "강릉 바다 1박2일 — 호텔·순두부·카페"
@@ -755,7 +755,7 @@
   tags: [camping, nature, trail, beach, food, religious, spa, mobile]
   places:
     - {day: 1, query: "설악동 야영장", expect_name_contains: "설악동야영장", family: camping, source: feature}
-    - {day: 1, query: "설악산 소공원", expect_name_contains: "설악산 국립공원", family: nature, source: feature}
+    - {day: 1, query: "설악산 소공원", expect_name_contains: "설악산소공원", family: park, source: feature}
     - {day: 2, query: "비룡폭포", expect_name_contains: "비룡폭포코스", family: trail, source: feature}
     - {day: 2, query: "속초해수욕장", expect_name_contains: "속초해수욕장", family: beach, source: feature}
     - {day: 2, query: "만석닭강정", expect_name_contains: "만석닭강정 중앙시장점", family: food, source: feature}
@@ -765,7 +765,7 @@
   checks:
     - weather_day: 1
     - delete_day: 3
-  notes: "야영장 2박(같은 장소 두 번)"
+  notes: "야영장 2박(같은 장소 두 번) — '설악산 소공원' 질의의 Map 1위는 '설악산소공원'(공원·광장)이라 그 이름을 기대(2026-11-16)"
 
 - id: TRS-CG-040
   title: "평창 리조트 2박3일 — 용평·알펜시아"
