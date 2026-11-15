@@ -1,7 +1,7 @@
 /**
  * SRCH-049..054 — Map #1436 ranking rules as observed through PinVi `/search`.
- * The /map viewport adds an order-only bbox bias (#615), so each test first zooms to national scale: when the
- * bias bbox covers Korea every row is "inside" and region_biased_items returns Map's order unchanged.
+ * The /map viewport sends its bbox to Map as a bias (weighted within a match stage only), so each test first zooms
+ * to national scale: when the bias bbox covers Korea every row is "inside" and the bias cannot change the order.
  * All ranking assertions are soft (prod data drift) except "row exists".
  */
 import { expect, test, type Page, type TestInfo } from '@playwright/test';

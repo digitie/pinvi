@@ -4,9 +4,11 @@
 # 한옥·민속마을 / 커피전문점 / 주차장 are what PinVi shows via `category_label`).
 #
 # Facts that shape the assertions (PinVi #614/#615, worktrees pinvi-claude-search / pinvi-claude-bias):
-# - GET /search?q&limit=8&bbox=lng_min,lat_min,lng_max,lat_max — bbox is an ORDER-ONLY bias: features inside
-#   the bbox are pulled to the front, at most limit//2 (=4), rest keep Map order. Trip page: bbox = trip POI
-#   extent + 0.25°; /map: bbox = current viewport (2-decimal). Never sent to Kakao/Naver.
+# - GET /search?q&limit=8&bbox=lng_min,lat_min,lng_max,lat_max — bbox is a bias, not a filter: PinVi forwards it
+#   to Map /v1/features/search (min_lon/min_lat/max_lon/max_lat) and keeps Map's order. Map weighs the bbox only
+#   WITHIN a match stage (an out-of-bbox name match stays above in-bbox similarity-only rows). Before 2026-11-16
+#   PinVi pulled up to limit//2 in-bbox rows to the front client-side (SRCH-002 '안동장' bug). Trip page: bbox =
+#   trip POI extent + 0.25°; /map: bbox = current viewport (2-decimal). Never sent to Kakao/Naver.
 # - feature rows have no address; secondary line = category_label. address rows = geo v2 address.full.
 # - detail card: `-category` shows category_label (leaf), subtitle = `category_label · address_line`.
 
@@ -177,7 +179,7 @@
 
 # ───────────────────────── B. region bias (#615) — in-trip search (mutating) ─────────────────────────
 - id: SRCH-013
-  title: 여행 장소 범위 안 결과가 먼저 온다 — 안동 여행에서 '카페' 검색
+  title: 여행 장소 범위가 편향 bbox로 간다 — 안동 여행에서 '카페' 검색
   priority: P1
   tags: [desktop, search, mutating]
   preconditions:
@@ -190,7 +192,7 @@
     - 지도 검색창(trip-map-place-search)에 '카페' 입력 → GET /search 요청의 bbox 파라미터와 응답 JSON 확보
   expected:
     - bbox 파라미터가 안동하회마을 좌표(약 128.52, 36.54)를 포함
-    - feature 행 중 bbox 안 좌표 행이 1개 이상이면 feature 행의 선두 min(4, 안쪽 수)개가 모두 bbox 안(soft)
+    - feature 행 1개 이상, 그 중 bbox 안 좌표 행이 1개 이상(soft — 순서는 Map이 일치 단계 안에서 정한다)
   cleanup: [생성한 여행 삭제]
   automation: scripted
   spec: specs/search/search-region.live.spec.ts#SRCH-013
@@ -208,15 +210,15 @@
   spec: specs/search/search-region.live.spec.ts#SRCH-014
 
 - id: SRCH-015
-  title: 지역 안 결과는 limit//2(=4)까지만 앞으로 — 지역 밖 결과가 뒤에 남는다
+  title: 편향은 필터가 아니다 — 지역 밖 결과도 응답·UI에 남는다
   priority: P2
   tags: [desktop, search, mutating]
   preconditions: [account: test@test.com (user)]
   data_sources: [map:food]
   steps: ["'[e2e] SRCH-015' 여행(안동하회마을 1곳) → 지도 검색 '찜닭'"]
   expected:
-    - feature 행 ≥5이고 bbox 안 행 ≥5이면 5번째 행부터는 Map 원래 순서(안/밖 혼재 허용) — 즉 '선두 연속 안쪽 행' 수가 정확히 4가 아니어도 4 이상(soft)
     - bbox 밖 행이 응답에 있으면 UI에도 남아 있음(필터 아님)
+  notes: 2026-11-16부터 PinVi는 화면 안 행을 limit//2까지 앞으로 당기지 않는다(bbox는 Map에 넘기고 Map 순서 유지) — 예전 '선두 4행 안쪽' 기대는 삭제.
   cleanup: [생성한 여행 삭제]
   automation: scripted
   spec: specs/search/search-region.live.spec.ts#SRCH-015
@@ -346,7 +348,7 @@
   cleanup: [읽기 전용]
   automation: scripted
   spec: specs/search/search-sources.live.spec.ts#SRCH-025
-  notes: '/map 은 화면(서울) bbox 로 순서 편향(#615) — 정확 일치가 1번째일 필요는 없고 결과에 있어야 한다(2026-11-03 수정).'
+  notes: '/map 은 화면(서울) bbox 를 Map 에 편향으로 넘긴다 — Map 은 일치 단계 안에서만 bbox 를 가중하므로 이름 일치는 화면 밖이어도 유사도만 행보다 앞이다(2026-11-16). 1번째 단언은 두지 않고 결과에 있어야 한다.'
 
 - id: SRCH-026
   title: 국가유산 — '도산서원'
