@@ -66,7 +66,12 @@ export interface WeatherIconProps {
 }
 
 /** 날씨 상태 아이콘. 지도 마커 라벨 등 다른 화면도 이 컴포넌트·매핑을 재사용한다. */
-export function WeatherIcon({ condition, night = false, className = 'h-4 w-4', label }: WeatherIconProps) {
+export function WeatherIcon({
+  condition,
+  night = false,
+  className = 'h-4 w-4',
+  label,
+}: WeatherIconProps) {
   const Icon = weatherIconFor(condition, night);
   return (
     <Icon

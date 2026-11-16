@@ -91,7 +91,8 @@ function isNight(epochMs: number): boolean {
 
 function numberOf(metric: WeatherMetric | undefined): number | null {
   if (!metric) return null;
-  if (metric.value_number != null && Number.isFinite(metric.value_number)) return metric.value_number;
+  if (metric.value_number != null && Number.isFinite(metric.value_number))
+    return metric.value_number;
   const text = metric.value_text?.trim();
   if (text && /^-?\d+(\.\d+)?$/.test(text)) return Number(text);
   return null;
@@ -187,7 +188,8 @@ function fromWeatherApi(code: number): WeatherConditionKind | null {
   if (code === 1087 || (code >= 1273 && code <= 1282)) return 'thunder';
   if ([1069, 1072, 1168, 1171, 1198, 1201, 1204, 1207, 1237, 1249, 1252, 1261, 1264].includes(code))
     return 'sleet';
-  if (code === 1066 || code === 1114 || code === 1117 || (code >= 1210 && code <= 1225)) return 'snow';
+  if (code === 1066 || code === 1114 || code === 1117 || (code >= 1210 && code <= 1225))
+    return 'snow';
   if (code === 1255 || code === 1258) return 'snow';
   if (code === 1240 || code === 1243 || code === 1246) return 'shower';
   if (code === 1063 || (code >= 1150 && code <= 1195)) return 'rain';
@@ -243,7 +245,9 @@ function addToSlot(slots: Map<number, Slot>, at: number, metric: WeatherMetric) 
     slot = { at, byKey: new Map() };
     slots.set(at, slot);
   }
-  const key = TEMP_KEYS.has(metric.metric_key.toUpperCase()) ? 'TEMP' : metric.metric_key.toUpperCase();
+  const key = TEMP_KEYS.has(metric.metric_key.toUpperCase())
+    ? 'TEMP'
+    : metric.metric_key.toUpperCase();
   const list = slot.byKey.get(key);
   if (list) list.push(metric);
   else slot.byKey.set(key, [metric]);
@@ -323,7 +327,9 @@ export function currentWeather(
   });
   const observed = new Map<string, WeatherMetric[]>();
   for (const metric of recent) {
-    const key = TEMP_KEYS.has(metric.metric_key.toUpperCase()) ? 'TEMP' : metric.metric_key.toUpperCase();
+    const key = TEMP_KEYS.has(metric.metric_key.toUpperCase())
+      ? 'TEMP'
+      : metric.metric_key.toUpperCase();
     const list = observed.get(key);
     if (list) list.push(metric);
     else observed.set(key, [metric]);
@@ -403,7 +409,10 @@ export function dailyForecast(
 ): DailyWeather[] {
   if (!card) return [];
   const today = kstDateKey(now);
-  const byDate = new Map<string, { hours: HourlyWeather[]; tmx: WeatherMetric[]; tmn: WeatherMetric[]; temps: number[] }>();
+  const byDate = new Map<
+    string,
+    { hours: HourlyWeather[]; tmx: WeatherMetric[]; tmn: WeatherMetric[]; temps: number[] }
+  >();
   const bucket = (date: string) => {
     let entry = byDate.get(date);
     if (!entry) {
@@ -455,7 +464,8 @@ export function todayRange(
   now: number,
 ): { max: number; min: number } | null {
   const today = dailyForecast(card, now, 1)[0];
-  if (!today || today.date !== kstDateKey(now) || today.max == null || today.min == null) return null;
+  if (!today || today.date !== kstDateKey(now) || today.max == null || today.min == null)
+    return null;
   return { max: today.max, min: today.min };
 }
 
@@ -468,7 +478,10 @@ export interface WeatherAlert {
 }
 
 /** 지금 유효한 기상 특보(advisory). 만료(`valid_until` 경과)된 것은 뺀다. */
-export function activeAlerts(card: FeatureWeatherCard | null | undefined, now: number): WeatherAlert[] {
+export function activeAlerts(
+  card: FeatureWeatherCard | null | undefined,
+  now: number,
+): WeatherAlert[] {
   if (!card) return [];
   const seen = new Set<string>();
   const alerts: WeatherAlert[] = [];
@@ -477,7 +490,10 @@ export function activeAlerts(card: FeatureWeatherCard | null | undefined, now: n
     const until = metric.valid_until ? Date.parse(metric.valid_until) : null;
     if (until != null && !Number.isNaN(until) && until < now) continue;
     const title =
-      metric.value_text?.trim() || metric.metric_name?.trim() || metric.metric_key.trim() || '기상 특보';
+      metric.value_text?.trim() ||
+      metric.metric_name?.trim() ||
+      metric.metric_key.trim() ||
+      '기상 특보';
     const key = `${title}|${metric.severity ?? ''}`;
     if (seen.has(key)) continue;
     seen.add(key);

@@ -14,7 +14,9 @@ import {
 const NOW = Date.parse('2026-11-16T10:00:00Z');
 const KMA = 'python-kma-api';
 
-function m(partial: Partial<WeatherMetric> & Pick<WeatherMetric, 'metric_key' | 'forecast_style'>): WeatherMetric {
+function m(
+  partial: Partial<WeatherMetric> & Pick<WeatherMetric, 'metric_key' | 'forecast_style'>,
+): WeatherMetric {
   return { provider: KMA, unit: null, ...partial };
 }
 
@@ -28,12 +30,50 @@ describe('currentWeather', () => {
   it('prefers KMA nowcast temperature over other observed providers', () => {
     const weather = currentWeather(
       card([
-        m({ forecast_style: 'nowcast', metric_key: 'T1H', value_number: 11.3, unit: 'deg_c', ...at('2026-11-16T10:00:00Z') }),
-        m({ forecast_style: 'observed', metric_key: 'T1H', value_number: 7.8, unit: '℃', provider: 'python-krforest-api', ...at('2026-11-16T09:00:00Z') }),
-        m({ forecast_style: 'observed', metric_key: 'T1H', value_number: 9, unit: 'deg_c', provider: 'openweathermap', ...at('2026-11-16T09:30:00Z') }),
-        m({ forecast_style: 'nowcast', metric_key: 'REH', value_number: 76, unit: '%', ...at('2026-11-16T10:00:00Z') }),
-        m({ forecast_style: 'ultra_short', metric_key: 'SKY', value_number: 3, unit: 'code', ...at('2026-11-16T10:00:00Z') }),
-        m({ forecast_style: 'ultra_short', metric_key: 'PTY', value_number: 0, unit: 'code', ...at('2026-11-16T10:00:00Z') }),
+        m({
+          forecast_style: 'nowcast',
+          metric_key: 'T1H',
+          value_number: 11.3,
+          unit: 'deg_c',
+          ...at('2026-11-16T10:00:00Z'),
+        }),
+        m({
+          forecast_style: 'observed',
+          metric_key: 'T1H',
+          value_number: 7.8,
+          unit: '℃',
+          provider: 'python-krforest-api',
+          ...at('2026-11-16T09:00:00Z'),
+        }),
+        m({
+          forecast_style: 'observed',
+          metric_key: 'T1H',
+          value_number: 9,
+          unit: 'deg_c',
+          provider: 'openweathermap',
+          ...at('2026-11-16T09:30:00Z'),
+        }),
+        m({
+          forecast_style: 'nowcast',
+          metric_key: 'REH',
+          value_number: 76,
+          unit: '%',
+          ...at('2026-11-16T10:00:00Z'),
+        }),
+        m({
+          forecast_style: 'ultra_short',
+          metric_key: 'SKY',
+          value_number: 3,
+          unit: 'code',
+          ...at('2026-11-16T10:00:00Z'),
+        }),
+        m({
+          forecast_style: 'ultra_short',
+          metric_key: 'PTY',
+          value_number: 0,
+          unit: 'code',
+          ...at('2026-11-16T10:00:00Z'),
+        }),
       ]),
       NOW,
     );
@@ -47,9 +87,27 @@ describe('currentWeather', () => {
   it('turns KMA PTY precipitation into rain/snow regardless of sky', () => {
     const weather = currentWeather(
       card([
-        m({ forecast_style: 'nowcast', metric_key: 'T1H', value_number: 1, unit: 'deg_c', ...at('2026-11-16T10:00:00Z') }),
-        m({ forecast_style: 'nowcast', metric_key: 'PTY', value_number: 3, unit: 'code', ...at('2026-11-16T10:00:00Z') }),
-        m({ forecast_style: 'ultra_short', metric_key: 'SKY', value_number: 1, unit: 'code', ...at('2026-11-16T10:00:00Z') }),
+        m({
+          forecast_style: 'nowcast',
+          metric_key: 'T1H',
+          value_number: 1,
+          unit: 'deg_c',
+          ...at('2026-11-16T10:00:00Z'),
+        }),
+        m({
+          forecast_style: 'nowcast',
+          metric_key: 'PTY',
+          value_number: 3,
+          unit: 'code',
+          ...at('2026-11-16T10:00:00Z'),
+        }),
+        m({
+          forecast_style: 'ultra_short',
+          metric_key: 'SKY',
+          value_number: 1,
+          unit: 'code',
+          ...at('2026-11-16T10:00:00Z'),
+        }),
       ]),
       NOW,
     );
@@ -59,16 +117,44 @@ describe('currentWeather', () => {
   it('falls back to external weather codes when KMA sky is missing', () => {
     const owm = currentWeather(
       card([
-        m({ forecast_style: 'observed', metric_key: 'T1H', value_number: 5, unit: 'deg_c', provider: 'openweathermap', ...at('2026-11-16T09:30:00Z') }),
-        m({ forecast_style: 'observed', metric_key: 'WEATHER_CODE', value_number: 501, unit: 'code', provider: 'openweathermap', ...at('2026-11-16T09:30:00Z') }),
+        m({
+          forecast_style: 'observed',
+          metric_key: 'T1H',
+          value_number: 5,
+          unit: 'deg_c',
+          provider: 'openweathermap',
+          ...at('2026-11-16T09:30:00Z'),
+        }),
+        m({
+          forecast_style: 'observed',
+          metric_key: 'WEATHER_CODE',
+          value_number: 501,
+          unit: 'code',
+          provider: 'openweathermap',
+          ...at('2026-11-16T09:30:00Z'),
+        }),
       ]),
       NOW,
     );
     expect(owm?.condition).toBe('rain');
     const weatherapi = currentWeather(
       card([
-        m({ forecast_style: 'observed', metric_key: 'T1H', value_number: 5, unit: 'deg_c', provider: 'weatherapi', ...at('2026-11-16T09:30:00Z') }),
-        m({ forecast_style: 'observed', metric_key: 'WEATHER_CODE', value_number: 1213, unit: 'code', provider: 'weatherapi', ...at('2026-11-16T09:30:00Z') }),
+        m({
+          forecast_style: 'observed',
+          metric_key: 'T1H',
+          value_number: 5,
+          unit: 'deg_c',
+          provider: 'weatherapi',
+          ...at('2026-11-16T09:30:00Z'),
+        }),
+        m({
+          forecast_style: 'observed',
+          metric_key: 'WEATHER_CODE',
+          value_number: 1213,
+          unit: 'code',
+          provider: 'weatherapi',
+          ...at('2026-11-16T09:30:00Z'),
+        }),
       ]),
       NOW,
     );
@@ -78,7 +164,15 @@ describe('currentWeather', () => {
   it('ignores non-celsius temperatures and returns null when nothing usable exists', () => {
     expect(
       currentWeather(
-        card([m({ forecast_style: 'observed', metric_key: 'T1H', value_number: 50, unit: 'deg_f', ...at('2026-11-16T10:00:00Z') })]),
+        card([
+          m({
+            forecast_style: 'observed',
+            metric_key: 'T1H',
+            value_number: 50,
+            unit: 'deg_f',
+            ...at('2026-11-16T10:00:00Z'),
+          }),
+        ]),
         NOW,
       ),
     ).toBeNull();
@@ -90,25 +184,110 @@ describe('currentWeather', () => {
 describe('hourly/daily forecast', () => {
   const metrics: WeatherMetric[] = [
     // 오늘 밤 KST 20시(11Z) — 기상청과 외부가 같은 시각을 주면 기상청 값.
-    m({ forecast_style: 'short', metric_key: 'TMP', value_number: 6, unit: 'deg_c', ...at('2026-11-16T11:00:00Z') }),
-    m({ forecast_style: 'short', metric_key: 'TMP', value_number: 9, unit: 'deg_c', provider: 'openweathermap', ...at('2026-11-16T11:00:00Z') }),
-    m({ forecast_style: 'short', metric_key: 'POP', value_number: 30, unit: '%', ...at('2026-11-16T11:00:00Z') }),
-    m({ forecast_style: 'short', metric_key: 'SKY', value_number: 4, unit: 'code', ...at('2026-11-16T11:00:00Z') }),
+    m({
+      forecast_style: 'short',
+      metric_key: 'TMP',
+      value_number: 6,
+      unit: 'deg_c',
+      ...at('2026-11-16T11:00:00Z'),
+    }),
+    m({
+      forecast_style: 'short',
+      metric_key: 'TMP',
+      value_number: 9,
+      unit: 'deg_c',
+      provider: 'openweathermap',
+      ...at('2026-11-16T11:00:00Z'),
+    }),
+    m({
+      forecast_style: 'short',
+      metric_key: 'POP',
+      value_number: 30,
+      unit: '%',
+      ...at('2026-11-16T11:00:00Z'),
+    }),
+    m({
+      forecast_style: 'short',
+      metric_key: 'SKY',
+      value_number: 4,
+      unit: 'code',
+      ...at('2026-11-16T11:00:00Z'),
+    }),
     // 내일 KST 12시(03Z) 비.
-    m({ forecast_style: 'short', metric_key: 'TMP', value_number: 12, unit: 'deg_c', ...at('2026-11-17T03:00:00Z') }),
-    m({ forecast_style: 'short', metric_key: 'PTY', value_number: 1, unit: 'code', ...at('2026-11-17T03:00:00Z') }),
-    m({ forecast_style: 'short', metric_key: 'POP', value_number: 80, unit: '%', ...at('2026-11-17T03:00:00Z') }),
+    m({
+      forecast_style: 'short',
+      metric_key: 'TMP',
+      value_number: 12,
+      unit: 'deg_c',
+      ...at('2026-11-17T03:00:00Z'),
+    }),
+    m({
+      forecast_style: 'short',
+      metric_key: 'PTY',
+      value_number: 1,
+      unit: 'code',
+      ...at('2026-11-17T03:00:00Z'),
+    }),
+    m({
+      forecast_style: 'short',
+      metric_key: 'POP',
+      value_number: 80,
+      unit: '%',
+      ...at('2026-11-17T03:00:00Z'),
+    }),
     // 내일 KST 06시(전날 21Z) 맑음, 기온 2.
-    m({ forecast_style: 'short', metric_key: 'TMP', value_number: 2, unit: 'deg_c', ...at('2026-11-16T21:00:00Z') }),
-    m({ forecast_style: 'short', metric_key: 'SKY', value_number: 1, unit: 'code', ...at('2026-11-16T21:00:00Z') }),
+    m({
+      forecast_style: 'short',
+      metric_key: 'TMP',
+      value_number: 2,
+      unit: 'deg_c',
+      ...at('2026-11-16T21:00:00Z'),
+    }),
+    m({
+      forecast_style: 'short',
+      metric_key: 'SKY',
+      value_number: 1,
+      unit: 'code',
+      ...at('2026-11-16T21:00:00Z'),
+    }),
     // 기상청 TMX가 있으면 시간별 최고보다 우선.
-    m({ forecast_style: 'short', metric_key: 'TMX', value_number: 14, unit: 'deg_c', ...at('2026-11-17T06:00:00Z') }),
+    m({
+      forecast_style: 'short',
+      metric_key: 'TMX',
+      value_number: 14,
+      unit: 'deg_c',
+      ...at('2026-11-17T06:00:00Z'),
+    }),
     // 오늘 이미 지난 관측.
-    m({ forecast_style: 'observed', metric_key: 'T1H', value_number: 13, unit: 'deg_c', ...at('2026-11-16T05:00:00Z') }),
+    m({
+      forecast_style: 'observed',
+      metric_key: 'T1H',
+      value_number: 13,
+      unit: 'deg_c',
+      ...at('2026-11-16T05:00:00Z'),
+    }),
     // 중기예보 문장.
-    m({ forecast_style: 'mid', metric_key: 'SKY', value_text: '구름많고 눈', provider: KMA, ...at('2026-11-20T03:00:00Z') }),
-    m({ forecast_style: 'mid', metric_key: 'TMN', value_number: -3, unit: 'deg_c', ...at('2026-11-20T03:00:00Z') }),
-    m({ forecast_style: 'mid', metric_key: 'TMX', value_number: 4, unit: 'deg_c', ...at('2026-11-20T03:00:00Z') }),
+    m({
+      forecast_style: 'mid',
+      metric_key: 'SKY',
+      value_text: '구름많고 눈',
+      provider: KMA,
+      ...at('2026-11-20T03:00:00Z'),
+    }),
+    m({
+      forecast_style: 'mid',
+      metric_key: 'TMN',
+      value_number: -3,
+      unit: 'deg_c',
+      ...at('2026-11-20T03:00:00Z'),
+    }),
+    m({
+      forecast_style: 'mid',
+      metric_key: 'TMX',
+      value_number: 4,
+      unit: 'deg_c',
+      ...at('2026-11-20T03:00:00Z'),
+    }),
   ];
 
   it('builds an hourly strip with provider priority and POP', () => {
@@ -130,7 +309,15 @@ describe('hourly/daily forecast', () => {
   it('uses the only value for both ends and returns null without temperatures', () => {
     expect(
       todayRange(
-        card([m({ forecast_style: 'short', metric_key: 'TMP', value_number: 6, unit: 'deg_c', ...at('2026-11-16T11:00:00Z') })]),
+        card([
+          m({
+            forecast_style: 'short',
+            metric_key: 'TMP',
+            value_number: 6,
+            unit: 'deg_c',
+            ...at('2026-11-16T11:00:00Z'),
+          }),
+        ]),
         NOW,
       ),
     ).toEqual({ max: 6, min: 6 });
@@ -142,9 +329,26 @@ describe('alerts and helpers', () => {
   it('keeps only unexpired, de-duplicated advisories', () => {
     const alerts = activeAlerts(
       card([
-        m({ forecast_style: 'advisory', metric_key: 'WRN', value_text: '강풍주의보', severity: '주의보', valid_until: '2026-11-17T00:00:00Z' }),
-        m({ forecast_style: 'advisory', metric_key: 'WRN', value_text: '강풍주의보', severity: '주의보', valid_until: '2026-11-17T00:00:00Z' }),
-        m({ forecast_style: 'advisory', metric_key: 'WRN', value_text: '건조주의보', valid_until: '2026-11-16T01:00:00Z' }),
+        m({
+          forecast_style: 'advisory',
+          metric_key: 'WRN',
+          value_text: '강풍주의보',
+          severity: '주의보',
+          valid_until: '2026-11-17T00:00:00Z',
+        }),
+        m({
+          forecast_style: 'advisory',
+          metric_key: 'WRN',
+          value_text: '강풍주의보',
+          severity: '주의보',
+          valid_until: '2026-11-17T00:00:00Z',
+        }),
+        m({
+          forecast_style: 'advisory',
+          metric_key: 'WRN',
+          value_text: '건조주의보',
+          valid_until: '2026-11-16T01:00:00Z',
+        }),
       ]),
       NOW,
     );

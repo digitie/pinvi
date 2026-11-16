@@ -19,7 +19,13 @@ export interface WeatherBadgeProps {
 }
 
 /** 아이콘 + 현재 기온 + 오늘 최고/최저. 보일 값이 없으면 아무것도 그리지 않는다(조용한 실패). */
-export function WeatherBadge({ card, loading = false, onOpen, now, className = '' }: WeatherBadgeProps) {
+export function WeatherBadge({
+  card,
+  loading = false,
+  onOpen,
+  now,
+  className = '',
+}: WeatherBadgeProps) {
   const clock = useMinuteNow();
   const at = now ?? clock;
   const current = useMemo(() => currentWeather(card, at), [card, at]);

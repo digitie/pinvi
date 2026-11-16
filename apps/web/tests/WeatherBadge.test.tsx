@@ -15,13 +15,62 @@ const CARD: FeatureWeatherCard = {
   latest_at: '2026-11-16T03:00:00Z',
   source_styles: ['nowcast', 'short', 'advisory'],
   metrics: [
-    { forecast_style: 'nowcast', metric_key: 'T1H', value_number: 11.3, unit: 'deg_c', provider: 'python-kma-api', valid_at: '2026-11-16T03:00:00Z' },
-    { forecast_style: 'ultra_short', metric_key: 'SKY', value_number: 1, unit: 'code', provider: 'python-kma-api', valid_at: '2026-11-16T03:00:00Z' },
-    { forecast_style: 'short', metric_key: 'TMP', value_number: 13, unit: 'deg_c', provider: 'python-kma-api', valid_at: '2026-11-16T05:00:00Z' },
-    { forecast_style: 'short', metric_key: 'POP', value_number: 60, unit: '%', provider: 'python-kma-api', valid_at: '2026-11-16T05:00:00Z' },
-    { forecast_style: 'short', metric_key: 'TMP', value_number: 4, unit: 'deg_c', provider: 'python-kma-api', valid_at: '2026-11-16T12:00:00Z' },
-    { forecast_style: 'short', metric_key: 'TMP', value_number: 8, unit: 'deg_c', provider: 'python-kma-api', valid_at: '2026-11-17T03:00:00Z' },
-    { forecast_style: 'advisory', metric_key: 'WRN', value_text: '강풍주의보', severity: '주의보', provider: 'python-kma-api', valid_until: '2026-11-17T00:00:00Z' },
+    {
+      forecast_style: 'nowcast',
+      metric_key: 'T1H',
+      value_number: 11.3,
+      unit: 'deg_c',
+      provider: 'python-kma-api',
+      valid_at: '2026-11-16T03:00:00Z',
+    },
+    {
+      forecast_style: 'ultra_short',
+      metric_key: 'SKY',
+      value_number: 1,
+      unit: 'code',
+      provider: 'python-kma-api',
+      valid_at: '2026-11-16T03:00:00Z',
+    },
+    {
+      forecast_style: 'short',
+      metric_key: 'TMP',
+      value_number: 13,
+      unit: 'deg_c',
+      provider: 'python-kma-api',
+      valid_at: '2026-11-16T05:00:00Z',
+    },
+    {
+      forecast_style: 'short',
+      metric_key: 'POP',
+      value_number: 60,
+      unit: '%',
+      provider: 'python-kma-api',
+      valid_at: '2026-11-16T05:00:00Z',
+    },
+    {
+      forecast_style: 'short',
+      metric_key: 'TMP',
+      value_number: 4,
+      unit: 'deg_c',
+      provider: 'python-kma-api',
+      valid_at: '2026-11-16T12:00:00Z',
+    },
+    {
+      forecast_style: 'short',
+      metric_key: 'TMP',
+      value_number: 8,
+      unit: 'deg_c',
+      provider: 'python-kma-api',
+      valid_at: '2026-11-17T03:00:00Z',
+    },
+    {
+      forecast_style: 'advisory',
+      metric_key: 'WRN',
+      value_text: '강풍주의보',
+      severity: '주의보',
+      provider: 'python-kma-api',
+      valid_until: '2026-11-17T00:00:00Z',
+    },
   ],
 };
 
@@ -59,7 +108,14 @@ describe('WeatherBadge', () => {
 describe('WeatherForecastPopup', () => {
   it('shows current, alerts, hourly strip with POP and daily max/min', () => {
     render(
-      <WeatherForecastPopup open onClose={() => {}} placeName="하회마을" card={CARD} now={NOW} onRefresh={() => {}} />,
+      <WeatherForecastPopup
+        open
+        onClose={() => {}}
+        placeName="하회마을"
+        card={CARD}
+        now={NOW}
+        onRefresh={() => {}}
+      />,
     );
     expect(screen.getByText('하회마을 날씨')).toBeInTheDocument();
     expect(screen.getByTestId('weather-current-temp')).toHaveTextContent('11°');
