@@ -43,6 +43,7 @@ import {
   legendMarkers,
   markersBody,
   markersQuery,
+  panBy,
   stateLine,
   toggleExpectingRequest,
   waitForControls,
@@ -388,7 +389,24 @@ test.describe('NEAR trip map — four-place trip', () => {
       await expectLayerLineShape(page, 'airport');
       test.skip(airports.status !== 'ok' || airports.items.filter((i) => i.coord).length === 0, 'no airport inside the trip viewport');
       await expect(legendMarkers(page, 'airport').first()).toBeAttached();
-      await clickTransportMarker(page, 'airport');
+      // 390px 모바일에서 뷰포트 안 유일한 공항(양양국제공항)은 묶음이 아니라 개별 마커지만, 핀 좌표가 캔버스
+      // 위쪽 가장자리에 걸려 아이콘이 화면 밖(box y=-44)으로 잘린다(2026-11-16 두 번 재현). 사용자가 하듯
+      // 지도를 아래로 끌어(키보드 ArrowUp = 100px) 공항 마커가 화면 안에서 맨 위로 보일 때까지 옮긴 뒤 누른다.
+      const airportOnScreen = () =>
+        page.evaluate(() => {
+          const canvas = document.querySelector('.maplibregl-canvas')?.getBoundingClientRect();
+          if (!canvas) return false;
+          return Array.from(document.querySelectorAll('.maplibregl-marker[data-interaction-id^="transport:airport:"]')).some((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.top < canvas.top || r.left < canvas.left || r.bottom > canvas.bottom || r.right > canvas.right) return false;
+            const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return !!top && (top === el || el.contains(top));
+          });
+        });
+      for (let i = 0; i < 8 && !(await airportOnScreen()); i += 1) await panBy(page, 'ArrowUp', 1);
+      // 그래도 묶음으로 그려지는 데이터 상태면 공항 좌표 쪽 묶음을 실제로 눌러 펼친다(NEAR-006과 같은 방식).
+      const airportCoords = airports.items.flatMap((i) => (i.coord ? [i.coord] : []));
+      await clickTransportMarker(page, 'airport', airportCoords);
       await expect(detailDialog(page)).toContainText(LAYER_LABEL.airport);
       await closeDetail(page);
     });
