@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   popupClose: null as (() => void) | null,
   map: null as unknown,
   onMoveEnd: null as ((event: unknown) => void) | null,
+  mobile: true,
 }));
 
 vi.mock('@/components/map/vworldPrimitives', () => ({
@@ -64,7 +65,7 @@ vi.mock('@/components/map/TransportDetailDialog', () => ({ TransportDetailDialog
 vi.mock('@/components/map/FeatureDetailModalController', () => ({
   FeatureDetailModalController: () => null,
 }));
-vi.mock('@/lib/useMobileWebLayout', () => ({ useMobileWebLayout: () => true }));
+vi.mock('@/lib/useMobileWebLayout', () => ({ useMobileWebLayout: () => h.mobile }));
 
 import { TripMapView } from '@/components/trips/TripMapView';
 
@@ -144,6 +145,7 @@ afterEach(() => {
   h.transportVisible = false;
   h.onMoveEnd = null;
   h.popupClose = null;
+  h.mobile = true;
 });
 
 describe('TripMapView 맞춤 배선', () => {
@@ -154,10 +156,11 @@ describe('TripMapView 맞춤 배선', () => {
       const map = fakeMap({ x: 72, y: 207 });
       h.map = map;
       const view = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
-      // 1차·패널 재맞춤 모두: 위 여백은 60% 상한(180) 그대로, 아래 여백이 먼저 줄어든다.
+      // 1차·패널 재맞춤 모두: 위 여백은 검색 줄 아래(132)+원형 마커 21+간격 24(60% 상한 180 안),
+      // 아래 여백이 먼저 줄어든다.
       expect(map.fitBounds).toHaveBeenCalledTimes(2);
       for (const call of map.fitBounds.mock.calls) {
-        expect(call[1].padding.top).toBe(180);
+        expect(call[1].padding.top).toBe(Math.min(180, 132 + 21 + 24));
         expect(call[1].padding.bottom).toBeLessThan(64);
         expect(300 - call[1].padding.top - call[1].padding.bottom).toBeGreaterThan(0);
       }
@@ -248,13 +251,20 @@ describe('TripMapView 맞춤 배선', () => {
   });
 });
 
-it('제어된 POI popup이 native로 닫히면 선택 해제를 소유자에게 전달한다', () => {
+it('제어된 POI popup이 native로 닫히면 선택 해제를 소유자에게 전달한다(데스크톱)', () => {
+  h.mobile = false;
   h.map = fakeMap({ x: 300, y: 300 });
   const select = vi.fn();
   render(<TripMapView points={POINTS} selectedPoiId="north" onSelectPoi={select} />);
   expect(h.popupClose).toEqual(expect.any(Function));
   h.popupClose!();
   expect(select).toHaveBeenCalledWith(null);
+});
+
+it('모바일은 선택한 장소의 이름 팝업을 띄우지 않는다 — 이름은 마커 라벨이 이미 보여 준다(이중 표시)', () => {
+  h.map = fakeMap({ x: 300, y: 300 });
+  render(<TripMapView points={POINTS} selectedPoiId="north" onSelectPoi={vi.fn()} />);
+  expect(h.popupClose).toBeNull();
 });
 
 it('외부 POI 선택은 가운데 열의 검색·교통 패널 아래로 offset을 준다', () => {

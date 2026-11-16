@@ -57,7 +57,7 @@ describe('CirclePlaceMarker(구글 지도식 원형 마커)', () => {
     const label = screen.getByText('경복궁');
     expect(label.style.backgroundColor).toBe('');
     expect(label.className).not.toMatch(/\bbg-|\bshadow-|\bborder/);
-    expect(label.style.textShadow).toContain('#fff');
+    expect(label.style.textShadow).toMatch(/#fff|rgb\(255, 255, 255\)/);
     const glyph = screen.getByTestId('place-weather-glyph');
     expect(glyph).toHaveAttribute('data-weather-kind', 'rain');
     // 마커 버튼이 이미 이름을 가지므로 라벨·날씨는 읽기에서 숨긴다(중복 낭독 방지).

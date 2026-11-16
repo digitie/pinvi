@@ -1678,7 +1678,14 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
           .boundingBox())!;
         const surfaceTop = surfaceBox.y;
         const topClearance = Math.min(anchor.y + anchor.height - surfaceTop + 45, surfaceBox.height * 0.6);
-        expect(surfaceBox.height - Math.max(64, topClearance) - 64).toBeLessThan(120);
+        // 원형 마커(21px)로 줄어든 뒤로는 이 창에서 맞춤 폭이 MIN_FIT_SPAN(120)을 넘을 수 있다 — 낮은 지도
+        // 여백 경로 자체는 tests/tripMapViewFit.test.tsx('낮은 지도…', 300px 컨테이너)가 고정한다. 여기서는
+        // 어느 경로든 아래 실지도 단언(모든 핀이 보이는 지도 안)이 지켜지는지를 본다.
+        test.info().annotations.push({
+          type: 'fit-path',
+          description:
+            surfaceBox.height - Math.max(64, topClearance) - 64 < 120 ? 'low-map' : 'normal',
+        });
       }
 
       if (process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1') return;

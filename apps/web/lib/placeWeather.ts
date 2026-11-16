@@ -35,8 +35,13 @@ export function placeCurrentWeather(
   dayCard: TripWeatherCard | null | undefined,
   now: number,
 ): CurrentWeather | null {
-  const card: FeatureWeatherCard | null =
-    poiCard ?? (dayCard ? { feature_id: 'trip-day', ...dayCard } : null);
-  const weather = currentWeather(card, now);
+  // 장소 현재 카드가 비었거나(제공자 장애·빈 응답) 상태를 모르면 일자 카드로 내려간다.
+  return (
+    known(currentWeather(poiCard, now)) ??
+    known(currentWeather(dayCard ? { feature_id: 'trip-day', ...dayCard } : null, now))
+  );
+}
+
+function known(weather: CurrentWeather | null): CurrentWeather | null {
   return weather && weather.condition !== 'unknown' ? weather : null;
 }

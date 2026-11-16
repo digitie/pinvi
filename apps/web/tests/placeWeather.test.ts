@@ -51,6 +51,16 @@ describe('placeCurrentWeather(마커 이름 옆 날씨)', () => {
     expect(weather?.condition).toBe('rain');
   });
 
+  it('장소 현재 카드가 비었으면(빈 응답) 일자 카드로 내려간다', () => {
+    const emptyPoiCard: FeatureWeatherCard = { feature_id: 'poi:1', ...dayCard([]) };
+    const weather = placeCurrentWeather(
+      emptyPoiCard,
+      dayCard([metric({ metric_key: 'PTY', value_number: 3 })]),
+      NOW,
+    );
+    expect(weather?.condition).toBe('snow');
+  });
+
   it('날씨를 알 수 없으면 null — 아이콘을 그리지 않는다(값을 지어내지 않는다)', () => {
     expect(placeCurrentWeather(null, null, NOW)).toBeNull();
     expect(placeCurrentWeather(null, dayCard([]), NOW)).toBeNull();
