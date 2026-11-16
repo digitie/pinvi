@@ -157,11 +157,6 @@ PINVI_ETL_ASSETS = [
         description="location_access_log archive 후보와 hash-chain bridge 상태를 dry-run으로 집계합니다.",
     ),
     AdminEtlDefinitionAsset(
-        key="pinvi_trip_day_rise_sets",
-        group_name="pinvi_kasi",
-        description="여행 일자 단위 KASI 해·달 출몰시각을 채웁니다(pending_fetch/stale 대상).",
-    ),
-    AdminEtlDefinitionAsset(
         key="pinvi_weather_retention_horizon_guard",
         group_name="pinvi_weather_retention",
         description="kor-travel-weather 실효 보존 기간이 임계 미만이면 실패하는 가드입니다.",
@@ -180,12 +175,6 @@ PINVI_ETL_JOBS = [
         trigger="schedule",
         description="매일 KST 03:30 KASI 특일 데이터를 갱신합니다.",
         asset_keys=["pinvi_kasi_special_days"],
-    ),
-    AdminEtlDefinitionJob(
-        name="kasi_poi_rise_set_job",
-        trigger="on_demand",
-        description="POI별 일출·일몰 보강을 1회 실행합니다.",
-        asset_keys=[],
     ),
     AdminEtlDefinitionJob(
         name="pinvi_email_outbox_job",
@@ -210,12 +199,6 @@ PINVI_ETL_JOBS = [
         trigger="schedule",
         description="매일 KST 04:30 위치 접근 로그 archive 후보와 chain bridge 상태를 점검합니다.",
         asset_keys=["pinvi_location_log_archive"],
-    ),
-    AdminEtlDefinitionJob(
-        name="pinvi_trip_day_rise_sets_job",
-        trigger="schedule",
-        description="20분마다 여행 일자 단위 KASI 해·달 출몰시각을 채웁니다.",
-        asset_keys=["pinvi_trip_day_rise_sets"],
     ),
     AdminEtlDefinitionJob(
         name="pinvi_weather_retention_horizon_job",
@@ -260,12 +243,6 @@ PINVI_ETL_SCHEDULES = [
         name="pinvi_location_log_archive_schedule",
         job_name="pinvi_location_log_archive_job",
         cron_schedule="30 4 * * *",
-        execution_timezone="Asia/Seoul",
-    ),
-    AdminEtlDefinitionSchedule(
-        name="pinvi_trip_day_rise_sets_schedule",
-        job_name="pinvi_trip_day_rise_sets_job",
-        cron_schedule="*/20 * * * *",
         execution_timezone="Asia/Seoul",
     ),
     AdminEtlDefinitionSchedule(

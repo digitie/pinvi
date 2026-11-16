@@ -80,7 +80,7 @@ def test_foreign_project_does_not_block_and_metadata_error_is_not_empty():
 def test_retry_allowlist_executor_and_notification_cover_every_named_job():
     repository = defs.get_repository_def()
     jobs = [job for job in repository.get_all_jobs() if job.name != "__ASSET_JOB"]
-    assert len(jobs) == 9
+    assert len(jobs) == 7  # 0109: kasi_poi_rise_set_job·pinvi_trip_day_rise_sets_job 은퇴
     for job in jobs:
         assert job.tags["kortravelcommon/job"] == f"pinvi/{job.name}"
         assert job.tags["dagster/max_retries"] == ("1" if job.name in INFRA_RETRY_JOBS else "0")

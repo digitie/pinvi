@@ -54,8 +54,7 @@
 
 - TOS 준수 (provider별 시점 확인)
 - raw long-term 저장은 소유 서비스에서만. kor-travel-map feature raw는 kor-travel-map
-  `source_records`, KASI raw는 Pinvi `app.kasi_special_days` /
-  `app.trip_poi_rise_sets`
+  `source_records`, KASI raw는 Pinvi `app.kasi_special_days`(해·달 출몰은 0109부터 저장 없이 계산)
 - 키는 환경변수 + 마스킹
 - 같은 region + time window 반복 호출 X
 - 사용자 가시 결과는 provider 라벨 명시

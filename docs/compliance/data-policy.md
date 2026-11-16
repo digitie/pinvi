@@ -77,8 +77,8 @@ v1 `docs/data-sources.md` + `skills/data-policy.ko.md` 정리.
 
 - `python-kasi-api`로 특일 정보와 POI별 위치별 해·달 출몰시각을 조회한다.
 - 서비스키는 `DATA_GO_KR_SERVICE_KEY`를 사용한다. 별도 `KASI_API_KEY`를 만들지 않는다.
-- 특일 정보 raw payload는 `app.kasi_special_days`, POI 출몰시각 raw payload는
-  `app.trip_poi_rise_sets`에 보존한다.
+- 특일 정보 raw payload는 `app.kasi_special_days`에 보존한다. 해·달 출몰은 2026-11-17(0109)부터 KASI를 부르지
+  않고 응답 때 계산하며 저장하지 않는다(`app.trip_poi_rise_sets` 삭제).
 - 자세히는 `docs/integrations/kasi.md`.
 
 ## 3. 라이브러리 위임 provider (`kor-travel-map` 소유)

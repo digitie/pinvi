@@ -61,7 +61,10 @@ apps/etl/
 - `app.kasi_special_days`에 upsert.
 - 별도 삭제 없음.
 
-### 3.2 `kasi_poi_rise_set_job`
+### 3.2 `kasi_poi_rise_set_job` (은퇴 0109)
+
+> **2026-11-17 은퇴(0109)**: KASI 해·달 출몰 저장 표(`trip_day_rise_sets`·`trip_poi_rise_sets`)와 그 Dagster job(`pinvi_trip_day_rise_sets`·`kasi_poi_rise_set_job`)은 없어졌다. 일출·일몰·월출·월몰은 API가 응답을 만들 때 `astral`로 계산한다(`apps/api/app/services/sun_times.py`, KASI 고시값과 ±1분). 아래 서술은 은퇴 전 기록이다.
+
 
 - POI 생성 시 enqueue/run.
 - API 생성 경로가 `app.trip_day_pois`의 좌표 snapshot과 `app.trip_days.date`를

@@ -338,7 +338,10 @@ LexoRank fractional indexing + COLLATE "C"** (SPEC V8 E-6 Critical).
 `feature_snapshot`은 적재 시점의 정보를 보존하는 캐시 — 라이브러리 schema가
 바뀌어도 UI 표시는 유지. 실제 최신 좌표/이름은 `feature_id`로 조회.
 
-#### `app.trip_poi_rise_sets`
+#### `app.trip_poi_rise_sets` (0109에서 삭제)
+
+> **2026-11-17 은퇴(0109)**: KASI 해·달 출몰 저장 표(`trip_day_rise_sets`·`trip_poi_rise_sets`)와 그 Dagster job(`pinvi_trip_day_rise_sets`·`kasi_poi_rise_set_job`)은 없어졌다. 일출·일몰·월출·월몰은 API가 응답을 만들 때 `astral`로 계산한다(`apps/api/app/services/sun_times.py`, KASI 고시값과 ±1분). 아래 서술은 은퇴 전 기록이다.
+
 
 POI 생성 시 `python-kasi-api`의 `rise_set.location`(`getLCRiseSetInfo`,
 위치별 해달 출몰시각 정보조회)을 1회 호출한 결과를 POI 부속 정보로 저장한다.

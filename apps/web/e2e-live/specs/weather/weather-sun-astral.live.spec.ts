@@ -40,6 +40,14 @@ test.describe('일출·일몰 즉시 계산 · 요일', () => {
     const view = await reloadTripView(page, id);
     const day1 = dayOf(view, 1);
     expect(day1.rise_set?.status, 'day rise_set').toBe('success');
+    // 0109: 달 출몰도 astral — 값이 있으면 그 날짜(KST)의 사건이고, 하루에 둘 다 없는 날은 없다.
+    const kstDate = (iso: string) =>
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(iso));
+    const moon = [day1.rise_set?.moonrise_at, day1.rise_set?.moonset_at].filter(
+      (v): v is string => typeof v === 'string',
+    );
+    expect(moon.length, '월출·월몰 중 하나 이상').toBeGreaterThan(0);
+    for (const value of moon) expect(kstDate(value)).toBe(day1.effective_date);
     const article = await openDay(page, 1);
     const daySun = riseSuccess(article);
     await expect(daySun).toBeVisible();

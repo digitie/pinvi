@@ -100,7 +100,7 @@ const etlSummary = {
     dagster_webserver_version: '1.13.11',
     dagster_graphql_version: '1.13.11',
     repository_count: 1,
-    job_count: 6,
+    job_count: 5,
     asset_count: 5,
     schedule_count: 5,
     sensor_count: 0,
@@ -110,7 +110,6 @@ const etlSummary = {
         location_name: 'pinvi.etl.definitions',
         jobs: [
           { name: 'kasi_special_days_job', is_job: true },
-          { name: 'kasi_poi_rise_set_job', is_job: true },
           { name: 'pinvi_email_outbox_job', is_job: true },
           { name: 'pinvi_telegram_system_outbox_job', is_job: true },
           { name: 'pinvi_pii_retention_job', is_job: true },
@@ -202,12 +201,6 @@ const etlSummary = {
         trigger: 'schedule',
         description: '매일 KST 03:30 KASI 특일 데이터를 갱신합니다.',
         asset_keys: ['pinvi_kasi_special_days'],
-      },
-      {
-        name: 'kasi_poi_rise_set_job',
-        trigger: 'on_demand',
-        description: 'POI별 일출·일몰 보강을 1회 실행합니다.',
-        asset_keys: [],
       },
       {
         name: 'pinvi_email_outbox_job',
@@ -474,10 +467,9 @@ test('ETL 페이지가 Pinvi 실제 Dagster 정의와 upstream import job을 표
   await expect(page.getByRole('heading', { name: 'ETL' })).toBeVisible();
   await expect(page.getByTestId('admin-etl-pinvi-status')).toContainText('정상');
   await expect(page.getByTestId('admin-etl-pinvi-live-repository-count')).toContainText('1');
-  await expect(page.getByTestId('admin-etl-pinvi-live-job-count')).toContainText('6');
+  await expect(page.getByTestId('admin-etl-pinvi-live-job-count')).toContainText('5');
   await expect(page.getByTestId('admin-etl-pinvi-live-schedule-count')).toContainText('5');
   await expect(page.getByTestId('admin-etl-job-kasi_special_days_job')).toBeVisible();
-  await expect(page.getByTestId('admin-etl-job-kasi_poi_rise_set_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_email_outbox_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_telegram_system_outbox_job')).toBeVisible();
   await expect(page.getByTestId('admin-etl-job-pinvi_pii_retention_job')).toBeVisible();

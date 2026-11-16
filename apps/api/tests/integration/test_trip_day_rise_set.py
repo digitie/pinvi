@@ -1,4 +1,8 @@
-"""일자 rise/set sync + build_trip_view emit 통합 테스트 (ADR-055 §6, T-305)."""
+"""해·달 출몰을 응답 때 계산한다(astral) — 저장 표·동기화 없음(0109, 2026-11-17).
+
+일자 rise/set = 그 일자 POI centroid, 장소 rise/set = 그 장소 좌표. 종전 일자·장소 출몰 표와 그 동기화는
+은퇴했다. 동기화 경합 시험들은 대상이 없어 지웠고, 단일 커넥션 풀·권한 경합 회귀는 그대로 남긴다.
+"""
 
 from __future__ import annotations
 
@@ -8,16 +12,22 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
-from app.models.kasi import TripDayRiseSet
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.models.user import User
-from app.services.trip_day_rise_set import sync_trip_day_rise_sets
 
 pytestmark = pytest.mark.asyncio
+
+KST = ZoneInfo("Asia/Seoul")
+
+
+def _hm(value: Any) -> str:
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    return str(value.astimezone(KST).strftime("%H:%M"))
 
 
 async def _seed_trip_with_poi(session_factory: Any, *, with_coord: bool = True) -> uuid.UUID:
@@ -66,131 +76,6 @@ async def _seed_trip_with_poi(session_factory: Any, *, with_coord: bool = True) 
     return trip_id
 
 
-async def test_sync_creates_day_rise_set_rows(session_factory: Any) -> None:
-    trip_id = await _seed_trip_with_poi(session_factory)
-    async with session_factory() as db:
-        await sync_trip_day_rise_sets(trip_id=trip_id)
-    async with session_factory() as db:
-        rows = {
-            r.day_index: r
-            for r in await db.scalars(
-                select(TripDayRiseSet).where(TripDayRiseSet.trip_id == trip_id)
-            )
-        }
-    # day1: POI 좌표 있음 → pending_fetch + 기준 좌표/라벨.
-    assert rows[1].status == "pending_fetch"
-    assert rows[1].locdate == date(2026, 6, 10)
-    assert round(rows[1].longitude or 0, 3) == 129.118
-    assert rows[1].reference_label == "광안리 해수욕장"
-    # day2: POI 없음 → pending_coord(좌표 앵커 없음), locdate는 파생.
-    assert rows[2].status == "pending_coord"
-    assert rows[2].locdate == date(2026, 6, 11)
-
-
-async def test_sync_marks_stale_when_coord_changes(session_factory: Any) -> None:
-    trip_id = await _seed_trip_with_poi(session_factory)
-    async with session_factory() as db:
-        await sync_trip_day_rise_sets(trip_id=trip_id)
-    # ETL이 채운 것처럼 success로 만든 뒤 좌표를 바꾸면 stale + pending_fetch로 표시돼야 한다.
-    async with session_factory() as db:
-        row = await db.get(TripDayRiseSet, {"trip_id": trip_id, "day_index": 1})
-        assert row is not None
-        row.status = "success"
-        row.stale = False
-        poi = await db.scalar(
-            select(TripDayPoi).where(TripDayPoi.trip_id == trip_id, TripDayPoi.day_index == 1)
-        )
-        assert poi is not None
-        poi.feature_snapshot = {"name": "다른 장소", "coord": {"lon": 127.0, "lat": 37.5}}
-        await db.commit()
-    async with session_factory() as db:
-        await sync_trip_day_rise_sets(trip_id=trip_id)
-    async with session_factory() as db:
-        row = await db.get(TripDayRiseSet, {"trip_id": trip_id, "day_index": 1})
-    assert row is not None
-    assert row.stale is True
-    assert row.status == "pending_fetch"
-    assert round(row.longitude or 0, 3) == 127.0
-
-
-async def test_build_trip_view_emits_day_rise_set(session_factory: Any) -> None:
-    from app.services.trip_view_builder import build_trip_view
-
-    trip_id = await _seed_trip_with_poi(session_factory)
-    async with session_factory() as db:
-        await sync_trip_day_rise_sets(trip_id=trip_id)
-        trip = await db.get(Trip, trip_id)
-        assert trip is not None
-        view = await build_trip_view(db, trip=trip, kor_travel_map_client=None)
-    days = {d["day_index"]: d for d in view["days"]}
-    # 일출·일몰은 KASI ETL을 기다리지 않고 응답을 만들 때 astral로 계산한다(요청 18). sync 행은
-    # 아직 pending_fetch여도 화면 값은 바로 success다. 부산 2026-06-10 KASI 고시 05:09 / 19:37.
-    kst = ZoneInfo("Asia/Seoul")
-    assert days[1]["rise_set"]["status"] == "success"
-    assert days[1]["rise_set"]["sunrise_at"].astimezone(kst).strftime("%H:%M") == "05:09"
-    assert days[1]["rise_set"]["sunset_at"].astimezone(kst).strftime("%H:%M") == "19:37"
-    assert days[1]["rise_set"]["fetched_at"] is None
-    assert days[1]["rise_set_reference"] == "광안리 해수욕장"
-    assert days[2]["rise_set"]["status"] == "pending_coord"
-    poi = days[1]["pois"][0]
-    assert poi["rise_set"]["status"] == "success"
-    assert poi["rise_set"]["sunrise_at"] == days[1]["rise_set"]["sunrise_at"]
-
-
-async def test_maintenance_failure_preserves_loaded_trip_and_poi(
-    session_factory: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    from sqlalchemy import inspect, text
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    trip_id = await _seed_trip_with_poi(session_factory)
-    original_execute = AsyncSession.execute
-
-    async def fail_cache_write(db: AsyncSession, statement: Any, *args: Any, **kwargs: Any) -> Any:
-        if str(statement).startswith("INSERT INTO app.trip_day_rise_sets"):
-            return await original_execute(
-                db, text("SELECT CAST('fixture-private-sql-param' AS int)")
-            )
-        return await original_execute(db, statement, *args, **kwargs)
-
-    monkeypatch.setattr(AsyncSession, "execute", fail_cache_write)
-    async with session_factory() as db:
-        trip = await db.get(Trip, trip_id)
-        poi = await db.scalar(select(TripDayPoi).where(TripDayPoi.trip_id == trip_id))
-        assert trip is not None and poi is not None
-        await sync_trip_day_rise_sets(trip_id=trip_id)
-        assert not inspect(trip).expired
-        assert not inspect(poi).expired
-        assert trip.title == "일출 여행"
-        assert poi.day_index == 1
-    assert "fixture-private-sql-param" not in caplog.text
-
-
-@pytest.mark.parametrize("flushed", [False, True])
-async def test_sync_does_not_commit_or_rollback_caller_writes(
-    session_factory: Any, flushed: bool
-) -> None:
-    trip_id = await _seed_trip_with_poi(session_factory)
-    async with session_factory() as db:
-        trip = await db.get(Trip, trip_id)
-        assert trip is not None
-        owner_id = trip.owner_user_id
-        user = await db.get(User, owner_id)
-        assert user is not None
-        user.nickname = "아직 커밋하지 않은 변경"
-        if flushed:
-            await db.flush()
-        await sync_trip_day_rise_sets(trip_id=trip_id)
-        assert user.nickname == "아직 커밋하지 않은 변경"
-        async with session_factory() as observer:
-            assert (
-                await observer.scalar(select(User.nickname).where(User.user_id == owner_id)) is None
-            )
-        await db.rollback()
-    async with session_factory() as observer:
-        assert await observer.scalar(select(User.nickname).where(User.user_id == owner_id)) is None
-
-
 async def _trip_owner_and_poi(session_factory: Any, trip_id: uuid.UUID) -> tuple[str, str]:
     async with session_factory() as db:
         owner = await db.scalar(select(Trip.owner_user_id).where(Trip.trip_id == trip_id))
@@ -198,101 +83,59 @@ async def _trip_owner_and_poi(session_factory: Any, trip_id: uuid.UUID) -> tuple
     return str(owner), str(poi)
 
 
-async def test_concurrent_gets_atomically_create_one_cache_row_per_day(
-    client: Any,
-    session_factory: Any,
-    auth_cookies: Any,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    import asyncio
-
-    from sqlalchemy.ext.asyncio import AsyncSession
+async def test_build_trip_view_computes_sun_and_moon(session_factory: Any) -> None:
+    from app.services.trip_view_builder import build_trip_view
 
     trip_id = await _seed_trip_with_poi(session_factory)
-    owner, _ = await _trip_owner_and_poi(session_factory, trip_id)
-    original_scalar = AsyncSession.scalar
-    ready = asyncio.Event()
-    contenders: set[int] = set()
-
-    async def concurrent_lock(db: AsyncSession, statement: Any, *args: Any, **kwargs: Any) -> Any:
-        if (
-            "FROM app.trips" in str(statement)
-            and "FOR UPDATE" in str(statement)
-            and id(db) not in contenders
-        ):
-            contenders.add(id(db))
-            if len(contenders) == 2:
-                ready.set()
-            await asyncio.wait_for(ready.wait(), timeout=5)
-        return await original_scalar(db, statement, *args, **kwargs)
-
-    monkeypatch.setattr(AsyncSession, "scalar", concurrent_lock)
-    responses = await asyncio.wait_for(
-        asyncio.gather(
-            client.get(f"/trips/{trip_id}", cookies=auth_cookies(owner)),
-            client.get(f"/trips/{trip_id}", cookies=auth_cookies(owner)),
-        ),
-        timeout=10,
-    )
-    assert len(contenders) == 2
-    assert [response.status_code for response in responses] == [200, 200]
-    for response in responses:
-        assert len(response.json()["data"]["days"]) == 2
-        assert response.json()["data"]["days"][0]["rise_set"]["status"] == "success"
     async with session_factory() as db:
-        rows = list(
-            await db.scalars(select(TripDayRiseSet).where(TripDayRiseSet.trip_id == trip_id))
-        )
-    assert sorted(row.day_index for row in rows) == [1, 2]
-    assert "trip_day_rise_set.sync_failed" not in caplog.text
+        trip = await db.get(Trip, trip_id)
+        assert trip is not None
+        view = await build_trip_view(db, trip=trip, kor_travel_map_client=None)
+    days = {d["day_index"]: d for d in view["days"]}
+    # 부산 2026-06-10 KASI 고시 일출 05:09 · 일몰 19:37. 달 출몰도 astral(같은 날짜의 사건).
+    day1 = days[1]["rise_set"]
+    assert day1["status"] == "success"
+    assert (_hm(day1["sunrise_at"]), _hm(day1["sunset_at"])) == ("05:09", "19:37")
+    assert (_hm(day1["moonrise_at"]), _hm(day1["moonset_at"])) == ("01:12", "14:07")
+    assert day1["moonrise_at"].astimezone(KST).date() == date(2026, 6, 10)
+    assert day1["fetched_at"] is None
+    assert days[1]["rise_set_reference"] == "광안리 해수욕장"
+    assert days[2]["rise_set"]["status"] == "pending_coord"
+    assert days[2]["rise_set"]["moonrise_at"] is None
+    poi = days[1]["pois"][0]
+    assert poi["rise_set"]["status"] == "success"
+    assert poi["rise_set"]["sunrise_at"] == day1["sunrise_at"]
+    assert poi["rise_set"]["moonrise_at"] == day1["moonrise_at"]
 
 
-async def test_cache_db_failure_preserves_get_and_committed_poi_move(
-    client: Any,
-    session_factory: Any,
-    auth_cookies: Any,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
+async def test_kasi_rise_set_tables_are_gone(session_factory: Any) -> None:
+    async with session_factory() as db:
+        for table in ("trip_day_rise_sets", "trip_poi_rise_sets"):
+            assert await db.scalar(text(f"SELECT to_regclass('app.{table}')")) is None
+
+
+async def test_moving_a_poi_recomputes_both_days_without_writes(
+    client: Any, session_factory: Any, auth_cookies: Any
 ) -> None:
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import AsyncSession
-
     trip_id = await _seed_trip_with_poi(session_factory)
     owner, poi_id = await _trip_owner_and_poi(session_factory, trip_id)
-    original_execute = AsyncSession.execute
-
-    async def fail_cache_insert(db: AsyncSession, statement: Any, *args: Any, **kwargs: Any) -> Any:
-        if str(statement).startswith("INSERT INTO app.trip_day_rise_sets"):
-            return await original_execute(
-                db, text("SELECT CAST('fixture-private-sql-param' AS int)")
-            )
-        return await original_execute(db, statement, *args, **kwargs)
-
-    monkeypatch.setattr(AsyncSession, "execute", fail_cache_insert)
-    got = await client.get(f"/trips/{trip_id}", cookies=auth_cookies(owner))
-    assert got.status_code == 200, got.text
-    assert got.json()["data"]["trip"]["title"] == "일출 여행"
     moved = await client.patch(
         f"/trips/{trip_id}/pois/{poi_id}",
-        cookies=auth_cookies(owner),
         headers={"If-Match": "1"},
         json={"day_index": 2},
+        cookies=auth_cookies(owner),
     )
     assert moved.status_code == 200, moved.text
-    assert moved.json()["data"]["day_index"] == 2
-    assert moved.json()["data"]["version"] == 2
-    async with session_factory() as db:
-        poi = await db.get(TripDayPoi, uuid.UUID(poi_id))
-        assert poi is not None and poi.day_index == 2
-        assert (
-            list(await db.scalars(select(TripDayRiseSet).where(TripDayRiseSet.trip_id == trip_id)))
-            == []
-        )
-    warnings = [r for r in caplog.records if r.message == "trip_day_rise_set.sync_failed"]
-    assert len(warnings) == 2
-    assert all(r.error_type == "DBAPIError" for r in warnings)
-    assert "fixture-private-sql-param" not in caplog.text
+    rise = moved.json()["data"]["rise_set"]
+    # 이동한 날(2026-06-11)의 값으로 바로 계산한다.
+    assert rise["status"] == "success" and rise["locdate"] == "2026-06-11"
+    assert (_hm(rise["moonrise_at"]), _hm(rise["moonset_at"])) == ("01:40", "15:16")
+    view = await client.get(f"/trips/{trip_id}", cookies=auth_cookies(owner))
+    assert view.status_code == 200, view.text
+    days = {d["day_index"]: d for d in view.json()["data"]["days"]}
+    assert days[1]["rise_set"]["status"] == "pending_coord"
+    assert days[2]["rise_set"]["status"] == "success"
+    assert days[2]["rise_set_reference"] == "광안리 해수욕장"
 
 
 async def test_get_and_move_do_not_exhaust_single_connection_pool(
@@ -336,196 +179,11 @@ async def test_get_and_move_do_not_exhaust_single_connection_pool(
                 timeout=5,
             )
             assert response.status_code == 200, response.text
-        async with factory() as db:
-            rows = list(
-                await db.scalars(select(TripDayRiseSet).where(TripDayRiseSet.trip_id == trip_id))
-            )
-        assert len(rows) == 2
-        assert next(row for row in rows if row.day_index == 2).status == "pending_fetch"
+        final = await client.get(f"/trips/{trip_id}", cookies=auth_cookies(owner))
+        days = {d["day_index"]: d for d in final.json()["data"]["days"]}
+        assert days[2]["rise_set"]["status"] == "success"
     finally:
         await engine.dispose()
-
-
-@pytest.mark.parametrize("flushed", [False, True])
-async def test_get_skips_maintenance_when_caller_has_pending_writes(
-    session_factory: Any, flushed: bool
-) -> None:
-    from app.api.v1.trips import get_trip_endpoint
-
-    trip_id = await _seed_trip_with_poi(session_factory)
-    async with session_factory() as db:
-        trip = await db.get(Trip, trip_id)
-        assert trip is not None
-        owner_id = str(trip.owner_user_id)
-        trip.title = "유지 함수가 커밋하면 안 되는 변경"
-        if flushed:
-            await db.flush()
-        with db.no_autoflush:
-            response = await get_trip_endpoint(
-                trip_id=trip_id,
-                current_user_id=owner_id,
-                db=db,
-                kor_travel_map_client=None,
-                weather_client=None,
-            )
-        assert response.data.trip.title == "유지 함수가 커밋하면 안 되는 변경"
-        assert db.in_transaction()
-        async with session_factory() as observer:
-            assert (
-                await observer.scalar(select(Trip.title).where(Trip.trip_id == trip_id))
-                == "일출 여행"
-            )
-            assert (
-                list(
-                    await observer.scalars(
-                        select(TripDayRiseSet).where(TripDayRiseSet.trip_id == trip_id)
-                    )
-                )
-                == []
-            )
-        await db.rollback()
-
-
-async def test_unchanged_input_preserves_etl_success_and_null_transitions_mark_stale(
-    session_factory: Any,
-) -> None:
-    trip_id = await _seed_trip_with_poi(session_factory)
-    await sync_trip_day_rise_sets(trip_id=trip_id)
-    fetched = datetime(2026, 6, 10, 1, 0, tzinfo=UTC)
-    async with session_factory() as db:
-        row = await db.get(TripDayRiseSet, {"trip_id": trip_id, "day_index": 1})
-        assert row is not None
-        row.status = "success"
-        row.sunrise_at = fetched
-        row.sunset_at = fetched
-        row.moonrise_at = fetched
-        row.moonset_at = fetched
-        row.fetched_at = fetched
-        row.raw_payload = {"fixture": "preserve"}
-        row.stale = False
-        await db.commit()
-        await db.refresh(row)
-        updated = row.updated_at
-    await sync_trip_day_rise_sets(trip_id=trip_id)
-    async with session_factory() as db:
-        row = await db.get(TripDayRiseSet, {"trip_id": trip_id, "day_index": 1})
-        assert row is not None
-        assert (
-            row.status,
-            row.stale,
-            row.sunrise_at,
-            row.sunset_at,
-            row.moonrise_at,
-            row.moonset_at,
-            row.fetched_at,
-            row.raw_payload,
-            row.updated_at,
-        ) == (
-            "success",
-            False,
-            fetched,
-            fetched,
-            fetched,
-            fetched,
-            fetched,
-            {"fixture": "preserve"},
-            updated,
-        )
-        poi = await db.scalar(select(TripDayPoi).where(TripDayPoi.trip_id == trip_id))
-        assert poi is not None
-        poi.feature_snapshot = {"name": "좌표 없음"}
-        await db.commit()
-    await sync_trip_day_rise_sets(trip_id=trip_id)
-    async with session_factory() as db:
-        row = await db.get(TripDayRiseSet, {"trip_id": trip_id, "day_index": 1})
-        assert row is not None and row.stale and row.status == "pending_coord"
-        assert row.longitude is None and row.latitude is None
-        trip = await db.get(Trip, trip_id)
-        assert trip is not None
-        trip.start_date = None
-        trip.end_date = None
-        await db.commit()
-    await sync_trip_day_rise_sets(trip_id=trip_id)
-    async with session_factory() as db:
-        row = await db.get(TripDayRiseSet, {"trip_id": trip_id, "day_index": 1})
-        assert row is not None and row.stale and row.status == "pending_date"
-        assert row.locdate is None
-
-
-async def test_older_sync_cannot_overwrite_a_newer_poi_move(
-    client: Any,
-    session_factory: Any,
-    auth_cookies: Any,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import asyncio
-
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    trip_id = await _seed_trip_with_poi(session_factory)
-    owner, poi_id = await _trip_owner_and_poi(session_factory, trip_id)
-    original_execute = AsyncSession.execute
-    old_ready = asyncio.Event()
-    release_old = asyncio.Event()
-    first_session: int | None = None
-
-    async def pause_old_sync(db: AsyncSession, statement: Any, *args: Any, **kwargs: Any) -> Any:
-        nonlocal first_session
-        if str(statement).startswith("INSERT INTO app.trip_day_rise_sets"):
-            if first_session is None:
-                first_session = id(db)
-                old_ready.set()
-                await asyncio.wait_for(release_old.wait(), timeout=10)
-        return await original_execute(db, statement, *args, **kwargs)
-
-    monkeypatch.setattr(AsyncSession, "execute", pause_old_sync)
-    old = asyncio.create_task(sync_trip_day_rise_sets(trip_id=trip_id))
-    move = None
-    try:
-        await asyncio.wait_for(old_ready.wait(), timeout=5)
-        move = asyncio.create_task(
-            client.patch(
-                f"/trips/{trip_id}/pois/{poi_id}",
-                cookies=auth_cookies(owner),
-                headers={"If-Match": "1"},
-                json={"day_index": 2},
-            )
-        )
-        # 정정 전에는 이동+새 sync가 먼저 끝난다. Trip fence 도입 후에는 실제
-        # PostgreSQL Lock wait를 확인한 다음 먼저 시작한 sync를 풀어준다.
-        for _ in range(200):
-            if move.done():
-                break
-            async with session_factory() as observer:
-                blocked = await observer.scalar(
-                    text(
-                        "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() "
-                        "AND wait_event_type='Lock' AND query LIKE '%app.trips%FOR UPDATE%'"
-                    )
-                )
-            if blocked:
-                break
-            await asyncio.sleep(0.01)
-        else:
-            pytest.fail("neither completed move nor database lock wait observed")
-    finally:
-        release_old.set()
-        await old
-        if move is not None:
-            response = await asyncio.wait_for(move, timeout=5)
-            assert response.status_code == 200, response.text
-    async with session_factory() as db:
-        rows = {
-            row.day_index: row
-            for row in await db.scalars(
-                select(TripDayRiseSet).where(TripDayRiseSet.trip_id == trip_id)
-            )
-        }
-    assert rows[1].status == "pending_coord" and rows[1].longitude is None
-    assert rows[2].status == "pending_fetch"
-    assert rows[2].longitude == 129.118
-    assert str(rows[2].reference_poi_id) == poi_id
 
 
 @pytest.mark.parametrize("method", ["DELETE", "PATCH"])

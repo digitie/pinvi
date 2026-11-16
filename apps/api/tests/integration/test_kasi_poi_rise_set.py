@@ -1,11 +1,8 @@
-"""POI 생성 시 KASI 출몰시각 상태 row 생성."""
+"""POI 응답의 해·달 출몰 — 저장 행 없이 일자 날짜·좌표로 계산한다(0109)."""
 
 from __future__ import annotations
 
-from datetime import date
-
 import pytest
-from sqlalchemy import text
 
 pytestmark = pytest.mark.asyncio
 
@@ -49,21 +46,9 @@ async def test_create_poi_with_date_and_coord_marks_rise_set_pending_fetch(
     assert poi_data["rise_set"]["sunset_at"] == "2026-05-06T19:25:00+09:00"
     assert poi_data["rise_set"]["fetched_at"] is None
 
-    async with session_factory() as db:
-        row = (
-            await db.execute(
-                text(
-                    "SELECT locdate, longitude, latitude, status "
-                    "FROM app.trip_poi_rise_sets WHERE poi_id = :poi_id"
-                ),
-                {"poi_id": poi_id},
-            )
-        ).one()
-
-    assert row.locdate == date(2026, 5, 6)
-    assert row.longitude == 127.1
-    assert row.latitude == 37.5
-    assert row.status == "pending_fetch"
+    # 달 출몰도 astral — 서울 08시대 월몰(UTC 전날)도 놓치지 않는다.
+    assert poi_data["rise_set"]["moonrise_at"] == "2026-05-06T23:51:00+09:00"
+    assert poi_data["rise_set"]["moonset_at"] == "2026-05-06T08:08:00+09:00"
 
     detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
     assert detail.status_code == 200, detail.text
@@ -97,21 +82,5 @@ async def test_create_poi_without_day_date_marks_rise_set_pending_date(
     )
     assert resp.status_code == 201, resp.text
     poi_data = resp.json()["data"]
-    poi_id = poi_data["attachment_id"]
     assert poi_data["rise_set"]["status"] == "pending_date"
     assert poi_data["rise_set"]["locdate"] is None
-
-    async with session_factory() as db:
-        row = (
-            await db.execute(
-                text(
-                    "SELECT locdate, longitude, latitude, status FROM app.trip_poi_rise_sets WHERE poi_id = :poi_id"
-                ),
-                {"poi_id": poi_id},
-            )
-        ).one()
-
-    assert row.locdate is None
-    assert row.longitude is None
-    assert row.latitude is None
-    assert row.status == "pending_date"

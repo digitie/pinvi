@@ -13,13 +13,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.kasi import TripPoiRiseSet
 from app.models.poi import TripDayPoi
 from app.models.poi_place_detail import TripPoiPlaceDetail
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
-from app.services.kasi import build_initial_poi_rise_set
-from app.services.sun_times import sun_rise_set_dict
+from app.services.sun_times import snapshot_coord, sun_rise_set_dict
 from app.services.trip import TripNotFoundError, validate_trip_day_payload
 
 _REGION_CODE_RE = re.compile(r"^[0-9]{2,10}$")
@@ -105,10 +103,10 @@ async def ensure_trip_day(db: AsyncSession, *, trip_id: uuid.UUID, day_index: in
 async def trip_day_effective_locdate(
     db: AsyncSession, *, trip_id: uuid.UUID, day_index: int, override: date | None
 ) -> date | None:
-    """POI rise/set seed용 effective 날짜(ADR-055).
+    """일자 effective 날짜(ADR-055) — POI 응답의 해·달 출몰 계산용.
 
     day.date override가 있으면 그것, 없으면 trip.start_date + (day_index-1)로 파생한다.
-    trip.start_date가 없으면 None(rise/set은 pending_date로 남는다).
+    trip.start_date가 없으면 None(rise/set은 pending_date).
     """
     if override is not None:
         return override
@@ -141,11 +139,7 @@ async def create_poi(
 ) -> TripDayPoi:
     if await _lock_active_trip(db, trip_id) is None:
         raise TripNotFoundError("여행을 찾을 수 없습니다.")
-    day = await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
-    # ADR-055: day.date는 override-only. rise/set seed는 effective_date(override 또는 파생)로.
-    locdate = await trip_day_effective_locdate(
-        db, trip_id=trip_id, day_index=day_index, override=day.date
-    )
+    await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
     poi = TripDayPoi(
         trip_id=trip_id,
         day_index=day_index,
@@ -176,13 +170,6 @@ async def create_poi(
     )
     try:
         await db.flush()
-        db.add(
-            build_initial_poi_rise_set(
-                poi=poi,
-                locdate=locdate,
-                feature_snapshot=feature_snapshot,
-            )
-        )
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -253,20 +240,6 @@ async def update_poi(
         setattr(poi, key, value)
     poi.version += 1
     try:
-        if moved:
-            assert day is not None
-            old_rise_set = await db.get(TripPoiRiseSet, poi.attachment_id)
-            if old_rise_set is not None:
-                await db.delete(old_rise_set)
-                await db.flush()
-            locdate = await trip_day_effective_locdate(
-                db, trip_id=poi.trip_id, day_index=poi.day_index, override=day.date
-            )
-            db.add(
-                build_initial_poi_rise_set(
-                    poi=poi, locdate=locdate, feature_snapshot=poi.feature_snapshot
-                )
-            )
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -288,47 +261,30 @@ async def soft_delete_poi(db: AsyncSession, *, poi: TripDayPoi) -> None:
     await db.commit()
 
 
-async def get_poi_rise_set(
-    db: AsyncSession,
-    *,
-    poi_id: uuid.UUID,
-) -> TripPoiRiseSet | None:
-    return await db.get(TripPoiRiseSet, poi_id)
+async def poi_rise_sets(
+    db: AsyncSession, pois: Iterable[TripDayPoi]
+) -> dict[uuid.UUID, dict[str, Any]]:
+    """POI 응답의 해·달 출몰 — 일자 effective 날짜와 저장 좌표로 astral 계산한다(`services/sun_times.py`).
 
-
-async def get_poi_rise_sets(
-    db: AsyncSession,
-    *,
-    poi_ids: Iterable[uuid.UUID],
-) -> dict[uuid.UUID, TripPoiRiseSet]:
-    unique_poi_ids = list(dict.fromkeys(poi_ids))
-    if not unique_poi_ids:
-        return {}
-    result = await db.execute(
-        select(TripPoiRiseSet).where(TripPoiRiseSet.poi_id.in_(unique_poi_ids))
-    )
-    return {row.poi_id: row for row in result.scalars()}
-
-
-def poi_rise_set_to_dict(rise_set: TripPoiRiseSet | None) -> dict[str, Any] | None:
-    """POI 단건 응답의 일출·일몰 — 행이 기록한 날짜·좌표로 astral 계산한다(요청 18, `sun_times.py`).
-
-    행 자체(`trip_poi_rise_sets`)는 입력 기록으로 남는다(KASI 달 출몰을 채울 수 있는 자리). trip 상세 응답은
-    `trip_view_builder`가 현재 일자 날짜·좌표로 같은 계산을 한다.
+    trip 상세 응답은 `trip_view_builder`가 최신 feature 좌표로 같은 계산을 한다.
     """
-    if rise_set is None:
-        return None
-    coord = (
-        (rise_set.longitude, rise_set.latitude)
-        if rise_set.longitude is not None and rise_set.latitude is not None
-        else None
-    )
-    moon = (
-        {"moonrise_at": rise_set.moonrise_at, "moonset_at": rise_set.moonset_at}
-        if rise_set.status == "success"
-        else None
-    )
-    return sun_rise_set_dict(locdate=rise_set.locdate, coord=coord, moon=moon)
+    out: dict[uuid.UUID, dict[str, Any]] = {}
+    locdates: dict[tuple[uuid.UUID, int], date | None] = {}
+    for poi in pois:
+        key = (poi.trip_id, poi.day_index)
+        if key not in locdates:
+            override = await db.scalar(
+                select(TripDay.date).where(
+                    TripDay.trip_id == poi.trip_id, TripDay.day_index == poi.day_index
+                )
+            )
+            locdates[key] = await trip_day_effective_locdate(
+                db, trip_id=poi.trip_id, day_index=poi.day_index, override=override
+            )
+        out[poi.attachment_id] = sun_rise_set_dict(
+            locdate=locdates[key], coord=snapshot_coord(poi.feature_snapshot)
+        )
+    return out
 
 
 async def reorder_pois(

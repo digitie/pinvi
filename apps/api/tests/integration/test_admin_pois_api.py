@@ -12,7 +12,6 @@ from sqlalchemy import select
 from app.models.attachment import CuratedPlanAttachment
 from app.models.audit import AdminAuditLog
 from app.models.comment import TripComment
-from app.models.kasi import TripPoiRiseSet
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
@@ -276,17 +275,14 @@ async def test_admin_poi_create_writes_audit(
         stored_day = await db.scalar(
             select(TripDay).where(TripDay.trip_id == trip_id, TripDay.day_index == 2)
         )
-        rise_set = await db.scalar(select(TripPoiRiseSet).where(TripPoiRiseSet.poi_id == poi_id))
         audit = await db.scalar(select(AdminAuditLog).where(AdminAuditLog.request_id == request_id))
         trip = await db.scalar(select(Trip).where(Trip.trip_id == trip_id))
 
     assert stored_poi is not None
     assert stored_poi.added_by_user_id == admin_id
     assert stored_day is not None
-    # ADR-055: auto-생성 day의 date는 NULL(override-only). rise/set seed는 파생 effective_date를 쓴다.
+    # ADR-055: auto-생성 day의 date는 NULL(override-only). 해·달 출몰은 응답 때 파생 effective_date로 계산한다.
     assert stored_day.date is None
-    assert rise_set is not None
-    assert rise_set.locdate == date(2026, 7, 2)
     assert audit is not None
     assert audit.action == "poi.create"
     assert audit.resource_id == str(poi_id)

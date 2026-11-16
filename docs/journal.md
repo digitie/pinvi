@@ -1,3 +1,10 @@
+## 2026-11-17 — 달 출몰도 astral, KASI 해·달 출몰 job·표 은퇴(0109)
+
+- 소유자 승인(11-17): 월출·월몰도 응답 때 `astral`로 계산하고 KASI 출몰 job(`pinvi_trip_day_rise_sets`, `kasi_poi_rise_set_job`)과 저장 표를 은퇴한다. 두 표(`trip_day_rise_sets`·`trip_poi_rise_sets`)는 job이 유일한 채움이었고, 달까지 계산으로 옮기면 남는 읽는 곳이 없어 0109에서 함께 지웠다. `sync_trip_day_rise_sets`(GET 여행·POI 이동 때 쓰던 유지 쓰기)도 없앴다.
+- astral `moonrise/moonset(tzinfo=KST)`은 UTC 날짜의 사건만 구해 KST 오전 9시 전 사건(예: 서울 2026-05-06 월몰 08:08)을 "그날 지지 않는다"로 놓친다 — `riseset`으로 UTC 사흘 사건을 모아 KST 날짜로 고른다.
+- 검증: 운영 KASI 성공 행 표본 25건(읽기 전용)과 astral 값이 해·달 모두 ±1분. 단위 `test_sun_times`(KASI 대조·08시대 월몰·월몰 없는 날), 통합 rise_set·POI·관리자 POI·trip view, ETL 정의·목록 시험, live WX-040 달 단언 추가.
+- 허용 목록: cache-target boundary 0109, runtime-role 0109 ACL 복구, deploy-node fresh head 0109, head 기대값 시험.
+
 ## 2026-11-17 — causal canary 시험 흔들림 원인과 결정적 판정
 
 - `test_remote_bracket_obeys_global_deadline_and_releases_writer_lock`이 11-16 CI 통합 shard 2에서 세 번 실패했다(`assert not writer.done()` 두 번, `snapshot_started` 대기 TimeoutError 한 번). 원인은 실시간 창 두 개: 전체 예산 0.3초 안에 canary가 잠금을 잡고 원격 snapshot까지 가야 했고, writer가 20 ms 동안 끝나지 않는지를 봤다. 느린 러너에서는 deadline이 snapshot 전에 지나거나, snapshot 시작이 deadline 직전이라 20 ms 안에 잠금이 풀려 writer가 끝났다. 코드 결함이 아니라 시험의 시간 가정이다.

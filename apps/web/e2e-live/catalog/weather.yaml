@@ -559,6 +559,7 @@
   expected:
     - days[0].rise_set.status=success(ETL 20분 주기를 기다리지 않음), 'trip-day-rise-set-pending' 없음
     - 장소 행 'trip-poi-rise-set'에 일출·일몰, NOAA 계산과 ±3분, 일자 값과 같음(장소 하나 = centroid)
+    - days[0].rise_set의 moonrise_at·moonset_at 중 하나 이상, 값은 그 KST 날짜의 사건(0109 달 출몰 astral 이관)
   cleanup:
     - 생성한 여행 삭제
   automation: scripted

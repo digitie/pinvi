@@ -29,7 +29,7 @@ from app.models.telegram_target import TelegramTarget
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.models.user import User
-from app.services.sun_times import compute_sun_times
+from app.services.sun_times import compute_sun_times, resolve_day_reference
 from app.services.telegram_itinerary import KST, effective_date, local_time, summary
 from app.services.telegram_metrics import PLANNING_FAILURES
 from app.services.telegram_notifications import (
@@ -40,7 +40,6 @@ from app.services.telegram_notifications import (
     preferences,
 )
 from app.services.telegram_weather import plan_weather, prepare_weather
-from app.services.trip_day_rise_set import resolve_day_reference
 from app.services.trip_weather_batch import (
     build_trip_weather_via_kor_travel_map,
     build_trip_weather_via_kor_travel_weather,

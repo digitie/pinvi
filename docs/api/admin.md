@@ -1993,7 +1993,6 @@ code location repository/job/asset/schedule, 최근 run 상태를 live snapshot�
     ],
     "jobs": [
       { "name": "kasi_special_days_job", "trigger": "schedule" },
-      { "name": "kasi_poi_rise_set_job", "trigger": "on_demand" },
       { "name": "pinvi_email_outbox_job", "trigger": "schedule" },
       { "name": "pinvi_telegram_system_outbox_job", "trigger": "schedule" },
       { "name": "pinvi_pii_retention_job", "trigger": "schedule" },

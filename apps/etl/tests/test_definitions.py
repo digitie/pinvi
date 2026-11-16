@@ -18,7 +18,10 @@ def test_definitions_load() -> None:
     assert "pinvi_location_log_archive" in asset_keys
     assert "pinvi_telegram_system_outbox" in asset_keys
     assert "pinvi_weather_retention_horizon_guard" in asset_keys
-    assert defs.get_job_def("kasi_poi_rise_set_job") is not None
+    # KASI 해·달 출몰 job은 은퇴했다(0109 — API가 astral로 계산한다).
+    assert "pinvi_trip_day_rise_sets" not in asset_keys
+    job_names = {job.name for job in defs.jobs}
+    assert not {"kasi_poi_rise_set_job", "pinvi_trip_day_rise_sets_job"} & job_names
     assert defs.get_job_def("pinvi_email_outbox_job") is not None
     assert defs.get_job_def("pinvi_pii_retention_job") is not None
     assert defs.get_job_def("pinvi_location_log_archive_job") is not None

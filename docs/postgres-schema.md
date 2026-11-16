@@ -320,7 +320,10 @@ BEFORE UPDATE ON app.trip_day_pois
 FOR EACH ROW EXECUTE FUNCTION app.touch_updated_at();
 ```
 
-### 3.3.1 `app.trip_poi_rise_sets`
+### 3.3.1 `app.trip_poi_rise_sets` (0109에서 삭제)
+
+> **2026-11-17 은퇴(0109)**: KASI 해·달 출몰 저장 표(`trip_day_rise_sets`·`trip_poi_rise_sets`)와 그 Dagster job(`pinvi_trip_day_rise_sets`·`kasi_poi_rise_set_job`)은 없어졌다. 일출·일몰·월출·월몰은 API가 응답을 만들 때 `astral`로 계산한다(`apps/api/app/services/sun_times.py`, KASI 고시값과 ±1분). 아래 서술은 은퇴 전 기록이다.
+
 
 ```sql
 CREATE TABLE app.trip_poi_rise_sets (
@@ -1381,3 +1384,12 @@ soft delete 때 서비스가 행을 지우며(영구 삭제는 CASCADE), 같은 
 "다시 읽어오기"는 값을 덮어쓴다(같은 장소 60초에 1회). 전역 장소 데이터로 쓰지 않는다. 저장 출처는
 kor-travel-map feature(공공데이터)뿐이다 — Kakao/Naver Local 응답과 Google Places 콘텐츠는 약관상
 저장하지 않는다.
+
+## KASI 해·달 출몰 표 은퇴 (0109)
+
+trip_day_rise_sets·trip_poi_rise_sets를 삭제한다. 일출·일몰·월출·월몰은 API가 응답 때 `astral`로 계산하고
+(`apps/api/app/services/sun_times.py` — 일자 = 그 일자 장소 centroid, 장소 = 그 좌표, KST 민간일, 분 반올림)
+저장하지 않는다. 두 표를 채우던 Dagster job(`pinvi_trip_day_rise_sets` 20분 주기, `kasi_poi_rise_set_job`)도
+은퇴했다. POI 표는 채우는 job이 없어 운영에서 전부 `pending_fetch`였다(2026-11-16 8,966행). 운영 KASI 성공 행
+표본 25건과 astral 값은 해·달 모두 ±1분이었다. downgrade는 0100 baseline 구조로 빈 표를 다시 만든다.
+

@@ -142,6 +142,8 @@ async def pinvi_kasi_special_days(
     ...
 ```
 
+> **2026-11-17 은퇴(0109)**: KASI 해·달 출몰 저장 표(`trip_day_rise_sets`·`trip_poi_rise_sets`)와 그 Dagster job(`pinvi_trip_day_rise_sets`·`kasi_poi_rise_set_job`)은 없어졌다. 일출·일몰·월출·월몰은 API가 응답을 만들 때 `astral`로 계산한다(`apps/api/app/services/sun_times.py`, KASI 고시값과 ±1분). 아래 서술은 은퇴 전 기록이다.
+
 POI 출몰시각은 정기 asset이 아니라 POI 생성 시 enqueue되는 job이다.
 `python-kasi-api`의 `rise_set.location`으로 "위치별 해달 출몰시각 정보조회"를
 호출하고 `app.trip_poi_rise_sets`에 1회 저장한다.

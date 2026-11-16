@@ -15,9 +15,9 @@
   - `budget_amount`, `actual_amount`, `currency` — 사용자 예상/실제 지출. 금액은 0 이상,
     `currency`는 대문자 3글자(기본 `KRW`)
   - `user_url` — 사용자가 저장한 참고 URL
-- `app.trip_poi_rise_sets`:
-  - POI 생성 시 `python-kasi-api` 위치별 해달 출몰시각 정보조회 결과를 1회 저장
-  - `rise_set` 응답 선택 필드의 원천. 날짜/좌표가 없으면 pending 상태
+- `rise_set`(응답 전용, 저장 없음 — 0109): 일자 effective 날짜와 장소 좌표로 응답 때 `astral` 계산한
+  일출·일몰·월출·월몰(`apps/api/app/services/sun_times.py`). 날짜가 없으면 `pending_date`, 좌표가 없으면
+  `pending_coord`, 있으면 `success`(그날 달이 뜨거나 지지 않으면 그 값만 null)
 
 ## 2. CRUD
 
@@ -53,6 +53,7 @@ Content-Type: application/json
 - `feature_id`가 없으면 자유 POI로 저장하고 `feature_snapshot`만 표시용으로 사용한다.
 - `feature_id`가 있는데 kor-travel-map batch 조회 결과에 없으면
   → `feature_link_broken_at` 채움 + 그래도 row 생성 (`feature_snapshot`으로 표시)
+- (은퇴 0109 — 아래 두 항목은 KASI 저장 시절 기록이다. 지금은 응답마다 계산하므로 이동·날짜 변경이 바로 반영된다.)
 - 좌표와 방문일(`trip_days.date`)이 있으면 POI 생성 후 Dagster/KASI job을 enqueue해
   `rise_set.location`(`getLCRiseSetInfo`) 결과를 1회 저장한다. API는 먼저
   `app.trip_poi_rise_sets.status='pending_fetch'` row를 만들고, Dagster one-shot job이

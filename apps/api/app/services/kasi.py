@@ -1,13 +1,9 @@
-"""KASI 부속 데이터 준비 로직."""
+"""feature snapshot 좌표 추출(해·달 출몰 계산·일자 기준 좌표가 쓴다)."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import date
 from typing import Any
-
-from app.models.kasi import TripPoiRiseSet
-from app.models.poi import TripDayPoi
 
 
 def extract_feature_coordinates(snapshot: Mapping[str, Any]) -> tuple[float, float] | None:
@@ -27,36 +23,6 @@ def extract_feature_coordinates(snapshot: Mapping[str, Any]) -> tuple[float, flo
                     return coord
 
     return None
-
-
-def build_initial_poi_rise_set(
-    *,
-    poi: TripDayPoi,
-    locdate: date | None,
-    feature_snapshot: Mapping[str, Any],
-) -> TripPoiRiseSet:
-    """POI 생성 직후 KASI 출몰시각 fetch 상태 row를 만듭니다."""
-
-    coord = extract_feature_coordinates(feature_snapshot)
-    if locdate is None:
-        status = "pending_date"
-        longitude = None
-        latitude = None
-    elif coord is None:
-        status = "pending_coord"
-        longitude = None
-        latitude = None
-    else:
-        status = "pending_fetch"
-        longitude, latitude = coord
-
-    return TripPoiRiseSet(
-        poi_id=poi.attachment_id,
-        locdate=locdate,
-        longitude=longitude,
-        latitude=latitude,
-        status=status,
-    )
 
 
 def _to_lon_lat(lon: object, lat: object) -> tuple[float, float] | None:

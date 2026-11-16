@@ -46,6 +46,8 @@ payload를 보존한다.
 Pinvi 여행계획 POI 생성 시 한 번만 `위치별 해달 출몰시각 정보조회`
 (`getLCRiseSetInfo`)를 호출한다.
 
+> **2026-11-17 은퇴(0109)**: KASI 해·달 출몰 저장 표(`trip_day_rise_sets`·`trip_poi_rise_sets`)와 그 Dagster job(`pinvi_trip_day_rise_sets`·`kasi_poi_rise_set_job`)은 없어졌다. 일출·일몰·월출·월몰은 API가 응답을 만들 때 `astral`로 계산한다(`apps/api/app/services/sun_times.py`, KASI 고시값과 ±1분). 아래 서술은 은퇴 전 기록이다.
+
 흐름:
 
 1. `POST /trips/{trip_id}/pois`가 POI를 생성한다.
