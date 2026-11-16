@@ -83,6 +83,14 @@ const CHECK_ORDER: ScenarioCheck['kind'][] = [
 const compactName = (s: string): string => s.replace(/\s+/g, '');
 const nameContains = (actual: string, expected: string): boolean =>
   compactName(actual).includes(compactName(expected));
+/**
+ * The same whitespace-insensitive match as a retrying locator assertion: `expected` with its spaces removed,
+ * any whitespace allowed between characters ('수원화성' ↔ '수원 화성', '파크 하얏트 부산' ↔ '파크하얏트 부산').
+ */
+const compactNamePattern = (expected: string): RegExp =>
+  new RegExp(
+    Array.from(compactName(expected), (ch) => ch.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&')).join('\\s*'),
+  );
 
 /**
  * Name-based pick: a Map feature row (badge '장소' on its own line, never Kakao/Naver/주소/내 여행) whose
@@ -276,8 +284,9 @@ async function checkShare(page: Page, s: TripScenario, title: string, tripId: st
   try {
     expect(fresh.apiStatus, redact(`${s.id}: shared view API status`, link.token)).toBe(200);
     await expectSharedReadOnly(fresh.page, title);
+    // Same whitespace-insensitive name match as the plan rows (#737) — the shared list shows the Map name.
     await expect(fresh.page.getByRole('complementary', { name: '장소 목록' })).toContainText(
-      s.places.find((p) => p.day === 1)!.expect_name_contains,
+      compactNamePattern(s.places.find((p) => p.day === 1)!.expect_name_contains),
     );
   } finally {
     await fresh.context.close();
