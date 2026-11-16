@@ -1,3 +1,8 @@
+## 예보 범위 밖 안내 (2026-11-17)
+
+PR claude/weather-forecast-horizon-message: no_data.forecast_until + 전용 문구(결정 3).
+다음: 배포 뒤 live WX-003·WX-028·WX-045.
+
 ## 달 출몰 astral·KASI 출몰 은퇴 (2026-11-17)
 
 PR claude/astral-moon-retire-kasi-riseset: 0109(두 표 삭제), Dagster job 둘 은퇴.

@@ -284,7 +284,11 @@ export const TripWeatherResolutionSchema = z.discriminatedUnion('state', [
     state: z.literal('found'),
     card_key: z.string(),
   }),
-  z.object({ state: z.literal('no_data') }),
+  z.object({
+    state: z.literal('no_data'),
+    // 예보 범위 밖이라 비었을 때 받은 예보의 마지막 날짜(KST). 그 밖의 이유면 없거나 null(2026-11-17).
+    forecast_until: z.string().date().nullable().optional(),
+  }),
   z.object({ state: z.literal('retired') }),
   z.object({ state: z.literal('suppressed') }),
   z.object({ state: z.literal('missing') }),

@@ -306,7 +306,11 @@ test.describe('SHR 공유 링크 (desktop)', () => {
         '비공개 장소는 날씨를 확인할 수 없습니다.',
         '장소 정보를 찾을 수 없어 날씨를 확인할 수 없습니다.',
       ];
-      for (const text of statusTexts) expect(allowed).toContain(text.trim());
+      // 2026-11-17 결정 3: 예보 범위 밖 날짜는 '예보는 N일 앞(M월 D일)까지만 제공됩니다.'
+      const beyondForecast = /^예보는 (\d+일 앞\(\d+월 \d+일\)|오늘)까지만 제공됩니다\.$/;
+      for (const text of statusTexts) {
+        if (!beyondForecast.test(text.trim())) expect(allowed).toContain(text.trim());
+      }
 
       // 일출/일몰: 값 표시 or "준비 중" 안내 or 미표시 — 깨진 값 금지.
       const header = fresh.page.getByTestId('trip-day-header');

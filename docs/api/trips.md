@@ -127,6 +127,11 @@ revision이 같은 캐시를 재사용한 성공 상태이므로 소비자 응�
 > **Map 경유(ADR-077)**: `PINVI_KOR_TRAVEL_MAP_WEATHER_ENABLED`가 켜지면 같은 셰입·상태 규칙으로 kor-travel-map
 > `POST /v1/service/weather/locations/batch`(50곳씩)에서 관측·예보·지난 일자 세 구간 요약을 읽는다(특보만
 > `kor-travel-weather`). 이때 kor-travel-map client가 없는 호출 경로는 균일하게 `unavailable`이다 — §9.
+>
+> **예보 범위 밖(2026-11-17)**: Map 경로는 예보 창을 오늘부터 연다(값은 날짜별로 잘라 쓴다). 받은 예보의 마지막
+> 대상 시각(KST 날짜)보다 뒤인 날짜의 `no_data`에는 `forecast_until`(그 날짜)을 싣고, 화면은 "이 날짜의 날씨
+> 정보가 없습니다." 대신 "예보는 N일 앞(M월 D일)까지만 제공됩니다."(N = `forecast_until` − 오늘)를 보이며 새로고침
+> 버튼을 두지 않는다. 예보가 하나도 없거나(적재 전) 직접 경로면 `forecast_until`은 없다(null).
 
 응답 shape:
 

@@ -17,6 +17,7 @@ Pinvi는 응답 셰입을 소유하되 **kor_travel_map 실계약 field 명/의�
 from __future__ import annotations
 
 import uuid
+from datetime import date as Date
 from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 
@@ -258,6 +259,8 @@ class FeatureWeatherFound(BaseModel):
 
 class FeatureWeatherNoData(BaseModel):
     state: Literal["no_data"] = "no_data"
+    #: 이 날짜가 예보 범위 밖이라 비었을 때 받은 예보의 마지막 날짜(KST). 그 밖의 이유면 null(2026-11-17).
+    forecast_until: Date | None = None
 
 
 class FeatureWeatherRetired(BaseModel):

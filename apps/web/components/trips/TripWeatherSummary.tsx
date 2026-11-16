@@ -1,6 +1,7 @@
 'use client';
 
 import { withOccurrenceKeys } from '@/lib/occurrenceKeys';
+import { forecastHorizonMessage, isBeyondForecast } from '@/lib/forecastHorizon';
 import { weatherRefreshMessage } from '@/lib/weatherRefreshMessage';
 import { providerLabel } from '@/lib/weatherProviderLabels';
 import type {
@@ -388,33 +389,41 @@ const STATUS_TEXT: Record<Exclude<TripWeatherResolution['state'], 'found'>, stri
   unavailable: '날씨 서비스를 일시적으로 사용할 수 없습니다.',
 };
 
+function statusTextFor(weather: TripWeatherResolution, hasCard: boolean, beyond: string | null) {
+  if (beyond) return forecastHorizonMessage(beyond);
+  if (weather.state === 'found') return hasCard ? STATUS_TEXT.no_data : STATUS_TEXT.unavailable;
+  return STATUS_TEXT[weather.state];
+}
+
 function TripWeatherStatus({
   weather,
   hasCard,
+  date,
   label,
   compact,
   onRefresh,
 }: {
   weather: TripWeatherResolution;
   hasCard: boolean;
+  date: string;
   label: string;
   compact: boolean;
   onRefresh: TripWeatherSummaryProps['onRefresh'];
 }) {
-  const statusText =
-    weather.state === 'found'
-      ? hasCard
-        ? STATUS_TEXT.no_data
-        : STATUS_TEXT.unavailable
-      : STATUS_TEXT[weather.state];
+  // 예보 범위 밖 날짜는 전용 안내만 보인다 — 다시 물어도 값이 없으므로 새로고침도 두지 않는다(결정 3).
+  const forecastUntil = weather.state === 'no_data' ? (weather.forecast_until ?? null) : null;
+  const beyond = isBeyondForecast(date, forecastUntil) ? forecastUntil : null;
+  const statusText = statusTextFor(weather, hasCard, beyond);
   // 비었거나 일시 장애일 때만 새로고침이 뜻이 있다(종료·비공개·없는 장소는 다시 물어도 같다).
   const refreshable =
-    weather.state === 'found' || weather.state === 'no_data' || weather.state === 'unavailable';
+    !beyond &&
+    (weather.state === 'found' || weather.state === 'no_data' || weather.state === 'unavailable');
   return (
     <section
       className={compact ? 'px-0 py-1' : 'rounded-sm bg-surface-soft px-3 py-2'}
       aria-label={label}
       data-testid="trip-weather-status"
+      data-weather-reason={beyond ? 'beyond_forecast' : undefined}
     >
       <div className="flex flex-wrap items-center gap-x-1">
         <p className="text-xs text-muted">{statusText}</p>
@@ -451,6 +460,7 @@ export function TripWeatherSummary({
       <TripWeatherStatus
         weather={weather}
         hasCard={card != null}
+        date={date}
         label={label}
         compact={compact}
         onRefresh={onRefresh}
