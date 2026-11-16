@@ -204,3 +204,21 @@ viewer는 POI 생성·수정·삭제·정렬을 할 수 없다.
 재정렬 요청은 day_index를 필수로 보낸다. moves 안의 모든 POI가 잠금 획득 후에도 해당 일자에 있어야 한다.
 이동 전 화면에서 보낸 오래된 정렬 요청은 409로 거부한다. Web·모바일 클라이언트도 이 계약을 함께 사용한다.
 이전 day_index 없는 요청은 422다. 데이터베이스 스키마 변경은 없다.
+
+## 장소 현재 날씨 (`GET /trips/{trip_id}/pois/{poi_id}/weather`)
+
+장소 목록의 날씨 배지(아이콘 + 현재 기온 + 오늘 최고/최저)와 날씨 예보 팝업(시간별 기온·강수확률,
+일별 최고/최저, 기상 특보)이 쓴다. 여행 멤버(viewer 포함)만 조회할 수 있다(비멤버 403, 없는·삭제된
+장소 404).
+
+- 응답은 `GET /features/{id}/weather`(`asof` 없음)와 같은 `FeatureWeatherCard` 셰입이다 — 관측·실황 +
+  가까운 3일 예보 + 특보(`forecast_style="advisory"`).
+- 좌표는 Map feature를 다시 조회하지 않고 POI snapshot 좌표(`cache_target_lon/lat`)를 쓴다. 그래서 지도
+  feature가 없는 직접 추가 장소(manual/kakao/naver)도 날씨가 나온다. snapshot에 좌표가 없으면 빈 카드다.
+- 위치 해석 캐시(`weather_location_links`) 키는 feature가 있으면 `feature_id`(trip view와 공유), 없으면
+  `poi:{poi_id}`다. 응답의 `feature_id`가 이 키다.
+- 소스 선택(Map 경로/kor-travel-weather 직접)과 `503 WEATHER_SERVICE_UNAVAILABLE` 정책은 feature
+  weather와 같다. 첫 조회(캐시 미스)는 배경 해석 동안 빈 카드일 수 있다.
+- 웹은 장소별 카드를 공유 캐시(`apps/web/lib/usePoiWeather.ts`, 동시 2건·성공 10분/실패 1분)로 받아
+  배지·팝업·장소 정보 패널이 나눠 쓴다. 화면 표시 규칙(제공자 우선순위, 상태 판정)은
+  `apps/web/lib/weatherNow.ts`가 정본이다.

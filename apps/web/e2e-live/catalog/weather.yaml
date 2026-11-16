@@ -564,3 +564,44 @@
   automation: scripted
   spec: specs/weather/weather-sun-astral.live.spec.ts#WX-040
   notes: 2026-11-16 소유자 요청 18. 배포 뒤에만 통과한다(이전 API는 pending_fetch → ETL 대기, 장소 줄은 없음).
+
+- id: WX-041
+  title: 장소 목록 이름 옆 현재 날씨 배지(아이콘·현재 기온·오늘 최고/최저) → 예보 팝업(시간별·일별·출처)
+  priority: P1
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+    - deploy: GET /trips/{id}/pois/{poi}/weather 배포 필요(장소 날씨 PR)
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 여행 D~D+1, 1일차 '안동하회마을' 추가 → 1일차 탭
+    - 장소 행의 날씨 배지 확인 → 배지 클릭 → 팝업 확인 → Escape
+  expected:
+    - 배지 data-testid=weather-badge, 기온 'N°', 아이콘 1개, 접근성 이름 '현재 … 날씨 예보 열기'
+    - 오늘 최고/최저 'N°/N°' [soft]
+    - 팝업 weather-forecast-popup — 현재 기온, 시간별 띠(지금/N시), 일별 '오늘' [soft], '출처:'
+    - 원문 키(deg_c/T1H/TMP/FEELS_LIKE) 미노출, 배지 클릭이 행 선택을 바꾸지 않음
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-poi-badge.live.spec.ts#WX-041
+  notes: 첫 조회는 위치 해석 캐시 미스로 빈 카드일 수 있어 한 번 새로고침한다.
+
+- id: WX-042
+  title: 모바일 — 장소 날씨 배지 탭 → 하단 시트 예보, 행 선택 없음
+  priority: P2
+  tags: [mobile, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+    - deploy: GET /trips/{id}/pois/{poi}/weather 배포 필요(장소 날씨 PR)
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 모바일 프로젝트에서 WX-041과 같은 절차
+  expected:
+    - WX-041과 같은 단언(시트 variant)
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-poi-badge.live.spec.ts#WX-042

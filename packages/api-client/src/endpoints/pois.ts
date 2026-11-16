@@ -1,4 +1,5 @@
 import {
+  FeatureWeatherCardSchema,
   PoiCreateSchema,
   PoiReorderRequestSchema,
   PoiResponseSchema,
@@ -35,5 +36,16 @@ export const poiApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(PoiReorderRequestSchema.parse(body)),
       schema: z.array(PoiResponseSchema),
+    }),
+
+  /**
+   * 장소 하나의 현재 날씨 + 가까운 며칠 예보 + 특보(`asof` 없는 feature weather와 같은 셰입).
+   * POI snapshot 좌표로 조회하므로 지도 feature가 없는 직접 추가 장소도 날씨가 나온다.
+   */
+  weather: (tripId: string, poiId: string, opts?: { signal?: AbortSignal }) =>
+    client.request(`/trips/${tripId}/pois/${poiId}/weather`, {
+      method: 'GET',
+      schema: FeatureWeatherCardSchema,
+      signal: opts?.signal,
     }),
 });

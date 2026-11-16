@@ -2258,6 +2258,7 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
                         weatherByFeatureId={day.weather_by_feature_id}
                         showInlineAttachments
                         showWeather
+                        showCurrentWeather
                         compact={mobileWebLayout}
                         editable={!busy}
                         onReorder={handleReorder}

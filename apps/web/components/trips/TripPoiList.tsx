@@ -4,6 +4,7 @@ import { PoiEditor } from '@/components/trips/PoiEditor';
 import { TripAttachmentsDisclosure } from '@/components/trips/TripAttachments';
 import { PoiRiseSetLine } from '@/components/trips/TripDayHeader';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
+import { PoiWeatherBadge } from '@/components/weather/WeatherBadge';
 import { arrayMove, featureResolutionNotice, formatKstTime, paletteHex } from '@pinvi/domain';
 import type {
   PoiUpdate,
@@ -30,6 +31,11 @@ export interface TripPoiListProps {
   weatherByFeatureId?: Record<string, TripWeatherResolution>;
   showInlineAttachments?: boolean;
   showWeather?: boolean;
+  /**
+   * 장소 이름 옆 현재 날씨 배지(아이콘·기온·오늘 최고/최저, 누르면 예보 팝업). 로그인 사용자의
+   * 여행 화면에서만 켠다 — 장소 날씨 API는 여행 멤버 전용이다. `tripId`가 필요하다.
+   */
+  showCurrentWeather?: boolean;
   compact?: boolean;
   /** 편집 가능(쓰기 권한)일 때만 D&D·편집·삭제 노출. */
   editable?: boolean;
@@ -77,6 +83,7 @@ export function TripPoiList({
   weatherByFeatureId = EMPTY_WEATHER_BY_FEATURE,
   showInlineAttachments = false,
   showWeather = false,
+  showCurrentWeather = false,
   compact = false,
   editable = false,
   onReorder,
@@ -226,6 +233,14 @@ export function TripPoiList({
                         )}
                       </span>
                     </button>
+                    {showCurrentWeather && tripId && (
+                      <PoiWeatherBadge
+                        tripId={tripId}
+                        poiId={poi.poi_id}
+                        placeName={poi.title ?? '장소'}
+                        className="mt-0.5"
+                      />
+                    )}
                     {(editable || attachmentTrigger) && (
                       <div className="flex shrink-0 items-center gap-1">
                         {attachmentTrigger}
