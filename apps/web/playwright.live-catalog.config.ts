@@ -82,6 +82,18 @@ export default defineConfig({
         deviceScaleFactor: 3,
       },
     },
+    {
+      // 2026-11-16 PC 바탕지도 누락은 Firefox·Safari에서만 났다(Chromium은 비표준 URL 스킴 전환을 허용해
+      // 가렸다). `@firefox` 태그 케이스만 Firefox 데스크톱으로 한 번 더 돈다 — 기본 실행에는 없고
+      // `--project desktop-firefox`로 고른다.
+      name: 'desktop-firefox',
+      grep: /@firefox/,
+      grepInvert: desktopInvert,
+      use: {
+        ...devices['Desktop Firefox'],
+        viewport: { width: 1440, height: 900 },
+      },
+    },
     ...(includeSession
       ? [
           {

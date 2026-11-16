@@ -15,8 +15,9 @@ import {
   FRESHNESS_RE,
   LAYERS,
   LAYER_LABEL,
-  LAYER_MIN_ZOOM,
   MARKERS_RE,
+  PANEL_LABELS,
+  REMOVED_LAYERS,
   STALE_TEXT,
   STATUS_RE,
   TRUNCATED_TEXT,
@@ -30,6 +31,7 @@ import {
   detailDialog,
   expectLayerLineShape,
   incidentList,
+  layerGroup,
   legendMarkers,
   markersBody,
   markersQuery,
@@ -50,51 +52,49 @@ test.describe('NEAR explore map panel', () => {
     await loginAsUser(page);
   });
 
-  test('NEAR-001 panel shows four chips in order, all off, no markers request before a toggle', async ({ page }) => {
+  test('NEAR-001 one layer panel: 경로·영역·주유소·교통 돌발 checkboxes in order, transport off, no markers request', async ({ page }) => {
     const rec = new TransportRecorder(page);
     const status = waitForRequest(page, STATUS_RE);
     await page.goto('/map');
     const statusRes = await status;
     expect(statusRes.ok()).toBe(true);
     await waitForControls(page);
-    await expect(controls(page).getByText('교통 정보', { exact: true })).toBeVisible();
-    const group = controls(page).getByRole('group', { name: '교통 정보 레이어' });
-    await expect(group.getByRole('button')).toHaveText(LAYERS.map((l) => LAYER_LABEL[l]));
+    // 2026-11-16: 별도 '교통 정보' 패널이 없어지고 경로·영역과 같은 체크박스 줄이 됐다.
+    await expect(controls(page).getByText('교통 정보', { exact: true })).toHaveCount(0);
+    await expect(layerGroup(page).locator('label')).toHaveText(PANEL_LABELS);
+    await expect(page.getByTestId('geometry-route-toggle')).toHaveAttribute('type', 'checkbox');
     for (const layer of LAYERS) {
-      await expect(chip(page, layer)).toHaveAttribute('aria-pressed', 'false');
+      await expect(chip(page, layer)).toHaveAttribute('type', 'checkbox');
+      await expect(chip(page, layer)).not.toBeChecked();
       await expect(stateLine(page, layer)).toHaveCount(0);
     }
-    expect(rec.markers(), 'no markers-in-bounds before any chip is on').toHaveLength(0);
+    expect(rec.markers(), 'no markers-in-bounds before any checkbox is on').toHaveLength(0);
     await expect(legendMarkers(page)).toHaveCount(0);
     await shot(page, 'NEAR-001', 'panel-idle');
   });
 
-  test('NEAR-002 휴게소 toggle at zoom 9 around Seoul → request, N곳 line, freshness, legend markers', async ({ page }) => {
+  test('NEAR-002 공항·휴게소 are gone: no checkbox, never requested, no markers even with every layer on', async ({ page }) => {
+    const rec = new TransportRecorder(page);
     await page.goto('/map');
     await waitForControls(page);
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 9)); // 12 → 9
-    const res = await toggleExpectingRequest(page, 'rest_area', (q) => q.layers.includes('rest_area') && q.zoom <= 10);
-    const q = markersQuery(res);
-    expect(q.layers).toEqual(['rest_area']);
-    expect(q.limit).toBe(200);
-    expect(q.zoom).toBeGreaterThanOrEqual(LAYER_MIN_ZOOM.rest_area);
-    const body = await markersBody(res);
-    const rest = body.layers.find((l) => l.layer === 'rest_area');
-    expect(rest).toBeDefined();
-    const line = stateLine(page, 'rest_area');
-    await expect(line).toBeVisible();
-    if (rest!.status === 'ok') {
-      await expect(line).toHaveAttribute('data-status', 'ok');
-      await expect(line).toContainText(`${rest!.items.length}곳`);
-      await expect(line).toContainText(FRESHNESS_RE);
-      // Gyeonggi highways (경부·서해안·영동·중부·외곽) are inside a zoom-9 Seoul viewport.
-      expect(rest!.items.length, 'rest areas around Seoul at zoom 9').toBeGreaterThan(0);
-      await expect(legendMarkers(page, 'rest_area')).toHaveCount(rest!.items.filter((i) => i.coord).length);
-    } else {
-      await expect(line).toContainText(UNAVAILABLE_TEXT);
-      await expect(line).toHaveAttribute('data-reason', /.+/);
+    for (const layer of REMOVED_LAYERS) {
+      await expect(chip(page, layer)).toHaveCount(0);
+      await expect(controls(page).getByText(LAYER_LABEL[layer], { exact: true })).toHaveCount(0);
     }
-    await shot(page, 'NEAR-002', 'rest-area-on');
+    await zoomBy(page, -1); // 12 → 11: both remaining layers are requestable
+    await toggleExpectingRequest(page, 'fuel_station');
+    const res = await toggleExpectingRequest(
+      page,
+      'highway_incident',
+      (q) => q.layers.includes('highway_incident') && q.layers.includes('fuel_station'),
+    );
+    expect(markersQuery(res).layers).toEqual(['fuel_station', 'highway_incident']);
+    for (const layer of REMOVED_LAYERS) {
+      expect(rec.layersRequested().has(layer), `${layer} never requested`).toBe(false);
+      await expect(legendMarkers(page, layer)).toHaveCount(0);
+      await expect(stateLine(page, layer)).toHaveCount(0);
+    }
+    await shot(page, 'NEAR-002', 'no-airport-rest-area');
   });
 
   test('NEAR-003 주유소 below zoom 11 says 확대하면 보여요 and is not requested; at zoom ≥11 it is', async ({ page }) => {
@@ -103,8 +103,8 @@ test.describe('NEAR explore map panel', () => {
     await waitForControls(page);
     await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 10)); // 12 → 10
     const mark = Date.now();
-    await chip(page, 'fuel_station').click();
-    await expect(chip(page, 'fuel_station')).toHaveAttribute('aria-pressed', 'true');
+    await chip(page, 'fuel_station').check();
+    await expect(chip(page, 'fuel_station')).toBeChecked();
     await expect(stateLine(page, 'fuel_station')).toContainText(ZOOM_IN_TEXT);
     // requestableTransportLayers() drops fuel_station below 11 → with only that layer on, no request at all.
     await page.waitForTimeout(1_000);
@@ -160,16 +160,16 @@ test.describe('NEAR explore map panel', () => {
     const rec = new TransportRecorder(page);
     await page.goto('/map');
     await waitForControls(page);
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 6));
-    await toggleExpectingRequest(page, 'airport');
-    await expect(stateLine(page, 'airport')).toBeVisible();
-    const before = await legendMarkers(page, 'airport').count();
+    // 기본 zoom 12(서울 도심) — 주유소가 늘 있다.
+    await toggleExpectingRequest(page, 'fuel_station');
+    await expect(stateLine(page, 'fuel_station')).toBeVisible();
+    const before = await legendMarkers(page, 'fuel_station').count();
     expect(before).toBeGreaterThan(0);
     const mark = Date.now();
-    await chip(page, 'airport').click();
-    await expect(chip(page, 'airport')).toHaveAttribute('aria-pressed', 'false');
-    await expect(legendMarkers(page, 'airport')).toHaveCount(0);
-    await expect(stateLine(page, 'airport')).toHaveCount(0);
+    await chip(page, 'fuel_station').uncheck();
+    await expect(chip(page, 'fuel_station')).not.toBeChecked();
+    await expect(legendMarkers(page, 'fuel_station')).toHaveCount(0);
+    await expect(stateLine(page, 'fuel_station')).toHaveCount(0);
     await page.waitForTimeout(800);
     expect(rec.markers(mark), 'no request when the last layer is switched off').toHaveLength(0);
   });
@@ -177,14 +177,14 @@ test.describe('NEAR explore map panel', () => {
   test('NEAR-011 two layers on → one request with layers in display order and two state lines', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 8));
-    await toggleExpectingRequest(page, 'airport');
-    const res = await toggleExpectingRequest(page, 'rest_area', (q) => q.layers.includes('rest_area') && q.layers.includes('airport'));
-    expect(markersQuery(res).layers).toEqual(['rest_area', 'airport']);
+    await zoomBy(page, -1); // 12 → 11: 주유소 최소 zoom
+    await toggleExpectingRequest(page, 'highway_incident');
+    const res = await toggleExpectingRequest(page, 'fuel_station', (q) => q.layers.includes('fuel_station') && q.layers.includes('highway_incident'));
+    expect(markersQuery(res).layers).toEqual(['fuel_station', 'highway_incident']);
     const body = await markersBody(res);
-    expect(body.layers.map((l) => l.layer).sort()).toEqual(['airport', 'rest_area']);
-    await expectLayerLineShape(page, 'rest_area');
-    await expectLayerLineShape(page, 'airport');
+    expect(body.layers.map((l) => l.layer).sort()).toEqual(['fuel_station', 'highway_incident']);
+    await expectLayerLineShape(page, 'fuel_station');
+    await expectLayerLineShape(page, 'highway_incident');
     await shot(page, 'NEAR-011', 'two-layers');
   });
 
@@ -192,13 +192,13 @@ test.describe('NEAR explore map panel', () => {
     await page.goto('/map');
     await waitForControls(page);
     await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 9));
-    const first = markersQuery(await toggleExpectingRequest(page, 'rest_area'));
-    const pending = nextMarkersResponse(page, (q) => q.layers.includes('rest_area') && q.bbox.join(',') !== first.bbox.join(','));
+    const first = markersQuery(await toggleExpectingRequest(page, 'highway_incident'));
+    const pending = nextMarkersResponse(page, (q) => q.layers.includes('highway_incident') && q.bbox.join(',') !== first.bbox.join(','));
     await panBy(page, 'ArrowRight', 4);
     const second = markersQuery(await pending);
     expect(second.zoom).toBe(first.zoom);
     expect(second.bbox[0]).toBeGreaterThan(first.bbox[0]); // moved east
-    await expectLayerLineShape(page, 'rest_area');
+    await expectLayerLineShape(page, 'highway_incident');
   });
 
   test('NEAR-013 truncated flag ↔ "일부만 표시" line (dense fuel layer at zoom 11)', async ({ page }) => {
@@ -225,16 +225,15 @@ test.describe('NEAR explore map panel', () => {
   test('NEAR-014 freshness label and stale badge mirror the response freshness for every ok layer', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
-    // zoom 8: the lowest level at which all three layers are requestable (휴게소 min zoom 8)
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 8));
-    // Each toggle requests only the layers it needs (others come from the per-layer cache), so
-    // collect the result of every toggle instead of waiting for one 3-layer request.
+    // zoom 11: the lowest level at which both layers are requestable (주유소 min zoom 11)
+    await zoomBy(page, -1);
+    // Collect the result of every toggle instead of waiting for one 2-layer request.
     const results = new Map<string, Awaited<ReturnType<typeof markersBody>>['layers'][number]>();
-    for (const layer of ['airport', 'highway_incident', 'rest_area'] as const) {
+    for (const layer of LAYERS) {
       const res = await toggleExpectingRequest(page, layer);
       for (const l of (await markersBody(res)).layers) results.set(l.layer, l);
     }
-    for (const layer of ['airport', 'highway_incident', 'rest_area'] as const) {
+    for (const layer of LAYERS) {
       const line = stateLine(page, layer);
       await expect(line).toBeVisible();
       const result = results.get(layer);
@@ -253,12 +252,13 @@ test.describe('NEAR explore map panel', () => {
     const data = ((await (await status).json()) as { data: { enabled: boolean; layers: Array<{ layer: string; available: boolean; reason: string | null }> } }).data;
     expect(data.enabled, 'transport is enabled on prod').toBe(true);
     await waitForControls(page);
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 7));
     for (const layer of LAYERS) await expect(chip(page, layer)).toBeVisible();
-    const down = data.layers.filter((l) => !l.available);
+    // 지도에 남은 레이어만 본다(공항·휴게소는 status에 있어도 체크박스가 없다).
+    const shown = new Set<string>(LAYERS);
+    const down = data.layers.filter((l) => !l.available && shown.has(l.layer));
     test.info().annotations.push({ type: 'status', description: JSON.stringify(data.layers) });
     for (const l of down) {
-      await chip(page, l.layer as (typeof LAYERS)[number]).click();
+      await chip(page, l.layer as (typeof LAYERS)[number]).check();
       const line = stateLine(page, l.layer as (typeof LAYERS)[number]);
       await expect(line).toContainText(UNAVAILABLE_TEXT);
     }
@@ -272,8 +272,8 @@ test.describe('NEAR explore map panel', () => {
     await page.goto('/map');
     expect((await inBounds).ok()).toBe(true);
     await waitForControls(page);
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 8));
-    for (const layer of LAYERS) await chip(page, layer).click();
+    await zoomBy(page, -1); // zoom 11: both layers requestable
+    for (const layer of LAYERS) await chip(page, layer).check();
     await nextMarkersResponse(page).catch(() => null);
     for (const layer of LAYERS) await expectLayerLineShape(page, layer);
     await expect(page.getByTestId('feature-map-error')).toHaveCount(0);
@@ -283,23 +283,25 @@ test.describe('NEAR explore map panel', () => {
     await shot(page, 'NEAR-016', 'all-layers-plus-search');
   });
 
-  test('NEAR-038 chips are keyboard operable and grouped with an accessible name', async ({ page }) => {
+  test('NEAR-038 layer checkboxes are keyboard operable, named, grouped, with 44px labels', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
-    const group = controls(page).getByRole('group', { name: '교통 정보 레이어' });
-    await expect(group).toBeVisible();
-    const airport = chip(page, 'airport');
-    await airport.focus();
-    await expect(airport).toBeFocused();
-    const pending = nextMarkersResponse(page, (q) => q.layers.includes('airport'));
-    await page.keyboard.press('Space');
-    await expect(airport).toHaveAttribute('aria-pressed', 'true');
-    await pending;
-    await page.keyboard.press('Enter');
-    await expect(airport).toHaveAttribute('aria-pressed', 'false');
+    await expect(layerGroup(page)).toBeVisible();
     for (const layer of LAYERS) {
-      const box = await chip(page, layer).boundingBox();
-      expect(box?.height ?? 0, `${layer} chip is ≥44px`).toBeGreaterThanOrEqual(44);
+      await expect(layerGroup(page).getByRole('checkbox', { name: LAYER_LABEL[layer] })).toBeVisible();
+    }
+    const incident = chip(page, 'highway_incident');
+    await incident.focus();
+    await expect(incident).toBeFocused();
+    const pending = nextMarkersResponse(page, (q) => q.layers.includes('highway_incident'));
+    await page.keyboard.press('Space');
+    await expect(incident).toBeChecked();
+    await pending;
+    await page.keyboard.press('Space');
+    await expect(incident).not.toBeChecked();
+    for (const label of await layerGroup(page).locator('label').all()) {
+      const box = await label.boundingBox();
+      expect(box?.height ?? 0, `${await label.textContent()} label is ≥44px`).toBeGreaterThanOrEqual(44);
     }
   });
 
@@ -320,10 +322,9 @@ test.describe('NEAR explore map panel', () => {
   test('NEAR-040 legend marker count per layer equals items with coordinates in the response', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 8));
-    await toggleExpectingRequest(page, 'rest_area');
-    await toggleExpectingRequest(page, 'airport');
-    const res = await toggleExpectingRequest(page, 'highway_incident', (q) => q.layers.length === 3);
+    await zoomBy(page, -1); // zoom 11
+    await toggleExpectingRequest(page, 'fuel_station');
+    const res = await toggleExpectingRequest(page, 'highway_incident', (q) => q.layers.length === 2);
     const body = await markersBody(res);
     for (const result of body.layers) {
       const expected = result.status === 'ok' ? result.items.filter((i) => i.coord).length : 0;
@@ -369,8 +370,8 @@ test.describe('NEAR explore map — mobile layout', () => {
     const input = search.getByRole('textbox', { name: '장소·주소 검색' });
     await input.click({ position: { x: 12, y: 12 } });
     await expect(input).toBeFocused();
-    await toggleExpectingRequest(page, 'airport');
-    await expectLayerLineShape(page, 'airport');
+    await toggleExpectingRequest(page, 'fuel_station');
+    await expectLayerLineShape(page, 'fuel_station');
     await shot(page, 'NEAR-020', 'mobile-panel');
   });
 

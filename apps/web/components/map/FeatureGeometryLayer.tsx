@@ -101,7 +101,7 @@ export function GeometryLayerToggles({ state }: { state: FeatureGeometryState })
   return (
     <>
       {(['route', 'area'] as const).map((kind) => (
-        <label className="flex min-h-9 cursor-pointer items-center gap-1.5" key={kind}>
+        <label className="flex min-h-11 cursor-pointer items-center gap-1.5" key={kind}>
           <input
             type="checkbox"
             checked={state.kinds.includes(kind)}

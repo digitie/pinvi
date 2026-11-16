@@ -17,8 +17,15 @@ import { dismissFeaturePopup } from './live';
 import { runSearch, searchRows } from './search';
 import { coordinateFixtureIndex } from './searchFixture';
 
-export const LAYERS = ['fuel_station', 'rest_area', 'highway_incident', 'airport'] as const;
-export type Layer = (typeof LAYERS)[number];
+/** 지도에서 켤 수 있는 교통 레이어(2026-11-16: 공항·휴게소 제거, 경로·영역과 같은 패널의 체크박스). */
+export const LAYERS = ['fuel_station', 'highway_incident'] as const;
+/** 지도에서 뺀 레이어 — API 계약(상세 경로)에는 남아 있다. */
+export const REMOVED_LAYERS = ['rest_area', 'airport'] as const;
+export type Layer = (typeof LAYERS)[number] | (typeof REMOVED_LAYERS)[number];
+/** 여행 지도 반경(서버 정책, `/transport/markers-near` radius_m). */
+export const NEAR_RADIUS_M = { fuel_station: 10_000, highway_incident: 20_000 } as const;
+/** 지도 레이어 패널의 체크박스 순서(경로·영역 + 교통). */
+export const PANEL_LABELS = ['경로', '영역', '주유소', '교통 돌발'];
 
 /** TRANSPORT_LAYER_META — display order, label and min zoom (packages/domain/src/transport.ts). */
 export const LAYER_LABEL: Record<Layer, string> = {
@@ -42,6 +49,8 @@ export const LAYER_PATH: Record<Layer, string> = {
 
 export const STATUS_RE = /\/transport\/status(\?|$)/;
 export const MARKERS_RE = /\/transport\/markers-in-bounds\?/;
+/** 여행 지도 — 여행 장소 반경 조회(2026-11-16). */
+export const NEAR_RE = /\/transport\/markers-near(\?|$)/;
 export const DETAIL_RE =
   /\/transport\/(fuel-stations|rest-areas|highway-incidents|airports)\/[^/?]+(\?|$)/;
 export const HISTORY_RE = /\/transport\/fuel-stations\/[^/]+\/price-history/;
@@ -56,7 +65,10 @@ export const STALE_TEXT = '오래된 정보';
 
 export const DEFAULT_EXPLORE_ZOOM = 12; // packages/domain/src/mapCenter.ts DEFAULT_MAP_ZOOM
 
-export const controls = (page: Page): Locator => page.getByTestId('transport-layer-controls');
+/** 지도 레이어 패널(경로·영역·주유소·교통 돌발 체크박스) — 예전 '교통 정보' 패널을 합쳤다. */
+export const controls = (page: Page): Locator => page.getByTestId('map-layer-controls');
+export const layerGroup = (page: Page): Locator =>
+  controls(page).getByRole('group', { name: '지도 레이어 표시' });
 export const chip = (page: Page, layer: Layer): Locator =>
   page.getByTestId(`transport-layer-toggle-${layer}`);
 export const stateLine = (page: Page, layer: Layer): Locator =>
@@ -74,9 +86,10 @@ export const detailError = (page: Page): Locator => page.getByTestId('transport-
 export const detailFooter = (page: Page): Locator => page.getByTestId('transport-detail-footer');
 export const mapCanvas = (page: Page): Locator => page.locator('.maplibregl-canvas').first();
 
-/** The controls only render after `/transport/status` answers `enabled=true` (prod: on). */
+/** 교통 체크박스는 `/transport/status`가 `enabled=true`를 답한 뒤에야 그려진다(prod: on). */
 export async function waitForControls(page: Page): Promise<void> {
   await expect(controls(page)).toBeVisible({ timeout: 30_000 });
+  await expect(chip(page, 'fuel_station')).toBeVisible({ timeout: 30_000 });
 }
 
 export interface MarkersQuery {
@@ -160,9 +173,65 @@ export async function toggleExpectingRequest(
   pred: (q: MarkersQuery) => boolean = (q) => q.layers.includes(layer),
 ): Promise<Response> {
   const pending = nextMarkersResponse(page, pred);
-  await chip(page, layer).click();
-  await expect(chip(page, layer)).toHaveAttribute('aria-pressed', 'true');
+  await chip(page, layer).check();
+  await expect(chip(page, layer)).toBeChecked();
   return pending;
+}
+
+export interface NearQuery {
+  layers: Layer[];
+  points: Array<{ lon: number; lat: number }>;
+  limit: number | null;
+}
+
+export function nearQuery(res: Response): NearQuery {
+  const u = new URL(res.url());
+  const points = (u.searchParams.get('points') ?? '')
+    .split(';')
+    .filter(Boolean)
+    .map((pair) => {
+      const [lon, lat] = pair.split(',').map(Number);
+      return { lon: lon ?? NaN, lat: lat ?? NaN };
+    });
+  return {
+    layers: (u.searchParams.get('layers') ?? '').split(',').filter(Boolean) as Layer[],
+    points,
+    limit: u.searchParams.has('limit') ? Number(u.searchParams.get('limit')) : null,
+  };
+}
+
+export async function nearBody(
+  res: Response,
+): Promise<{ radius_m: Partial<Record<Layer, number>>; layers: LayerResult[] }> {
+  const json = (await res.json()) as {
+    data: { radius_m: Partial<Record<Layer, number>>; layers: LayerResult[] };
+  };
+  return json.data;
+}
+
+/** 여행 지도: 체크박스를 켜고 그것이 부른 `markers-near` 응답을 돌려준다(여행 장소 반경, 지도 이동 무관). */
+export async function toggleExpectingNear(
+  page: Page,
+  layer: Layer,
+  pred: (q: NearQuery) => boolean = (q) => q.layers.includes(layer),
+): Promise<Response> {
+  const pending = page.waitForResponse(
+    (r) => NEAR_RE.test(r.url()) && r.request().method() === 'GET' && r.ok() && pred(nearQuery(r)),
+    { timeout: 30_000 },
+  );
+  await chip(page, layer).check();
+  await expect(chip(page, layer)).toBeChecked();
+  return pending;
+}
+
+/** 두 좌표 사이 대원 거리(m) — 서버 `haversine_m`과 같은 식. */
+export function haversineM(a: { lon: number; lat: number }, b: { lon: number; lat: number }): number {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dphi = rad(b.lat - a.lat);
+  const dlmb = rad(b.lon - a.lon);
+  const h =
+    Math.sin(dphi / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dlmb / 2) ** 2;
+  return 2 * 6_371_008.8 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 /**
@@ -339,6 +408,8 @@ export async function clickTransportMarker(
   page: Page,
   layer: Layer,
   expandToward: readonly Coord[] = [],
+  /** 이 이름의 마커는 건너뛴다(다른 마커를 열어 내용이 바뀌는지 볼 때). */
+  excludeTitles: readonly string[] = [],
 ): Promise<string> {
   expect(
     await legendMarkers(page, layer).count(),
@@ -350,6 +421,7 @@ export async function clickTransportMarker(
     candidates = await topmostTransportMarkers(page, layer);
   }
   for (const item of candidates) {
+    if (excludeTitles.includes(item.title)) continue;
     const marker = page.locator(
       '.maplibregl-marker[data-interaction-id=' +
         JSON.stringify('transport:' + layer + ':' + item.id) +

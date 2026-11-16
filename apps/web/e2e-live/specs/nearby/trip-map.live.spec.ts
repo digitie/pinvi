@@ -1,8 +1,9 @@
 /**
  * NEAR — transport panel on the trip detail map (`/trips/{id}`): stacking under the place search
  * (#613), fit padding so pins are never under the search line or the panel (#619), nearby data is
- * relative to the trip's places (fitted viewport) rather than Seoul, re-query on POI selection,
- * empty-trip default view, mobile overlay stack.
+ * the trip places' radius (2026-11-16: 주유소 10 km · 교통 돌발 20 km, `/transport/markers-near`) rather
+ * than the viewport — so camera moves never re-query, an empty trip has nothing nearby — and the
+ * mobile overlay stack (공항·휴게소 layers removed).
  *
  * UI reference (PinVi main b1cef056): apps/web/components/trips/TripDetail.tsx (overlayTopLeft →
  * `trip-map-place-search`, `transportLayers` on), apps/web/components/trips/TripMapView.tsx
@@ -10,11 +11,10 @@
  *
  * Mutating: creates one `[e2e]` trip per project in beforeAll and deletes it in afterAll (+ sweep).
  */
-import { expect, test, type Page, type Response } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { runSearch, searchRows } from '../../helpers/search';
 import { renderedMap, waitForCamera } from '../../helpers/geometry';
 import { normalizeFixtureName } from '../../helpers/searchFixture';
-import { viewportBboxMatches } from '../../helpers/viewportBbox';
 import {
   createTrip,
   deleteAllE2eTrips,
@@ -27,25 +27,28 @@ import {
   waitForMapIdle,
 } from '../../helpers/live';
 import {
-  LAYER_LABEL,
-  MARKERS_RE,
+  LAYERS,
+  LOADING_TEXT,
+  NEAR_RADIUS_M,
+  NEAR_RE,
+  PANEL_LABELS,
+  REMOVED_LAYERS,
   TransportRecorder,
+  UNAVAILABLE_TEXT,
   ZOOM_IN_TEXT,
   boxesOverlap,
   chip,
-  clickTransportMarker,
-  closeDetail,
   controls,
-  detailDialog,
   expectLayerLineShape,
+  haversineM,
   incidentList,
   incidentToggle,
+  layerGroup,
   legendMarkers,
-  markersBody,
-  markersQuery,
-  panBy,
+  nearBody,
+  nearQuery,
   stateLine,
-  toggleExpectingRequest,
+  toggleExpectingNear,
   waitForControls,
 } from '../../helpers/nearby';
 
@@ -116,7 +119,7 @@ test.describe('NEAR trip map — four-place trip', () => {
     const stack = overlayStack(page);
     await expect(stack).toBeVisible();
     await expect(stack.getByTestId('trip-map-place-search')).toBeVisible();
-    await expect(stack.getByTestId('transport-layer-controls')).toBeVisible();
+    await expect(stack.getByTestId('map-layer-controls')).toBeVisible();
     const searchBox = (await searchCard(page).boundingBox())!;
     const panelBox = (await controls(page).boundingBox())!;
     expect(boxesOverlap(searchBox, panelBox)).toBe(false);
@@ -151,162 +154,110 @@ test.describe('NEAR trip map — four-place trip', () => {
     await shot(page, 'NEAR-023', 'fit-padding');
   });
 
-  test('NEAR-024 nearby data is requested for the trip viewport, not the Seoul default', async ({ page }) => {
+  test('NEAR-024 trip map transport is the trip places radius (markers-near with the place points), not the viewport', async ({ page }) => {
+    const rec = new TransportRecorder(page);
     await openTrip(page, tripId);
-    // #686: 맞춤은 지도 load 뒤에 적용된다. 그 전에 칩을 누르면 TripMapView 기본 시점(127.5,36.5 z7)의
-    // 요청을 잡는다(운영 22:41:30 bbox=124.80,33.00,130.20,40.05 z7). NEAR-023처럼 네 핀이 그려지고
-    // 지도가 멈춘 뒤 — 사용자가 여행 지도를 본 상태에서 — 켠다.
     await expect(tripMarkers(page)).toHaveCount(PLACES.length, { timeout: 30_000 });
     await waitForMapIdle(page);
-    const map=await renderedMap(page);
-    await waitForCamera(map);
     expect(expectedCoords).toHaveLength(4);
-    // 결과가 오면 교통 패널이 자라(모바일은 사건 목록이 지도 가운데 열을 덮는다) #619 재맞춤이 지도를 옮기고,
-    // 그 moveend가 같은 레이어를 새 bbox로 다시 조회한다(운영 mobile 2026-11-08: 첫 요청 z8.196 bbox →
-    // 패널 214~615px로 성장 → 재맞춤 z8.118 → 두 번째 요청). 첫 응답이 아니라, 지도가 멈춘 뒤 마지막
-    // 요청이 실제 지도 viewport와 맞는지 본다 — 마지막 요청이 끝내 맞지 않으면 그것이 제품 결함이다.
-    const responses: Response[] = [];
-    const record = (r: Response) => {
-      if (MARKERS_RE.test(r.url()) && r.request().method() === 'GET' && r.ok() &&
-          markersQuery(r).layers.includes('highway_incident')) responses.push(r);
-    };
-    page.on('response', record);
-    let res: Response;
-    try {
-      res = await toggleExpectingRequest(page, 'highway_incident');
-      // 맞는 상태가 1.5초(디바운스 250ms·패널 성장·재맞춤보다 길게) 그대로일 때만 멈춘 것으로 본다.
-      const settled = async () => {
-        await waitForCamera(map);
-        const native = await map.evaluate((m) => {
-          const b = m.getBounds();
-          return m.isMoving() ? null : [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-        });
-        // 마지막 응답, 또는 (재맞춤이 앞 viewport로 돌아가 60초 캐시가 네트워크 없이 답한 경우) 앞서 받은
-        // 같은 viewport의 응답과 맞아야 한다.
-        const candidates = responses.length > 0 ? [...responses].reverse() : [res];
-        const ok = native != null && candidates.some((r) => {
-          const query = markersQuery(r);
-          return viewportBboxMatches(query.bbox, native, query.zoom);
-        });
-        return { ok, key: `${responses.length}:${native?.join(',')}` };
-      };
-      const deadline = Date.now() + 20_000;
-      let stable = false;
-      while (!stable && Date.now() < deadline) {
-        const before = await settled();
-        await page.waitForTimeout(1_500);
-        const after = await settled();
-        stable = before.ok && after.ok && before.key === after.key;
-      }
-      expect(stable, 'after the map settles, the last markers request matches the native viewport').toBe(true);
-      // 재맞춤·재조회가 끝없이 이어지지 않는다(토글 1회 + 결과로 인한 재맞춤 1~2회).
-      expect(responses.length).toBeLessThanOrEqual(3);
-      const native = await map.evaluate((m) => {
-        const b = m.getBounds();
-        return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-      });
-      res = [...responses].reverse().find((r) => {
-        const query = markersQuery(r);
-        return viewportBboxMatches(query.bbox, native, query.zoom);
-      }) ?? res;
-    } finally {
-      page.off('response', record);
+    // 2026-11-16: 여행 지도의 주유소·교통 돌발은 여행 장소 반경이다(주유소 10 km·교통 돌발 20 km).
+    const res = await toggleExpectingNear(page, 'highway_incident');
+    const q = nearQuery(res);
+    expect(q.layers).toEqual(['highway_incident']);
+    // 요청 기준점 = 여행 장소 네 곳(지도 화면 bbox가 아니다).
+    expect(q.points).toHaveLength(PLACES.length);
+    for (const coord of expectedCoords) {
+      expect(
+        q.points.some((p) => Math.abs(p.lon - coord.lon) < 1e-4 && Math.abs(p.lat - coord.lat) < 1e-4),
+        `trip place ${coord.lon},${coord.lat} is a query point`,
+      ).toBe(true);
     }
-    const q = markersQuery(res);
-    test.info().annotations.push({ type: 'markers-requests', description: String(responses.length) });
-    for(const coord of expectedCoords){
-      expect(q.bbox[0]).toBeLessThanOrEqual(coord.lon);
-      expect(q.bbox[2]).toBeGreaterThanOrEqual(coord.lon);
-      expect(q.bbox[1]).toBeLessThanOrEqual(coord.lat);
-      expect(q.bbox[3]).toBeGreaterThanOrEqual(coord.lat);
+    expect(new URL(res.url()).searchParams.get('bbox')).toBeNull();
+    const body = await nearBody(res);
+    expect(body.radius_m.highway_incident).toBe(NEAR_RADIUS_M.highway_incident);
+    const line = stateLine(page, 'highway_incident');
+    await expect(line).not.toContainText(LOADING_TEXT, { timeout: 30_000 });
+    const inc = body.layers.find((l) => l.layer === 'highway_incident')!;
+    if (inc.status === 'ok') {
+      await expect(line).toContainText(`${inc.items.length}곳 · 여행 장소 20km 이내`);
+      // 반경 모드에는 줌 안내가 없다.
+      await expect(line).not.toContainText(ZOOM_IN_TEXT);
+    } else {
+      await expect(line).toContainText(UNAVAILABLE_TEXT);
     }
-    expect(await map.evaluate((m,coords)=>coords.every(c=>m.getBounds().contains([c.lon,c.lat])),expectedCoords)).toBe(true);
-    const viewport = await map.evaluate((m, coords) => {
-      const bounds = m.getBounds(), canvas = m.getCanvas();
-      const points = coords.map(c => m.project([c.lon, c.lat]));
-      return {
-        bbox: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
-        spanX: Math.max(...points.map(p => p.x)) - Math.min(...points.map(p => p.x)),
-        spanY: Math.max(...points.map(p => p.y)) - Math.min(...points.map(p => p.y)),
-        width: canvas.clientWidth, height: canvas.clientHeight,
-      };
-    }, expectedCoords);
-    // API가 실제 맞춘 native viewport를 조회해야 한다. 한국 경계 clamp와 저줌 양자화만 허용한다.
-    expect(viewportBboxMatches(q.bbox, viewport.bbox, q.zoom)).toBe(true);
-    // 네 좌표가 포함돼도 지나치게 축소한 전국 보기는 실패한다. 고정 카탈로그 화면에서
-    // 여행의 투영 범위가 한 축에서 지도 1/4 이상을 사용해야 한다.
-    expect(Math.max(viewport.spanX / viewport.width, viewport.spanY / viewport.height)).toBeGreaterThan(0.25);
-    // 맞춤이 피하는 것은 교통 패널의 상시 부분이다 — 펼쳐지는 사건 목록([data-map-fit-transient])은 제품
-    // 설계상 맞춤 여백에서 뺀다(lib/mapFitPadding.ts fitPanelRect, #619 리뷰). 여행 지도에서 그 목록은 접혀 있다가
-    // 사용자가 상태 줄을 눌러야 펼쳐진다(#729) — 맞춤 뒤에 저절로 자라 핀을 덮지 않는다.
+    // 뷰포트 조회는 하지 않는다.
+    expect(rec.markers(), 'no markers-in-bounds on the trip map').toHaveLength(0);
+    // 맞춤이 피하는 것은 패널의 상시 부분이다(#619) — 결과가 와도 핀이 패널 밑에 들지 않는다.
+    await waitForMapIdle(page);
     const panelFull = (await controls(page).boundingBox())!;
     const transient = controls(page).locator('[data-map-fit-transient]');
     const transientTop = (await transient.count()) > 0 ? (await transient.first().boundingBox())?.y : undefined;
     const panel = transientTop == null ? panelFull
       : { ...panelFull, height: Math.max(0, Math.min(panelFull.height, transientTop - panelFull.y)) };
-    const stats = (await page.getByTestId('trip-map-stats').boundingBox())!;
     for (const marker of await tripMarkers(page).all()) {
-      const box = (await marker.boundingBox())!;
-      expect(boxesOverlap(box, panel)).toBe(false);
-      expect(boxesOverlap(box, stats)).toBe(false);
+      expect(boxesOverlap((await marker.boundingBox())!, panel)).toBe(false);
     }
-    await map.dispose();
-    await expectLayerLineShape(page, 'highway_incident');
-    const rest = await toggleExpectingRequest(page, 'rest_area', (x) => x.layers.includes('rest_area'));
-    const restBody = (await markersBody(rest)).layers.find((l) => l.layer === 'rest_area')!;
-    if (restBody.status === 'ok') {
-      await expect(stateLine(page, 'rest_area')).toContainText(`${restBody.items.length}곳`);
-      // 중앙고속도로(안동·영주) runs through the fitted viewport.
-      expect(restBody.items.length).toBeGreaterThan(0);
-    }
-    await shot(page, 'NEAR-024', 'trip-viewport-layers');
+    await shot(page, 'NEAR-024', 'trip-radius-layers');
   });
 
-  test('NEAR-025 selecting a POI pin flies the map and re-queries the enabled layers', async ({ page }) => {
+  test('NEAR-041 every item is within the radius of a trip place (주유소 10 km · 교통 돌발 20 km) and lines say so', async ({ page }) => {
     await openTrip(page, tripId);
-    const first = markersQuery(await toggleExpectingRequest(page, 'highway_incident'));
+    for (const layer of LAYERS) {
+      const res = await toggleExpectingNear(page, layer);
+      const body = await nearBody(res);
+      const radius = NEAR_RADIUS_M[layer];
+      expect(body.radius_m[layer]).toBe(radius);
+      const result = body.layers.find((l) => l.layer === layer)!;
+      const line = stateLine(page, layer);
+      await expect(line).not.toContainText(LOADING_TEXT, { timeout: 30_000 });
+      if (result.status !== 'ok') {
+        await expect(line).toContainText(UNAVAILABLE_TEXT);
+        continue;
+      }
+      await expect(line).toContainText(`여행 장소 ${radius / 1000}km 이내`);
+      let previous = -1;
+      for (const item of result.items) {
+        expect(item.coord, `${layer} ${item.feature_id} has a coordinate`).not.toBeNull();
+        const nearest = Math.min(...expectedCoords.map((c) => haversineM(item.coord!, c)));
+        // 서버가 거른 반경 + 좌표 반올림 여유(5자리 ≈ 1 m).
+        expect(nearest, `${layer} ${item.feature_id} within ${radius} m of a trip place`).toBeLessThanOrEqual(radius + 5);
+        const distance = Number(item.distance_m);
+        expect(Math.abs(distance - nearest), 'distance_m = distance to the nearest trip place').toBeLessThanOrEqual(5);
+        expect(distance, 'items are nearest first').toBeGreaterThanOrEqual(previous);
+        previous = distance;
+      }
+      // 마커 legend = 응답 중 좌표 있는 항목.
+      await expect(legendMarkers(page, layer)).toHaveCount(result.items.filter((i) => i.coord).length);
+    }
+    await shot(page, 'NEAR-041', 'trip-radius-distances');
+  });
+
+  test('NEAR-025 selecting a POI pin flies the map but does not re-query (radius follows the places, not the camera)', async ({ page }) => {
+    const rec = new TransportRecorder(page);
+    await openTrip(page, tripId);
+    await toggleExpectingNear(page, 'highway_incident');
+    await expectLayerLineShape(page, 'highway_incident');
+    const lineBefore = await stateLine(page, 'highway_incident').textContent();
     const poiId = await page.getByTestId('trip-map-marker-style').filter({ hasText: /고씨굴/ }).getAttribute('data-poi-id');
     expect(poiId).toBeTruthy();
     const pin = tripMarkers(page).and(page.locator('[data-interaction-id=' + JSON.stringify('poi:' + poiId) + ']'));
     await expect(pin).toBeVisible();
     const map = await renderedMap(page);
-    const responses: Response[] = [];
-    const issuedAfter = Date.now();
-    const observe = (response: Response) => {
-      const url = new URL(response.url());
-      if (url.pathname.endsWith('/transport/markers-in-bounds') &&
-          response.request().timing().startTime >= issuedAfter) responses.push(response);
-    };
-    page.on('response', observe);
+    const nearBefore = rec.urls.filter((u) => NEAR_RE.test(u.url)).length;
     try {
+      const zoomBefore = await map.evaluate((m) => m.getZoom());
       await pin.click();
       await expect(pin).toHaveAttribute('data-selected', 'true');
       await waitForCamera(map);
-      const bbox = await map.evaluate(m => {
-        const b = m.getBounds();
-        return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-      });
-      let matched: Response | undefined;
-      await expect.poll(() => {
-        matched = responses.find(response => {
-          const q = markersQuery(response);
-          return q.layers.includes('highway_incident') && q.bbox.join(',') !== first.bbox.join(',') &&
-            viewportBboxMatches(q.bbox, bbox, q.zoom);
-        });
-        return Boolean(matched);
-      }, { timeout: 30_000 }).toBe(true);
-      const next = markersQuery(matched!);
-      const selectedCoord = expectedCoords[0]!;
-      expect(next.bbox[0]).toBeLessThanOrEqual(selectedCoord.lon);
-      expect(next.bbox[2]).toBeGreaterThanOrEqual(selectedCoord.lon);
-      expect(next.bbox[1]).toBeLessThanOrEqual(selectedCoord.lat);
-      expect(next.bbox[3]).toBeGreaterThanOrEqual(selectedCoord.lat);
-      test.info().annotations.push({ type: 'flyto-zoom', description: first.zoom + ' → ' + next.zoom });
+      const zoomAfter = await map.evaluate((m) => m.getZoom());
+      test.info().annotations.push({ type: 'flyto-zoom', description: zoomBefore + ' → ' + zoomAfter });
+      await page.waitForTimeout(1_500); // 디바운스(250ms)보다 넉넉히
     } finally {
-      page.off('response', observe);
       await map.dispose();
     }
-    await expectLayerLineShape(page, 'highway_incident');
+    expect(rec.urls.filter((u) => NEAR_RE.test(u.url)).length, 'no new markers-near after the camera moved').toBe(nearBefore);
+    expect(rec.markers(), 'no markers-in-bounds either').toHaveLength(0);
+    await expect(stateLine(page, 'highway_incident')).toHaveText(lineBefore ?? '');
   });
 
   /** #704: 지도·패널이 창 안, 문서 스크롤 없음, 맞춤 뒤 모든 핀이 지도·창 안. */
@@ -363,8 +314,8 @@ test.describe('NEAR trip map — four-place trip', () => {
       await expect(stack).toHaveCSS('overflow-y', 'auto');
       const panelBox = (await controls(page).boundingBox())!;
       expect(panelBox.width).toBeLessThanOrEqual(stackBox.width * 0.7 + 1); // w-64 max-w-[70%]
-      const res = await toggleExpectingRequest(page, 'highway_incident');
-      const inc = (await markersBody(res)).layers.find((l) => l.layer === 'highway_incident')!;
+      const res = await toggleExpectingNear(page, 'highway_incident');
+      const inc = (await nearBody(res)).layers.find((l) => l.layer === 'highway_incident')!;
       if (inc.status === 'ok' && inc.items.length > 0) {
         // 여행 지도는 돌발 목록을 접어 둔다(#731) — 실제 상태 줄 토글로 편 뒤 스택이 지도 안에 머무는지 본다.
         const toggle = incidentToggle(page);
@@ -381,34 +332,33 @@ test.describe('NEAR trip map — four-place trip', () => {
       await shot(page, 'NEAR-028', 'mobile-stack');
     });
 
-    test('NEAR-029 no navigation control on the mobile trip map, chips still toggle, marker tap opens the sheet', async ({ page }) => {
+    test('NEAR-029 no navigation control on the mobile trip map, airport layer is gone, remaining checkboxes toggle', async ({ page }) => {
+      const rec = new TransportRecorder(page);
       await openTrip(page, tripId);
       await expect(page.locator('.maplibregl-ctrl-zoom-in')).toHaveCount(0);
-      const res = await toggleExpectingRequest(page, 'airport');
-      const airports = (await markersBody(res)).layers.find((l) => l.layer === 'airport')!;
-      await expectLayerLineShape(page, 'airport');
-      test.skip(airports.status !== 'ok' || airports.items.filter((i) => i.coord).length === 0, 'no airport inside the trip viewport');
-      await expect(legendMarkers(page, 'airport').first()).toBeAttached();
-      // 390px 모바일에서 뷰포트 안 유일한 공항(양양국제공항)은 묶음이 아니라 개별 마커지만, 핀 좌표가 캔버스
-      // 위쪽 가장자리에 걸려 아이콘이 화면 밖(box y=-44)으로 잘린다(2026-11-16 두 번 재현). 사용자가 하듯
-      // 지도를 아래로 끌어(키보드 ArrowUp = 100px) 공항 마커가 화면 안에서 맨 위로 보일 때까지 옮긴 뒤 누른다.
-      const airportOnScreen = () =>
-        page.evaluate(() => {
-          const canvas = document.querySelector('.maplibregl-canvas')?.getBoundingClientRect();
-          if (!canvas) return false;
-          return Array.from(document.querySelectorAll('.maplibregl-marker[data-interaction-id^="transport:airport:"]')).some((el) => {
-            const r = el.getBoundingClientRect();
-            if (r.top < canvas.top || r.left < canvas.left || r.bottom > canvas.bottom || r.right > canvas.right) return false;
-            const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-            return !!top && (top === el || el.contains(top));
-          });
-        });
-      for (let i = 0; i < 8 && !(await airportOnScreen()); i += 1) await panBy(page, 'ArrowUp', 1);
-      // 그래도 묶음으로 그려지는 데이터 상태면 공항 좌표 쪽 묶음을 실제로 눌러 펼친다(NEAR-006과 같은 방식).
-      const airportCoords = airports.items.flatMap((i) => (i.coord ? [i.coord] : []));
-      await clickTransportMarker(page, 'airport', airportCoords);
-      await expect(detailDialog(page)).toContainText(LAYER_LABEL.airport);
-      await closeDetail(page);
+      // 2026-11-16: 공항·휴게소 레이어를 지도에서 뺐다 — 체크박스도 마커도 요청도 없다.
+      await expect(layerGroup(page).locator('label')).toHaveText(PANEL_LABELS);
+      for (const layer of REMOVED_LAYERS) {
+        await expect(chip(page, layer)).toHaveCount(0);
+        await expect(legendMarkers(page, layer)).toHaveCount(0);
+      }
+      for (const layer of LAYERS) {
+        await toggleExpectingNear(page, layer);
+        await expectLayerLineShape(page, layer);
+      }
+      for (const layer of LAYERS) {
+        await chip(page, layer).uncheck();
+        await expect(chip(page, layer)).not.toBeChecked();
+        await expect(stateLine(page, layer)).toHaveCount(0);
+        await expect(legendMarkers(page, layer)).toHaveCount(0);
+      }
+      const requested = new Set(
+        rec.urls
+          .filter((u) => NEAR_RE.test(u.url))
+          .flatMap((u) => (new URL(u.url).searchParams.get('layers') ?? '').split(',')),
+      );
+      for (const layer of REMOVED_LAYERS) expect(requested.has(layer), `${layer} never requested`).toBe(false);
+      await shot(page, 'NEAR-029', 'mobile-checkboxes');
     });
   });
 });
@@ -418,7 +368,7 @@ test.describe('NEAR trip map — empty trip', () => {
     await loginAsUser(page);
   });
 
-  test('NEAR-026 a trip with no places shows the country view: 공항 lists ≥5, 주유소 asks to zoom in', async ({ page }) => {
+  test('NEAR-026 a trip with no places has nothing nearby: markers-near without points answers 0곳, no zoom hint', async ({ page }) => {
     const rec = new TransportRecorder(page);
     const trip = await createTrip(page, {
       title: `${e2ePrefix} NEAR empty ${Date.now()}`,
@@ -428,17 +378,15 @@ test.describe('NEAR trip map — empty trip', () => {
     try {
       await openTrip(page, trip.id);
       await expect(page.getByTestId('trip-map-stats')).toContainText('장소 0곳');
-      const res = await toggleExpectingRequest(page, 'airport', (q) => q.layers.includes('airport'));
-      const q = markersQuery(res);
-      expect(q.zoom).toBeLessThanOrEqual(7); // TripMapView DEFAULT_ZOOM = 7
-      const airports = (await markersBody(res)).layers.find((l) => l.layer === 'airport')!;
-      if (airports.status === 'ok') expect(airports.items.length).toBeGreaterThanOrEqual(5);
-      const mark = Date.now();
-      await chip(page, 'fuel_station').click();
-      await expect(stateLine(page, 'fuel_station')).toContainText(ZOOM_IN_TEXT);
-      await page.waitForTimeout(1_000);
-      expect(rec.layersRequested(mark).has('fuel_station')).toBe(false);
-      await shot(page, 'NEAR-026', 'empty-trip-country-view');
+      const res = await toggleExpectingNear(page, 'fuel_station');
+      expect(nearQuery(res).points).toHaveLength(0);
+      const fuel = (await nearBody(res)).layers.find((l) => l.layer === 'fuel_station')!;
+      expect(fuel.status).toBe('ok');
+      expect(fuel.items).toHaveLength(0);
+      await expect(stateLine(page, 'fuel_station')).toContainText('0곳 · 여행 장소 10km 이내');
+      await expect(stateLine(page, 'fuel_station')).not.toContainText(ZOOM_IN_TEXT);
+      expect(rec.markers(), 'no markers-in-bounds on the trip map').toHaveLength(0);
+      await shot(page, 'NEAR-026', 'empty-trip-radius');
     } finally {
       await deleteTrip(page, trip.id).catch(() => undefined);
     }

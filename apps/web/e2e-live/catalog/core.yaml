@@ -259,9 +259,9 @@
   notes: 실제 측위 경로는 동의 변경이 필요해 검증하지 않는다.
 
 - id: CORE-016
-  title: 타일 로드 — VWorld WMTS 200, 디코드/worker/WebGL 오류·tile-error 이벤트 없음
+  title: 타일 로드 — VWorld WMTS 200, 디코드/worker/WebGL 오류·tile-error 이벤트 없음(Firefox 데스크톱 포함)
   priority: P1
-  tags: [desktop, mobile]
+  tags: [desktop, mobile, firefox]
   preconditions:
     - account: test@test.com
     - env: VWorld 키 유효(만료 시 전부 4xx — 운영 이슈로 분류)
@@ -273,7 +273,11 @@
   cleanup: [없음]
   automation: scripted
   spec: specs/core/core-map.live.spec.ts#CORE-016
-  notes: vworld:// 프로토콜이 https로 재작성해 fetch — response 이벤트로 관측 가능.
+  notes: >-
+    vworld:// 프로토콜이 https로 재작성해 fetch — response 이벤트로 관측 가능. 2026-11-16 PC 바탕지도 누락:
+    vworld-map-web 1.0.3 handler가 `URL.protocol` setter로 스킴을 바꿔 Firefox·Safari에서는 vworld://를 그대로
+    fetch했다(타일 0건). PinVi `lib/vworldTileProtocol.ts`가 덮는다. `@firefox` — `--project desktop-firefox`로
+    Firefox 데스크톱에서도 돈다. 콘솔에 vworld:// 오류가 없어야 한다.
 
 - id: CORE-017
   title: maplibre worker — /maplibre/maplibre-gl-worker.mjs JS 서빙 + module worker 실기동(#613)

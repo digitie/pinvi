@@ -65,7 +65,7 @@ export function TransportLayerToggles({ state }: { state: TransportLayersState }
   return (
     <>
       {TRANSPORT_LAYER_META.map((meta) => (
-        <label className="flex min-h-9 cursor-pointer items-center gap-1.5" key={meta.layer}>
+        <label className="flex min-h-11 cursor-pointer items-center gap-1.5" key={meta.layer}>
           <input
             type="checkbox"
             checked={state.enabled.has(meta.layer)}
