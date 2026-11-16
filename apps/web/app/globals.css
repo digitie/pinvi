@@ -313,7 +313,7 @@ body {
 
 /* 축척 막대는 보기 전용이다 — 원형 마커의 이름 라벨이 그 밑으로 지나가도 탭을 가로채지 않게 한다
    (구글 지도처럼 라벨·마커를 축척 위에서도 누를 수 있다). */
-.maplibregl-ctrl-scale {
+.maplibregl-ctrl.maplibregl-ctrl-scale {
   pointer-events: none;
 }
 
