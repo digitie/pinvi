@@ -1988,6 +1988,35 @@ test.describe('모바일 지도 비율·목록 탭 가운데·내 위치(2026-11
     await expect.poll(async () => (await offCentre()).dx, { timeout: 10_000 }).toBeLessThan(4);
   });
 
+  test('장소 정보 패널이 열리면 내 위치 버튼이 패널 위로 올라간다 — 가려지지 않는다', async ({
+    page,
+  }) => {
+    await mockTripDetailRoutes(page);
+    await page.goto(`/trips/${tripId}`);
+    const button = page.getByTestId('map-my-location');
+    await expect(button).toBeVisible();
+    const before = (await button.boundingBox())!;
+    await expect(page.getByTestId('map-my-location-control')).toHaveAttribute('data-lifted', 'false');
+
+    await page.getByRole('button', { name: '패널 열기' }).click();
+    await page.getByRole('button', { name: /해운대 해수욕장/ }).first().click();
+    const panel = page.getByTestId('place-info-panel');
+    await expect(panel).toBeVisible();
+    await expect(page.getByTestId('map-my-location-control')).toHaveAttribute('data-lifted', 'true');
+    const panelBox = (await panel.boundingBox())!;
+    const lifted = (await button.boundingBox())!;
+    // 버튼 아래 끝이 패널 위 끝보다 위 — 겹치지 않고, 실제로 눌린다.
+    expect(lifted.y + lifted.height).toBeLessThanOrEqual(panelBox.y);
+    expect(lifted.y).toBeLessThan(before.y);
+    await button.click({ trial: true });
+
+    // 패널을 닫으면 원래 자리로 돌아온다.
+    await panel.getByRole('button', { name: /닫기/ }).first().click();
+    await expect(panel).toHaveCount(0);
+    await expect(page.getByTestId('map-my-location-control')).toHaveAttribute('data-lifted', 'false');
+    expect(Math.round((await button.boundingBox())!.y)).toBe(Math.round(before.y));
+  });
+
   test('내 위치 버튼 — 동의 후 따라가기 모드, 40px 이상 터치 타깃', async ({ page }) => {
     await page.route(/.*\/users\/me\/consents$/, async (route, request) => {
       if (!isFetch(request.resourceType())) return route.fallback();

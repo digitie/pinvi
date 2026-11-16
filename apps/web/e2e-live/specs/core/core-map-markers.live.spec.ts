@@ -46,7 +46,7 @@ test.describe('CORE map markers', () => {
 
   test.beforeEach(async ({ page }, testInfo) => {
     await loginAsUser(page);
-    if (testInfo.title.startsWith('CORE-045')) return;
+    if (testInfo.title.startsWith('CORE-045') || testInfo.title.startsWith('CORE-046')) return;
     const { id } = await createTrip(page, {
       title: `${e2ePrefix} CORE-markers ${Date.now()}`,
       start: '2026-11-05',
@@ -194,5 +194,46 @@ test.describe('CORE map markers', () => {
     // 같은 장소가 지도 팝업(상세보기 버튼)으로 한 번 더 그려지지 않는다.
     await expect(page.locator('.maplibregl-popup')).toHaveCount(0);
     await shot(page, 'CORE-045', 'sheet-only');
+  });
+
+  test('CORE-046 탐색 지도 내 위치 버튼 — 따라가기, 끌면 해제, 다시 누르면 복귀', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 37.5665, longitude: 126.978 });
+    await page.goto('/map');
+    await waitForMapCanvas(page);
+    const button = page.getByTestId('map-my-location');
+    await expect(button).toHaveAttribute('data-follow-mode', 'off');
+    await button.click();
+    const consent = page.getByTestId('location-consent-agree');
+    if (await consent.isVisible({ timeout: 3_000 }).catch(() => false)) await consent.click();
+    await expect(button).toHaveAttribute('data-follow-mode', 'follow', { timeout: 20_000 });
+    await waitForMapIdle(page);
+    const canvas = (await page.locator('.maplibregl-canvas').first().boundingBox()) as Box;
+    await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height * 0.6);
+    await page.mouse.down();
+    await page.mouse.move(canvas.x + canvas.width / 2 - 80, canvas.y + canvas.height * 0.5, { steps: 8 });
+    await page.mouse.up();
+    await expect(button).toHaveAttribute('data-follow-mode', 'tracking');
+    await button.click();
+    await expect(button).toHaveAttribute('data-follow-mode', 'follow');
+    await shot(page, 'CORE-046', 'follow');
+  });
+
+  test('CORE-047 (모바일) 장소 정보 패널이 열리면 내 위치 버튼이 패널 위로 올라간다', async ({ page }) => {
+    test.skip(!isMobileViewport(page), 'mobile project only (390x844)');
+    await waitForMapCanvas(page);
+    const button = page.getByTestId('map-my-location');
+    const before = (await button.boundingBox()) as Box;
+    await openPanel(page);
+    await poiRows(page).filter({ hasText: names[0]! }).first().locator('button[aria-current]').first().tap();
+    const panel = page.getByTestId('place-info-panel');
+    await expect(panel).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('map-my-location-control')).toHaveAttribute('data-lifted', 'true');
+    const panelBox = (await panel.boundingBox()) as Box;
+    const lifted = (await button.boundingBox()) as Box;
+    expect(lifted.y + lifted.height, '버튼이 패널 위').toBeLessThanOrEqual(panelBox.y);
+    expect(lifted.y).toBeLessThan(before.y);
+    await button.click({ trial: true });
+    await shot(page, 'CORE-047', 'lifted');
   });
 });

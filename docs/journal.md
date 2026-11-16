@@ -1,3 +1,10 @@
+## 2026-11-17 — 내 위치 버튼 후속(소유자 승인: #755 미결 3건)
+
+- 모바일 장소 정보 패널(#754)이 열리면 내 위치 버튼을 패널 위로 올린다: `useLiftAboveObstacle`가 같은 지도 경계의 `[data-map-location-avoid]`(TripDetail 모바일 패널 래퍼)를 ResizeObserver·MutationObserver로 따라가 `bottom`을 패널 위 끝+8px로 둔다.
+- 탐색 지도(/map) 버튼을 1회 측위(`useUserLocation`)에서 `useMyLocationControl`/`MyLocationControl` 따라가기로 교체. 자동 센터링(T-325) 경로는 그대로, 동의 다이얼로그는 버튼 쪽 하나만.
+- 탐색 지도 마커는 이름 라벨 없이 유지(변경 없음).
+- 검증: vitest `useLiftAboveObstacle`, mocked e2e(패널 위로 올라감, /map 따라가기 — 끌기는 canvas grep), live CORE-046·047 추가.
+
 ## 2026-11-16 — 지도 마커·라벨·모바일 지도 동작(소유자 요청 1·2·4·8·9·10·16)
 
 - 마커: 물방울 핀(27×40) → 흰 테두리 원(여행 22px·주변 feature 18px), 원 중심=좌표(`anchor:left` + 반지름 offset). 이름은 상자 없는 halo 글자, 옆에 일자 날씨 카드(`weather_by_feature_id`)에서 뽑은 날씨 아이콘(`lib/placeWeather.ts`, 새 조회 없음). 맞춤 여백의 핀 높이 48→21.

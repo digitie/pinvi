@@ -115,3 +115,35 @@ describe('useLocationFollow(내 위치 따라가기)', () => {
     expect(state.stopped).toBe(2);
   });
 });
+
+describe('useLocationFollow — 첫 위치가 지도 로드보다 먼저 올 때', () => {
+  it('지도가 준비되면 붙여 그 위치로 옮기고, 그 뒤 끌기로 따라가기가 풀린다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { state, source } = fakeSource();
+      const { map, drag } = fakeMap();
+      let ready: typeof map | null = null;
+      const hook = renderHook(() =>
+        useLocationFollow({
+          getMap: () => ready as unknown as MapLibreMap | null,
+          ensureConsent: async () => true,
+          source,
+        }),
+      );
+      await act(() => hook.result.current.activate());
+      act(() => state.onPosition?.([127.1, 37.5]));
+      expect(hook.result.current.mode).toBe('follow');
+      expect(map.flyTo).not.toHaveBeenCalled();
+
+      ready = map;
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(map.flyTo).toHaveBeenCalledWith({ center: [127.1, 37.5], zoom: FOLLOW_INITIAL_ZOOM });
+      act(() => drag());
+      expect(hook.result.current.mode).toBe('tracking');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

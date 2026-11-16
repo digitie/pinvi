@@ -15,9 +15,9 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | poi | 40 | 32 | 6 | 2 |
 | notify | 32 | 23 | 4 | 5 |
 | admin | 44 | 37 | 5 | 2 |
-| core | 37 | 36 | 1 | 0 |
+| core | 39 | 38 | 1 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **569** | **516** | **29** | **24** |
+| **all** | **571** | **518** | **29** | **24** |
 
 Spec files: 64.
 
@@ -404,6 +404,8 @@ Spec files: 64.
 | CORE-043 | core | (모바일) 목록에서 장소를 누르면 시트를 닫고 그 장소를 지도 가운데로 — 지도를 옮긴 뒤 다시 눌러도 | P1 | mobile, mutating | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-043` |
 | CORE-044 | core | 내 위치 버튼 — 따라가기 모드, 지도를 끌면 해제, 다시 누르면 복귀 | P1 | desktop, mobile, mutating | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-044` |
 | CORE-045 | core | (모바일) 탐색 지도 장소를 누르면 상세 시트만 — 지도 팝업과 이중 표시 없음 | P1 | mobile | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-045` |
+| CORE-046 | core | 탐색 지도(/map) 내 위치 버튼 — 따라가기 모드, 지도를 끌면 해제, 다시 누르면 복귀 | P1 | desktop, mobile | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-046` |
+| CORE-047 | core | (모바일) 장소 정보 패널이 열리면 내 위치 버튼이 패널 위로 올라간다 — 가려지지 않는다 | P1 | mobile, mutating | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-047` |
 | TRS-CG-001 | trs | 서울 궁궐 1박2일 — 경복궁·북촌·한옥스테이 | P1 | heritage, culture, food, lodging, market, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-002 | trs | 명동·남산 도심 당일 — 만두·곰탕·DDP | P2 | food, culture, park | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-003 | trs | 서울 박물관·미술관 2박3일 | P2 | museum, lodging, food, heritage, culture, market, transport | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
