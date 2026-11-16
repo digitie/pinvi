@@ -1143,6 +1143,43 @@ class KorTravelMapClient:
             return None
         return self._data(resp)
 
+    async def public_curation_groups(
+        self,
+        *,
+        min_lon: float | None = None,
+        min_lat: float | None = None,
+        max_lon: float | None = None,
+        max_lat: float | None = None,
+        theme_slug: str | None = None,
+        page_size: int | None = None,
+    ) -> dict[str, Any]:
+        """공개 큐레이션 Feature 그룹(Feature 1건 + 그 Feature가 속한 공개 membership 전부).
+
+        data = {items:[{feature, curations, curation_count}]} + threaded next_cursor.
+        bbox 4값은 함께 보내야 한다(Map이 일부만 오면 422). 추천 여행 주변 정보가 쓴다.
+        """
+        params: dict[str, Any] = {}
+        for key, value in (
+            ("min_lon", min_lon),
+            ("min_lat", min_lat),
+            ("max_lon", max_lon),
+            ("max_lat", max_lat),
+            ("theme_slug", theme_slug),
+            ("page_size", page_size),
+        ):
+            if value is not None:
+                params[key] = value
+        data, meta = self._payload(
+            await self._send(
+                "GET",
+                "/v1/curations",
+                params=params,
+                allow_public_api_key=True,
+                circuit="viewport",
+            )
+        )
+        return self._thread_page(data, meta)
+
     async def healthz(self) -> dict[str, Any]:
         """liveness. envelope 없이 raw 객체일 수 있어 그대로 반환."""
         resp = await self._send("GET", "/health")

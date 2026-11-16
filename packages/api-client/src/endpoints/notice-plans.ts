@@ -1,6 +1,7 @@
 import {
   NoticePlanCopyRequestSchema,
   NoticePlanCopyResponseSchema,
+  NoticePlanHighlightsResponseSchema,
   NoticePlanResponseSchema,
 } from '@pinvi/schemas';
 import { z } from 'zod';
@@ -35,6 +36,14 @@ export const noticePlanApi = (client: ApiClient) => ({
     client.request(`/notice-plans/${noticePlanId}`, {
       method: 'GET',
       schema: NoticePlanResponseSchema,
+    }),
+
+  /** 기간 중 축제·행사 + 주변 큐레이션(kor-travel-map). Map 장애 구역은 `unavailable`. */
+  highlights: (noticePlanId: string, opts?: { signal?: AbortSignal }) =>
+    client.request(`/notice-plans/${noticePlanId}/highlights`, {
+      method: 'GET',
+      schema: NoticePlanHighlightsResponseSchema,
+      signal: opts?.signal,
     }),
 
   copy: (noticePlanId: string, body: NoticePlanCopyRequest, opts?: { signal?: AbortSignal }) =>

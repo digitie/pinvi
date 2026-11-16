@@ -1,0 +1,69 @@
+# AREA: recommend (REC) — 추천 여행(/notice-plans) 카드의 '주변 축제·큐레이션' 펼침, PinVi prod live.
+# Schema: see ../SPEC.md. 화면: apps/web/components/notice-plans/{NoticePlanShelf,NoticePlanHighlights,AddPlaceToTripDialog}.tsx
+# API: GET /notice-plans/{id}/highlights → kor-travel-map GET /v1/curations(bbox) + /v1/public/festivals/monthly(시도·월).
+#
+# ⚠ pending deploy: 이 영역 전부 PinVi '추천 여행 주변 축제·큐레이션' PR 머지 + prod 배포 뒤에만 green 이다.
+#   배포 전 prod 에는 토글 버튼(notice-plan-highlights-toggle-*)이 없어 실패한다.
+# 데이터 전제: 공개된 추천 여행이 1개 이상 있고 그 POI에 좌표가 있어야 큐레이션 구역이 채워진다
+#   (Map 큐레이션 collection 을 import 한 plan). 축제는 기간·시도에 따라 0건일 수 있다 — 빈 문구도 통과.
+
+- id: REC-001
+  title: 추천 여행 카드 '주변 축제·큐레이션' 펼침 — 축제·큐레이션 두 구역이 항목/빈 문구/불가 안내 중 하나로 그려진다
+  priority: P1
+  tags: [desktop, mobile]
+  preconditions:
+    - account: test@test.com (user)
+    - env: PinVi ≥ 추천 여행 주변 축제·큐레이션 PR deployed (pending deploy)
+    - data: 공개 추천 여행 ≥ 1
+  data_sources: [map:curations, map:festivals]
+  steps:
+    - 로그인 → /notice-plans → 첫 카드의 '주변 축제·큐레이션'(aria-expanded=false) 클릭
+    - GET /notice-plans/{id}/highlights 응답 대기
+  expected:
+    - 응답 200, data.window_basis ∈ {plan, upcoming}, data.region_scope ∈ {sido, nationwide}
+    - 토글 aria-expanded=true, notice-plan-highlights-{id} 안에 notice-plan-events·notice-plan-curated 구역
+    - 각 구역은 목록(li) 또는 빈 문구 또는 '지금은 불러올 수 없습니다' 중 하나 — unavailable 구역 수를 annotation 으로 기록
+    - 다시 클릭하면 패널이 닫힌다
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/recommend/recommend-highlights.live.spec.ts#REC-001
+  notes: Map 장애는 구역 단위로 unavailable — 200 이 유지되는지가 핵심 계약.
+
+- id: REC-002
+  title: 주변 큐레이션/축제 항목 '추가' → 새 [e2e] 여행의 1일차 끝에 장소가 들어간다
+  priority: P1
+  tags: [desktop, mutating]
+  preconditions:
+    - account: test@test.com (user)
+    - env: PinVi ≥ 추천 여행 주변 축제·큐레이션 PR deployed (pending deploy)
+    - data: 펼친 카드 중 좌표 있는 항목('… 내 여행에 추가' 버튼) ≥ 1 — 없으면 skip(annotation)
+  data_sources: [map:curations, map:festivals]
+  steps:
+    - '[e2e] REC-002 <ts>' 여행(앞으로 30일 뒤 2일) 생성
+    - /notice-plans → 카드들을 차례로 펼쳐 첫 '내 여행에 추가' 버튼 클릭
+    - 다이얼로그(add-place-dialog)에서 그 여행 선택 → 1일차 선택 → '추가'
+  expected:
+    - POST /trips/{id}/pois 201, 다이얼로그 role=status '…일차 · …에 추가했습니다.' 와 '여행 열기' 링크
+    - GET /trips/{id} 의 1일차 POI 수 0 → 1
+  cleanup: [여행 soft delete]
+  automation: scripted
+  spec: specs/recommend/recommend-highlights.live.spec.ts#REC-002
+
+- id: REC-003
+  title: 모바일 — 펼친 주변 정보가 가로 스크롤 없이 카드 안에 들어가고 '더 보기'로 펼쳐진다
+  priority: P2
+  tags: [mobile]
+  preconditions:
+    - account: test@test.com (user)
+    - env: PinVi ≥ 추천 여행 주변 축제·큐레이션 PR deployed (pending deploy)
+  data_sources: [map:curations, map:festivals]
+  steps:
+    - 모바일 뷰포트 로그인 → /notice-plans → 첫 카드 펼침
+    - 구역에 'N곳 더 보기' 가 있으면 클릭
+  expected:
+    - document.scrollWidth ≤ window.innerWidth + 1
+    - '더 보기' 클릭 뒤 aria-expanded=true, li 수 증가(3 → 3+N), 버튼 라벨 '접기'
+  cleanup: [읽기 전용]
+  automation: scripted
+  spec: specs/recommend/recommend-highlights.live.spec.ts#REC-003
+  notes: '더 보기'는 구역 항목이 4건 이상일 때만 생긴다 — 없으면 해당 단계만 annotation 후 통과.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Generates `apps/web/e2e-live/catalog/INDEX.md` from the nine area catalogs plus the data-driven
+ * Generates `apps/web/e2e-live/catalog/INDEX.md` from the area catalogs plus the data-driven
  * trip scenarios (`trip-scenarios/*.yaml`, area `trs`) and verifies them:
  *  - ids are unique across areas and match `<PREFIX>-<3 digits>` (`TRS-<REGION>-<3 digits>` for trs);
  *  - `automation` is one of scripted | manual | blocked;
@@ -29,6 +29,7 @@ const AREAS = [
   'notify',
   'admin',
   'core',
+  'recommend',
   'trs',
 ];
 /** Data-driven area: every scenario file under TRS_DIR is one case, all run by TRS_SPEC. */

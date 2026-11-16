@@ -1,3 +1,14 @@
+## 2026-11-16 (claude) — 추천 여행에 주변 축제·큐레이션 표시 (브랜치 `feat/recommend-curated-events`)
+
+소유자 지시 "추천 여행에 curated feature 및 축제 등 정보 읽어서 보여주도록". 이전의 `/notice-plans`는
+공개 plan 카드(제목·목적지·기간·출처)와 '내 여행으로 가져오기' 복사만 있었고 Map 정보는 읽지 않았다.
+새 `GET /notice-plans/{id}/highlights`가 Map 공개 표면 두 개(`/v1/curations` bbox, `/v1/public/festivals/monthly`
+시도·월)를 요청마다 읽어 기간 중 축제·행사(≤10)와 주변 큐레이션(≤8, plan에 있는 Feature 제외)을 plan 장소까지
+거리 순으로 돌려준다. 구역 실패는 `unavailable`로 격리(200 유지). 웹은 카드 토글로 펼칠 때만 조회하고 구역당
+3건 + '더 보기', 좌표 있는 항목은 '추가' → 여행·일자 선택 → 일자 끝 append(`source=feature`).
+Map 변경 없음(두 경로 모두 vendored user 스냅샷 d8253e85에 있음). Map 계약 게이트(`test_kor_travel_map_contract.py`)에
+`/v1/curations` 경로·query exact 핀·소비 필드 계약을 추가했다. live e2e는 새 영역 `recommend`(REC-001~003, pending deploy).
+
 ## 2026-11-17 — 예보 범위 밖 날짜 전용 안내(결정 3)
 
 - 범위는 고정 일수가 아니라 받은 예보에서 낸다: Map 경로가 예보 창을 오늘부터 열고(카드는 날짜별로 잘라 써서 내용 불변, 상한은 Map 예보 범위 약 열흘), `forecast_horizon`이 `ok` 예보 부분의 마지막 대상 시각을 KST 날짜로 낸다. 그 뒤 날짜의 `no_data`에 `forecast_until`을 싣는다. 예보가 하나도 없으면(적재 전·직접 경로) null이라 기존 문구가 남는다.

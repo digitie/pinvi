@@ -194,3 +194,56 @@ export const KorTravelMapCurationCutoverBackfillResponseSchema = z.object({
 export type KorTravelMapCurationCutoverBackfillResponse = z.infer<
   typeof KorTravelMapCurationCutoverBackfillResponseSchema
 >;
+
+/** 추천 여행 주변 정보(`GET /notice-plans/{id}/highlights`) — 기간 중 축제·행사 + 주변 큐레이션. */
+export const NoticePlanHighlightThemeSchema = z.object({
+  theme_name: z.string(),
+  collection_title: z.string(),
+  edition_key: z.string(),
+  summary: z.string().nullable(),
+  source_url: z.string().nullable(),
+});
+export type NoticePlanHighlightTheme = z.infer<typeof NoticePlanHighlightThemeSchema>;
+
+export const NoticePlanCuratedPickSchema = z.object({
+  feature_id: z.string(),
+  name: z.string(),
+  kind: z.string(),
+  category: z.string(),
+  lon: z.number().nullable(),
+  lat: z.number().nullable(),
+  address: z.string().nullable(),
+  distance_m: z.number().nullable(),
+  themes: z.array(NoticePlanHighlightThemeSchema),
+});
+export type NoticePlanCuratedPick = z.infer<typeof NoticePlanCuratedPickSchema>;
+
+export const NoticePlanEventPickSchema = z.object({
+  feature_id: z.string(),
+  name: z.string(),
+  start_date: z.string().date().nullable(),
+  end_date: z.string().date().nullable(),
+  status: z.enum(['scheduled', 'ongoing', 'ended', 'unknown']),
+  venue_name: z.string().nullable(),
+  address: z.string().nullable(),
+  summary: z.string().nullable(),
+  homepage_url: z.string().nullable(),
+  lon: z.number().nullable(),
+  lat: z.number().nullable(),
+  marker_color: z.string().nullable(),
+  marker_icon: z.string().nullable(),
+  distance_m: z.number().nullable(),
+});
+export type NoticePlanEventPick = z.infer<typeof NoticePlanEventPickSchema>;
+
+export const NoticePlanHighlightsResponseSchema = z.object({
+  notice_plan_id: z.string().uuid(),
+  window_start: z.string().date(),
+  window_end: z.string().date(),
+  window_basis: z.enum(['plan', 'upcoming']),
+  region_scope: z.enum(['sido', 'nationwide']),
+  curated: z.array(NoticePlanCuratedPickSchema),
+  events: z.array(NoticePlanEventPickSchema),
+  unavailable: z.array(z.enum(['curated', 'events'])),
+});
+export type NoticePlanHighlightsResponse = z.infer<typeof NoticePlanHighlightsResponseSchema>;

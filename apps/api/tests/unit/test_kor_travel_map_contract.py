@@ -79,7 +79,9 @@ _CLIENT_PATHS = [
     "/v1/public/festivals/monthly",
     "/v1/public/festivals/map-markers",
     "/v1/public/festivals/{feature_id}",
-    # 큐레이션 import는 canonical service snapshot을 사용하며 user-contract gate 범위 밖이다.
+    # 추천 여행 주변 큐레이션(`services/notice_plan_highlights.py`). 큐레이션 import는 canonical
+    # service snapshot을 쓰며 user-contract gate 범위 밖이다.
+    "/v1/curations",
 ]
 
 # 각 client 경로가 스냅샷에서 선언하는 query의 **exact** 집합. `_CONSUMED_FIELD_CONTRACTS`
@@ -188,6 +190,20 @@ _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
         "max_items",
     },
     "/v1/public/festivals/{feature_id}": set(),
+    # client는 bbox 4값·`theme_slug`·`page_size`만 보낸다(`edition_key`/`provider_dataset_id`/
+    # `q`/`cursor`는 보내지 않는다).
+    "/v1/curations": {
+        "theme_slug",
+        "edition_key",
+        "provider_dataset_id",
+        "q",
+        "min_lon",
+        "min_lat",
+        "max_lon",
+        "max_lat",
+        "page_size",
+        "cursor",
+    },
 }
 
 _PUBLIC_API_KEY_SCHEME = {
@@ -224,7 +240,8 @@ _PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 # Map의 무해한 additive 변경마다 Pinvi가 false-red가 된다(Map migration 0066의
 # `external_component_id` 추가가 실제 사례). consumer는 "우리가 읽는 필드의 shape"만 본다.
 #
-# 공개 curated 표면(`PublicCurated*`/`PublicCuration*`)은 대상이 아니다. PinVi의 큐레이션 런타임은
+# 공개 curated 표면 중 `GET /v1/curations`(추천 여행 주변 큐레이션)가 읽는 필드만 대상이다
+# (`FeatureCurationGroup*`/`CurationFeatureView`/`PublicCurationItemView`). 큐레이션 import 런타임은
 # 별도 canonical service snapshot 계약이 소유한다.
 #
 # 참고(항상 None인 방어적 read — 대응 property가 user 표면에 없어 고정할 계약이 없다):
@@ -248,6 +265,51 @@ _PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 # `meta.cluster.cluster_unit`를 `data`로 re-projection하므로 실제 값이 온다(위 `ClusterMeta` 핀).
 # `data.get("next_cursor")`/`get("total")`(`public.py _page_meta`)도 같은 방식이다(`PageMeta` 핀).
 _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
+    # `services/notice_plan_highlights.py` `_CurationGroup`/`_CurationFeature`/`_CurationMembership`.
+    "FeatureCurationGroupsData": {
+        "items": {
+            "type": "array",
+            "items_ref": "FeatureCurationGroupView",
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "FeatureCurationGroupView": {
+        "feature": {
+            "type": "object",
+            "ref": "CurationFeatureView",
+            "required": True,
+            "nullable": False,
+        },
+        "curations": {
+            "type": "array",
+            "items_ref": "PublicCurationItemView",
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "CurationFeatureView": {
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "name": {"type": "string", "required": True, "nullable": False},
+        "kind": {"type": "string", "required": True, "nullable": False},
+        "category": {"type": "string", "required": True, "nullable": False},
+        "lon": {"type": "number", "required": True, "nullable": True},
+        "lat": {"type": "number", "required": True, "nullable": True},
+        "address": {"type": "object", "required": True, "nullable": False},
+    },
+    "PublicCurationItemView": {
+        "theme_name": {"type": "string", "required": True, "nullable": False},
+        "title": {"type": "string", "required": True, "nullable": False},
+        "edition_key": {"type": "string", "required": True, "nullable": False},
+        "item_summary": {"type": "string", "required": True, "nullable": True},
+        "source_url": {"type": "string", "required": True, "nullable": True},
+        "status": {
+            "type": "string",
+            "enum": {"candidate", "included", "rejected", "archived"},
+            "required": True,
+            "nullable": False,
+        },
+    },
     "FeatureSummary": {
         "feature_id": {"type": "string", "required": True, "nullable": False},
         "kind": {"type": "string", "required": True, "nullable": False},
@@ -659,6 +721,7 @@ _ENDPOINT_DATA_SCHEMAS: dict[tuple[str, str], str] = {
     ("get", "/v1/public/festivals/monthly"): "PublicFestivalMonthlyData",
     ("get", "/v1/public/festivals/map-markers"): "PublicMapMarkerLayerData",
     ("get", "/v1/public/festivals/{feature_id}"): "FestivalPublicView",
+    ("get", "/v1/curations"): "FeatureCurationGroupsData",
 }
 
 # `model_validate`로 upstream 객체 전체를 검증하는 표면 → (스냅샷 schema, Pinvi 소비 모델).
@@ -902,6 +965,17 @@ async def test_client_never_sends_a_query_the_snapshot_does_not_declare() -> Non
             ),
         ),
         ("/v1/public/festivals/{feature_id}", lambda c: c.get_public_festival("f1")),
+        (
+            "/v1/curations",
+            lambda c: c.public_curation_groups(
+                min_lon=129.0,
+                min_lat=35.0,
+                max_lon=129.2,
+                max_lat=35.2,
+                theme_slug="korea-100",
+                page_size=60,
+            ),
+        ),
     ]
     assert [path for path, _call in probes] == _CLIENT_PATHS, (
         "probe 목록이 client 경로 전체를 덮지 않는다(순서 포함)"
