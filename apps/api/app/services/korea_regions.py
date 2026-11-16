@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 # 정본 시도 코드 → 약칭. 표시는 약칭, 키는 코드.
@@ -59,7 +59,7 @@ _SIDO_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 # 시도를 하나로 정할 수 있는 시·군 이름(접미 '시'·'군' 없이). 자치구 이름은 여러 시에 겹쳐 쓰지 않는다.
-_SIGUNGU_SIDO: dict[str, tuple[str, ...]] = {
+_SIGUNGU_SIDO: dict[str, Sequence[str]] = {
     "41": (
         "수원 성남 의정부 안양 부천 광명 평택 동두천 안산 고양 과천 구리 남양주 오산 시흥 군포 "
         "의왕 하남 용인 파주 이천 안성 김포 화성 양주 포천 여주 연천 가평 양평"

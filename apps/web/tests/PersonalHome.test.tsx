@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AnchorHTMLAttributes } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { PersonalHome, nextTripBadge } from '@/components/home/PersonalHome';
+import { PersonalHome } from '@/components/home/PersonalHome';
+import { nextTripBadge } from '@/lib/personalHome';
 import type { UserHome } from '@pinvi/schemas';
 
 const api = vi.hoisted(() => ({ getHome: vi.fn() }));

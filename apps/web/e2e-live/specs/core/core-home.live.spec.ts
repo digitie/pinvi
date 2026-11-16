@@ -59,7 +59,7 @@ test.describe('CORE personal home', () => {
     await shot(page, 'CORE-032', isMobile(testInfo) ? 'home-mobile' : 'home-desktop');
   });
 
-  test('CORE-033 로그인 사용자의 홈 메뉴와 랜딩(/)은 개인 홈으로 간다', async ({
+  test('CORE-033 로그인 사용자의 홈 메뉴와 랜딩의 내 홈은 개인 홈으로 간다', async ({
     page,
   }, testInfo) => {
     await loginAsUser(page);
@@ -74,17 +74,21 @@ test.describe('CORE personal home', () => {
     if (!isMobile(testInfo)) {
       await expect(page.getByTestId('app-nav--home')).toHaveAttribute('aria-current', 'page');
     }
-    // 마케팅 랜딩은 로그인 사용자를 개인 홈으로 보낸다.
+    // 마케팅 랜딩은 로그인 사용자에게 로그인·시작하기 대신 '내 홈'을 보인다.
     await page.goto('/');
+    const myHome = page.getByTestId('landing-my-home');
+    await expect(myHome).toBeVisible({ timeout: 20_000 });
+    await myHome.click();
     await expectHomeRendered(page);
   });
 
   test('CORE-034 익명 사용자 — /home은 로그인으로, 랜딩은 그대로', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('home-hero')).toBeVisible();
-    // 랜딩의 로그인 확인(GET /auth/me 401)이 끝난 뒤에도 랜딩에 머문다.
+    // 랜딩의 로그인 확인(GET /auth/me 401)이 끝나도 로그인·시작하기가 그대로다.
     await page.waitForLoadState('networkidle');
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByTestId('landing-my-home')).toHaveCount(0);
+    await expect(page.getByRole('banner').getByRole('link', { name: '로그인' })).toBeVisible();
     await page.goto('/home');
     await expect(page).toHaveURL(/\/login\?next=%2Fhome/, { timeout: 20_000 });
     await shot(page, 'CORE-034', 'login');

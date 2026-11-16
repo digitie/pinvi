@@ -667,7 +667,7 @@
   notes: 배포 전에는 워드마크가 '/'(마케팅 랜딩, 로그인 CTA)로 가서 실패한다 — pending deploy.
 
 - id: CORE-033
-  title: 로그인 사용자의 '홈' 메뉴(데스크톱 탭·모바일 더보기)와 랜딩(/)은 개인 홈으로 간다
+  title: 로그인 사용자의 '홈' 메뉴(데스크톱 탭·모바일 더보기)와 랜딩(/)의 '내 홈'은 개인 홈으로 간다
   priority: P1
   tags: [desktop, mobile, auth, home]
   preconditions:
@@ -676,13 +676,13 @@
   data_sources: []
   steps:
     - 로그인 → /map → 데스크톱 app-nav--home / 모바일 더보기 → app-nav--home-mobile
-    - '/' 직접 진입
+    - '/' 진입 → masthead '내 홈'(landing-my-home) 클릭
   expected:
     - 두 경로 모두 URL /home + 통계 렌더, 데스크톱 홈 탭 aria-current=page
   cleanup: [없음]
   automation: scripted
   spec: specs/core/core-home.live.spec.ts#CORE-033
-  notes: 랜딩은 GET /auth/me 200이면 router.replace('/home')(SignedInHomeRedirect). pending deploy.
+  notes: 랜딩은 GET /auth/me 200이면 masthead 액션을 '내 홈'으로 바꾼다(LandingSessionActions, 클라이언트 redirect 없음). pending deploy.
 
 - id: CORE-034
   title: 익명 사용자 — /home은 /login?next=%2Fhome으로, 랜딩(/)은 그대로
@@ -695,7 +695,7 @@
   steps:
     - '/' 진입 → networkidle → '/home' 진입
   expected:
-    - 랜딩 home-hero 유지(URL /)
+    - 랜딩 home-hero, masthead 로그인 링크 유지, landing-my-home 없음
     - /home은 GET /users/me/home 401 → /login?next=%2Fhome
   cleanup: [없음]
   automation: scripted

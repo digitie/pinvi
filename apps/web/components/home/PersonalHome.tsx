@@ -2,6 +2,7 @@
 
 import { buttonClassName } from '@/components/ui/button-styles';
 import { apiClient } from '@/lib/api';
+import { SIDO_TOTAL, nextTripBadge } from '@/lib/personalHome';
 import { formatTripDate, formatTripDateRange } from '@/lib/tripDateLabels';
 import { userApi } from '@pinvi/api-client';
 import type { HomeTripCard, HomeVisitedPlace, UserHome } from '@pinvi/schemas';
@@ -15,20 +16,10 @@ import { useCallback, useEffect, useState } from 'react';
  * state: 로딩=skeleton · 오류=원인+다시 시도(role=alert) · 빈 상태=첫 여행 만들기
  */
 
-/** 시도 17개 — '다녀온 지역 N/17'의 분모. */
-export const SIDO_TOTAL = 17;
-
 function tripDates(trip: Pick<HomeTripCard, 'start_date' | 'end_date'>): string {
   if (!trip.start_date) return '날짜 미정';
   if (!trip.end_date || trip.end_date === trip.start_date) return formatTripDate(trip.start_date);
   return formatTripDateRange(trip.start_date, trip.end_date);
-}
-
-/** 다음 여행의 배지 — 진행 중 / 오늘 출발 / D-n. */
-export function nextTripBadge(trip: Pick<HomeTripCard, 'phase' | 'days_until'>): string | null {
-  if (trip.phase === 'ongoing') return '여행 중';
-  if (trip.phase !== 'upcoming' || trip.days_until == null) return null;
-  return trip.days_until === 0 ? '오늘 출발' : `D-${trip.days_until}`;
 }
 
 function tripMeta(trip: HomeTripCard): string {

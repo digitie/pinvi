@@ -2,6 +2,7 @@ import { expect, test, type Page } from './fixtures';
 
 /**
  * 개인 홈(/home) — 로고·'홈'이 로그인 사용자를 마케팅 랜딩(로그인 CTA)이 아니라 개인 홈으로 보낸다.
+ * 랜딩은 로그인 사용자에게 로그인·시작하기 대신 '내 홈'을 보인다(클라이언트 redirect는 하지 않는다).
  */
 
 const isFetch = (resourceType: string) => ['fetch', 'xhr'].includes(resourceType);
@@ -72,9 +73,13 @@ async function signedIn(page: Page) {
   );
 }
 
-test('로그인 사용자가 랜딩(/)에 오면 개인 홈으로 가고 통계가 보인다', async ({ page }) => {
+test('로그인 사용자는 랜딩의 내 홈 링크로 개인 홈에 가고 통계가 보인다', async ({ page }) => {
   await signedIn(page);
   await page.goto('/');
+  const myHome = page.getByTestId('landing-my-home');
+  await expect(myHome).toHaveAttribute('href', '/home');
+  await expect(page.getByRole('link', { name: '로그인', exact: true })).toHaveCount(1); // hero CTA만 남는다
+  await myHome.click();
   await expect(page).toHaveURL(/\/home$/);
   const root = page.getByTestId('personal-home');
   await expect(root.getByRole('heading', { name: '내 여행', level: 1 })).toBeVisible();
@@ -96,7 +101,7 @@ test('앱 셸의 로고는 개인 홈으로 간다', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Pinvi 홈' })).toHaveAttribute('href', '/home');
 });
 
-test('익명 방문자는 랜딩에 머문다', async ({ page }) => {
+test('익명 방문자에게는 랜딩의 로그인·시작하기가 그대로 보인다', async ({ page }) => {
   await page.route(apiPath('/auth/me'), (route) =>
     route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }),
   );
@@ -104,5 +109,6 @@ test('익명 방문자는 랜딩에 머문다', async ({ page }) => {
   await page.goto('/');
   await checked;
   await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('landing-my-home')).toHaveCount(0);
+  await expect(page.getByRole('banner').getByRole('link', { name: '로그인' })).toBeVisible();
 });
