@@ -280,3 +280,122 @@ async def test_price_history_unknown_reason_is_folded_and_id_checked() -> None:
             days=7,
             now=datetime(2026, 10, 23, tzinfo=KST),
         )
+
+
+def _near_page(items: list[tuple[str, float, float]], *, truncated: bool = False) -> dict[str, Any]:
+    """Map 근처 검색 응답 — (feature_id, lon, lat) 주유소 목록."""
+    body = fx.list_body("fuel-stations", truncated=truncated)
+    template = body["data"]["items"][0]
+    body["data"]["items"] = [
+        {**template, "feature_id": fid, "coord": {"lon": lon, "lat": lat}} for fid, lon, lat in items
+    ]
+    return body
+
+
+def test_cluster_points_merges_close_places_only() -> None:
+    # 강남역 두 곳(약 300 m)은 한 중심, 부산은 따로.
+    centers = transport_layers.cluster_points(
+        [(127.0276, 37.4979), (127.0300, 37.4990), (129.0756, 35.1796)]
+    )
+    assert centers == [(127.0276, 37.4979), (129.0756, 35.1796)]
+
+
+async def test_near_points_filters_exact_radius_and_dedupes() -> None:
+    # 기준 장소 (127.0, 37.5). 위도 0.01도 ≈ 1.11 km → 0.08도 ≈ 8.9 km(안), 0.095도 ≈ 10.6 km(밖).
+    page = _near_page(
+        [
+            ("f_x_place_far", 127.0, 37.595),
+            ("f_x_place_mid", 127.0, 37.58),
+            ("f_x_place_near", 127.0, 37.501),
+        ]
+    )
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=page)
+
+    results = await transport_layers.markers_near_points(
+        _client(handler),
+        # 두 기준 장소는 2 km 안이라 한 번만 조회한다.
+        points=[(127.0, 37.5), (127.005, 37.505)],
+        layers=["fuel_station"],
+        limit=100,
+    )
+    assert len(seen) == 1
+    params = seen[0].url.params
+    assert params["radius_m"] == str(float(10_000 + transport_layers.NEAR_MERGE_M))
+    assert "min_lon" not in params
+    fuel = results[0]
+    assert fuel.status == "ok" and fuel.truncated is False
+    assert [item.feature_id for item in fuel.items] == ["f_x_place_near", "f_x_place_mid"]
+    assert fuel.items[0].distance_m is not None and fuel.items[0].distance_m < 200
+
+
+async def test_near_points_unions_far_places_and_keeps_nearest_distance() -> None:
+    seoul = _near_page([("f_x_place_shared", 127.0, 37.55), ("f_x_place_seoul", 127.0, 37.51)])
+    other = _near_page([("f_x_place_shared", 127.0, 37.55), ("f_x_place_other", 127.0, 37.78)])
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        lat = float(request.url.params["lat"])
+        return httpx.Response(200, json=seoul if lat < 37.6 else other)
+
+    results = await transport_layers.markers_near_points(
+        _client(handler),
+        points=[(127.0, 37.5), (127.0, 37.7)],  # 약 22 km 떨어진 두 곳
+        layers=["fuel_station"],
+        limit=100,
+    )
+    assert len(seen) == 2
+    ids = [item.feature_id for item in results[0].items]
+    assert ids == ["f_x_place_seoul", "f_x_place_shared", "f_x_place_other"]
+    shared = results[0].items[1]
+    # 0.05도 ≈ 5.6 km(37.5 기준) — 37.7 기준(16.7 km)이 아니라 가까운 쪽 거리.
+    assert shared.distance_m is not None and 5_000 < shared.distance_m < 6_000
+
+
+async def test_near_points_limit_and_truncation() -> None:
+    page = _near_page([(f"f_x_place_{i}", 127.0, 37.5 + i * 0.001) for i in range(5)])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=page)
+
+    results = await transport_layers.markers_near_points(
+        _client(handler), points=[(127.0, 37.5)], layers=["fuel_station"], limit=3
+    )
+    assert results[0].truncated is True
+    assert [item.feature_id for item in results[0].items] == [
+        "f_x_place_0",
+        "f_x_place_1",
+        "f_x_place_2",
+    ]
+
+
+async def test_near_points_one_failed_query_degrades_layer() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if float(request.url.params["lat"]) > 37.6:
+            return httpx.Response(503, json=fx.problem_body(503, "TRANSPORT_STATE_NOT_LOADED"))
+        return httpx.Response(200, json=_near_page([]))
+
+    results = await transport_layers.markers_near_points(
+        _client(handler),
+        points=[(127.0, 37.5), (127.0, 37.7)],
+        layers=["highway_incident"],
+        limit=10,
+    )
+    assert results[0].status == "unavailable"
+    assert results[0].reason == "NOT_LOADED"
+
+
+async def test_near_points_without_points_skips_map() -> None:
+    handler, seen = _by_dataset({})
+    results = await transport_layers.markers_near_points(
+        _client(handler), points=[], layers=["fuel_station", "highway_incident"], limit=10
+    )
+    assert [(r.layer, r.status, r.items) for r in results] == [
+        ("fuel_station", "ok", []),
+        ("highway_incident", "ok", []),
+    ]
+    assert seen == []

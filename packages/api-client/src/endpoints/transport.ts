@@ -2,6 +2,7 @@ import {
   FuelPriceHistoryResponseSchema,
   TransportDetailResponseSchema,
   TransportMarkersInBoundsResponseSchema,
+  TransportMarkersNearResponseSchema,
   TransportStatusResponseSchema,
 } from '@pinvi/schemas';
 import type { TransportLayer } from '@pinvi/schemas';
@@ -42,6 +43,26 @@ export const transportApi = (client: ApiClient) => ({
     return client.request(`/transport/markers-in-bounds?${qs.toString()}`, {
       method: 'GET',
       schema: TransportMarkersInBoundsResponseSchema,
+      signal: opts?.signal,
+    });
+  },
+
+  /**
+   * 여행 장소들에서 레이어별 반경(주유소 10 km·교통 돌발 20 km — 서버 정책) 안의 항목. 가까운 순.
+   * `points`가 비면 서버가 Map을 부르지 않고 빈 `ok`를 준다.
+   */
+  markersNear: (
+    params: { points: ReadonlyArray<{ lon: number; lat: number }>; layers: TransportLayer[]; limit?: number },
+    opts?: { signal?: AbortSignal },
+  ) => {
+    const qs = new URLSearchParams();
+    // 5자리(≈1 m)면 충분하고 URL이 짧아진다.
+    qs.set('points', params.points.map((p) => `${p.lon.toFixed(5)},${p.lat.toFixed(5)}`).join(';'));
+    qs.set('layers', params.layers.join(','));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return client.request(`/transport/markers-near?${qs.toString()}`, {
+      method: 'GET',
+      schema: TransportMarkersNearResponseSchema,
       signal: opts?.signal,
     });
   },

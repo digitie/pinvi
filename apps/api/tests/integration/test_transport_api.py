@@ -223,3 +223,62 @@ async def test_out_of_range_bbox_is_clamped_not_500(
         client, auth_cookies, verified_user, "/transport/markers-in-bounds?bbox=a,b,c,d&zoom=6"
     )
     assert bad.status_code == 400
+
+
+async def test_markers_near_uses_map_near_search(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    settings.pinvi_kor_travel_map_transport_enabled = True
+    fake = _install(_ok)
+    # 픽스처 주유소(127.0276, 37.4979) 바로 옆 기준 장소.
+    resp = await _get(
+        client,
+        auth_cookies,
+        verified_user,
+        "/transport/markers-near?points=127.03,37.5;127.03,37.5&layers=fuel_station",
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["radius_m"] == {"fuel_station": 10000}
+    fuel = data["layers"][0]
+    assert fuel["status"] == "ok"
+    assert fuel["items"][0]["feature_id"] == fx.FUEL_STATION_ID
+    assert fuel["items"][0]["distance_m"] < 1000
+    # 같은 좌표 두 번은 한 번만 조회, 영역이 아니라 근처 검색.
+    assert len(fake.requests) == 1
+    assert fake.requests[0].url.params["radius_m"] == "12000.0"
+
+
+async def test_markers_near_defaults_and_validation(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    settings.pinvi_kor_travel_map_transport_enabled = True
+    fake = _install(_ok)
+    empty = await _get(client, auth_cookies, verified_user, "/transport/markers-near")
+    assert empty.status_code == 200
+    assert [(r["layer"], r["status"]) for r in empty.json()["data"]["layers"]] == [
+        ("fuel_station", "ok"),
+        ("highway_incident", "ok"),
+    ]
+    assert fake.requests == []
+    for query in (
+        "points=127.0,37.5&layers=airport",
+        "points=127.0,37.5&layers=rest_area",
+        "points=1.0,2.0",
+        "points=abc",
+        "points=" + ";".join(f"127.{i:03d},37.5" for i in range(61)),
+    ):
+        resp = await _get(client, auth_cookies, verified_user, f"/transport/markers-near?{query}")
+        assert resp.status_code == 400, query
+    assert fake.requests == []
+
+
+async def test_markers_near_flag_off_never_calls_map(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    settings.pinvi_kor_travel_map_transport_enabled = False
+    fake = _install(_ok)
+    resp = await _get(client, auth_cookies, verified_user, "/transport/markers-near?points=127,37.5")
+    assert resp.status_code == 200
+    assert {r["status"] for r in resp.json()["data"]["layers"]} == {"disabled"}
+    assert fake.requests == []

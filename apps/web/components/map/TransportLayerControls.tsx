@@ -7,6 +7,7 @@ import {
   sortIncidentsByRecency,
   transportFreshnessAgeSeconds,
   transportFreshnessLabel,
+  transportRadiusLabel,
 } from '@pinvi/domain';
 import type { TransportDetailTarget, TransportLayersState } from '@/lib/useTransportLayers';
 
@@ -20,19 +21,22 @@ function layerLine(
   minZoom: number,
   state: Pick<
     TransportLayersState,
-    'zoom' | 'results' | 'receivedAt' | 'nowMs' | 'status' | 'hasMap'
+    'zoom' | 'results' | 'receivedAt' | 'nowMs' | 'status' | 'hasMap' | 'nearMode' | 'radiusM'
   >,
 ): string | null {
   const status = state.status?.layers.find((s) => s.layer === layer);
   if (status && !status.available) return '일시적으로 불러올 수 없음';
-  if (state.zoom != null && state.zoom < minZoom) return '확대하면 보여요';
+  // 여행 장소 반경 모드는 줌과 무관하게 조회한다.
+  if (!state.nearMode && state.zoom != null && state.zoom < minZoom) return '확대하면 보여요';
   const result = state.results.find((r) => r.layer === layer);
   // 결과 전에도 줄을 차지한다 — 결과가 와서 줄이 새로 생기면 패널 상시 부분이 자라 여행 지도가 다시
   // 맞춰지고 같은 레이어를 다시 조회한다(#712).
   if (!result) return state.hasMap ? LOADING_TEXT : null;
   if (result.status !== 'ok') return '일시적으로 불러올 수 없음';
   const parts: string[] = [`${result.items.length}곳`];
-  if (result.truncated) parts.push('일부만 표시 — 확대하세요');
+  const radius = state.nearMode ? state.radiusM?.[layer] : undefined;
+  if (radius != null) parts.push(transportRadiusLabel(radius));
+  if (result.truncated) parts.push(state.nearMode ? '가까운 곳만 표시' : '일부만 표시 — 확대하세요');
   if (result.freshness && state.receivedAt != null) {
     parts.push(
       transportFreshnessLabel(
@@ -52,10 +56,32 @@ function incidentsOf(results: readonly TransportLayerResult[]): HighwayIncidentI
   );
 }
 
-export interface TransportLayerControlsProps {
+/**
+ * 교통 레이어 체크박스(주유소·교통 돌발) — 지도 레이어 패널에서 경로·영역 체크박스와 같은 줄에 놓인다
+ * (`MapLayerControls`). `state.visible`이 false면 아무것도 그리지 않는다.
+ */
+export function TransportLayerToggles({ state }: { state: TransportLayersState }) {
+  if (!state.visible) return null;
+  return (
+    <>
+      {TRANSPORT_LAYER_META.map((meta) => (
+        <label className="flex min-h-9 cursor-pointer items-center gap-1.5" key={meta.layer}>
+          <input
+            type="checkbox"
+            checked={state.enabled.has(meta.layer)}
+            data-testid={`transport-layer-toggle-${meta.layer}`}
+            onChange={() => state.toggle(meta.layer)}
+          />
+          {meta.label}
+        </label>
+      ))}
+    </>
+  );
+}
+
+export interface TransportLayerStatusProps {
   state: TransportLayersState;
   onOpenDetail: (target: TransportDetailTarget) => void;
-  className?: string;
   /**
    * 돌발 목록을 접어 두고 '교통 돌발' 상태 줄을 눌러 펴게 한다(여행 지도, #729). 여행 지도는 맞춤이 끝난
    * 뒤 결과가 오므로, 목록이 저절로 펼쳐지면 맞춤이 피한 패널 아래로 자라 핀을 덮는다. 상태 줄은 켠
@@ -65,15 +91,14 @@ export interface TransportLayerControlsProps {
 }
 
 /**
- * 지도 transport 레이어 토글(ADR-076). `state.visible`이 false(기능 꺼짐·상태 미확인)면 아무것도
- * 그리지 않는다 — 꺼진 동안 지도 화면은 지금과 같다.
+ * 켠 교통 레이어의 상태 줄(개수·반경·신선도)과 교통 돌발 목록(ADR-076). `state.visible`이 false(기능 꺼짐·
+ * 상태 미확인)이거나 켠 레이어가 없으면 아무것도 그리지 않는다 — 꺼진 동안 지도 화면은 지금과 같다.
  */
-export function TransportLayerControls({
+export function TransportLayerStatus({
   state,
   onOpenDetail,
-  className,
   collapseIncidents = false,
-}: TransportLayerControlsProps) {
+}: TransportLayerStatusProps) {
   const listId = useId();
   const incidents = state.enabled.has('highway_incident') ? incidentsOf(state.results) : [];
   const hasIncidents = incidents.length > 0;
@@ -85,38 +110,13 @@ export function TransportLayerControls({
     if (!hasIncidents) setExpanded(false);
   }
   if (!state.visible) return null;
+  const enabledMeta = TRANSPORT_LAYER_META.filter((meta) => state.enabled.has(meta.layer));
+  if (enabledMeta.length === 0) return null;
   const showList = incidents.length > 0 && (!collapseIncidents || expanded);
   return (
-    // data-map-fit-panel: 여행 지도 맞춤이 이 패널 밑에 든 핀을 피한다(사건 목록은 transient로 뺀다).
-    <div
-      className={`rounded-sm bg-canvas/95 p-2 text-xs shadow-card ${className ?? ''}`}
-      data-testid="transport-layer-controls"
-      data-map-fit-panel=""
-    >
-      <p className="mb-1 text-sm font-semibold text-ink">교통 정보</p>
-      <div className="flex flex-wrap gap-1" role="group" aria-label="교통 정보 레이어">
-        {TRANSPORT_LAYER_META.map((meta) => {
-          const on = state.enabled.has(meta.layer);
-          return (
-            <button
-              key={meta.layer}
-              type="button"
-              aria-pressed={on}
-              onClick={() => state.toggle(meta.layer)}
-              data-testid={`transport-layer-toggle-${meta.layer}`}
-              className={`focus-ring min-h-11 rounded-full border px-3 text-sm font-semibold ${
-                on
-                  ? 'border-ink bg-ink text-canvas'
-                  : 'border-hairline bg-canvas text-body hover:bg-surface-soft'
-              }`}
-            >
-              {meta.label}
-            </button>
-          );
-        })}
-      </div>
+    <div data-testid="transport-layer-status">
       <ul className="mt-1 space-y-0.5">
-        {TRANSPORT_LAYER_META.filter((meta) => state.enabled.has(meta.layer)).map((meta) => {
+        {enabledMeta.map((meta) => {
           const line = layerLine(meta.layer, meta.minZoom, state);
           const result = state.results.find((r) => r.layer === meta.layer);
           if (!line) return null;
@@ -179,7 +179,9 @@ export function TransportLayerControls({
           data-testid="transport-incident-list"
           data-map-fit-transient=""
         >
-          <p className="font-semibold text-body">이 지역 교통 돌발 {incidents.length}건</p>
+          <p className="font-semibold text-body">
+            {state.nearMode ? '여행 장소 주변' : '이 지역'} 교통 돌발 {incidents.length}건
+          </p>
           <ul>
             {incidents.slice(0, INCIDENT_LIST_MAX).map((incident) => (
               <li key={incident.feature_id}>

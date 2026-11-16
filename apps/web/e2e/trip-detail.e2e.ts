@@ -1400,7 +1400,7 @@ function boxesOverlap(a: Box, b: Box): boolean {
 
 async function expectSearchNotCoveredByTransport(page: Page) {
   const search = page.getByTestId('trip-map-place-search');
-  const controls = page.getByTestId('transport-layer-controls');
+  const controls = page.getByTestId('map-layer-controls');
   await expect(search).toBeVisible();
   await expect(controls).toBeVisible();
   const searchBox = await search.boundingBox();
@@ -1422,6 +1422,61 @@ test('교통 정보 컨트롤은 지도 장소 검색창을 덮지 않는다(데
 
   await expect(page.getByTestId('trip-detail-shell')).toBeVisible();
   await expectSearchNotCoveredByTransport(page);
+});
+
+// 2026-11-16 — 여행 지도의 주유소·교통 돌발은 화면 범위가 아니라 여행 장소 반경(주유소 10 km·교통 돌발
+// 20 km)이다. 체크박스는 경로·영역과 같은 패널이고 공항·휴게소는 없다.
+test('여행 지도 교통 레이어는 여행 장소 반경으로 조회하고 반경을 알린다', async ({ page }) => {
+  await mockTripDetailRoutes(page);
+  await mockTransportEnabled(page);
+  const nearQueries: URLSearchParams[] = [];
+  let boundsRequests = 0;
+  await page.route(/.*\/transport\/markers-in-bounds(\?.*)?$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.fallback();
+    boundsRequests += 1;
+    await route.abort();
+  });
+  await page.route(/.*\/transport\/markers-near(\?.*)?$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.fallback();
+    const query = new URL(request.url()).searchParams;
+    nearQueries.push(query);
+    const layers = (query.get('layers') ?? '').split(',');
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          radius_m: Object.fromEntries(
+            layers.map((layer) => [layer, layer === 'fuel_station' ? 10000 : 20000]),
+          ),
+          layers: layers.map((layer) => ({ layer, status: 'ok', truncated: false, items: [] })),
+        },
+      }),
+    });
+  });
+
+  await page.goto(`/trips/${tripId}`);
+  const controls = page.getByTestId('map-layer-controls');
+  await expect(controls).toBeVisible();
+  await expect(
+    controls.getByRole('group', { name: '지도 레이어 표시' }).locator('label'),
+  ).toHaveText(['경로', '영역', '주유소', '교통 돌발']);
+  await expect(page.getByTestId('transport-layer-toggle-airport')).toHaveCount(0);
+  await expect(page.getByTestId('transport-layer-toggle-rest_area')).toHaveCount(0);
+
+  await page.getByTestId('transport-layer-toggle-fuel_station').check();
+  await expect(page.getByTestId('transport-layer-state-fuel_station')).toContainText(
+    '0곳 · 여행 장소 10km 이내',
+  );
+  await page.getByTestId('transport-layer-toggle-highway_incident').check();
+  await expect(page.getByTestId('transport-layer-state-highway_incident')).toContainText(
+    '여행 장소 20km 이내',
+  );
+  const last = nearQueries.at(-1)!;
+  expect(last.get('layers')).toBe('fuel_station,highway_incident');
+  // 여행 장소 좌표(lon,lat;…)를 보낸다 — 화면 bbox가 아니다.
+  expect(last.get('points')).toMatch(/^\d+\.\d{5},\d+\.\d{5}(;\d+\.\d{5},\d+\.\d{5})*$/);
+  expect(last.get('bbox')).toBeNull();
+  expect(boundsRequests).toBe(0);
 });
 
 test.describe('모바일 지도 오버레이', () => {
@@ -1679,7 +1734,8 @@ test.describe('모바일 여행 지도 교통 결과(#712)', () => {
     await mockTransportEnabled(page);
     await stubTilesInCanvasMode(page);
     const markersRequests: string[] = [];
-    await page.route(/.*\/transport\/markers-in-bounds(\?.*)?$/, async (route, request) => {
+    // 여행 지도는 여행 장소 반경으로 조회한다(2026-11-16).
+    await page.route(/.*\/transport\/markers-near(\?.*)?$/, async (route, request) => {
       if (!isFetch(request.resourceType())) return route.fallback();
       markersRequests.push(request.url());
       // 실제처럼 결과가 조금 늦게 온다 — 그 사이 지도가 멈춘 상태여야 한다.
@@ -1699,8 +1755,7 @@ test.describe('모바일 여행 지도 교통 결과(#712)', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           data: {
-            bbox: { lng_min: 126.0, lat_min: 33.5, lng_max: 129.5, lat_max: 38.5 },
-            zoom: 8,
+            radius_m: { highway_incident: 20000 },
             layers: [{ layer: 'highway_incident', status: 'ok', truncated: false, items }],
           },
         }),
@@ -1709,7 +1764,7 @@ test.describe('모바일 여행 지도 교통 결과(#712)', () => {
 
     await page.goto(`/trips/${tripId}`);
     await expect(page.locator('.maplibregl-canvas').first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId('transport-layer-controls')).toBeVisible();
+    await expect(page.getByTestId('map-layer-controls')).toBeVisible();
     await page.waitForTimeout(1_000);
     markersRequests.length = 0;
 
@@ -1726,7 +1781,7 @@ test.describe('모바일 여행 지도 교통 결과(#712)', () => {
     expect(markersRequests).toHaveLength(1);
     // #729: 맞춤이 끝난 뒤 돌발 목록이 저절로 펼쳐져 핀을 덮지 않는다 — 교통 패널 전체가 어느 핀과도
     // 겹치지 않고, 핀을 실제로 누를 수 있다.
-    const controlsBox = (await page.getByTestId('transport-layer-controls').boundingBox())!;
+    const controlsBox = (await page.getByTestId('map-layer-controls').boundingBox())!;
     const markers = page.locator('.maplibregl-marker.trip-map-marker');
     await expect(markers).toHaveCount(nearbyPois.length);
     for (const marker of await markers.all()) {

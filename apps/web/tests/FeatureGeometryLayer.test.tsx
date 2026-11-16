@@ -5,11 +5,8 @@ import type { MapMouseEvent, PolygonAreaProps, RouteLineProps } from 'vworld-map
 import type { FeatureGeometry } from '@pinvi/schemas';
 import type { GeometryFeature } from '@/lib/featureGeometry';
 import type { FeatureGeometryState } from '@/lib/useFeatureGeometry';
-import {
-  FeatureGeometryControls,
-  FeatureGeometryLayers,
-  FeatureGeometryPopup,
-} from '@/components/map/FeatureGeometryLayer';
+import { FeatureGeometryLayers, FeatureGeometryPopup } from '@/components/map/FeatureGeometryLayer';
+import { MapLayerControls } from '@/components/map/MapLayerControls';
 
 const captures = vi.hoisted(() => ({
   lines: [] as RouteLineProps[],
@@ -150,8 +147,10 @@ describe('geometry layers', () => {
   it('토글과 목록 선택을 키보드로 실행하고 부분 결과·재시도도 안내한다', async () => {
     const user = userEvent.setup(),
       current = state({ truncated: true, error: '조회 실패' });
-    render(<FeatureGeometryControls state={current} />);
-    await user.click(screen.getByRole('checkbox', { name: '경로 표시' }));
+    render(
+      <MapLayerControls geometry={current} transport={null} onOpenTransportDetail={vi.fn()} />,
+    );
+    await user.click(screen.getByRole('checkbox', { name: '경로' }));
     expect(current.toggle).toHaveBeenCalledWith('route', false);
     fireEvent.click(screen.getByRole('button', { name: '다시 불러오기' }));
     expect(current.retry).toHaveBeenCalledOnce();

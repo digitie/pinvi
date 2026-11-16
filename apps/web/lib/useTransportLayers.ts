@@ -10,6 +10,7 @@ import type {
 } from '@pinvi/schemas';
 import {
   requestableTransportLayers,
+  TRANSPORT_LAYER_META,
   resolveMarkerStyle,
   transportItemTitle,
   transportMarkerId,
@@ -23,6 +24,8 @@ const DEBOUNCE_MS = 250;
 const CACHE_MAX = 32;
 const CACHE_TTL_MS = 60_000;
 const LIMIT = 200;
+/** 반경 조회 기준 장소 상한 — 서버 `NEAR_MAX_POINTS`와 같다(넘으면 400). */
+const NEAR_MAX_POINTS = 60;
 /** 신선도 문구("n분 전")를 다시 그리는 주기. */
 const NOW_TICK_MS = 30_000;
 
@@ -83,7 +86,28 @@ function toPoints(results: readonly TransportLayerResult[]): TransportMapPoint[]
  * 필요라 401이 로그인 화면 이동을 부른다). 실패는 조용히 레이어 상태로만 보인다 — 장소 마커와 여행 화면이
  * 이 기능 때문에 깨지면 안 된다.
  */
-export function useTransportLayers({ active }: { active: boolean }) {
+export function useTransportLayers({
+  active,
+  nearPoints = null,
+}: {
+  active: boolean;
+  /**
+   * 여행 지도: 기준 장소(여행 장소) 좌표. 주면 viewport가 아니라 이 장소들의 반경(주유소 10 km·교통 돌발
+   * 20 km — 서버 정책, `/transport/markers-near`)으로 조회하고 지도 이동·줌으로 다시 조회하지 않는다.
+   * `null`이면(탐색 지도) 지금처럼 viewport로 조회한다.
+   */
+  nearPoints?: ReadonlyArray<{ lon: number; lat: number }> | null;
+}) {
+  const nearMode = nearPoints != null;
+  // 좌표 배열의 identity가 아니라 값으로 다시 조회한다 — 부모가 렌더마다 새 배열을 만들어도 조회는 한 번.
+  const nearKey = nearPoints
+    ? nearPoints.map((p) => `${p.lon.toFixed(5)},${p.lat.toFixed(5)}`).join(';')
+    : null;
+  const nearPointsRef = useRef(nearPoints);
+  useEffect(() => {
+    nearPointsRef.current = nearPoints;
+  }, [nearPoints]);
+  const [radiusM, setRadiusM] = useState<Partial<Record<TransportLayer, number>> | null>(null);
   const [status, setStatus] = useState<TransportStatusResponse | null>(null);
   const [enabled, setEnabled] = useState<ReadonlySet<TransportLayer>>(() => new Set());
   const [zoom, setZoom] = useState<number | null>(null);
@@ -97,7 +121,12 @@ export function useTransportLayers({ active }: { active: boolean }) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const latestRef = useRef(0);
-  const cacheRef = useRef(new Map<string, Fetched & { cachedAt: number }>());
+  const cacheRef = useRef(
+    new Map<
+      string,
+      Fetched & { cachedAt: number; radiusM: Partial<Record<TransportLayer, number>> | null }
+    >(),
+  );
 
   useEffect(() => {
     if (!active) return;
@@ -122,32 +151,57 @@ export function useTransportLayers({ active }: { active: boolean }) {
   }, [visible, hasData]);
 
   const fetchNow = useCallback(
-    async (map: MapLibreMap, layersOn: ReadonlySet<TransportLayer>) => {
+    async (map: MapLibreMap | null, layersOn: ReadonlySet<TransportLayer>) => {
       const requestId = latestRef.current + 1;
       latestRef.current = requestId;
       abortRef.current?.abort();
-      const z = clampZoom(map.getZoom());
-      setZoom(z);
-      const layers = requestableTransportLayers(layersOn, z);
+      const near = nearPointsRef.current;
+      let layers: TransportLayer[];
+      let key: string;
+      let request: (signal: AbortSignal) => Promise<{
+        layers: TransportLayerResult[];
+        radius_m?: Partial<Record<TransportLayer, number>>;
+      }>;
+      if (near) {
+        // 여행 장소 반경 — 줌과 무관하게 켠 레이어를 모두 조회한다(반경이 이미 범위를 좁힌다).
+        if (map) setZoom(clampZoom(map.getZoom()));
+        layers = TRANSPORT_LAYER_META.filter((meta) => layersOn.has(meta.layer)).map(
+          (meta) => meta.layer,
+        );
+        const points = near.slice(0, NEAR_MAX_POINTS);
+        key = `near:${points.map((p) => `${p.lon.toFixed(5)},${p.lat.toFixed(5)}`).join(';')}:${layers.join(',')}`;
+        request = (signal) =>
+          transportApi(apiClient).markersNear({ points, layers, limit: LIMIT }, { signal });
+      } else {
+        if (!map) return;
+        const z = clampZoom(map.getZoom());
+        setZoom(z);
+        layers = requestableTransportLayers(layersOn, z);
+        const bbox = boundsToBbox(map.getBounds(), z);
+        key = `${z}:${bbox}:${layers.join(',')}`;
+        request = (signal) =>
+          transportApi(apiClient).markersInBounds(
+            { bbox, zoom: z, layers, limit: LIMIT },
+            { signal },
+          );
+      }
       if (layers.length === 0) {
         setFetched(null);
         return;
       }
-      const bbox = boundsToBbox(map.getBounds(), z);
-      const key = `${z}:${bbox}:${layers.join(',')}`;
       const cached = cacheRef.current.get(key);
       if (cached && Date.now() - cached.cachedAt <= CACHE_TTL_MS) {
         setFetched({ results: cached.results, receivedAt: cached.receivedAt });
+        if (cached.radiusM) setRadiusM(cached.radiusM);
         return;
       }
       const controller = new AbortController();
       abortRef.current = controller;
       try {
-        const data = await transportApi(apiClient).markersInBounds(
-          { bbox, zoom: z, layers, limit: LIMIT },
-          { signal: controller.signal },
-        );
+        const data = await request(controller.signal);
         if (requestId !== latestRef.current) return;
+        const radius = data.radius_m ?? null;
+        if (radius) setRadiusM(radius);
         const receivedAt = Date.now();
         // 요청한 레이어가 응답에 없으면 "불러오는 중"에 머물지 않게 불러올 수 없음으로 채운다.
         const returned = new Set(data.layers.map((result) => result.layer));
@@ -165,7 +219,7 @@ export function useTransportLayers({ active }: { active: boolean }) {
         ];
         const cache = cacheRef.current;
         cache.delete(key);
-        cache.set(key, { results, receivedAt, cachedAt: receivedAt });
+        cache.set(key, { results, receivedAt, cachedAt: receivedAt, radiusM: radius });
         while (cache.size > CACHE_MAX) {
           const first = cache.keys().next().value;
           if (first == null) break;
@@ -207,7 +261,8 @@ export function useTransportLayers({ active }: { active: boolean }) {
     (map: MapLibreMap) => {
       mapRef.current = map;
       setHasMap(true);
-      if (!visibleRef.current) return;
+      // 여행 장소 반경 모드는 지도 이동과 무관하다 — 장소·레이어가 바뀔 때만 조회한다.
+      if (!visibleRef.current || nearPointsRef.current) return;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         // 아직 움직이는 중(애니메이션 맞춤)이면 건너뛴다 — 끝나는 moveend가 다시 부른다.
@@ -231,6 +286,14 @@ export function useTransportLayers({ active }: { active: boolean }) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       // 진행 중인 이전 조회는 바로 끊는다(꺼 둔 레이어의 늦은 응답이 남지 않게).
       abortRef.current?.abort();
+      if (nearPointsRef.current) {
+        // 여행 장소 반경은 bounds를 읽지 않는다 — 지도 상태와 무관하게 잠시 뒤 조회한다.
+        debounceRef.current = setTimeout(
+          () => void fetchNow(mapRef.current, enabledRef.current),
+          DEBOUNCE_MS,
+        );
+        return;
+      }
       if (!mapRef.current) return;
       debounceRef.current = setTimeout(() => {
         const map = mapRef.current;
@@ -249,11 +312,12 @@ export function useTransportLayers({ active }: { active: boolean }) {
   }, []);
 
   // 컨트롤이 보이기 시작했을 때(상태 응답 도착) 이미 떠 있는 지도로 한 번 맞춘다.
+  // 여행 장소 반경 모드는 장소 목록(값)이 바뀌어도 다시 조회한다.
   useEffect(() => {
-    if (visible && mapRef.current && enabledRef.current.size > 0) {
+    if (visible && (mapRef.current || nearKey != null) && enabledRef.current.size > 0) {
       void fetchNow(mapRef.current, enabledRef.current);
     }
-  }, [visible, fetchNow]);
+  }, [visible, nearKey, fetchNow]);
 
   const results = useMemo(() => {
     if (!fetched) return [] as TransportLayerResult[];
@@ -267,7 +331,12 @@ export function useTransportLayers({ active }: { active: boolean }) {
     visible,
     status,
     enabled,
-    hasMap,
+    // 반경 모드는 지도 없이도 조회한다 — 켠 레이어는 바로 "불러오는 중"을 차지한다.
+    hasMap: hasMap || nearMode,
+    /** 여행 장소 반경 모드(줌 안내 없음, 반경 문구). */
+    nearMode,
+    /** 반경 모드에서 서버가 알려 준 레이어별 반경(m). */
+    radiusM,
     zoom,
     results,
     receivedAt: fetched?.receivedAt ?? null,

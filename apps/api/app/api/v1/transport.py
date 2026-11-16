@@ -38,6 +38,7 @@ from app.schemas.transport import (
     TransportLayerResult,
     TransportLayerStatus,
     TransportMarkersInBoundsResponse,
+    TransportMarkersNearResponse,
     TransportStatusResponse,
 )
 from app.services import transport_layers
@@ -191,6 +192,100 @@ async def transport_markers_in_bounds(
             limit=limit,
         )
     return Envelope.of(TransportMarkersInBoundsResponse(bbox=bbox_obj, zoom=zoom, layers=results))
+
+
+def _parse_points(raw: str) -> list[tuple[float, float]]:
+    """`lon,lat;lon,lat;…` → 국내 범위 기준 장소 목록(중복 제거, 순서 유지).
+
+    국내 범위(`BBox` 제약) 밖이거나 숫자가 아니면 400이다 — 여행 장소는 국내 좌표다.
+    """
+    invalid = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={
+            "code": "VALIDATION_ERROR",
+            "message": (
+                "points 는 'lon,lat;lon,lat' 형식의 국내 좌표"
+                f"(최대 {transport_layers.NEAR_MAX_POINTS}곳)여야 합니다."
+            ),
+        },
+    )
+    points: list[tuple[float, float]] = []
+    for part in raw.split(";"):
+        if not part.strip():
+            continue
+        values = part.split(",")
+        if len(values) != 2:
+            raise invalid
+        try:
+            lon, lat = (float(v) for v in values)
+        except ValueError as exc:
+            raise invalid from exc
+        if not (
+            math.isfinite(lon) and math.isfinite(lat) and 124.0 <= lon <= 132.0 and 33.0 <= lat <= 43.0
+        ):
+            raise invalid
+        point = (round(lon, 6), round(lat, 6))
+        if point not in points:
+            points.append(point)
+    if len(points) > transport_layers.NEAR_MAX_POINTS:
+        raise invalid
+    return points
+
+
+def _parse_near_layers(raw: list[str] | None) -> list[TransportLayer]:
+    """반경 표면 레이어 — `NEAR_RADIUS_M`에 있는 레이어만. 생략하면 그 전부."""
+    allowed = list(transport_layers.NEAR_RADIUS_M)
+    if not raw:
+        return allowed
+    wanted = {part.strip() for value in raw for part in value.split(",") if part.strip()}
+    if not wanted or wanted - set(allowed):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": f"layers는 {', '.join(allowed)} 중에서 고릅니다.",
+            },
+        )
+    return [layer for layer in allowed if layer in wanted]
+
+
+@router.get("/markers-near", response_model=Envelope[TransportMarkersNearResponse])
+async def transport_markers_near(
+    _current_user: CurrentUserId,
+    client: OptionalKorTravelMapHttpClientDep,
+    points: Annotated[
+        str,
+        Query(
+            max_length=2_000,
+            description="기준 장소 'lon,lat;lon,lat'(여행 장소, 최대 60곳). 비우면 빈 결과.",
+        ),
+    ] = "",
+    layers: Annotated[list[str] | None, Query(max_length=8)] = None,
+    limit: Annotated[int, Query(ge=1, le=_MAX_LIMIT)] = _DEFAULT_LIMIT,
+) -> Envelope[TransportMarkersNearResponse]:
+    """기준 장소들에서 레이어별 반경(주유소 10 km·교통 돌발 20 km) 안의 항목. 5xx를 내지 않는다."""
+    parsed_points = _parse_points(points)
+    wanted = _parse_near_layers(layers)
+    if not settings.pinvi_kor_travel_map_transport_enabled:
+        results = transport_layers.disabled_layers(wanted)
+    elif client is None:
+        results = [
+            TransportLayerResult(layer=layer, status="unavailable", reason="UPSTREAM_UNAVAILABLE")
+            for layer in wanted
+        ]
+    else:
+        results = await transport_layers.markers_near_points(
+            KorTravelMapTransportClient(client),
+            points=parsed_points,
+            layers=wanted,
+            limit=limit,
+        )
+    return Envelope.of(
+        TransportMarkersNearResponse(
+            radius_m={layer: transport_layers.NEAR_RADIUS_M[layer] for layer in wanted},
+            layers=results,
+        )
+    )
 
 
 async def _detail(

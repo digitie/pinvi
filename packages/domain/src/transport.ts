@@ -7,6 +7,7 @@
  * - 마커 id: `transport:<layer>:<feature_id>` — feature 마커 id와 섞이지 않게 접두로 가른다(ADR-076 D7).
  */
 
+import { TransportLayerSchema } from '@pinvi/schemas';
 import type {
   HighwayIncidentItem,
   TransportFreshness,
@@ -21,13 +22,22 @@ export interface TransportLayerMeta {
   minZoom: number;
 }
 
-/** 표시 순서 = 이 배열 순서. */
+/**
+ * 지도에 켤 수 있는 레이어. 표시 순서 = 이 배열 순서.
+ *
+ * 휴게소·공항은 지도에서 뺐다(소유자 결정 2026-11-16) — API 계약(`TransportLayer`)에는 남아 있지만 화면은
+ * 켜지 않는다. 여행 지도는 여행 장소 반경(주유소 10 km·교통 돌발 20 km, `/transport/markers-near`)만 보인다.
+ */
 export const TRANSPORT_LAYER_META: readonly TransportLayerMeta[] = [
   { layer: 'fuel_station', label: '주유소', minZoom: 11 },
-  { layer: 'rest_area', label: '휴게소', minZoom: 8 },
   { layer: 'highway_incident', label: '교통 돌발', minZoom: 7 },
-  { layer: 'airport', label: '공항', minZoom: 5 },
 ];
+
+/** 여행 지도 반경 문구 — 서버가 알려 준 반경(m)을 "여행 장소 10km 이내"로. */
+export function transportRadiusLabel(radiusM: number): string {
+  const km = radiusM / 1000;
+  return `여행 장소 ${Number.isInteger(km) ? km : km.toFixed(1)}km 이내`;
+}
 
 const META_BY_LAYER = new Map(TRANSPORT_LAYER_META.map((meta) => [meta.layer, meta]));
 
@@ -97,7 +107,8 @@ export function transportMarkerId(layer: TransportLayer, featureId: string): str
   return `${MARKER_PREFIX}${layer}:${featureId}`;
 }
 
-const LAYERS: ReadonlySet<string> = new Set(TRANSPORT_LAYER_META.map((meta) => meta.layer));
+// 화면에서 뺀 레이어(휴게소·공항)의 id도 계약상 유효하다 — 메타가 아니라 계약 목록으로 판별한다.
+const LAYERS: ReadonlySet<string> = new Set<string>(TransportLayerSchema.options);
 
 /** `transportMarkerId`의 역. transport 마커가 아니면 `null`. */
 export function parseTransportMarkerId(

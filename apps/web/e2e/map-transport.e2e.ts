@@ -57,12 +57,17 @@ test('교통 정보가 켜져 있으면 레이어 토글이 보이고 적재 전
 
   await page.goto('/map');
 
-  const controls = page.getByTestId('transport-layer-controls');
+  // 2026-11-16: 교통 레이어는 경로·영역과 같은 패널의 체크박스다. 공항·휴게소는 없다.
+  const controls = page.getByTestId('map-layer-controls');
   await expect(controls).toBeVisible();
+  const labels = controls.getByRole('group', { name: '지도 레이어 표시' }).locator('label');
+  await expect(labels).toHaveText(['경로', '영역', '주유소', '교통 돌발']);
+  await expect(page.getByTestId('transport-layer-toggle-airport')).toHaveCount(0);
+  await expect(page.getByTestId('transport-layer-toggle-rest_area')).toHaveCount(0);
   const fuel = page.getByTestId('transport-layer-toggle-fuel_station');
-  await expect(fuel).toHaveAttribute('aria-pressed', 'false');
-  await fuel.click();
-  await expect(fuel).toHaveAttribute('aria-pressed', 'true');
+  await expect(fuel).not.toBeChecked();
+  await fuel.check();
+  await expect(fuel).toBeChecked();
   // 상태 응답에서 주유소는 NOT_LOADED — 켜면 "일시적으로 불러올 수 없음"이다.
   await expect(page.getByTestId('transport-layer-state-fuel_station')).toContainText(
     '일시적으로 불러올 수 없음',
@@ -76,5 +81,8 @@ test('교통 정보가 꺼져 있으면 지도 화면은 지금과 같다', asyn
   await page.goto('/map');
 
   await expect(page.getByTestId('feature-map')).toBeVisible();
-  await expect(page.getByTestId('transport-layer-controls')).toHaveCount(0);
+  // 경로·영역 체크박스는 그대로, 교통 체크박스만 없다.
+  await expect(page.getByTestId('geometry-route-toggle')).toBeVisible();
+  await expect(page.getByTestId('transport-layer-toggle-fuel_station')).toHaveCount(0);
+  await expect(page.getByTestId('transport-layer-toggle-highway_incident')).toHaveCount(0);
 });

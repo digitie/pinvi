@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any, Final, cast
@@ -197,6 +198,138 @@ async def markers_in_bounds(
     clipped = clip_to_korea(bbox)
     return list(
         await asyncio.gather(*(_layer_in_bounds(client, layer, clipped, limit) for layer in layers))
+    )
+
+
+#: 여행 장소 기준 반경(m) — 주유소 10 km, 교통 돌발 20 km(소유자 결정 2026-11-16). 이 반경 표면은 이 두
+#: 레이어만 받는다(휴게소·공항은 지도에서 뺐다).
+NEAR_RADIUS_M: Final[dict[TransportLayer, int]] = {
+    "fuel_station": 10_000,
+    "highway_incident": 20_000,
+}
+#: 한 요청이 받는 기준 장소 수 상한.
+NEAR_MAX_POINTS: Final = 60
+#: 이 거리 안의 기준 장소는 한 번의 Map 근처 조회로 묶는다(조회 반경을 이만큼 넓히고 정확한 거리로 다시
+#: 거른다 — 묶어도 결과는 같다).
+NEAR_MERGE_M: Final = 2_000
+#: 동시에 보내는 Map 근처 조회 수.
+NEAR_CONCURRENCY: Final = 6
+#: 반경 조회 레이어 하나의 상한(초). 조회가 여러 번이라 viewport 상한보다 넉넉하다.
+NEAR_LAYER_DEADLINE_SECONDS: Final[float] = 5.0
+_EARTH_RADIUS_M: Final = 6_371_008.8
+
+
+def haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+    """두 경위도 사이 대원 거리(m)."""
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = p2 - p1
+    dlmb = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    return 2 * _EARTH_RADIUS_M * math.asin(min(1.0, math.sqrt(a)))
+
+
+def cluster_points(
+    points: Sequence[tuple[float, float]], merge_m: float = NEAR_MERGE_M
+) -> list[tuple[float, float]]:
+    """가까운 기준 장소를 묶은 조회 중심. 모든 장소는 어느 중심에서 ``merge_m`` 안에 있다."""
+    centers: list[tuple[float, float]] = []
+    for lon, lat in points:
+        if not any(haversine_m(lon, lat, c_lon, c_lat) <= merge_m for c_lon, c_lat in centers):
+            centers.append((lon, lat))
+    return centers
+
+
+async def _layer_near_points(
+    client: KorTravelMapTransportClient,
+    layer: TransportLayer,
+    points: Sequence[tuple[float, float]],
+    limit: int,
+) -> TransportLayerResult:
+    radius = NEAR_RADIUS_M[layer]
+    centers = cluster_points(points)
+    semaphore = asyncio.Semaphore(NEAR_CONCURRENCY)
+
+    async def one(center: tuple[float, float]) -> dict[str, Any]:
+        async with semaphore:
+            return await client.list_items(
+                LAYER_DATASET_PATH[layer],
+                near=(center[0], center[1], float(radius + NEAR_MERGE_M)),
+                limit=limit,
+            )
+
+    try:
+        pages = await asyncio.wait_for(
+            asyncio.gather(*(one(center) for center in centers)),
+            timeout=NEAR_LAYER_DEADLINE_SECONDS,
+        )
+        truncated = False
+        freshness: TransportFreshness | None = None
+        nearest: dict[str, tuple[float, TransportItem]] = {}
+        for data in pages:
+            raw_items = data.get("items")
+            page_truncated = data.get("truncated")
+            if not isinstance(raw_items, list) or not isinstance(page_truncated, bool):
+                raise TransportContractError(
+                    f"Map transport {layer} 목록 셰입이 올바르지 않습니다."
+                )
+            truncated = truncated or page_truncated
+            page_freshness = _freshness(data.get("freshness"), f"{layer} freshness")
+            # 여러 조회의 신선도 중 가장 오래된 것을 보인다(보수적).
+            if freshness is None or page_freshness.age_seconds > freshness.age_seconds:
+                freshness = page_freshness
+            for item in _items(layer, raw_items):
+                if item.coord is None:
+                    continue
+                # 묶은 중심의 넓힌 반경이 아니라 실제 기준 장소들까지의 거리로 다시 거른다.
+                distance = min(
+                    haversine_m(item.coord.lon, item.coord.lat, lon, lat) for lon, lat in points
+                )
+                if distance > radius:
+                    continue
+                seen = nearest.get(item.feature_id)
+                if seen is None or distance < seen[0]:
+                    nearest[item.feature_id] = (
+                        distance,
+                        item.model_copy(update={"distance_m": round(distance, 1)}),
+                    )
+        ordered = sorted(nearest.values(), key=lambda pair: pair[0])
+        if len(ordered) > limit:
+            truncated = True
+            ordered = ordered[:limit]
+        return TransportLayerResult(
+            layer=layer,
+            status="ok",
+            freshness=freshness,
+            truncated=truncated,
+            items=[item for _, item in ordered],
+        )
+    except (KorTravelMapError, TimeoutError) as exc:
+        reason = unavailable_reason(exc)
+        logger.warning(
+            "transport.layer_unavailable",
+            extra={"layer": layer, "reason": reason, "error": type(exc).__name__},
+        )
+        return TransportLayerResult(layer=layer, status="unavailable", reason=reason)
+
+
+async def markers_near_points(
+    client: KorTravelMapTransportClient,
+    *,
+    points: Sequence[tuple[float, float]],
+    layers: Sequence[TransportLayer],
+    limit: int,
+) -> list[TransportLayerResult]:
+    """기준 장소들(여행 장소)에서 레이어별 반경(`NEAR_RADIUS_M`) 안의 항목. 가까운 순, 레이어별 강등.
+
+    반경 거르기는 Map의 근처 검색(Valkey GEOSEARCH)이 하고, 여러 장소의 합집합·중복 제거·정확한 거리
+    재확인을 여기서 한다. 기준 장소가 없으면 Map을 부르지 않고 빈 ``ok``다.
+    """
+    if not points:
+        return [TransportLayerResult(layer=layer, status="ok") for layer in layers]
+    return list(
+        await asyncio.gather(
+            *(_layer_near_points(client, layer, points, limit) for layer in layers)
+        )
     )
 
 

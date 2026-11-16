@@ -172,6 +172,14 @@ class TransportMarkersInBoundsResponse(BaseModel):
     layers: list[TransportLayerResult]
 
 
+class TransportMarkersNearResponse(BaseModel):
+    """`GET /transport/markers-near` — 기준 장소들에서 레이어별 반경 안의 항목(가까운 순)."""
+
+    #: 레이어별 적용 반경(m). 반경은 서버 정책이다(주유소 10 km, 교통 돌발 20 km).
+    radius_m: dict[TransportLayer, int]
+    layers: list[TransportLayerResult]
+
+
 class TransportLayerStatus(BaseModel):
     layer: TransportLayer
     available: bool

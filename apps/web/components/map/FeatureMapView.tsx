@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  FeatureGeometryControls,
   FeatureGeometryLayers,
   FeatureGeometryPopup,
 } from '@/components/map/FeatureGeometryLayer';
@@ -23,7 +22,7 @@ import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
 import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
-import { TransportLayerControls } from '@/components/map/TransportLayerControls';
+import { MapLayerControls } from '@/components/map/MapLayerControls';
 import { TransportMarkerLegend, TransportMarkers } from '@/components/map/TransportMarkers';
 import {
   ClusterLayer,
@@ -1100,10 +1099,10 @@ function FeatureMapViewView0Part0({ viewModel }: { viewModel: FeatureMapViewView
             {notice}
           </p>
         )}
-        <FeatureGeometryControls state={geometry} className="mt-1" />
-        <TransportLayerControls
-          state={transport}
-          onOpenDetail={openTransportDetail}
+        <MapLayerControls
+          geometry={geometry}
+          transport={transport}
+          onOpenTransportDetail={openTransportDetail}
           className="mt-1"
         />
       </div>

@@ -827,6 +827,7 @@ export {
   TransportLayerSchema,
   TransportLayerStatusSchema,
   TransportMarkersInBoundsResponseSchema,
+  TransportMarkersNearResponseSchema,
   TransportStatusResponseSchema,
   TransportUnavailableReasonSchema,
 } from './transport';
@@ -847,6 +848,7 @@ export type {
   TransportLayerResult,
   TransportLayerStatus,
   TransportMarkersInBoundsResponse,
+  TransportMarkersNearResponse,
   TransportStatusResponse,
   TransportUnavailableReason,
 } from './transport';

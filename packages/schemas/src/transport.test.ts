@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { TransportMarkersInBoundsResponseSchema } from './transport';
+import {
+  TransportMarkersInBoundsResponseSchema,
+  TransportMarkersNearResponseSchema,
+} from './transport';
 
 /** API(`apps/api/app/schemas/transport.py`)가 실제로 내보내는 모양 — pydantic은 UTC를 `Z`로 쓴다. */
 const payload = {
@@ -60,5 +63,16 @@ describe('TransportMarkersInBoundsResponseSchema', () => {
     const broken = structuredClone(payload);
     broken.layers[0]!.layer = 'parking';
     expect(TransportMarkersInBoundsResponseSchema.safeParse(broken).success).toBe(false);
+  });
+});
+
+describe('TransportMarkersNearResponseSchema', () => {
+  it('요청한 레이어의 반경만 담는다', () => {
+    const parsed = TransportMarkersNearResponseSchema.parse({
+      radius_m: { fuel_station: 10000 },
+      layers: [{ layer: 'fuel_station', status: 'ok', truncated: false, items: [] }],
+    });
+    expect(parsed.radius_m.fuel_station).toBe(10000);
+    expect(parsed.radius_m.highway_incident).toBeUndefined();
   });
 });
