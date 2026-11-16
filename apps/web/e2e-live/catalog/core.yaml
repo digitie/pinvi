@@ -653,7 +653,7 @@
   tags: [desktop, mobile, auth, home]
   preconditions:
     - account: test@test.com
-    - env: PinVi ≥ 개인 홈 PR(feat/personal-home) deployed
+    - env: PinVi ≥ #748 deployed
   data_sources: []
   steps:
     - 로그인 → /trips → 헤더 워드마크 'Pinvi 홈' 클릭
@@ -672,7 +672,7 @@
   tags: [desktop, mobile, auth, home]
   preconditions:
     - account: test@test.com
-    - env: PinVi ≥ 개인 홈 PR(feat/personal-home) deployed
+    - env: PinVi ≥ #748 deployed
   data_sources: []
   steps:
     - 로그인 → /map → 데스크톱 app-nav--home / 모바일 더보기 → app-nav--home-mobile
@@ -690,7 +690,7 @@
   tags: [desktop, mobile, auth, home]
   preconditions:
     - 로그인하지 않은 새 context
-    - env: PinVi ≥ 개인 홈 PR(feat/personal-home) deployed
+    - env: PinVi ≥ #748 deployed
   data_sources: []
   steps:
     - '/' 진입 → networkidle → '/home' 진입
@@ -709,7 +709,7 @@
   preconditions:
     - account: test@test.com
     - data: "'경포해변' 검색 가능"
-    - env: PinVi ≥ 개인 홈 PR(feat/personal-home) deployed
+    - env: PinVi ≥ #748 deployed
   data_sources: [map:place]
   steps:
     - GET /users/me/home(전) → '[e2e] CORE-035' 여행(D-2~D-1, 지역 '강릉') → 1일차 '경포해변' 추가 → GET /users/me/home(후) → /home
