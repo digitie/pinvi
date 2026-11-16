@@ -1,6 +1,7 @@
 'use client';
 
 import { withOccurrenceKeys } from '@/lib/occurrenceKeys';
+import { weatherRefreshMessage } from '@/lib/weatherRefreshMessage';
 import { providerLabel } from '@/lib/weatherProviderLabels';
 import type {
   TripWeatherCard,
@@ -330,19 +331,6 @@ export interface TripWeatherSummaryProps {
   onRefresh?: () => Promise<TripWeatherRefreshResponse>;
 }
 
-/** 새로고침 결과 안내 — 다시 읽은 뒤에도 비어 있을 때 이유를 짧게 말한다. */
-export function weatherRefreshMessage(result: TripWeatherRefreshResponse): string {
-  if (result.refreshed > 0) {
-    return '날씨를 다시 확인했습니다. 예보는 보통 열흘 앞까지만 있습니다.';
-  }
-  if (result.cooldown > 0) {
-    return `방금 확인했습니다. ${result.retry_after_seconds ?? 60}초 뒤 다시 시도할 수 있습니다.`;
-  }
-  if (result.failed > 0) return '날씨 서비스에 연결하지 못했습니다. 잠시 뒤 다시 시도하세요.';
-  if (result.no_data > 0) return '이 장소 근처에 날씨 관측·예보 지점이 없습니다.';
-  return '좌표가 있는 장소만 날씨를 확인할 수 있습니다.';
-}
-
 function WeatherRefreshButton({
   onRefresh,
 }: {
@@ -392,6 +380,50 @@ function WeatherRefreshButton({
   );
 }
 
+const STATUS_TEXT: Record<Exclude<TripWeatherResolution['state'], 'found'>, string> = {
+  no_data: '이 날짜의 날씨 정보가 없습니다.',
+  retired: '장소 상태가 종료되어 날씨를 확인할 수 없습니다.',
+  suppressed: '비공개 장소는 날씨를 확인할 수 없습니다.',
+  missing: '장소 정보를 찾을 수 없어 날씨를 확인할 수 없습니다.',
+  unavailable: '날씨 서비스를 일시적으로 사용할 수 없습니다.',
+};
+
+function TripWeatherStatus({
+  weather,
+  hasCard,
+  label,
+  compact,
+  onRefresh,
+}: {
+  weather: TripWeatherResolution;
+  hasCard: boolean;
+  label: string;
+  compact: boolean;
+  onRefresh: TripWeatherSummaryProps['onRefresh'];
+}) {
+  const statusText =
+    weather.state === 'found'
+      ? hasCard
+        ? STATUS_TEXT.no_data
+        : STATUS_TEXT.unavailable
+      : STATUS_TEXT[weather.state];
+  // 비었거나 일시 장애일 때만 새로고침이 뜻이 있다(종료·비공개·없는 장소는 다시 물어도 같다).
+  const refreshable =
+    weather.state === 'found' || weather.state === 'no_data' || weather.state === 'unavailable';
+  return (
+    <section
+      className={compact ? 'px-0 py-1' : 'rounded-sm bg-surface-soft px-3 py-2'}
+      aria-label={label}
+      data-testid="trip-weather-status"
+    >
+      <div className="flex flex-wrap items-center gap-x-1">
+        <p className="text-xs text-muted">{statusText}</p>
+        {refreshable && onRefresh && <WeatherRefreshButton onRefresh={onRefresh} />}
+      </div>
+    </section>
+  );
+}
+
 export function TripWeatherSummary({
   weather,
   weatherCards = {},
@@ -415,33 +447,14 @@ export function TripWeatherSummary({
 
   if (!date || !weather) return null;
   if (weather.state !== 'found' || !card || groups.length === 0) {
-    const statusText =
-      weather.state === 'found'
-        ? card
-          ? '이 날짜의 날씨 정보가 없습니다.'
-          : '날씨 서비스를 일시적으로 사용할 수 없습니다.'
-        : {
-            no_data: '이 날짜의 날씨 정보가 없습니다.',
-            retired: '장소 상태가 종료되어 날씨를 확인할 수 없습니다.',
-            suppressed: '비공개 장소는 날씨를 확인할 수 없습니다.',
-            missing: '장소 정보를 찾을 수 없어 날씨를 확인할 수 없습니다.',
-            unavailable: '날씨 서비스를 일시적으로 사용할 수 없습니다.',
-          }[weather.state];
-    // 비었거나 일시 장애일 때만 새로고침이 뜻이 있다(종료·비공개·없는 장소는 다시 물어도 같다).
-    const refreshable =
-      onRefresh != null &&
-      (weather.state === 'found' || weather.state === 'no_data' || weather.state === 'unavailable');
     return (
-      <section
-        className={compact ? 'px-0 py-1' : 'rounded-sm bg-surface-soft px-3 py-2'}
-        aria-label={label}
-        data-testid="trip-weather-status"
-      >
-        <div className="flex flex-wrap items-center gap-x-1">
-          <p className="text-xs text-muted">{statusText}</p>
-          {refreshable && onRefresh && <WeatherRefreshButton onRefresh={onRefresh} />}
-        </div>
-      </section>
+      <TripWeatherStatus
+        weather={weather}
+        hasCard={card != null}
+        label={label}
+        compact={compact}
+        onRefresh={onRefresh}
+      />
     );
   }
 

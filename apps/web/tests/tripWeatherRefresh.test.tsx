@@ -1,7 +1,8 @@
 // 날씨 새로고침 버튼(2026-11-16 소유자 요청 15).
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { TripWeatherSummary, weatherRefreshMessage } from '@/components/trips/TripWeatherSummary';
+import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
+import { weatherRefreshMessage } from '@/lib/weatherRefreshMessage';
 import type { TripWeatherRefreshResponse } from '@pinvi/schemas';
 
 const BASE: TripWeatherRefreshResponse = {
