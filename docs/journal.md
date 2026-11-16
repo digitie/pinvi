@@ -3,7 +3,7 @@
 - `POST /trips/{id}/days/{n}/weather/refresh`(body `poi_id` 선택). PinVi 쪽 캐시는 날씨 위치 해석(`weather_location_links`, TTL 7일)뿐이고 날씨 값은 Map Valkey 상태(Map Dagster 적재)라 상류 수집을 당기는 API가 없다. 그래서 새로고침은 그 장소의 위치 집합을 Map `/nearest`·`/locations?near=`로 즉시 다시 해석해 저장한다(해석 당시 적재 전이던 예보 격자가 7일간 빠지는 경우를 고친다). 직접 경로(플래그 off)는 stale 표시.
 - 속도 제한: feature별 60초 쿨다운(행 `resolved_at` — worker·노드 공유, 방금 화면이 해석한 행도 쉰다), 요청당 30곳, Map 동시성 4, 사용자 일반 한도는 미들웨어. 구성원(읽기 권한)이면 누구나.
 - 웹: 상태 문구 옆 버튼(날짜·장소 날씨), 갱신되면 trip 재조회, 쿨다운 초·지점 없음·연결 실패 안내.
-- 검증: 통합 `test_trip_weather_refresh`, 단위 `test_weather_refresh`·`tripWeatherRefresh`, live WX-041(배포 뒤).
+- 검증: 통합 `test_trip_weather_refresh`, 단위 `test_weather_refresh`·`tripWeatherRefresh`, live WX-045(배포 뒤).
 
 ## 2026-11-16 — 일출·일몰 astral 즉시 계산, 일자 요일·공휴일 강조(소유자 요청 17·18)
 
