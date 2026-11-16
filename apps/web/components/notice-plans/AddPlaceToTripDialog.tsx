@@ -37,7 +37,7 @@ function dayLabel(day: TripView['days'][number]): string {
   return date ? `${day.day_index}일차 · ${date}` : `${day.day_index}일차`;
 }
 
-export function AddPlaceToTripDialog({ place, onClose }: AddPlaceToTripDialogProps) {
+function useAddPlaceToTrip(place: AddablePlace) {
   const [trips, setTrips] = useState<TripResponse[] | null>(null);
   const [tripId, setTripId] = useState<string | null>(null);
   const [view, setView] = useState<TripView | null>(null);
@@ -72,10 +72,7 @@ export function AddPlaceToTripDialog({ place, onClose }: AddPlaceToTripDialogPro
       .then((loaded) => {
         if (cancelled) return;
         setView(loaded);
-        const preferred = place.preferred_date
-          ? loaded.days.find((day) => (day.effective_date ?? day.date) === place.preferred_date)
-          : undefined;
-        setDayIndex(preferred?.day_index ?? loaded.days[0]?.day_index ?? null);
+        setDayIndex(defaultDayIndex(loaded, place.preferred_date ?? null));
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -130,14 +127,82 @@ export function AddPlaceToTripDialog({ place, onClose }: AddPlaceToTripDialogPro
     }
   };
 
-  const footer = addedTripId ? (
-    <>
-      <Button ref={successCloseRef} variant="secondary" onClick={onClose}>
-        닫기
-      </Button>
-      <ButtonLink href={`/trips/${addedTripId}`}>여행 열기</ButtonLink>
-    </>
-  ) : (
+  return {
+    add,
+    addedTripId,
+    chooseTrip,
+    dayIndex,
+    error,
+    saving,
+    selectedDay,
+    setDayIndex,
+    successCloseRef,
+    tripId,
+    trips,
+    view,
+  };
+}
+
+type AddPlaceModel = ReturnType<typeof useAddPlaceToTrip>;
+
+/** 행사 시작일과 같은 일자, 없으면 첫 일자. */
+function defaultDayIndex(view: TripView, preferredDate: string | null): number | null {
+  const preferred = view.days.find(
+    (day) => preferredDate != null && (day.effective_date ?? day.date) === preferredDate,
+  );
+  return preferred?.day_index ?? view.days[0]?.day_index ?? null;
+}
+
+export function AddPlaceToTripDialog({ place, onClose }: AddPlaceToTripDialogProps) {
+  const model = useAddPlaceToTrip(place);
+  const { addedTripId, saving, selectedDay } = model;
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      busy={saving}
+      size="sm"
+      title="내 여행에 추가"
+      description={place.name}
+      testId="add-place-dialog"
+      footer={<AddPlaceFooter model={model} onClose={onClose} />}
+    >
+      {addedTripId ? (
+        <p
+          className="flex items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text"
+          role="status"
+        >
+          <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+          {selectedDay ? `${dayLabel(selectedDay)}에 추가했습니다.` : '추가했습니다.'}
+        </p>
+      ) : (
+        <div className="space-y-4">
+          <TripPicker model={model} />
+          {model.tripId != null ? <DayPicker model={model} /> : null}
+          {model.error ? (
+            <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text">
+              {model.error}
+            </p>
+          ) : null}
+        </div>
+      )}
+    </Dialog>
+  );
+}
+
+function AddPlaceFooter({ model, onClose }: { model: AddPlaceModel; onClose: () => void }) {
+  const { add, addedTripId, saving, selectedDay, successCloseRef } = model;
+  if (addedTripId) {
+    return (
+      <>
+        <Button ref={successCloseRef} variant="secondary" onClick={onClose}>
+          닫기
+        </Button>
+        <ButtonLink href={`/trips/${addedTripId}`}>여행 열기</ButtonLink>
+      </>
+    );
+  }
+  return (
     <>
       <Button variant="secondary" onClick={onClose} disabled={saving}>
         취소
@@ -152,106 +217,80 @@ export function AddPlaceToTripDialog({ place, onClose }: AddPlaceToTripDialogPro
       </Button>
     </>
   );
+}
 
+function TripPicker({ model }: { model: AddPlaceModel }) {
+  const { chooseTrip, tripId, trips } = model;
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      busy={saving}
-      size="sm"
-      title="내 여행에 추가"
-      description={place.name}
-      testId="add-place-dialog"
-      footer={footer}
-    >
-      {addedTripId ? (
-        <p
-          className="flex items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-sm text-success-text"
-          role="status"
-        >
-          <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
-          {selectedDay ? `${dayLabel(selectedDay)}에 추가했습니다.` : '추가했습니다.'}
+    <fieldset>
+      <legend className="text-sm font-semibold text-ink">여행</legend>
+      {trips == null ? (
+        <div className="mt-2 space-y-2" aria-busy="true" aria-live="polite">
+          <span className="sr-only">여행 목록을 불러오는 중…</span>
+          {[0, 1].map((row) => (
+            <div key={row} className="h-11 animate-pulse rounded-sm bg-surface-soft" />
+          ))}
+        </div>
+      ) : trips.length === 0 ? (
+        <p className="mt-2 rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">
+          추가할 여행이 없습니다. 먼저 여행을 만들어 주세요.
         </p>
       ) : (
-        <div className="space-y-4">
-          <fieldset>
-            <legend className="text-sm font-semibold text-ink">여행</legend>
-            {trips == null ? (
-              <div className="mt-2 space-y-2" aria-busy="true" aria-live="polite">
-                <span className="sr-only">여행 목록을 불러오는 중…</span>
-                {[0, 1].map((row) => (
-                  <div key={row} className="h-11 animate-pulse rounded-sm bg-surface-soft" />
-                ))}
-              </div>
-            ) : trips.length === 0 ? (
-              <p className="mt-2 rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">
-                추가할 여행이 없습니다. 먼저 여행을 만들어 주세요.
-              </p>
-            ) : (
-              <ul className="mt-2 max-h-40 space-y-1 overflow-auto">
-                {trips.map((trip) => (
-                  <li key={trip.trip_id}>
-                    <button
-                      type="button"
-                      onClick={() => chooseTrip(trip.trip_id)}
-                      aria-pressed={tripId === trip.trip_id}
-                      className={
-                        tripId === trip.trip_id
-                          ? 'focus-ring block min-h-11 w-full rounded-sm border border-ink bg-surface-soft px-3 py-2 text-left text-sm font-medium text-ink'
-                          : 'focus-ring block min-h-11 w-full rounded-sm border border-hairline px-3 py-2 text-left text-sm text-ink hover:bg-surface-soft'
-                      }
-                    >
-                      {trip.title}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </fieldset>
+        <ul className="mt-2 max-h-40 space-y-1 overflow-auto">
+          {trips.map((trip) => (
+            <li key={trip.trip_id}>
+              <button
+                type="button"
+                onClick={() => chooseTrip(trip.trip_id)}
+                aria-pressed={tripId === trip.trip_id}
+                className={
+                  tripId === trip.trip_id
+                    ? 'focus-ring block min-h-11 w-full rounded-sm border border-ink bg-surface-soft px-3 py-2 text-left text-sm font-medium text-ink'
+                    : 'focus-ring block min-h-11 w-full rounded-sm border border-hairline px-3 py-2 text-left text-sm text-ink hover:bg-surface-soft'
+                }
+              >
+                {trip.title}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </fieldset>
+  );
+}
 
-          {tripId != null ? (
-            <fieldset>
-              <legend className="text-sm font-semibold text-ink">일자</legend>
-              {view == null ? (
-                error ? null : (
-                  <div
-                    className="mt-2 h-11 animate-pulse rounded-sm bg-surface-soft"
-                    aria-busy="true"
-                  />
-                )
-              ) : view.days.length === 0 ? (
-                <p className="mt-2 rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">
-                  이 여행에는 일자가 없습니다. 여행에서 일자를 먼저 추가해 주세요.
-                </p>
-              ) : (
-                <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="일자 선택">
-                  {view.days.map((day) => (
-                    <button
-                      key={day.day_index}
-                      type="button"
-                      onClick={() => setDayIndex(day.day_index)}
-                      aria-pressed={dayIndex === day.day_index}
-                      className={
-                        dayIndex === day.day_index
-                          ? 'focus-ring inline-flex min-h-11 items-center rounded-sm bg-ink px-3 text-sm font-semibold text-canvas'
-                          : 'focus-ring inline-flex min-h-11 items-center rounded-sm border border-hairline bg-canvas px-3 text-sm text-ink hover:bg-surface-soft'
-                      }
-                    >
-                      {dayLabel(day)}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </fieldset>
-          ) : null}
-
-          {error ? (
-            <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-sm text-error-text">
-              {error}
-            </p>
-          ) : null}
+function DayPicker({ model }: { model: AddPlaceModel }) {
+  const { dayIndex, error, setDayIndex, view } = model;
+  return (
+    <fieldset>
+      <legend className="text-sm font-semibold text-ink">일자</legend>
+      {view == null ? (
+        error ? null : (
+          <div className="mt-2 h-11 animate-pulse rounded-sm bg-surface-soft" aria-busy="true" />
+        )
+      ) : view.days.length === 0 ? (
+        <p className="mt-2 rounded-sm bg-surface-soft px-3 py-2 text-sm text-muted">
+          이 여행에는 일자가 없습니다. 여행에서 일자를 먼저 추가해 주세요.
+        </p>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="일자 선택">
+          {view.days.map((day) => (
+            <button
+              key={day.day_index}
+              type="button"
+              onClick={() => setDayIndex(day.day_index)}
+              aria-pressed={dayIndex === day.day_index}
+              className={
+                dayIndex === day.day_index
+                  ? 'focus-ring inline-flex min-h-11 items-center rounded-sm bg-ink px-3 text-sm font-semibold text-canvas'
+                  : 'focus-ring inline-flex min-h-11 items-center rounded-sm border border-hairline bg-canvas px-3 text-sm text-ink hover:bg-surface-soft'
+              }
+            >
+              {dayLabel(day)}
+            </button>
+          ))}
         </div>
       )}
-    </Dialog>
+    </fieldset>
   );
 }

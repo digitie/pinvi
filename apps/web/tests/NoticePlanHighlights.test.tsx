@@ -1,10 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import {
-  NoticePlanHighlights,
-  formatEventPeriod,
-  formatNearDistance,
-} from '@/components/notice-plans/NoticePlanHighlights';
+import { NoticePlanHighlights } from '@/components/notice-plans/NoticePlanHighlights';
+import { formatEventPeriod, formatNearDistance } from '@/lib/noticePlanHighlights';
 import { NoticePlanShelf } from '@/components/notice-plans/NoticePlanShelf';
 
 const api = vi.hoisted(() => ({ list: vi.fn(), highlights: vi.fn(), copy: vi.fn(), get: vi.fn() }));

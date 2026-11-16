@@ -270,9 +270,7 @@ async def test_build_queries_sido_months_and_bbox(monkeypatch: pytest.MonkeyPatc
 
 
 async def test_build_isolates_a_failing_section(monkeypatch: pytest.MonkeyPatch) -> None:
-    plan_id = _patch_plan(
-        monkeypatch, starts_on=None, ends_on=None, pois=[_poi("a", _GANGNEUNG)]
-    )
+    plan_id = _patch_plan(monkeypatch, starts_on=None, ends_on=None, pois=[_poi("a", _GANGNEUNG)])
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/v1/curations":
