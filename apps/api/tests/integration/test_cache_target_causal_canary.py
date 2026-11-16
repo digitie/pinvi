@@ -797,9 +797,18 @@ async def test_crash_after_success_replay_fetches_fresh_snapshot_before_receipt(
 async def test_remote_bracket_obeys_global_deadline_and_releases_writer_lock(
     session_factory,
 ) -> None:  # type: ignore[no-untyped-def]
+    """원격 snapshot 대기 중에는 consumer 행 잠금을 쥐고, 전역 deadline에서 끊고 잠금을 놓는다.
+
+    종전 판정은 실시간 창 두 개에 기대 CI에서 흔들렸다(2026-11-16 세 번): 전체 예산 0.3초 안에 snapshot까지
+    가야 했고(느린 러너에서는 그 전에 deadline이 지나 `snapshot_started` 대기가 TimeoutError), writer가 20 ms
+    동안 끝나지 않았는지를 봤다(snapshot 시작이 deadline 직전이면 그 사이 잠금이 풀려 writer가 끝난다).
+    이제 writer가 **실제로 이 잠금에 막혀 기다리는지**를 Postgres(`pg_blocking_pids`)로 확인하고, 예산은 그 확인이
+    끝날 만큼 넉넉히 두되 60초짜리 snapshot을 deadline에서 끊는지(경과 < 예산 + 1초)는 그대로 본다.
+    """
     run_id, _ = await _complete_run(session_factory)
     client = _SlowSnapshotClient(session_factory)
     loop = asyncio.get_running_loop()
+    budget_seconds = 3.0
     started_at = loop.time()
     replay = asyncio.create_task(
         run_cache_target_causal_canary(
@@ -808,26 +817,41 @@ async def test_remote_bracket_obeys_global_deadline_and_releases_writer_lock(
             consumer_client=client,  # type: ignore[arg-type]
             consumer_id=CONSUMER_ID,
             run_id=run_id,
-            timeout_seconds=0.3,
+            timeout_seconds=budget_seconds,
             poll_seconds=0.01,
         )
     )
-    await asyncio.wait_for(client.snapshot_started.wait(), timeout=1)
+    await asyncio.wait_for(client.snapshot_started.wait(), timeout=budget_seconds)
+    writer_pid: asyncio.Future[int] = loop.create_future()
 
     async def mutate_consumer() -> None:
         async with session_factory() as db:
+            writer_pid.set_result(int(await db.scalar(text("SELECT pg_backend_pid()"))))
             consumer = await db.get(KtmCacheTargetConsumer, CONSUMER_ID)
             assert consumer is not None
             consumer.feature_cache_generation += 1
             await db.commit()
 
     writer = asyncio.create_task(mutate_consumer())
-    await asyncio.sleep(0.02)
+    pid = await asyncio.wait_for(writer_pid, timeout=budget_seconds)
+
+    async def blocked_by_canary() -> bool:
+        async with session_factory() as probe:
+            blockers = await probe.scalar(
+                text("SELECT cardinality(pg_blocking_pids(:pid))"), {"pid": pid}
+            )
+        return bool(blockers)
+
+    # writer UPDATE가 잠금 대기에 들어갈 때까지 기다린다(시간 창이 아니라 상태로 판정).
+    while not await blocked_by_canary():
+        assert not writer.done(), f"원격 대기 중 writer가 잠금 없이 끝났다: {writer.exception()!r}"
+        assert not replay.done(), "writer가 막히기 전에 canary가 끝났다(예산 부족)"
+        await asyncio.sleep(0.01)
     assert not writer.done()
     with pytest.raises(CacheTargetCanaryFailure, match="final_snapshot_unavailable"):
         await replay
     await asyncio.wait_for(writer, timeout=1)
-    assert loop.time() - started_at < 1
+    assert loop.time() - started_at < budget_seconds + 1
 
 
 @pytest.mark.parametrize(

@@ -1,3 +1,8 @@
+## causal canary 시험 결정화 (2026-11-17)
+
+PR claude/fix-causal-canary-flake: 시간 창 대신 pg_blocking_pids 상태 판정.
+다음: 없음(CI 통합 shard 2 재실행 필요가 사라지는지 관찰).
+
 ## 날씨 새로고침 (2026-11-16)
 
 PR claude/trip-weather-refresh: 날씨 없음 문구 옆 새로고침 버튼 + 일자 날씨 새로고침 API(요청 15).

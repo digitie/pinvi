@@ -1,3 +1,9 @@
+## 2026-11-17 — causal canary 시험 흔들림 원인과 결정적 판정
+
+- `test_remote_bracket_obeys_global_deadline_and_releases_writer_lock`이 11-16 CI 통합 shard 2에서 세 번 실패했다(`assert not writer.done()` 두 번, `snapshot_started` 대기 TimeoutError 한 번). 원인은 실시간 창 두 개: 전체 예산 0.3초 안에 canary가 잠금을 잡고 원격 snapshot까지 가야 했고, writer가 20 ms 동안 끝나지 않는지를 봤다. 느린 러너에서는 deadline이 snapshot 전에 지나거나, snapshot 시작이 deadline 직전이라 20 ms 안에 잠금이 풀려 writer가 끝났다. 코드 결함이 아니라 시험의 시간 가정이다.
+- 고침: writer가 **실제로 canary 잠금에 막혀 기다리는지**를 `pg_blocking_pids(writer_pid)`로 확인하고(상태 판정), 예산은 3초로 두되 60초 snapshot을 deadline에서 끊는지(경과 < 예산 + 1초)와 잠금 해제 뒤 writer 완료는 그대로 단언한다.
+- 재현: WSL 16코어에 busy loop 32개 부하에서 옛 시험 4회 중 3회 실패, 새 시험 4회 모두 통과(부하 없이 5회 통과).
+
 ## 2026-11-17 — 내 위치 버튼 후속(소유자 승인: #755 미결 3건)
 
 - 모바일 장소 정보 패널(#754)이 열리면 내 위치 버튼을 패널 위로 올린다: `useLiftAboveObstacle`가 같은 지도 경계의 `[data-map-location-avoid]`(TripDetail 모바일 패널 래퍼)를 ResizeObserver·MutationObserver로 따라가 `bottom`을 패널 위 끝+8px로 둔다.
