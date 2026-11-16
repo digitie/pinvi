@@ -156,11 +156,14 @@ describe('TripMapView 맞춤 배선', () => {
       const map = fakeMap({ x: 72, y: 207 });
       h.map = map;
       const view = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
-      // 1차·패널 재맞춤 모두: 위 여백은 검색 줄 아래(132)+원형 마커 21+간격 24(60% 상한 180 안),
-      // 아래 여백이 먼저 줄어든다.
+      // 1차는 검색 줄 아래(132)+원형 마커 21+간격 24, 패널 재맞춤은 패널 아래(288)+45가 60% 상한(180)에
+      // 묶인다. 두 번 모두 아래 여백이 먼저 줄어든다.
       expect(map.fitBounds).toHaveBeenCalledTimes(2);
+      expect(map.fitBounds.mock.calls.map((call) => call[1].padding.top)).toEqual([
+        132 + 21 + 24,
+        180,
+      ]);
       for (const call of map.fitBounds.mock.calls) {
-        expect(call[1].padding.top).toBe(Math.min(180, 132 + 21 + 24));
         expect(call[1].padding.bottom).toBeLessThan(64);
         expect(300 - call[1].padding.top - call[1].padding.bottom).toBeGreaterThan(0);
       }
