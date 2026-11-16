@@ -23,6 +23,8 @@ import {
   TripShareLinkResponseSchema,
   TripUpdateSchema,
   TripViewSchema,
+  TripWeatherRefreshRequestSchema,
+  TripWeatherRefreshResponseSchema,
 } from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
@@ -38,6 +40,7 @@ import type {
   TripDeleteRequest,
   TripShareLinkCreate,
   TripUpdate,
+  TripWeatherRefreshRequest,
 } from '@pinvi/schemas';
 
 export type TripBucket = 'future' | 'past' | 'all';
@@ -201,27 +204,37 @@ export const tripApi = (client: ApiClient) => ({
 
   listSharedComments: (tripId: string, token: string) =>
     client.request(`/trips/${tripId}/shared/${encodeURIComponent(token)}/comments`, {
-      method: 'GET', schema: z.array(TripCommentResponseSchema),
+      method: 'GET',
+      schema: z.array(TripCommentResponseSchema),
     }),
 
   createSharedComment: (tripId: string, token: string, body: TripCommentCreate) =>
     client.request(`/trips/${tripId}/shared/${encodeURIComponent(token)}/comments`, {
-      method: 'POST', body: JSON.stringify(TripCommentCreateSchema.parse(body)),
+      method: 'POST',
+      body: JSON.stringify(TripCommentCreateSchema.parse(body)),
       schema: TripCommentResponseSchema,
     }),
 
   deleteSharedComment: (tripId: string, token: string, commentId: string) =>
-    client.requestNoContent(`/trips/${tripId}/shared/${encodeURIComponent(token)}/comments/${commentId}`, {
-      method: 'DELETE',
-    }),
+    client.requestNoContent(
+      `/trips/${tripId}/shared/${encodeURIComponent(token)}/comments/${commentId}`,
+      {
+        method: 'DELETE',
+      },
+    ),
 
   updateShared: (
-    tripId: string, token: string, version: number,
+    tripId: string,
+    token: string,
+    version: number,
     body: Pick<TripUpdate, 'title' | 'description' | 'region_hint' | 'start_date' | 'end_date'>,
-  ) => client.request(`/trips/${tripId}/shared/${encodeURIComponent(token)}`, {
-    method: 'PATCH', headers: { 'If-Match': String(version) },
-    body: JSON.stringify(body), schema: TripResponseSchema,
-  }),
+  ) =>
+    client.request(`/trips/${tripId}/shared/${encodeURIComponent(token)}`, {
+      method: 'PATCH',
+      headers: { 'If-Match': String(version) },
+      body: JSON.stringify(body),
+      schema: TripResponseSchema,
+    }),
 
   listAttachments: (tripId: string) =>
     client.request(`/trips/${tripId}/attachments`, {
@@ -310,6 +323,14 @@ export const tripApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(TripDayOptimizeRequestSchema.parse(body)),
       schema: TripDayOptimizeResponseSchema,
+    }),
+
+  /** 일자(또는 한 장소)의 날씨 위치 해석 캐시를 새로 한다 — 이어서 `get`으로 다시 읽는다(요청 15). */
+  refreshDayWeather: (tripId: string, dayIndex: number, body: TripWeatherRefreshRequest = {}) =>
+    client.request(`/trips/${tripId}/days/${dayIndex}/weather/refresh`, {
+      method: 'POST',
+      body: JSON.stringify(TripWeatherRefreshRequestSchema.parse(body)),
+      schema: TripWeatherRefreshResponseSchema,
     }),
 
   inviteMember: (tripId: string, body: TripCompanionInvite) =>

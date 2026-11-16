@@ -513,6 +513,23 @@ meter 정수 또는 좌표 누락 시 `null`을 반환한다. optimize는 `neare
 좌표 없는 POI는 경고와 함께 기존 순서로 뒤에 둔다. `persist=true`면 POI `sort_order`를
 새 LexoRank로 저장하고 `poi.reordered` realtime event를 발행한다.
 
+### 10.x 일자 날씨 새로고침 (2026-11-16)
+
+- `POST /trips/{trip_id}/days/{day_index}/weather/refresh` — body `{"poi_id": uuid | null}`(생략 가능)
+
+일정 화면의 "이 날짜의 날씨 정보가 없습니다." 옆 새로고침 버튼이 부른다. 여행을 볼 수 있는 구성원이면 누구나
+부를 수 있다(값을 바꾸지 않는다). 그 일자(또는 한 장소)의 날씨 대상 — `feature_id`와 저장 좌표
+`feature_snapshot.coord`가 있는 POI — 의 **날씨 위치 해석 캐시**(`weather_location_links`)를 건너뛰고 다시
+해석한다. Map 경로(운영)는 Map `/v1/service/weather/nearest`·`/locations?near=`를 바로 불러 저장하고, 직접 경로는
+행을 stale로 표시해 다음 조회가 재해석한다. 날씨 값 자체는 Map·weather가 적재하므로 예보 범위 밖 날짜는
+새로고침해도 비어 있다.
+
+- 속도 제한: 같은 feature는 60초 안에 다시 해석하지 않는다(`cooldown` + `retry_after_seconds`, 행의
+  `resolved_at` 기준이라 worker·노드 공유). 한 요청은 30곳까지. 사용자별 일반 한도는 `authenticated_default`.
+- 응답: `refreshed`·`cooldown`·`no_data`·`failed`·`skipped`(좌표·Map 연결 없음)·`retry_after_seconds`. 호출자는
+  이어서 `GET /trips/{trip_id}`를 다시 읽는다.
+- Map 경로에서 service token이 없으면 503 `WEATHER_SERVICE_UNAVAILABLE`, 일자에 없는 `poi_id`는 404.
+
 ## 11. 여행 내보내기
 
 내보내기는 **현재 저장된 Pinvi snapshot**을 기준으로 만든다. PDF/print/GPX 생성 중
