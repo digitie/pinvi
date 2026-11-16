@@ -1,3 +1,10 @@
+## 2026-11-16 — 일출·일몰 astral 즉시 계산, 일자 요일·공휴일 강조(소유자 요청 17·18)
+
+- prod 실측(읽기 전용): `trip_poi_rise_sets` 8,966행이 전부 `pending_fetch`(채우는 job 없음 — `kasi_poi_rise_set_job`은 asset 0개), `trip_day_rise_sets`도 첫 ETL(20분 주기)까지 '준비 중'. 일출·일몰은 좌표·날짜로 결정적이라 응답을 만들 때 `astral` 3.2로 계산한다(`services/sun_times.py`, 분 반올림 — KASI 고시값과 서울·부산 하지·동지 분 단위 일치). 일자 = 일자 POI centroid(대표 라벨은 그대로), 장소 = 그 좌표, POI 단건 응답·텔레그램 일간 일출도 같은 계산. 달 출몰은 KASI 행이 같은 날짜로 성공했을 때만 싣는다. ETL·테이블은 그대로 두었다(정리는 소유자 결정).
+- 공휴일 출처: Map·weather는 KASI 특일을 API로 내지 않는다(Map은 provider 등록뿐, weather 없음). PinVi `kasi_special_days_job`(data.go.kr 키, 매일 03:30)이 이미 `kasi_special_days`를 채우고 있어(prod 2026-03 ~ 2028-05, 11-13 갱신) 그대로 쓴다. 웹은 일자 목록·공유 머리글 날짜에 요일을 붙이고 토요일 파랑, 일요일·공휴일 빨강(`tripDayTone`).
+- 장소 날씨 아래에 장소 일출·일몰 한 줄(`PoiRiseSetLine`).
+- 검증: `test_sun_times`, 통합 `test_trip_day_rise_set`·`test_kasi_poi_rise_set`·`test_telegram_notifications` 기대값 갱신, 웹 `tripDayWeekdaySun`·domain `tripDateLabels`, live WX-040·TRIP-071(배포 뒤).
+
 ## 2026-11-16 — 일정 목록 장소·일자 행 정리(소유자 요청 11·12·13)
 
 - 장소 편집기: 마커 색·아이콘·도착·출발·예산·실제 비용을 접는 항목(기본 접힘, 머리글 옆 현재 값 요약)으로 바꾸고 예산은 링크 아래로 옮겼다. 요약은 버튼 이름 밖에 둬 색 버튼('노랑' 등)과 접근 이름이 겹치지 않는다. 장소 행도 예산·실제 비용을 메모 아래 마지막 줄에 보인다.

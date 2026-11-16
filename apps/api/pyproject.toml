@@ -29,6 +29,8 @@ dependencies = [
   "boto3>=1.35",
   "cryptography>=43.0",
   "prometheus-client>=0.22",
+  # 일출·일몰을 좌표·날짜로 직접 계산한다(ADR-055 §6 개정 — 외부 호출·ETL 대기 없음).
+  "astral>=3.2",
 ]
 
 [project.optional-dependencies]

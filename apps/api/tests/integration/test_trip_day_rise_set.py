@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import select
@@ -122,9 +123,18 @@ async def test_build_trip_view_emits_day_rise_set(session_factory: Any) -> None:
         assert trip is not None
         view = await build_trip_view(db, trip=trip, kor_travel_map_client=None)
     days = {d["day_index"]: d for d in view["days"]}
-    assert days[1]["rise_set"]["status"] == "pending_fetch"
+    # 일출·일몰은 KASI ETL을 기다리지 않고 응답을 만들 때 astral로 계산한다(요청 18). sync 행은
+    # 아직 pending_fetch여도 화면 값은 바로 success다. 부산 2026-06-10 KASI 고시 05:09 / 19:37.
+    kst = ZoneInfo("Asia/Seoul")
+    assert days[1]["rise_set"]["status"] == "success"
+    assert days[1]["rise_set"]["sunrise_at"].astimezone(kst).strftime("%H:%M") == "05:09"
+    assert days[1]["rise_set"]["sunset_at"].astimezone(kst).strftime("%H:%M") == "19:37"
+    assert days[1]["rise_set"]["fetched_at"] is None
     assert days[1]["rise_set_reference"] == "광안리 해수욕장"
     assert days[2]["rise_set"]["status"] == "pending_coord"
+    poi = days[1]["pois"][0]
+    assert poi["rise_set"]["status"] == "success"
+    assert poi["rise_set"]["sunrise_at"] == days[1]["rise_set"]["sunrise_at"]
 
 
 async def test_maintenance_failure_preserves_loaded_trip_and_poi(
@@ -229,7 +239,7 @@ async def test_concurrent_gets_atomically_create_one_cache_row_per_day(
     assert [response.status_code for response in responses] == [200, 200]
     for response in responses:
         assert len(response.json()["data"]["days"]) == 2
-        assert response.json()["data"]["days"][0]["rise_set"]["status"] == "pending_fetch"
+        assert response.json()["data"]["days"][0]["rise_set"]["status"] == "success"
     async with session_factory() as db:
         rows = list(
             await db.scalars(select(TripDayRiseSet).where(TripDayRiseSet.trip_id == trip_id))

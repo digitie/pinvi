@@ -14,6 +14,41 @@ export function formatTripDate(value: string | null): string {
   }).format(new Date(value));
 }
 
+const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'] as const;
+
+export interface TripWeekday {
+  /** '일'~'토'. */
+  label: (typeof WEEKDAY_LABELS)[number];
+  /** 0=일요일 … 6=토요일. */
+  index: number;
+}
+
+/** date-only ISO('YYYY-MM-DD', KST 민간일)의 요일. `formatTripDate`와 같이 UTC로 읽어 기기 timezone과 무관하다. */
+export function tripWeekday(value: string | null | undefined): TripWeekday | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const index = parsed.getUTCDay();
+  return { label: WEEKDAY_LABELS[index]!, index };
+}
+
+/** 날짜 + 요일 — 예: `2026년 11월 16일 (월)`. 날짜가 없으면 `미정`. */
+export function formatTripDateWithWeekday(value: string | null): string {
+  const weekday = tripWeekday(value);
+  return weekday ? `${formatTripDate(value)} (${weekday.label})` : formatTripDate(value);
+}
+
+/** 달력 관례의 강조 — 일요일·공휴일은 'holiday', 토요일은 'saturday', 그 밖은 null. */
+export function tripDayTone(
+  value: string | null | undefined,
+  holidays?: TripDayHoliday[],
+): 'holiday' | 'saturday' | null {
+  const weekday = tripWeekday(value);
+  if ((holidays ?? []).some((holiday) => holiday.name) || weekday?.index === 0) return 'holiday';
+  if (weekday?.index === 6) return 'saturday';
+  return null;
+}
+
 /** ISO 시각 → 한국시(KST) `HH:MM`. rise/set 시각 표시용. 값 없으면 null. */
 export function formatKstTime(value: string | null | undefined): string | null {
   if (!value) return null;
