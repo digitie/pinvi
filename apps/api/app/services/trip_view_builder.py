@@ -392,7 +392,13 @@ async def build_trip_view(
                 "user_url": poi.user_url,
                 "rise_set": sun_rise_set_dict(
                     locdate=day_effective_date.get(poi.day_index),
-                    coord=extract_feature_coordinates(
+                    # 최신 feature 좌표(없으면 저장 snapshot) — 화면 지도 핀과 같은 좌표.
+                    coord=(
+                        extract_feature_coordinates(feature_view)
+                        if isinstance(feature_view, dict)
+                        else None
+                    )
+                    or extract_feature_coordinates(
                         poi.feature_snapshot if isinstance(poi.feature_snapshot, dict) else {}
                     ),
                     moon=_kasi_moon(

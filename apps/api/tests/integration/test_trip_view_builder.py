@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -108,6 +109,8 @@ async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> No
             trip_id=trip_id,
             owner_user_id=user_id,
             title="서울 여행",
+            start_date=date(2026, 5, 6),
+            end_date=date(2026, 5, 6),
         )
         day = TripDay(trip_id=trip_id, day_index=1, title="1일차")
         db.add_all([trip, day])
@@ -146,9 +149,11 @@ async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> No
     assert built_poi["feature_resolution_state"] == "found"
     assert built_poi["title"] == "최신 경복궁"
     assert built_poi["feature"]["coord"] == {"lon": 126.977, "lat": 37.579}
+    # 일출·일몰은 저장 KASI 행이 아니라 최신 feature 좌표(snapshot엔 없음)·날짜로 astral 계산(요청 18).
     assert built_poi["rise_set"]["status"] == "success"
     assert built_poi["rise_set"]["locdate"] == date(2026, 5, 6)
-    assert built_poi["rise_set"]["sunrise_at"] == datetime(2026, 5, 6, 5, 30, tzinfo=UTC)
+    sunrise = built_poi["rise_set"]["sunrise_at"]
+    assert sunrise.astimezone(ZoneInfo("Asia/Seoul")).strftime("%H:%M") == "05:32"
 
 
 async def test_build_trip_view_weather_client_none_marks_all_unavailable(
