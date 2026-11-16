@@ -388,7 +388,10 @@ test.describe('NEAR trip map — four-place trip', () => {
       await expectLayerLineShape(page, 'airport');
       test.skip(airports.status !== 'ok' || airports.items.filter((i) => i.coord).length === 0, 'no airport inside the trip viewport');
       await expect(legendMarkers(page, 'airport').first()).toBeAttached();
-      await clickTransportMarker(page, 'airport');
+      // 390px 폭에서는 뷰포트 안 공항이 전부 '묶음'으로 그려진다(2026-11-16 두 번 재현) — 사용자처럼
+      // 공항 좌표 쪽 묶음을 실제로 눌러 펼친 뒤 개별 공항 마커를 누른다(NEAR-006과 같은 방식).
+      const airportCoords = airports.items.flatMap((i) => (i.coord ? [i.coord] : []));
+      await clickTransportMarker(page, 'airport', airportCoords);
       await expect(detailDialog(page)).toContainText(LAYER_LABEL.airport);
       await closeDetail(page);
     });
