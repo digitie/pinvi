@@ -1,3 +1,7 @@
+## 2026-11-16 — 지도 레이어 패널·여행 장소 반경 교통 정보·PC 바탕지도 (feat/map-overlays-pc-tiles)
+
+공항·휴게소를 지도에서 빼고 주유소·교통 돌발을 경로·영역과 같은 체크박스 줄로 합쳤다. 여행 지도는 `/transport/markers-near`(여행 장소 주유소 10 km·교통 돌발 20 km)로 조회한다. Firefox·Safari 바탕지도 누락은 `lib/vworldTileProtocol.ts`로 고쳤다. 다음: 배포 뒤 live `--project desktop-firefox --area core`(CORE-016)와 NEAR 재작성 케이스 확인, maplibre-vworld-react `vworld.ts` 정본 수정 후 vendor 갱신.
+
 ## 2026-11-13 — 규칙 예외 없는 같은 origin의401 문서 복귀
 
 c412의 인라인 ESLint 예외는 preserve-ignores 요구와 맞지 않아 후속 commit으로 제거한다. 표준 URL로 현재 origin·포트를 보존한 절대 로그인 주소를 만들고 기존 location.href 문서 reload와 safeLoginReturnTo 정리를 유지한다. config·ignore·규칙 예외 추가0이며 실제 전체 web lint 경고0, 경고1개 대조 old exit0→new exit1, 기존 인증·복귀 경로와 새 origin/포트 회귀를 확인했다. c412의 CI 성공·부적합 소스와9fdb Doctor 실패 이력은 별도 보존한다. Expo3patch/launcher·Common36/C11은 동일하며 최종 새 정확 CI와 원2 검토·이미지 runtime 수용은 대기다. 운영·native 실기기/EAS/store는 NOT_RUN이다.
