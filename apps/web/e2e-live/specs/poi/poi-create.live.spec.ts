@@ -118,6 +118,7 @@ test.describe('POI create (desktop)', () => {
     const editor = page.getByTestId('poi-editor');
     await expect(editor).toBeVisible();
     await editor.getByLabel('메모').fill('[e2e] memo');
+    await editor.getByRole('button', { name: '예산·실제 비용', exact: true }).click();
     await editor.getByLabel('예산').fill('12000');
     await editor.getByLabel('링크').fill('https://example.com/e2e');
     const patch = page.waitForResponse(
@@ -156,6 +157,7 @@ test.describe('POI create (desktop)', () => {
     const { title } = await createManualPoi(page, id, e2eName('색'));
     await poiRow(page, title).getByRole('button', { name: '마커 편집' }).click();
     const editor = page.getByTestId('poi-editor');
+    await editor.getByRole('button', { name: '마커 색', exact: true }).click(); // 기본 접힘
     await editor.getByRole('button', { name: '노랑' }).click(); // P-03 (packages/design-tokens/src/colors.ts)
     await editor.getByRole('button', { name: '저장' }).click();
     await expect(editor).toBeHidden();

@@ -7,19 +7,19 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 
 | area | total | scripted | manual | blocked |
 |---|---:|---:|---:|---:|
-| trip | 58 | 54 | 2 | 2 |
+| trip | 59 | 55 | 2 | 2 |
 | search | 55 | 47 | 6 | 2 |
 | nearby | 43 | 36 | 2 | 5 |
 | weather | 29 | 24 | 2 | 3 |
 | share | 35 | 31 | 1 | 3 |
-| poi | 32 | 25 | 5 | 2 |
+| poi | 34 | 27 | 5 | 2 |
 | notify | 32 | 23 | 4 | 5 |
 | admin | 44 | 37 | 5 | 2 |
 | core | 31 | 30 | 1 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **549** | **497** | **28** | **24** |
+| **all** | **552** | **500** | **28** | **24** |
 
-Spec files: 58.
+Spec files: 59.
 
 ## Cases
 
@@ -83,6 +83,7 @@ Spec files: 58.
 | TRIP-056 | trip | 빈 상태 — 여행이 없는 계정(user2)에서 '아직 여행이 없습니다.' + '새 여행 만들기' CTA가 폼에 포커스 | P3 | desktop, mobile, a11y, auth | scripted | `specs/trip/trip-user2.live.spec.ts#TRIP-056` |
 | TRIP-057 | trip | 두 번째 사용자 격리 — user1의 비공개 여행은 user2 목록에 없고 URL 직접 접근도 거부 | P2 | desktop, mutating, auth | scripted | `specs/trip/trip-user2.live.spec.ts#TRIP-057` |
 | TRIP-058 | trip | 휴지통 30일 보존 — 만료 시각 = 삭제 시각 + 30일, 복원 가능, 복원 응답은 기한 해제 | P1 | desktop, mobile, mutating | scripted | `specs/trip/trip-list.live.spec.ts#TRIP-058` |
+| TRIP-070 | trip | 일자 편집·삭제 버튼 축소(접근 이름·24px 이상 유지), 일자 파일 버튼은 편집 옆·목록은 날짜 아래 | P2 | desktop, mutating, a11y | scripted | `specs/trip/trip-list-panel.live.spec.ts#TRIP-070` |
 | SRCH-001 | search | 탐색 지도에서 2글자 검색('설악') → 8초 내 결과 목록 + 소스 배지 | P1 | desktop, mobile, search, perf | scripted | `specs/search/search-basic.live.spec.ts#SRCH-001` |
 | SRCH-002 | search | 정확한 이름 '안동하회마을' 검색 → '장소' 배지 행이 첫 번째, 둘째 줄은 카테고리 라벨 | P1 | desktop, search, poi | scripted | `specs/search/search-basic.live.spec.ts#SRCH-002` |
 | SRCH-003 | search | 1글자 입력('설')은 검색을 발화하지 않는다(MIN_CHARS=2) | P2 | desktop, search | scripted | `specs/search/search-basic.live.spec.ts#SRCH-003` |
@@ -277,6 +278,8 @@ Spec files: 58.
 | POI-030 | poi | POI 삭제 후 그 장소 첨부가 /files 에 남는지 관찰 | P2 | desktop, mutating, poi | manual |  |
 | POI-031 | poi | POI 생성 다이얼로그 접근성 — 초기 포커스·Esc 닫기 | P3 | desktop, poi, a11y | scripted | `specs/poi/poi-create.live.spec.ts#POI-031` |
 | POI-032 | poi | 기존 POI 마커 우클릭은 생성이 아니라 편집기를 연다 | P3 | desktop, mutating, poi | scripted | `specs/poi/poi-create.live.spec.ts#POI-032` |
+| POI-040 | poi | 장소 편집기 — 마커 색·아이콘·도착·출발·예산 항목 기본 접힘, 예산은 링크 아래 | P2 | desktop, mutating, poi | scripted | `specs/trip/trip-list-panel.live.spec.ts#POI-040` |
+| POI-041 | poi | 장소 파일 버튼은 '마커 편집' 옆, 업로드하면 개수 표시 | P2 | desktop, mutating, poi | scripted | `specs/trip/trip-list-panel.live.spec.ts#POI-041` |
 | NTF-001 | notify | 설정 > Telegram 알림 진입 — 탭·안내문·Chat ID 폼 라벨·그룹 경고 표시 | P1 | desktop, mobile, telegram, a11y | scripted | `specs/notify/notify-settings.live.spec.ts#NTF-001` |
 | NTF-002 | notify | Chat ID 비움 제출 → 필드 오류·aria-invalid·포커스, API 호출 없음 | P2 | desktop, mobile, telegram, a11y | scripted | `specs/notify/notify-settings.live.spec.ts#NTF-002` |
 | NTF-003 | notify | 존재하지 않는 chat ID 등록 → verify 실패(invalid_chat) 알림, 목록 미추가, 입력 보존 | P1 | desktop, telegram | scripted | `specs/notify/notify-settings.live.spec.ts#NTF-003` |

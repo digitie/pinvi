@@ -19,7 +19,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react';
 
 const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,application/pdf';
 
@@ -41,6 +41,27 @@ export function TripAttachments(...args: Parameters<typeof useTripAttachmentsMod
   const viewModel = useTripAttachmentsModel(...args);
   if (viewModel.renderBranch === 'render0') return <TripAttachmentsView0 viewModel={viewModel} />;
   return null;
+}
+
+export interface TripAttachmentsDisclosureProps extends Omit<TripAttachmentsProps, 'compact'> {
+  /**
+   * 열기 버튼(`trigger`)과 펼친 파일 영역(`panel`, 닫혀 있으면 null)을 호출부가 따로 배치한다 — 일자는
+   * 날짜 편집 아이콘 옆에 버튼을, 날짜 바로 아래에 목록을 둔다(2026-11-16 소유자 요청 12).
+   */
+  children: (parts: { trigger: ReactNode; panel: ReactNode }) => ReactNode;
+}
+
+/** 버튼(파일 수 + `>`)과 펼침 영역을 나눠 배치하는 첨부. 목록·업로드 상태는 하나다. */
+export function TripAttachmentsDisclosure({ children, ...props }: TripAttachmentsDisclosureProps) {
+  const viewModel = useTripAttachmentsModel({ ...props, compact: true });
+  return (
+    <>
+      {children({
+        trigger: <TripAttachmentsTrigger viewModel={viewModel} />,
+        panel: viewModel.listOpen ? <TripAttachmentsPanel viewModel={viewModel} /> : null,
+      })}
+    </>
+  );
 }
 
 function useTripAttachmentsModel({
@@ -187,6 +208,7 @@ function useTripAttachmentsModel({
     items,
     listId,
     listOpen,
+    loadError,
     loading,
     onPick,
     remove,
@@ -295,6 +317,86 @@ function TripAttachmentsSection0_0Part0({ viewModel }: { viewModel: TripAttachme
         </label>
       </div>
     </div>
+  );
+}
+
+function TripAttachmentsTrigger({ viewModel }: { viewModel: TripAttachmentsView0Model }) {
+  const { loadError, items, listId, listOpen, loading, setListOpen, title } = viewModel;
+  const count = loading || loadError ? null : items.length;
+  const hint =
+    loadError ?? (count == null ? '파일 불러오는 중' : count > 0 ? `파일 ${count}개` : '파일 없음');
+  return (
+    <button
+      type="button"
+      onClick={() => setListOpen((open) => !open)}
+      aria-label={`${title} 목록 ${listOpen ? '닫기' : '열기'}`}
+      aria-controls={listOpen ? listId : undefined}
+      aria-expanded={listOpen}
+      title={hint}
+      // 시각은 작게(28px), 누름 영역은 WCAG 2.5.8 최소(24px) 이상을 유지한다.
+      className="inline-flex h-7 min-w-7 shrink-0 items-center justify-center gap-0.5 rounded-sm px-1 text-muted hover:bg-surface-soft hover:text-ink"
+      data-testid="trip-attachment-toggle"
+      data-attachment-count={count ?? undefined}
+    >
+      <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+      {count != null && count > 0 && (
+        <span className="text-xs font-semibold tabular-nums" aria-hidden="true">
+          {count}
+        </span>
+      )}
+      {listOpen ? (
+        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+      ) : (
+        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
+    </button>
+  );
+}
+
+function TripAttachmentsPanel({ viewModel }: { viewModel: TripAttachmentsView0Model }) {
+  const { error, inputRef, onPick, title, uploading } = viewModel;
+  return (
+    <section
+      className="space-y-2 rounded-sm border border-hairline bg-canvas p-2"
+      aria-label="첨부"
+      data-testid="trip-attachment-panel"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 text-xs font-bold text-ink">
+          <Paperclip className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+          {title}
+        </h2>
+        <label
+          aria-label={`${title} 올리기`}
+          title="파일 올리기"
+          className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-sm bg-cta text-on-primary hover:bg-cta-hover"
+        >
+          {uploading ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Upload className="h-4 w-4" aria-hidden="true" />
+          )}
+          <input
+            ref={inputRef}
+            type="file"
+            accept={ATTACHMENT_ACCEPT}
+            className="sr-only"
+            data-testid="attachment-input"
+            disabled={uploading}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void onPick(file);
+            }}
+          />
+        </label>
+      </div>
+      {error && (
+        <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-xs text-error-text">
+          {error}
+        </p>
+      )}
+      <TripAttachmentsSection0_0Part1 viewModel={viewModel} />
+    </section>
   );
 }
 
