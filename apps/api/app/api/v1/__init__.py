@@ -10,6 +10,7 @@ from app.api.v1 import (
     mobile,
     notice_plans,
     oauth,
+    poi_place_details,
     poi_weather,
     pois,
     public,
@@ -44,6 +45,7 @@ api_router.include_router(trips.router)
 api_router.include_router(trip_weather.router)
 api_router.include_router(pois.router)
 api_router.include_router(poi_weather.router)
+api_router.include_router(poi_place_details.router)
 api_router.include_router(ws.router)
 api_router.include_router(notice_plans.router)
 api_router.include_router(public.router)

@@ -98,3 +98,23 @@ class PoiResponse(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+
+
+class PoiPlaceDetails(BaseModel):
+    """장소 영업 정보 — `GET|POST /trips/{trip_id}/pois/{poi_id}/place-details[/refresh]`.
+
+    `status`: ready = 값이 하나 이상 있음, empty = 출처를 조회했지만 줄 값이 없음,
+    unavailable = 출처 장애로 아직 받지 못함(저장하지 않았고 다음 열람 때 다시 시도).
+    `sources`는 필드 이름 → 출처 이름(현재 `kor_travel_map`뿐)이다.
+    """
+
+    poi_id: uuid.UUID
+    status: Literal["ready", "empty", "unavailable"]
+    opening_hours: list[str] = Field(default_factory=list)
+    closed_days: str | None = None
+    phone: str | None = None
+    website: str | None = None
+    sources: dict[str, str] = Field(default_factory=dict)
+    fetched_at: datetime | None = None
+    # 이 시각 이후에 "다시 읽어오기"가 허용된다(같은 장소 60초에 1회).
+    refresh_available_at: datetime | None = None

@@ -97,15 +97,19 @@ test.describe('POI create (desktop)', () => {
     await snap(page, 'POI-003', 'address-title');
   });
 
-  test('POI-010 my-POI 팝업에는 상세보기·홈페이지가 없다', async ({ page }) => {
+  test('POI-010 my-POI 장소 정보 패널에는 상세보기·홈페이지가 없다', async ({ page }) => {
     const id = await freshTrip(page, 'POI 팝업');
     const { title } = await createManualPoi(page, id, e2eName('팝업'));
-    // creation selects the POI → popup with just the title
+    // 선택하면 지도 위 작은 제목 팝업 대신 장소 정보 패널이 뜬다(접힌 항목만, 링크 없음).
     await poiRow(page, title).getByRole('button').first().click();
-    const popup = page.locator('.maplibregl-popup').filter({ hasText: title });
-    await expect(popup).toBeVisible();
-    await expect(popup.getByTestId('trip-map-detail-open')).toHaveCount(0);
-    await expect(popup.getByRole('link')).toHaveCount(0);
+    const panel = page.getByTestId('place-info-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByTestId('place-info-title')).toHaveText(title);
+    await expect(page.locator('.maplibregl-popup').filter({ hasText: title })).toHaveCount(0);
+    await expect(panel.getByTestId('trip-map-detail-open')).toHaveCount(0);
+    await expect(panel.getByRole('link')).toHaveCount(0);
+    await panel.getByTestId('place-info-hours-toggle').click();
+    await expect(panel.getByTestId('place-info-website')).toHaveCount(0);
     await expect(poiRow(page, title).getByRole('link', { name: /홈페이지|전화/ })).toHaveCount(0);
     await snap(page, 'POI-010', 'popup');
   });

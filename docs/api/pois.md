@@ -222,3 +222,37 @@ viewer는 POI 생성·수정·삭제·정렬을 할 수 없다.
 - 웹은 장소별 카드를 공유 캐시(`apps/web/lib/usePoiWeather.ts`, 동시 2건·성공 10분/실패 1분)로 받아
   배지·팝업·장소 정보 패널이 나눠 쓴다. 화면 표시 규칙(제공자 우선순위, 상태 판정)은
   `apps/web/lib/weatherNow.ts`가 정본이다.
+
+## 장소 영업 정보 (`/trips/{trip_id}/pois/{poi_id}/place-details`)
+
+지도 마커(또는 목록 행)를 고르면 뜨는 장소 정보 패널(`apps/web/components/trips/PlaceInfoPanel.tsx`)이
+쓴다. 영업시간·휴무일·전화·웹사이트를 **여행에 넣은 장소 하나에만** 붙여 저장한다(`trip_poi_place_details`,
+migration `20261116_0108`). 전역 장소 데이터로 보관하지 않는다.
+
+- `GET`: 저장값이 있으면 그대로, 없으면 출처에서 한 번 받아 저장한 값을 준다. 여행 멤버(viewer 포함).
+  출처에 값이 없으면 `status="empty"`로 저장해 다시 묻지 않는다. 출처 장애는 저장하지 않고
+  `200 status="unavailable"`(화면은 조용히 '확인된 영업 정보가 없습니다.').
+- `POST .../refresh`("다시 읽어오기"): 편집 권한(owner/co_owner/editor)만. 같은 장소 60초에 1회
+  (`429 RATE_LIMITED` + `Retry-After`), 받은 값으로 덮어쓴다. 출처 장애는 `503 PLACE_DETAILS_UNAVAILABLE`이고
+  기존 값을 둔다. 응답의 `refresh_available_at`이 다음 허용 시각이다.
+- 삭제: 장소 삭제(`DELETE /trips/{id}/pois/{poi}` → soft delete)가 같은 트랜잭션에서 행을 지운다. 영구
+  삭제(여행 purge 등)는 FK `ON DELETE CASCADE`. 같은 곳을 다시 넣으면 새 POI라 처음 열 때 다시 받는다.
+
+### 출처별 판단 (공식 API만, 약관 준수)
+
+| 출처 | 영업시간 | 휴무일 | 전화 | 웹사이트 | 사용 |
+| --- | --- | --- | --- | --- | --- |
+| kor-travel-map feature 상세(공공데이터) | `business_hours`(Google 호환 periods/weekday_text) 또는 출처 원문(`facility_info.operating_time` 등) | periods에서 쉬는 요일, `special_days`, 원문(`rstde_info` 등) | `phones[]`/`facility_info.tel` | `urls.homepage`/`facility_info.url` | **저장** (`sources` 값 `kor_travel_map`) |
+| Kakao Local (키워드 검색) | 없음 | 없음 | `phone` | 없음(`place_url`만) | 저장 안 함 — ADR-054(응답 저장·재전달 금지). 상세 카드의 라이브 표시로만 |
+| Naver Local (지역 검색) | 없음 | 없음 | `telephone`(대부분 빈 값) | `link`(일부) | 저장 안 함 — ADR-054 |
+| Google Places Details (New) | `regularOpeningHours` | 있음 | `nationalPhoneNumber` | `websiteUri` | **사용 안 함** — Places 콘텐츠 캐시·저장 금지(place_id만 허용), 비 Google 지도(VWorld) 위 표시 금지(Service Specific Terms). PinVi에는 키도 없고, 키를 가진 kor-travel-concierge에도 키를 넘겨주거나 Details를 대신 조회하는 계약이 없다 |
+
+HTML 화면 스크래핑은 하지 않는다. 지도 feature가 없는 직접 추가 장소(manual/kakao/naver)는 저장 가능한
+출처가 없어 `empty`다.
+
+### 지도 앱 링크
+
+네이버·카카오·구글 지도 링크는 공개 URL 규약만 써서 키가 필요 없다(`apps/web/lib/mapLinks.ts`). PC는 웹
+주소를 새 탭으로, 모바일은 앱을 먼저 연다 — Android `intent://…;S.browser_fallback_url=`(앱 없으면 웹),
+iOS 앱 스킴(`nmap://`, `kakaomap://`) 뒤 화면이 그대로면 1.5초 뒤 웹으로. 구글은 `google.com/maps/search/?api=1`
+주소가 모바일에서 앱을 직접 연다.

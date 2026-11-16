@@ -180,6 +180,11 @@ export interface TripMapViewProps {
   overlayTopLeftClassName?: string;
   /** 지도 화면이 바뀔 때마다(로드·이동·줌) 그 bbox를 알린다 — 장소 검색 지역 편향의 화면 fallback. */
   onViewportBboxChange?: (bbox: string) => void;
+  /**
+   * 선택한 장소 마커 위 작은 제목 팝업. 호출부가 장소 정보 패널을 따로 띄우면 끈다(같은 정보 중복).
+   * 기본 켜짐.
+   */
+  showSelectedPoiPopup?: boolean;
 }
 
 export function TripMapView(...args: Parameters<typeof useTripMapViewModel>) {
@@ -206,6 +211,7 @@ function useTripMapViewModel({
   overlayTopLeft,
   overlayTopLeftClassName = 'pointer-events-none absolute left-2 right-2 top-2 z-10',
   onViewportBboxChange,
+  showSelectedPoiPopup = true,
 }: TripMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const overlayStackRef = useRef<HTMLDivElement | null>(null);
@@ -725,6 +731,7 @@ function useTripMapViewModel({
     setSelectedFeature,
     showFeatures,
     showNavigationControls,
+    showSelectedPoiPopup,
     surfaceClassName,
     transport,
     layerControls,
@@ -767,6 +774,7 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
     setSelectedFeature,
     showFeatures,
     showNavigationControls,
+    showSelectedPoiPopup,
     surfaceClassName,
     transport,
     userMovedRef,
@@ -916,7 +924,7 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
               }}
             />
           )}
-          {selected && !geometry.selection && (
+          {selected && !geometry.selection && showSelectedPoiPopup && (
             <Popup
               key={selected.poiId}
               lngLat={[selected.lon, selected.lat]}

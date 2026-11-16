@@ -1417,11 +1417,12 @@ async def test_runtime_retention_acl_probe_rejects_select_only_role(session_fact
                 text(
                     f"GRANT SELECT ON app.attachment_upload_intents, app.attachment_gc_objects, "
                     "app.telegram_notification_preferences, app.telegram_notifications, "
-                    f'app.telegram_notification_deliveries, app.telegram_weather_observations TO "{role}"'
+                    "app.telegram_notification_deliveries, app.telegram_weather_observations, "
+                    f'app.trip_poi_place_details TO "{role}"'
                 )
             )
             result = (await db.execute(text(_app_feature_runtime_privileges_sql(role)))).one()
-            assert tuple(result) == ("false",) * 6
+            assert tuple(result) == ("false",) * 7
         finally:
             await db.rollback()
 

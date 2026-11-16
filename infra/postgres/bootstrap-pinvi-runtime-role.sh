@@ -1290,5 +1290,9 @@ SQL
   if [ "${applied_revision}" = "20261107_0107" ]; then
     apply_runtime_acl_repair
   fi
+  # 장소 영업 정보(trip_poi_place_details) 테이블도 exact 0108 head에서 runtime ACL을 복구한다.
+  if [ "${applied_revision}" = "20261116_0108" ]; then
+    apply_runtime_acl_repair
+  fi
 
 fi

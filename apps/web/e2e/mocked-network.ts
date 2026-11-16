@@ -43,6 +43,7 @@ const SAFE_SEGMENTS = new Set([
   'gc',
   'download',
   'weather',
+  'place-details',
 ]);
 
 /** 정본 endpoint 이름만 남기고 ID·token·서명 query·헤더는 진단에 넣지 않는다. */
@@ -133,6 +134,7 @@ export async function installMockedNetwork(
   // 공통 새 사용자/새 여행의 명시적인 read-only 초기 상태. POST/PUT은
   // 여기에 포함하지 않으며 기능별 page mock이 항상 우선한다.
   const POI_WEATHER_PATH = /^\/trips\/[0-9a-f-]{36}\/pois\/([0-9a-f-]{36})\/weather$/;
+  const POI_PLACE_DETAILS_PATH = /^\/trips\/[0-9a-f-]{36}\/pois\/([0-9a-f-]{36})\/place-details$/;
   const emptyLists = [
     /^\/users\/me\/telegram-(targets|notifications)$/,
     /^\/trips\/[0-9a-f-]{36}\/telegram-targets$/,
@@ -143,13 +145,28 @@ export async function installMockedNetwork(
       url.origin === MOCK_API_ORIGIN &&
       (emptyLists.some((pattern) => pattern.test(url.pathname)) ||
         POI_WEATHER_PATH.test(url.pathname) ||
+        POI_PLACE_DETAILS_PATH.test(url.pathname) ||
         url.pathname === '/transport/status' ||
         url.pathname === '/users/me/telegram-notification-preferences'),
     async (route) => {
       if (route.request().method() !== 'GET') return route.fallback();
       const path = new URL(route.request().url()).pathname;
       const poiWeather = POI_WEATHER_PATH.exec(path);
-      const data = poiWeather
+      const poiDetails = POI_PLACE_DETAILS_PATH.exec(path);
+      const data = poiDetails
+        ? // 장소 정보 패널 영업 정보: 출처에 값 없음(empty). 검사하는 spec은 page mock으로 덮는다.
+          {
+            poi_id: poiDetails[1],
+            status: 'empty',
+            opening_hours: [],
+            closed_days: null,
+            phone: null,
+            website: null,
+            sources: {},
+            fetched_at: null,
+            refresh_available_at: null,
+          }
+        : poiWeather
         ? // 장소 현재 날씨 배지: 값 없는 카드(배지는 조용히 그리지 않는다). 날씨를 검사하는 spec은 page mock으로 덮는다.
           { feature_id: 'poi:' + poiWeather[1], is_stale: false, source_styles: [], metrics: [] }
         : path === '/transport/status'
