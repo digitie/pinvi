@@ -1,3 +1,10 @@
+## 2026-11-16 — 날씨 없음 옆 새로고침(소유자 요청 15)
+
+- `POST /trips/{id}/days/{n}/weather/refresh`(body `poi_id` 선택). PinVi 쪽 캐시는 날씨 위치 해석(`weather_location_links`, TTL 7일)뿐이고 날씨 값은 Map Valkey 상태(Map Dagster 적재)라 상류 수집을 당기는 API가 없다. 그래서 새로고침은 그 장소의 위치 집합을 Map `/nearest`·`/locations?near=`로 즉시 다시 해석해 저장한다(해석 당시 적재 전이던 예보 격자가 7일간 빠지는 경우를 고친다). 직접 경로(플래그 off)는 stale 표시.
+- 속도 제한: feature별 60초 쿨다운(행 `resolved_at` — worker·노드 공유, 방금 화면이 해석한 행도 쉰다), 요청당 30곳, Map 동시성 4, 사용자 일반 한도는 미들웨어. 구성원(읽기 권한)이면 누구나.
+- 웹: 상태 문구 옆 버튼(날짜·장소 날씨), 갱신되면 trip 재조회, 쿨다운 초·지점 없음·연결 실패 안내.
+- 검증: 통합 `test_trip_weather_refresh`, 단위 `test_weather_refresh`·`tripWeatherRefresh`, live WX-041(배포 뒤).
+
 ## 2026-11-16 — 일출·일몰 astral 즉시 계산, 일자 요일·공휴일 강조(소유자 요청 17·18)
 
 - prod 실측(읽기 전용): `trip_poi_rise_sets` 8,966행이 전부 `pending_fetch`(채우는 job 없음 — `kasi_poi_rise_set_job`은 asset 0개), `trip_day_rise_sets`도 첫 ETL(20분 주기)까지 '준비 중'. 일출·일몰은 좌표·날짜로 결정적이라 응답을 만들 때 `astral` 3.2로 계산한다(`services/sun_times.py`, 분 반올림 — KASI 고시값과 서울·부산 하지·동지 분 단위 일치). 일자 = 일자 POI centroid(대표 라벨은 그대로), 장소 = 그 좌표, POI 단건 응답·텔레그램 일간 일출도 같은 계산. 달 출몰은 KASI 행이 같은 날짜로 성공했을 때만 싣는다. ETL·테이블은 그대로 두었다(정리는 소유자 결정).

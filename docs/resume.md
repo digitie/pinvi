@@ -1,3 +1,8 @@
+## 날씨 새로고침 (2026-11-16)
+
+PR claude/trip-weather-refresh: 날씨 없음 문구 옆 새로고침 버튼 + 일자 날씨 새로고침 API(요청 15).
+다음: 배포 뒤 live WX-041. 예보 범위 밖 날짜 안내 문구 개선은 소유자 결정.
+
 ## 일출·일몰 astral·요일 (2026-11-16)
 
 PR claude/trip-sun-holiday: 일출·일몰 응답 시 astral 계산(ETL 대기 없음), 일자 요일·공휴일 강조(요청 17·18), 의존성 astral 3.2.
