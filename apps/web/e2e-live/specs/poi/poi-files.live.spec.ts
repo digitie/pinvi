@@ -90,6 +90,8 @@ test.describe('attachments (desktop)', () => {
   test('POI-021 일자 첨부 — PDF 업로드 후 /files 에 "날짜" 범위', async ({ page }) => {
     await freshTrip(page, 'POI 파일일자');
     await selectDay(page, 1);
+    // 일자 파일은 날짜 편집 아이콘 옆 버튼으로 연다(펼친 목록은 날짜 바로 아래).
+    await page.getByRole('button', { name: '1일차 파일 목록 열기' }).click();
     const section = attachmentSection(page, '1일차 파일');
     const name = e2eFileName('day', 'pdf');
     const row = await uploadTo(section, { name, mimeType: 'application/pdf', buffer: PDF_BYTES });
@@ -113,6 +115,7 @@ test.describe('attachments (desktop)', () => {
     await selectDay(page, 1);
     const poiName = e2eName('파일장소');
     await createManualPoi(page, id, poiName);
+    await poiRow(page, poiName).getByRole('button', { name: '장소 파일 목록 열기' }).click();
     const section = poiRow(page, poiName).locator('section[aria-label="첨부"]').filter({
       has: page.getByRole('heading', { name: '장소 파일' }),
     });
@@ -220,16 +223,22 @@ test.describe('attachments (desktop)', () => {
   test('POI-028 첨부 목록 토글과 빈 상태', async ({ page }) => {
     await freshTrip(page, 'POI 토글');
     await selectDay(page, 1);
-    const section = attachmentSection(page, '1일차 파일');
-    const toggle = section.getByTestId('trip-attachment-toggle');
+    // 버튼은 일자 행의 편집 아이콘 옆, 펼친 목록은 날짜 바로 아래에 있다.
+    const controls = page
+      .getByRole('tab', { name: '1일차', exact: true })
+      .locator('xpath=..')
+      .getByTestId('trip-day-controls');
+    const toggle = controls.getByTestId('trip-attachment-toggle');
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(toggle).toHaveAccessibleName('1일차 파일 목록 열기');
+    await expect(attachmentSection(page, '1일차 파일')).toHaveCount(0);
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const section = attachmentSection(page, '1일차 파일');
     await expect(section.getByText('파일 없음')).toBeVisible();
     await expect(toggle).toHaveAccessibleName('1일차 파일 목록 닫기');
     await toggle.click();
-    await expect(section.getByText('파일 없음')).toHaveCount(0);
+    await expect(section).toHaveCount(0);
   });
 });
 

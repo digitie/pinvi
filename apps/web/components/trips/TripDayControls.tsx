@@ -7,12 +7,16 @@ import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { MARKER_PALETTE, type MarkerColorKey, paletteHex } from '@pinvi/domain';
 import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 
 const PALETTE_KEYS = Object.keys(MARKER_PALETTE) as MarkerColorKey[];
 const DIALOG_LABEL = 'block text-sm font-semibold text-ink';
 // 푸터 버튼이 다이얼로그 셸 밖(footer 슬롯)에 있어 form 속성으로 제출을 잇는다.
 const FORM_ID = 'trip-day-settings-form';
+// 일자 행의 편집·삭제는 보조 동작이라 작게(28px) 둔다 — 누름 영역은 WCAG 2.5.8 최소(24px) 이상이고
+// 이름은 aria-label이 준다(2026-11-16 소유자 요청 13).
+const DAY_ICON_BUTTON =
+  'inline-flex size-7 shrink-0 items-center justify-center rounded-sm disabled:opacity-50';
 
 export interface TripDayControlsProps {
   selectedDay: {
@@ -42,6 +46,8 @@ export interface TripDayControlsProps {
   busy?: boolean;
   /** 저장 중 명시적 닫기 — 진행 중 요청을 취소하고 닫는다(다른 저장 다이얼로그와 같은 계약). */
   onCancelBusy?: () => void;
+  /** 편집 아이콘 바로 앞에 둘 보조 버튼(일자 파일 열기 — 2026-11-16 소유자 요청 12). */
+  leading?: ReactNode;
 }
 
 function dayDraft(day: TripDayControlsProps['selectedDay']) {
@@ -72,6 +78,7 @@ function useTripDayControlsModel({
   showAdd = true,
   busy = false,
   onCancelBusy,
+  leading = null,
 }: TripDayControlsProps) {
   const serverDraft = dayDraft(selectedDay);
   const [title, setTitle] = useState(serverDraft.title);
@@ -142,6 +149,7 @@ function useTripDayControlsModel({
     closeSettings,
     color,
     date,
+    leading,
     note,
     onAdd,
     onCancelBusy,
@@ -173,6 +181,7 @@ function TripDayControlsView0({ viewModel }: { viewModel: TripDayControlsView0Mo
     closeSettings,
     color,
     date,
+    leading,
     note,
     onAdd,
     onCancelBusy,
@@ -191,7 +200,7 @@ function TripDayControlsView0({ viewModel }: { viewModel: TripDayControlsView0Mo
     title,
   } = viewModel;
   return (
-    <div className="flex flex-wrap items-center gap-2" data-testid="trip-day-controls">
+    <div className="flex flex-wrap items-center gap-1" data-testid="trip-day-controls">
       {showAdd && (
         <button
           type="button"
@@ -212,16 +221,17 @@ function TripDayControlsView0({ viewModel }: { viewModel: TripDayControlsView0Mo
       )}
       {selectedDay && (
         <>
+          {leading}
           <button
             type="button"
             onClick={openSettings}
             disabled={busy}
             aria-label={`${selectedDay.day_index}일차 설정`}
             title="일자 설정"
-            className="inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-ink hover:bg-surface-soft disabled:opacity-50"
+            className={DAY_ICON_BUTTON + ' text-ink hover:bg-surface-soft'}
             data-testid="trip-day-rename"
           >
-            <Pencil className="h-4 w-4" aria-hidden="true" />
+            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -229,10 +239,10 @@ function TripDayControlsView0({ viewModel }: { viewModel: TripDayControlsView0Mo
             disabled={busy}
             aria-label={`${selectedDay.day_index}일차 삭제`}
             title="삭제"
-            className="inline-flex size-11 items-center justify-center rounded-sm border border-hairline text-muted hover:bg-error-bg hover:text-error-text disabled:opacity-50"
+            className={DAY_ICON_BUTTON + ' text-muted hover:bg-error-bg hover:text-error-text'}
             data-testid="trip-day-delete"
           >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
           {settingsOpen && (
             <DaySettingsDialog

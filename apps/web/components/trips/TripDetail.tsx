@@ -3,7 +3,7 @@
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { ConflictDialog, type ConflictField } from '@/components/trips/ConflictDialog';
 import { TripActions } from '@/components/trips/TripActions';
-import { TripAttachments } from '@/components/trips/TripAttachments';
+import { TripAttachments, TripAttachmentsDisclosure } from '@/components/trips/TripAttachments';
 import { TripComments } from '@/components/trips/TripComments';
 import { TripCompanions } from '@/components/trips/TripCompanions';
 import { TripDayControls } from '@/components/trips/TripDayControls';
@@ -2124,67 +2124,84 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
                       : 'border-l-2 border-transparent'
                   }
                 >
-                  <div className="flex items-start gap-3 p-3">
-                    <input
-                      type="checkbox"
-                      checked={visible}
-                      onChange={() => toggleDayVisibility(day.day_index)}
-                      disabled={visible && visibleLayerCount <= 1}
-                      aria-label={`${dayLabel} 표시`}
-                      className="mt-1 h-4 w-4 rounded border-hairline text-primary focus:ring-primary"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start gap-2">
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-label={dayLabel}
-                          aria-selected={active}
-                          onClick={() => handleSelectDay(day.day_index)}
-                          className="min-w-0 flex-1 text-left"
-                        >
-                          <span className="flex min-w-0 items-center gap-2">
-                            <span className="truncate text-sm font-bold text-ink">{dayLabel}</span>
-                            <span className="shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs font-semibold text-muted">
-                              {day.pois.length}곳
-                            </span>
-                          </span>
-                          <span className="mt-1 block text-xs text-muted">
-                            {/* ADR-055: date는 override-only → effective_date 표시. */}
-                            {formatTripDate(day.effective_date ?? day.date)} ·{' '}
-                            {visible ? '표시' : '숨김'}
-                          </span>
-                          {day.out_of_range && (
-                            <span
-                              className="mt-1 inline-flex w-fit items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
-                              data-testid="trip-day-out-of-range"
-                              title="이 일자의 날짜가 여행 기간을 벗어났습니다."
-                            >
-                              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                              기간 벗어남
-                            </span>
-                          )}
-                          {dayHolidayLabel && (
-                            <span
-                              className="mt-1 inline-flex w-fit rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
-                              data-testid="trip-day-holiday"
-                            >
-                              {dayHolidayLabel}
-                            </span>
-                          )}
-                        </button>
-                        <TripDayControls
-                          selectedDay={day}
-                          onAdd={handleAddDay}
-                          onUpdate={handleUpdateDay}
-                          onDelete={handleDeleteDay}
-                          showAdd={false}
-                          busy={busy}
-                          onCancelBusy={cancelDayUpdate}
+                  <TripAttachmentsDisclosure
+                    tripId={tripId}
+                    dayIndex={day.day_index}
+                    title={`${day.day_index}일차 파일`}
+                  >
+                    {({ trigger: dayFilesTrigger, panel: dayFilesPanel }) => (
+                      <div className="flex items-start gap-3 p-3">
+                        <input
+                          type="checkbox"
+                          checked={visible}
+                          onChange={() => toggleDayVisibility(day.day_index)}
+                          disabled={visible && visibleLayerCount <= 1}
+                          aria-label={`${dayLabel} 표시`}
+                          className="mt-1 h-4 w-4 rounded border-hairline text-primary focus:ring-primary"
                         />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start gap-2">
+                            <button
+                              type="button"
+                              role="tab"
+                              aria-label={dayLabel}
+                              aria-selected={active}
+                              onClick={() => handleSelectDay(day.day_index)}
+                              className="min-w-0 flex-1 text-left"
+                            >
+                              <span className="flex min-w-0 items-center gap-2">
+                                <span className="truncate text-sm font-bold text-ink">
+                                  {dayLabel}
+                                </span>
+                                <span className="shrink-0 rounded-sm bg-surface-soft px-1.5 py-0.5 text-xs font-semibold text-muted">
+                                  {day.pois.length}곳
+                                </span>
+                              </span>
+                              <span className="mt-1 block text-xs text-muted">
+                                {/* ADR-055: date는 override-only → effective_date 표시. */}
+                                {formatTripDate(day.effective_date ?? day.date)} ·{' '}
+                                {visible ? '표시' : '숨김'}
+                              </span>
+                              {day.out_of_range && (
+                                <span
+                                  className="mt-1 inline-flex w-fit items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
+                                  data-testid="trip-day-out-of-range"
+                                  title="이 일자의 날짜가 여행 기간을 벗어났습니다."
+                                >
+                                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                                  기간 벗어남
+                                </span>
+                              )}
+                              {dayHolidayLabel && (
+                                <span
+                                  className="mt-1 inline-flex w-fit rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
+                                  data-testid="trip-day-holiday"
+                                >
+                                  {dayHolidayLabel}
+                                </span>
+                              )}
+                            </button>
+                            <TripDayControls
+                              selectedDay={day}
+                              onAdd={handleAddDay}
+                              onUpdate={handleUpdateDay}
+                              onDelete={handleDeleteDay}
+                              showAdd={false}
+                              busy={busy}
+                              onCancelBusy={cancelDayUpdate}
+                              leading={dayFilesTrigger}
+                            />
+                          </div>
+                          {/* 일자 파일은 날짜 편집 아이콘 옆 버튼으로 열고, 날짜 바로 아래에 펼친다(소유자 요청 12). */}
+                          {dayFilesPanel && (
+                            <div className="mt-2" data-testid="trip-day-files">
+                              {dayFilesPanel}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    )}
+                  </TripAttachmentsDisclosure>
 
                   {active ? (
                     <div className="space-y-3 px-3 pb-3">
@@ -2200,12 +2217,6 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
                         date={day.effective_date}
                         label="날짜 날씨"
                         compact={mobileWebLayout}
-                      />
-                      <TripAttachments
-                        tripId={tripId}
-                        dayIndex={day.day_index}
-                        title={`${day.day_index}일차 파일`}
-                        compact
                       />
                       <MapSearchBox onSelect={handleAddPlace} getBias={getSearchBias} />
                       <TripDayOptimize

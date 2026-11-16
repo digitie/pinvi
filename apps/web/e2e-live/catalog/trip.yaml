@@ -1025,3 +1025,22 @@
   automation: scripted
   spec: specs/trip/trip-list.live.spec.ts#TRIP-058
   notes: "#681. 만료(410 TRIP_TRASH_EXPIRED)·실제 영구 정리는 30일을 기다릴 수 없어 API 통합 테스트(test_attachment_retention.py test_restore_has_thirty_day_deadline)와 ADM-041(정리 확인창 취소만)로 본다. prod 에서 정리 실행은 하지 않는다."
+
+- id: TRIP-070
+  title: 일자 편집·삭제 버튼 축소(접근 이름·24px 이상 유지), 일자 파일 버튼은 편집 옆·목록은 날짜 아래
+  priority: P2
+  tags: [desktop, mutating, a11y]
+  preconditions:
+    - "account: test@test.com (user)"
+  data_sources: [pinvi:trips, storage]
+  steps:
+    - "1박2일 여행 생성 → 1일차 → 일자 줄의 '1일차 설정'·'1일차 삭제'·'1일차 파일 목록 열기' 크기·위치 측정"
+    - "'1일차 파일 목록 열기' 클릭"
+  expected:
+    - "세 버튼 모두 24px 이상·40px 미만, 파일 버튼이 편집 버튼 바로 왼쪽 같은 줄"
+    - "펼치기 전엔 '1일차 파일' 영역 없음, 펼치면 날짜 줄 아래에 '파일 없음'"
+  cleanup:
+    - "afterEach 여행 삭제 + [e2e] 파일 정리"
+  automation: scripted
+  spec: specs/trip/trip-list-panel.live.spec.ts#TRIP-070
+  notes: "2026-11-16 소유자 요청 12·13. 배포 뒤에만 통과한다(이전 UI는 버튼 44px·파일 섹션이 일정 본문)."

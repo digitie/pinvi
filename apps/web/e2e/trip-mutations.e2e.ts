@@ -239,6 +239,9 @@ test('POI 마커 편집기를 열고 저장하면 닫힌다', async ({ page }) =
   // FormField/FormTextArea로 label↔input이 연결됐는지(접근성) 확인.
   await expect(editor.getByLabel('메모')).toBeVisible();
   await expect(editor.getByLabel('링크')).toBeVisible();
+  // 예산은 링크 아래 접힌 항목이다(기본 접힘) — 펼치면 label이 연결된 입력이 보인다.
+  await expect(editor.getByLabel('예산')).toHaveCount(0);
+  await editor.getByRole('button', { name: '예산·실제 비용', exact: true }).click();
   await expect(editor.getByLabel('예산')).toBeVisible();
 
   await editor.getByRole('button', { name: '저장' }).click();

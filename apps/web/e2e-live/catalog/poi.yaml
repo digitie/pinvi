@@ -204,7 +204,7 @@
   data_sources: [geo]
   steps:
     - 여행 생성 → 1일차 → 우클릭 생성 '[e2e] 편집' → 행의 '마커 편집'
-    - 메모 '[e2e] memo', 예산 12000, 링크 https://example.com/e2e → '저장'
+    - 메모 '[e2e] memo', '예산·실제 비용' 펼침 → 예산 12000, 링크 https://example.com/e2e → '저장'
   expected:
     - 편집기(poi-editor) 닫힘, 행에 '[e2e] memo' 와 '예산 12000 KRW'
     - PATCH /trips/{id}/pois/{poi} 에 If-Match 헤더, 응답 version 2
@@ -238,7 +238,7 @@
     - account: test@test.com (user)
   data_sources: [geo]
   steps:
-    - 여행 생성 → 1일차 → 우클릭 생성 → '마커 편집' → 색 '노랑'(P-03) 선택 → 저장
+    - 여행 생성 → 1일차 → 우클릭 생성 → '마커 편집' → '마커 색' 펼침 → 색 '노랑'(P-03) 선택 → 저장
   expected:
     - 마커 범례 data-marker-color="P-03", data-marker-hex="#FDD835"
   cleanup:
@@ -385,7 +385,7 @@
     - account: test@test.com (user)
   data_sources: [storage]
   steps:
-    - 여행 생성 → 1일차 선택 → 일정 패널의 '1일차 파일' 섹션 입력에 '[e2e]-day-<ts>.pdf'(application/pdf)
+    - 여행 생성 → 1일차 선택 → 일자 줄 '1일차 파일 목록 열기'(편집 아이콘 옆) → 날짜 아래 펼친 '1일차 파일' 입력에 '[e2e]-day-<ts>.pdf'(application/pdf)
     - /files 이동
   expected:
     - 일정 패널 '1일차 파일' 목록에 행, 'application/pdf'
@@ -403,7 +403,7 @@
     - account: test@test.com (user)
   data_sources: [geo, storage]
   steps:
-    - 여행 생성 → 1일차 → 우클릭 생성 '[e2e] 파일장소' → 행 아래 '장소 파일' 입력에 '[e2e]-poi-<ts>.png'
+    - 여행 생성 → 1일차 → 우클릭 생성 '[e2e] 파일장소' → 행의 '장소 파일 목록 열기'('마커 편집' 옆) → 펼친 '장소 파일' 입력에 '[e2e]-poi-<ts>.png'
     - /files 이동
   expected:
     - '장소 파일' 목록에 행
@@ -586,3 +586,40 @@
   automation: scripted
   spec: specs/poi/poi-create.live.spec.ts#POI-032
   notes: 마커가 정확히 중앙에 있지 않으면 생성 다이얼로그가 열린다 — 그 경우 soft-fail 로 skip 처리.
+
+- id: POI-040
+  title: 장소 편집기 — 마커 색·아이콘·도착·출발·예산 항목 기본 접힘, 예산은 링크 아래
+  priority: P2
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo]
+  steps:
+    - 여행 생성 → 1일차 → 우클릭 생성 → '마커 편집'
+    - '예산·실제 비용' 펼치기
+  expected:
+    - 네 항목 버튼 aria-expanded=false, 예산·도착 입력과 색 버튼('노랑') 없음
+    - '예산·실제 비용' 버튼이 '링크' 입력보다 아래, 펼치면 '예산'·'실제 비용' 입력 표시
+  cleanup:
+    - 장소 삭제 → 여행 삭제
+  automation: scripted
+  spec: specs/trip/trip-list-panel.live.spec.ts#POI-040
+  notes: 2026-11-16 소유자 요청 11. 배포 뒤에만 통과한다.
+
+- id: POI-041
+  title: 장소 파일 버튼은 '마커 편집' 옆, 업로드하면 개수 표시
+  priority: P2
+  tags: [desktop, mutating, poi]
+  preconditions:
+    - account: test@test.com (user)
+  data_sources: [geo, storage]
+  steps:
+    - 여행 생성 → 1일차 → 우클릭 생성 → 행의 '장소 파일 목록 열기' 위치 확인 → 클릭 → JPEG 업로드 → 삭제
+  expected:
+    - 파일 버튼이 '마커 편집' 바로 왼쪽 같은 줄, 펼치기 전 첨부 영역 없음
+    - data-attachment-count 0 → 1 → 0
+  cleanup:
+    - 파일 삭제 → 장소 삭제 → 여행 삭제 → [e2e] 파일 정리
+  automation: scripted
+  spec: specs/trip/trip-list-panel.live.spec.ts#POI-041
+  notes: 2026-11-16 소유자 요청 12. 배포 뒤에만 통과한다.
