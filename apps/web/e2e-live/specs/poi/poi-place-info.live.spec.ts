@@ -1,6 +1,6 @@
 /**
  * POI area — 마커/행 선택 시 장소 정보 패널(요약 + 접힌 항목), 영업 정보 저장·다시 읽어오기, 지도 앱 링크.
- * Cases: POI-045, POI-046, POI-047, POI-048(mobile).
+ * Cases: POI-045, POI-046, POI-047, POI-048(mobile), POI-049.
  * Selectors: components/trips/PlaceInfoPanel.tsx (place-info-*), WeatherBadge.tsx (weather-badge).
  * API: GET /trips/{id}/pois/{poi}/place-details, POST …/place-details/refresh (배포 뒤에만 존재).
  */
@@ -127,6 +127,48 @@ test.describe('POI place info (desktop)', () => {
     } else {
       test.info().annotations.push({ type: 'poi', description: `출처 장애로 저장 안 됨: ${firstBody.data.status}/${secondBody.data.status}` });
     }
+  });
+});
+
+test.describe('POI place info — Kakao live phone (desktop)', () => {
+  test.skip(({ isMobile }) => isMobile, 'desktop-only case');
+  test.setTimeout(180_000);
+
+  test('POI-049 저장 전화가 없을 때만 Kakao 라이브 전화(출처 표시, 미저장)', async ({ page }) => {
+    const { title } = await tripWithPlace(page, '카카오 전화');
+    if (!(await panel(page).isVisible())) await openPanelFromRow(page, title);
+    const p = panel(page);
+    const kakaoCalls: string[] = [];
+    page.on('request', (r) => {
+      if (r.url().includes('/place-details/kakao-phone')) kakaoCalls.push(r.url());
+    });
+    await p.getByTestId('place-info-hours-toggle').click();
+    const hours = p.getByTestId('place-info-hours');
+    await expect(hours.getByTestId('place-info-refetch')).toBeEnabled({ timeout: 30_000 });
+    if (await hours.getByTestId('place-info-phone').isVisible()) {
+      // 저장된(공공데이터) 전화가 있으면 Kakao를 부르지 않는다.
+      await page.waitForTimeout(2_000);
+      expect(kakaoCalls, '저장 전화가 있으면 kakao-phone 요청 없음').toHaveLength(0);
+      await expect(hours.getByTestId('place-info-kakao-phone')).toHaveCount(0);
+      test.info().annotations.push({ type: 'poi', description: '저장 전화 있음 — Kakao 미호출 확인' });
+    } else {
+      const response = await page.waitForResponse((r) => r.url().includes('/place-details/kakao-phone'));
+      expect(response.status()).toBe(200);
+      const body = (await response.json()) as { data: { matched: boolean; phone: string | null } };
+      if (body.data.matched && body.data.phone) {
+        const live = hours.getByTestId('place-info-kakao-phone');
+        await expect(live).toContainText('전화 (카카오)');
+        await expect(live.getByTestId('place-info-kakao-link')).toHaveAttribute('href', /place\.map\.kakao\.com/);
+      } else {
+        await expect(hours.getByTestId('place-info-kakao-phone')).toHaveCount(0);
+      }
+      // 접었다 다시 펼쳐도 같은 장소는 다시 묻지 않는다(메모리 캐시).
+      await p.getByTestId('place-info-hours-toggle').click();
+      await p.getByTestId('place-info-hours-toggle').click();
+      await page.waitForTimeout(1_000);
+      expect(kakaoCalls).toHaveLength(1);
+    }
+    await snap(page, 'POI-049', 'kakao-phone');
   });
 });
 

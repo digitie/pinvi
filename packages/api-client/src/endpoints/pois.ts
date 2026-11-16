@@ -1,4 +1,5 @@
 import {
+  ExternalEnrichmentSchema,
   FeatureWeatherCardSchema,
   PoiCreateSchema,
   PoiPlaceDetailsSchema,
@@ -55,6 +56,17 @@ export const poiApi = (client: ApiClient) => ({
     client.request(`/trips/${tripId}/pois/${poiId}/place-details`, {
       method: 'GET',
       schema: PoiPlaceDetailsSchema,
+      signal: opts?.signal,
+    }),
+
+  /**
+   * 저장된 전화가 없을 때 표시 시점에 Kakao Local로 찾은 전화·카카오맵 링크(저장하지 않음, ADR-054).
+   * 확실히 맞는 장소가 없거나 장애면 `matched=false`.
+   */
+  kakaoPhone: (tripId: string, poiId: string, opts?: { signal?: AbortSignal }) =>
+    client.request(`/trips/${tripId}/pois/${poiId}/place-details/kakao-phone`, {
+      method: 'GET',
+      schema: ExternalEnrichmentSchema,
       signal: opts?.signal,
     }),
 

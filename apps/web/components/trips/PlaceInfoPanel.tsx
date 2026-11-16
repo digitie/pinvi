@@ -4,6 +4,7 @@ import { PoiWeatherBadge } from '@/components/weather/WeatherBadge';
 import { WeatherForecastBody } from '@/components/weather/WeatherForecastPopup';
 import { buildMapLinks, openMapLink, type MapLink } from '@/lib/mapLinks';
 import {
+  useKakaoPhone,
   usePlaceDetails,
   type PlaceDetailsRefreshState,
   type PlaceDetailsState,
@@ -157,17 +158,58 @@ function RefreshMessage({ refreshState }: { refreshState: PlaceDetailsRefreshSta
   return null;
 }
 
+/**
+ * 저장된 전화가 없을 때 Kakao Local에서 표시 시점에 찾은 전화(ADR-054 — 저장하지 않음). 카카오 출처
+ * 표시와 카카오맵 back-link를 함께 둔다. 영업 정보 항목을 펼쳤을 때만 마운트된다(요청 절약).
+ */
+function KakaoPhone({ tripId, poiId }: { tripId: string; poiId: string }) {
+  const match = useKakaoPhone(tripId, poiId, true);
+  if (!match?.phone) return null;
+  return (
+    <div className="mt-2 text-sm" data-testid="place-info-kakao-phone">
+      <p className="text-xs font-semibold text-muted">전화 (카카오)</p>
+      <p className="flex flex-wrap items-center gap-x-2 text-body">
+        <a
+          href={`tel:${match.phone.replace(/[^0-9+]/g, '')}`}
+          className={`inline-flex items-center gap-1 ${LINK_CLASS}`}
+          data-testid="place-info-kakao-phone-number"
+        >
+          <Phone className="h-3.5 w-3.5" aria-hidden="true" />
+          {match.phone}
+        </a>
+        {match.provider_url && (
+          <a
+            href={match.provider_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted underline-offset-2 hover:underline"
+            data-testid="place-info-kakao-link"
+          >
+            출처: 카카오맵
+          </a>
+        )}
+      </p>
+    </div>
+  );
+}
+
 function HoursContent({
+  tripId,
+  poiId,
   state,
   refreshState,
   onRefresh,
 }: {
+  tripId: string;
+  poiId: string;
   state: PlaceDetailsState;
   refreshState: PlaceDetailsRefreshState;
   onRefresh: () => void;
 }) {
   const details = state.data;
   const refreshing = refreshState.status === 'loading';
+  // 저장된 전화(공공데이터)가 있으면 Kakao를 부르지 않는다.
+  const needsKakaoPhone = state.status !== 'loading' && !details?.phone;
   let body: ReactNode;
   if (state.status === 'loading' && !details) {
     body = (
@@ -187,6 +229,7 @@ function HoursContent({
   return (
     <>
       {body}
+      {needsKakaoPhone && <KakaoPhone tripId={tripId} poiId={poiId} />}
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
         <span className="min-w-0 flex-1" data-testid="place-info-hours-source">
           {sourceLine(details)}
@@ -407,7 +450,15 @@ export function PlaceInfoPanel({
       key: 'hours',
       title: '영업 정보',
       icon: <Clock className="h-4 w-4" />,
-      content: <HoursContent state={state} refreshState={refreshState} onRefresh={refresh} />,
+      content: (
+        <HoursContent
+          tripId={tripId}
+          poiId={poi.poi_id}
+          state={state}
+          refreshState={refreshState}
+          onRefresh={refresh}
+        />
+      ),
     },
     {
       key: 'memo',

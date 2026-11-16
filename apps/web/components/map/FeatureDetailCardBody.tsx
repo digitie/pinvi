@@ -256,7 +256,8 @@ function PlaceFacts({
       )}
       {card.business_hours && (
         <Row icon={<Clock className="h-4 w-4" />} testId={`${testId}-hours`}>
-          {card.business_hours}
+          {/* 구조화 영업시간은 서버가 요일별 줄을 줄바꿈으로 이어 준다. */}
+          <span className="whitespace-pre-line">{card.business_hours}</span>
         </Row>
       )}
     </>

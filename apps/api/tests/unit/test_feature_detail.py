@@ -347,3 +347,29 @@ def test_event_card_never_invents_missing_canonical_period_or_venue() -> None:
     )
     assert isinstance(card, EventDetailCard)
     assert (card.start_date, card.end_date, card.venue) == (None, None, None)
+
+
+def test_place_card_renders_structured_business_hours() -> None:
+    """Map은 영업시간을 Google 호환 구조(`FeatureOpeningHours`)로 준다 — 문자열만 읽던 카드가 이를 버렸다."""
+    periods = [
+        {"open": {"day": d, "time": "0900"}, "close": {"day": d, "time": "1800"}}
+        for d in range(1, 7)
+    ]
+    card = build_detail_card(
+        _place_dto(detail={"business_hours": {"timezone": "Asia/Seoul", "periods": periods}})
+    )
+    assert isinstance(card, PlaceDetailCard)
+    assert card.business_hours is not None
+    lines = card.business_hours.split("\n")
+    assert lines[0] == "월요일: 09:00~18:00"
+    assert lines[-1] == "일요일: 휴무"
+
+    with_text = build_detail_card(
+        _place_dto(detail={"business_hours": {"weekday_text": ["매일 10:00~20:00"], "periods": []}})
+    )
+    assert isinstance(with_text, PlaceDetailCard)
+    assert with_text.business_hours == "매일 10:00~20:00"
+
+    empty = build_detail_card(_place_dto(detail={"business_hours": {"periods": []}}))
+    assert isinstance(empty, PlaceDetailCard)
+    assert empty.business_hours is None

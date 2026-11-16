@@ -143,4 +143,19 @@ describe('FeatureDetailCardBody', () => {
       screen.queryByTestId('feature-detail-card-body-load-enrichment'),
     ).not.toBeInTheDocument();
   });
+
+  it('renders multi-line structured opening hours one line per weekday', () => {
+    render(
+      <FeatureDetailCardBody
+        card={placeCard({ business_hours: '월요일: 09:00~18:00\n일요일: 휴무' })}
+      />,
+    );
+    const hours = screen.getByTestId('feature-detail-card-body-hours');
+    expect(hours).toHaveTextContent('월요일: 09:00~18:00');
+    expect(hours).toHaveTextContent('일요일: 휴무');
+    expect(hours.querySelector('.whitespace-pre-line')?.textContent).toBe(
+      '월요일: 09:00~18:00\n일요일: 휴무',
+    );
+  });
 });
+

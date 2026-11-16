@@ -6,6 +6,7 @@ import type { PoiPlaceDetails, TripViewPoi } from '@pinvi/schemas';
 const api = vi.hoisted(() => ({
   placeDetails: vi.fn(),
   refreshPlaceDetails: vi.fn(),
+  kakaoPhone: vi.fn(),
   weather: vi.fn(),
 }));
 
@@ -16,6 +17,7 @@ vi.mock('@pinvi/api-client', async (importOriginal) => {
 
 import { ApiError } from '@pinvi/api-client';
 import { PlaceInfoPanel } from '@/components/trips/PlaceInfoPanel';
+import { __clearKakaoPhoneCacheForTest } from '@/lib/usePlaceDetails';
 import { __resetPoiWeatherForTest } from '@/lib/usePoiWeather';
 
 const NOW = Date.parse('2026-11-16T03:00:00Z'); // 월요일 12:00 KST
@@ -65,6 +67,9 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
   api.placeDetails.mockReset();
   api.refreshPlaceDetails.mockReset();
+  api.kakaoPhone.mockReset();
+  api.kakaoPhone.mockResolvedValue({ provider: 'kakao', matched: false });
+  __clearKakaoPhoneCacheForTest();
   __resetPoiWeatherForTest(async () => ({
     feature_id: 'f_hahoe',
     is_stale: false,
@@ -228,5 +233,52 @@ describe('PlaceInfoPanel', () => {
         '편집할 수 있는 사람만',
       ),
     );
+  });
+
+  it('does not ask Kakao when a stored phone exists', async () => {
+    api.placeDetails.mockResolvedValue(details());
+    renderPanel();
+    fireEvent.click(screen.getByTestId('place-info-hours-toggle'));
+    expect(await screen.findByTestId('place-info-phone')).toHaveTextContent('054-853-0109');
+    expect(api.kakaoPhone).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('place-info-kakao-phone')).toBeNull();
+  });
+
+  it('shows a live Kakao phone (attributed, not stored) only when the hours section is opened', async () => {
+    api.placeDetails.mockResolvedValue(details({ phone: null }));
+    api.kakaoPhone.mockResolvedValue({
+      provider: 'kakao',
+      matched: true,
+      phone: '054-852-3588',
+      provider_url: 'http://place.map.kakao.com/8146617',
+    });
+    renderPanel();
+    await screen.findByTestId('place-info-today-hours');
+    expect(api.kakaoPhone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('place-info-hours-toggle'));
+    const live = await screen.findByTestId('place-info-kakao-phone');
+    expect(live).toHaveTextContent('전화 (카카오)');
+    expect(within(live).getByTestId('place-info-kakao-phone-number')).toHaveAttribute(
+      'href',
+      'tel:0548523588',
+    );
+    expect(within(live).getByTestId('place-info-kakao-link')).toHaveAttribute(
+      'href',
+      'http://place.map.kakao.com/8146617',
+    );
+    expect(api.kakaoPhone).toHaveBeenCalledWith('t1', POI_ID, expect.anything());
+    // 접었다 다시 펼쳐도 메모리 캐시를 쓴다.
+    fireEvent.click(screen.getByTestId('place-info-hours-toggle'));
+    fireEvent.click(screen.getByTestId('place-info-hours-toggle'));
+    expect(await screen.findByTestId('place-info-kakao-phone')).toBeInTheDocument();
+    expect(api.kakaoPhone).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows nothing extra when Kakao has no confident match', async () => {
+    api.placeDetails.mockResolvedValue(details({ phone: null }));
+    renderPanel();
+    fireEvent.click(screen.getByTestId('place-info-hours-toggle'));
+    await waitFor(() => expect(api.kakaoPhone).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('place-info-kakao-phone')).toBeNull();
   });
 });
