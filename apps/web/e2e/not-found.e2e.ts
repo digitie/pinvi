@@ -10,6 +10,11 @@ test('알 수 없는 경로는 not-found 페이지를 보여준다', async ({ pa
 });
 
 test('not-found 페이지의 홈 링크로 이동한다', async ({ page }) => {
+  // 익명 방문자 — 랜딩의 로그인 확인(`GET /auth/me`)이 401이면 랜딩에 머문다.
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/auth/me',
+    (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }),
+  );
   await page.goto('/nope-nope-nope');
   await page.getByTestId('not-found-page').getByRole('link', { name: '홈으로' }).click();
   await expect(page).toHaveURL(/\/$/);

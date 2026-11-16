@@ -1,5 +1,5 @@
 # CORE — auth/session · map interaction · mobile UX · resilience · a11y · perf · i18n
-# Target: PinVi prod (origin/main b1cef056 or newer). 31 cases, 30 scripted (CORE-005 manual).
+# Target: PinVi prod (origin/main b1cef056 or newer). 35 cases, 34 scripted (CORE-005 manual).
 # Selectors verified against origin/main unless a case says `selector unverified against origin/main`.
 
 - id: CORE-001
@@ -647,3 +647,76 @@
   cleanup: [여행 삭제]
   automation: scripted
   spec: specs/core/core-map-markers.live.spec.ts#CORE-047
+- id: CORE-032
+  title: 로그인 사용자의 앱 셸 로고(Pinvi 홈)는 개인 홈 /home으로 간다(로그인 화면·랜딩 아님)
+  priority: P1
+  tags: [desktop, mobile, auth, home]
+  preconditions:
+    - account: test@test.com
+    - env: PinVi ≥ 개인 홈 PR(feat/personal-home) deployed
+  data_sources: []
+  steps:
+    - 로그인 → /trips → 헤더 워드마크 'Pinvi 홈' 클릭
+  expected:
+    - 워드마크 href '/home', URL /home, h1 '내 여행'
+    - home-stats에 다녀온 여행·여행한 날·다녀온 장소·다녀온 지역(N/17) 숫자
+    - /login으로 가지 않음
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-home.live.spec.ts#CORE-032
+  notes: 배포 전에는 워드마크가 '/'(마케팅 랜딩, 로그인 CTA)로 가서 실패한다 — pending deploy.
+
+- id: CORE-033
+  title: 로그인 사용자의 '홈' 메뉴(데스크톱 탭·모바일 더보기)와 랜딩(/)은 개인 홈으로 간다
+  priority: P1
+  tags: [desktop, mobile, auth, home]
+  preconditions:
+    - account: test@test.com
+    - env: PinVi ≥ 개인 홈 PR(feat/personal-home) deployed
+  data_sources: []
+  steps:
+    - 로그인 → /map → 데스크톱 app-nav--home / 모바일 더보기 → app-nav--home-mobile
+    - '/' 직접 진입
+  expected:
+    - 두 경로 모두 URL /home + 통계 렌더, 데스크톱 홈 탭 aria-current=page
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-home.live.spec.ts#CORE-033
+  notes: 랜딩은 GET /auth/me 200이면 router.replace('/home')(SignedInHomeRedirect). pending deploy.
+
+- id: CORE-034
+  title: 익명 사용자 — /home은 /login?next=%2Fhome으로, 랜딩(/)은 그대로
+  priority: P1
+  tags: [desktop, mobile, auth, home]
+  preconditions:
+    - 로그인하지 않은 새 context
+    - env: PinVi ≥ 개인 홈 PR(feat/personal-home) deployed
+  data_sources: []
+  steps:
+    - '/' 진입 → networkidle → '/home' 진입
+  expected:
+    - 랜딩 home-hero 유지(URL /)
+    - /home은 GET /users/me/home 401 → /login?next=%2Fhome
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-home.live.spec.ts#CORE-034
+  notes: 랜딩 부분은 배포 전에도 통과, /home 부분은 배포 전 404 — pending deploy.
+
+- id: CORE-035
+  title: 지난 여행에 장소를 담으면 개인 홈 통계·최근 여행·다녀온 지역에 반영된다
+  priority: P2
+  tags: [desktop, mutating, search, home]
+  preconditions:
+    - account: test@test.com
+    - data: "'경포해변' 검색 가능"
+    - env: PinVi ≥ 개인 홈 PR(feat/personal-home) deployed
+  data_sources: [map:place]
+  steps:
+    - GET /users/me/home(전) → '[e2e] CORE-035' 여행(D-2~D-1, 지역 '강릉') → 1일차 '경포해변' 추가 → GET /users/me/home(후) → /home
+  expected:
+    - trip_count·completed_trip_count +1, 다녀온 장소 ≥ 1, 지역 ≥ 1
+    - home-recent에 여행 제목, home-regions에 '강원', 다녀온 여행 숫자 = API 값
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-home.live.spec.ts#CORE-035
+  notes: 정의는 apps/api/app/services/user_home.py — 다녀온 = 날짜 기준(종료일 < 오늘 KST), 장소 = 실제 날짜 ≤ 오늘인 일자의 장소. pending deploy.

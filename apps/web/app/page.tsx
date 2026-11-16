@@ -1,4 +1,5 @@
 import { PublicColophon, PublicMasthead } from '@/components/app/PublicChrome';
+import { SignedInHomeRedirect } from '@/components/app/SignedInHomeRedirect';
 import { ButtonLink } from '@/components/ui/Button';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Narrative Workflow · design-system: DESIGN.md · designed-as-app
@@ -128,6 +129,8 @@ function StageFigure({ kind }: { kind: Stage['figure'] }) {
 export default function HomePage() {
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-ink">
+      {/* 로그인 사용자는 개인 홈(/home)으로 — 로고·'홈으로' 링크가 랜딩에 머물지 않게 한다. */}
+      <SignedInHomeRedirect />
       <PublicMasthead
         actions={
           <>

@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.api.request_url import public_api_base_url
 from app.core.deps import CurrentUserId, DbSession
+from app.core.time import kst_now
 from app.core.session_cookies import clear_session_cookies
 from app.models.attachment import CuratedPlanAttachment
 from app.models.user import User
@@ -34,6 +35,7 @@ from app.schemas.moderation import (
     ContentReportListResponse,
     ContentReportRecord,
 )
+from app.schemas.user_home import UserHome
 from app.schemas.storage import (
     AVATAR_CONTENT_TYPES,
     AttachmentLibraryItem,
@@ -92,6 +94,7 @@ from app.services.rustfs_storage import (
     make_download_url,
     make_upload_url,
 )
+from app.services.user_home import build_user_home
 from app.services.storage_policy import (
     attachment_scope,
     get_user_library_attachment,
@@ -111,6 +114,13 @@ async def _get_current_user(db: DbSession, current_user_id: CurrentUserId) -> Us
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
         )
     return user
+
+
+@router.get("/home", response_model=Envelope[UserHome])
+async def get_my_home(current_user_id: CurrentUserId, db: DbSession) -> Envelope[UserHome]:
+    """개인 홈 — 내 여행(다음·예정·최근), 다녀온 장소, 여행 통계. 정의는 `services/user_home.py`."""
+    home = await build_user_home(db, user_id=uuid.UUID(current_user_id), today=kst_now().date())
+    return Envelope.of(home)
 
 
 def _storage_error(exc: Exception) -> HTTPException:

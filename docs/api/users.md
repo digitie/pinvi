@@ -316,6 +316,28 @@ Cookie: pinvi_access=...
   사용자 상태에서 탈퇴해야 한다.
 - retention 실행 또는 Admin `lifecycle/anonymize`가 최종 `status='deleted'`와 PII 익명화를 수행한다.
 
+## 9a. 개인 홈 `GET /users/me/home`
+
+```http
+GET /users/me/home
+Cookie: pinvi_access=...
+```
+
+로그인 사용자의 홈 화면(`/home` — 로고·'홈' 메뉴의 목적지) 한 번에 필요한 집계. 미로그인은 401.
+범위는 `/trips` 목록과 같다(내가 소유한 휴지통 밖 여행). 오늘 = KST 날짜. 구현 `app/services/user_home.py`.
+
+| 필드 | 정의 |
+|---|---|
+| `stats.trip_count` | 전체 여행 수 |
+| `stats.upcoming_trip_count` / `ongoing_trip_count` / `completed_trip_count` / `undated_trip_count` | 날짜 기준 단계 — 시작일 > 오늘 / 시작일 ≤ 오늘 ≤ 종료일 / 종료일 < 오늘 / 시작일 없음. 사용자 `status`는 보지 않는다 |
+| `stats.travel_day_count` | 진행 중·다녀온 여행의 [시작일, min(종료일, 오늘)] 날짜 합집합(겹친 날은 한 번) |
+| `stats.visited_place_count` | 실제 날짜(일자 override, 없으면 시작일 + 일차 − 1)가 오늘 이전·오늘인 일자의 장소. 같은 feature(또는 이름+좌표가 같은 직접 추가 장소)는 한 곳 |
+| `stats.region_count`, `regions[]` | 다녀온 장소의 시도(snapshot 코드·주소 → 여행 지역 코드 → 여행 지역 메모 순), 장소 없는 진행·다녀온 여행은 여행의 시도. 판정 못 하면 세지 않는다(좌표 역지오코딩 안 함). 2023 강원·2024 전북 코드 개편은 새 코드로 접는다 |
+| `next_trip` | 진행 중 여행(시작일 순) 첫째, 없으면 가장 가까운 예정 여행. `days_until`은 예정일 때 남은 날 |
+| `upcoming_trips[]` | 다음 여행을 뺀 진행·예정(시작일 순) + 날짜 미정(최근 수정 순), 최대 4 |
+| `recent_trips[]` | 다녀온 여행(종료일 최신 순), 최대 4 |
+| `recent_places[]` | 다녀온 장소(방문일 최신 순, 같은 장소는 최근 한 번), 최대 8 |
+
 ## 10. AI agent 구현 체크리스트
 
 - [ ] `apps/api/app/schemas/user.py` Pydantic + `packages/schemas/src/user.ts` Zod
