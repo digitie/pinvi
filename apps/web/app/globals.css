@@ -311,6 +311,12 @@ body {
   isolation: isolate;
 }
 
+/* 축척 막대는 보기 전용이다 — 원형 마커의 이름 라벨이 그 밑으로 지나가도 탭을 가로채지 않게 한다
+   (구글 지도처럼 라벨·마커를 축척 위에서도 누를 수 있다). */
+.maplibregl-ctrl-scale {
+  pointer-events: none;
+}
+
 /* 공통 Radix 프리미티브의 의미 이름을 Pinvi 팔레트에 연결한다.
    기존 primary/muted 유틸 값은 사용자 웹과 공유하므로 재정의하지 않는다. */
 @theme inline {
