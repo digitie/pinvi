@@ -71,7 +71,11 @@ def _group(feature_id: str, lon: float, lat: float, *, status: str = "included")
 
 def test_window_uses_plan_dates_while_plan_not_over() -> None:
     window = hl.plan_event_window(date(2026, 12, 1), date(2026, 12, 3), TODAY)
-    assert (window.start, window.end, window.basis) == (date(2026, 12, 1), date(2026, 12, 3), "plan")
+    assert (window.start, window.end, window.basis) == (
+        date(2026, 12, 1),
+        date(2026, 12, 3),
+        "plan",
+    )
 
 
 def test_window_falls_back_to_upcoming_for_past_or_undated_plans() -> None:

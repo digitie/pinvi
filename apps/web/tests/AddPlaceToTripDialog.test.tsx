@@ -52,7 +52,7 @@ describe('AddPlaceToTripDialog', () => {
     fireEvent.click(screen.getByTestId('add-place-confirm'));
     expect(await screen.findByRole('status')).toHaveTextContent('2일차 · 2026-12-02에 추가했습니다.');
     expect(pois.create).toHaveBeenCalledTimes(1);
-    const [tripId, body] = pois.create.mock.calls[0];
+    const [tripId, body] = pois.create.mock.calls[0] as [string, { sort_order: string }];
     expect(tripId).toBe('trip-1');
     expect(body).toMatchObject({
       day_index: 2,
