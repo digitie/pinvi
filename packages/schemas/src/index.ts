@@ -192,9 +192,11 @@ export {
   PoiReorderRequestSchema,
   PoiResponseSchema,
   PoiSourceSchema,
+  PoiPlaceDetailsSchema,
 } from './poi';
 export type {
   PoiCreate,
+  PoiPlaceDetails,
   PoiResponse,
   PoiRiseSetResponse,
   PoiRiseSetStatus,

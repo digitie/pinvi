@@ -179,7 +179,7 @@
   spec: specs/poi/poi-search-add.live.spec.ts#POI-009
 
 - id: POI-010
-  title: my-POI 선택 팝업에는 '상세보기'·홈페이지·카테고리가 없다
+  title: my-POI 장소 정보 패널에는 '상세보기'·홈페이지가 없다
   priority: P2
   tags: [desktop, mutating, poi]
   preconditions:
@@ -188,7 +188,8 @@
   steps:
     - 여행 생성 → 1일차 → 우클릭 생성 '[e2e] 팝업' → 목록 행 클릭(선택)
   expected:
-    - 지도 Popup 에 제목만 표시, 'trip-map-detail-open'(상세보기) 버튼 없음
+    - 지도 위 제목 Popup 대신 place-info-panel(제목), 'trip-map-detail-open'(상세보기) 없음, 접힌 상태에서 링크 없음
+    - 영업 정보 항목을 펼쳐도 웹사이트 없음(my-POI 는 저장 출처가 없다)
     - 목록 행에 전화/홈페이지 링크 없음(my-POI 는 feature 카드가 없다)
   cleanup:
     - 장소 삭제 → 여행 삭제
@@ -623,3 +624,83 @@
   automation: scripted
   spec: specs/trip/trip-list-panel.live.spec.ts#POI-041
   notes: 2026-11-16 소유자 요청 12. 배포 뒤에만 통과한다.
+
+- id: POI-045
+  title: 장소 정보 패널 — 요약(제목·날씨 배지) + 접힌 항목(날씨·영업 정보·메모·링크·지도 앱), 지도 앱 링크
+  priority: P1
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+    - deploy: GET /trips/{id}/pois/{poi}/place-details 배포 필요(장소 정보 PR)
+  data_sources: [map:heritage, weather:map-rest]
+  steps:
+    - 여행 생성 → 1일차 '안동하회마을' 추가 → 패널 닫기 → 목록 행으로 다시 선택
+    - 영업 정보 항목 펼치기 → 지도 앱 항목 펼치기 → 닫기
+  expected:
+    - GET place-details 200, place-info-panel 제목 일치, 날씨 배지 [soft]
+    - 다섯 항목 버튼 모두 aria-expanded=false, 내용 미렌더(기본 접힘), 한 번에 한 항목만 펼침
+    - 영업 정보는 본문(출처 '공공데이터') 또는 '확인된 영업 정보가 없습니다.'
+    - 네이버(map.naver.com/p/search …?c=lon,lat,15)·카카오(map.kakao.com/link/map/이름,lat,lon)·구글(maps/search/?api=1&query=lat,lon) 링크
+    - 지도 위 제목 Popup 없음, 닫기로 패널 사라짐
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-place-info.live.spec.ts#POI-045
+
+- id: POI-046
+  title: 장소 정보 '다시 읽어오기' — 성공 시 덮어쓰기 안내, 60초 안 재요청은 429 안내
+  priority: P1
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+    - deploy: POST /trips/{id}/pois/{poi}/place-details/refresh 배포 필요(장소 정보 PR)
+  data_sources: [map:heritage]
+  steps:
+    - 장소 추가(선택됨) → 영업 정보 펼치기 → '다시 읽어오기' → 바로 한 번 더
+  expected:
+    - 첫 요청 200이면 'place-info-refetch-done', 429면 '…다시 읽어올 수 있습니다' 안내(처음 열람 저장 직후라 둘 다 허용)
+    - 두 번째 요청은 429 + 'N초 뒤에 다시 읽어올 수 있습니다.' (role=alert), 기존 값 유지
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-place-info.live.spec.ts#POI-046
+
+- id: POI-047
+  title: 장소 삭제 후 다시 추가하면 영업 정보를 새로 받는다(장소별 저장, 삭제 시 함께 삭제)
+  priority: P2
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+    - deploy: place-details 배포 필요(장소 정보 PR)
+  data_sources: [map:heritage]
+  steps:
+    - 장소 추가 → 행 선택(GET place-details 응답 기록) → 장소 삭제 → 같은 곳 다시 추가 → 행 선택
+  expected:
+    - 두 번째 응답의 poi_id가 다르고 fetched_at이 더 늦다(출처 장애로 저장되지 않으면 annotation)
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-place-info.live.spec.ts#POI-047
+
+- id: POI-048
+  title: 모바일 — 마커 탭 → 지도 아래쪽 장소 정보 패널, 지도 앱 링크(앱 딥링크는 웹 href로 표시)
+  priority: P2
+  tags: [mobile, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+    - deploy: place-details 배포 필요(장소 정보 PR)
+  data_sources: [map:heritage]
+  steps:
+    - 모바일 프로젝트에서 장소 추가 → 패널 닫기 → 지도 마커(data-interaction-id=poi:{id}) 탭 → 지도 앱 항목 펼치기 → 닫기
+  expected:
+    - 패널 아래 끝이 화면 절반보다 아래(하단 배치)
+    - 네이버·카카오·구글 링크 href
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-place-info.live.spec.ts#POI-048
+  notes: 실제 앱 열기(intent/nmap/kakaomap)는 기기 의존이라 수동 확인 영역 — 단위 테스트(mapLinks.test.ts)가 분기를 검증한다.

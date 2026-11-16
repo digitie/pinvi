@@ -1,6 +1,7 @@
 import {
   FeatureWeatherCardSchema,
   PoiCreateSchema,
+  PoiPlaceDetailsSchema,
   PoiReorderRequestSchema,
   PoiResponseSchema,
   PoiUpdateSchema,
@@ -47,5 +48,20 @@ export const poiApi = (client: ApiClient) => ({
       method: 'GET',
       schema: FeatureWeatherCardSchema,
       signal: opts?.signal,
+    }),
+
+  /** 장소 영업 정보(영업시간·휴무일·전화·웹사이트). 처음 열 때 서버가 한 번 받아 저장한다. */
+  placeDetails: (tripId: string, poiId: string, opts?: { signal?: AbortSignal }) =>
+    client.request(`/trips/${tripId}/pois/${poiId}/place-details`, {
+      method: 'GET',
+      schema: PoiPlaceDetailsSchema,
+      signal: opts?.signal,
+    }),
+
+  /** "다시 읽어오기" — 저장값을 출처에서 다시 받아 덮어쓴다(같은 장소 60초에 1회, 429). */
+  refreshPlaceDetails: (tripId: string, poiId: string) =>
+    client.request(`/trips/${tripId}/pois/${poiId}/place-details/refresh`, {
+      method: 'POST',
+      schema: PoiPlaceDetailsSchema,
     }),
 });

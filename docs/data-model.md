@@ -907,3 +907,14 @@ telegram_notification_preferences에 기본 false weather_enabled와 nullable ti
 ## 확정 takedown 증거 보존 (0107)
 
 curated_plan_attachments.evidence_hold_started_at (timestamptz, nullable): 확정 takedown 시각. moderation_hold이고 이 값이 있으면 `PINVI_MODERATION_EVIDENCE_RETENTION_DAYS`(기본 180일) 동안 증거로 보존하며 업로더·여행 용량 합산에서 제외한다. 기간이 지나고 같은 첨부에 열린 신고(received·reviewing·hidden·appealed)가 없으면 정리 자격을 얻어 객체가 삭제되고 purged_at이 기록되며, 남은 참조가 없는 휴지통 여행은 정상 삭제된다. restore는 hold와 함께 이 값을 지운다. 0107은 nullable 열 추가와, 현재 hold 중인 첨부에 대한 taken_down 신고의 조치 시각 backfill만 한다.
+
+## 장소 영업 정보 (0108)
+
+trip_poi_place_details: 여행 장소(trip_day_pois) 하나에 붙는 영업 정보 사본. PK = poi_id(FK
+trip_day_pois.attachment_id ON DELETE CASCADE). status('ready'|'empty'), opening_hours(jsonb 문자열 배열,
+요일별 표시 줄), closed_days(text), phone(text), website(text), sources(jsonb, 필드→출처 이름),
+fetched_at(timestamptz), created_at/updated_at. 장소 정보 패널을 처음 열 때 한 번 받아 저장하고, 장소
+soft delete 때 서비스가 행을 지우며(영구 삭제는 CASCADE), 같은 곳을 다시 넣으면 새 POI라 다시 받는다.
+"다시 읽어오기"는 값을 덮어쓴다(같은 장소 60초에 1회). 전역 장소 데이터로 쓰지 않는다. 저장 출처는
+kor-travel-map feature(공공데이터)뿐이다 — Kakao/Naver Local 응답과 Google Places 콘텐츠는 약관상
+저장하지 않는다.

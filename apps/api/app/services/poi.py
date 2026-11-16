@@ -9,12 +9,13 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.kasi import TripPoiRiseSet
 from app.models.poi import TripDayPoi
+from app.models.poi_place_detail import TripPoiPlaceDetail
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.services.kasi import build_initial_poi_rise_set
@@ -280,6 +281,10 @@ async def soft_delete_poi(db: AsyncSession, *, poi: TripDayPoi) -> None:
     # 일자 기준 유지/추가/이동과 같은 Trip→POI 순서로 직렬화한다.
     poi = await _lock_poi_in_observed_trip(db, poi)
     poi.deleted_at = datetime.now(UTC)
+    # 장소에 붙은 영업 정보 사본도 함께 지운다 — 다시 넣으면 새로 받는다(전역 보관 금지).
+    await db.execute(
+        delete(TripPoiPlaceDetail).where(TripPoiPlaceDetail.poi_id == poi.attachment_id)
+    )
     await db.commit()
 
 

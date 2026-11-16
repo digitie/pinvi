@@ -2,6 +2,7 @@
 
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { ConflictDialog, type ConflictField } from '@/components/trips/ConflictDialog';
+import { PlaceInfoPanel } from '@/components/trips/PlaceInfoPanel';
 import { TripActions } from '@/components/trips/TripActions';
 import { TripAttachments, TripAttachmentsDisclosure } from '@/components/trips/TripAttachments';
 import { TripComments } from '@/components/trips/TripComments';
@@ -51,7 +52,13 @@ import {
   type TripRealtimeEvent,
   type TripRealtimeStatus,
 } from '@pinvi/api-client';
-import { appendRank, paletteHex, reorderMoves, tripDaysToMapPoints } from '@pinvi/domain';
+import {
+  appendRank,
+  extractCoord,
+  paletteHex,
+  reorderMoves,
+  tripDaysToMapPoints,
+} from '@pinvi/domain';
 import type {
   FeatureSummary,
   PlaceSearchResult,
@@ -1561,9 +1568,14 @@ function TripDetailSection2_0({ viewModel }: { viewModel: TripDetailView2Model }
     mobileWebLayout,
     plannedFeatureIds,
     selectedDay,
+    selectedPoi,
     selectedPoiId,
+    tripId,
     visibleLayerCount,
   } = viewModel;
+  const selectedPoint = selectedPoi
+    ? (mapPoints.find((point) => point.poiId === selectedPoi.poi_id) ?? null)
+    : null;
   return (
     <section
       id="trip-map-canvas"
@@ -1611,9 +1623,30 @@ function TripDetailSection2_0({ viewModel }: { viewModel: TripDetailView2Model }
         onAddFeature={handleAddFeature}
         onCreatePoiAtCoordinate={handleCreatePoiAtCoordinate}
         showNavigationControls={!mobileWebLayout}
+        showSelectedPoiPopup={false}
         className="h-full"
         chrome="flush"
       />
+      {selectedPoi && (
+        // 마커(또는 목록 행)를 고르면 장소 정보 패널 — 데스크톱은 지도 오른쪽 위, 모바일은 지도 아래쪽.
+        <PlaceInfoPanel
+          key={selectedPoi.poi_id}
+          tripId={tripId}
+          poi={selectedPoi}
+          coord={
+            selectedPoint
+              ? { lon: selectedPoint.lon, lat: selectedPoint.lat }
+              : extractCoord(selectedPoi.feature)
+          }
+          onClose={() => handleSelectPoi(null)}
+          className={
+            mobileWebLayout
+              ? 'absolute inset-x-2 bottom-16 z-10 max-h-[55%] overflow-y-auto'
+              : // 오른쪽 위 확대/축소 컨트롤 아래에 둔다(컨트롤을 가리지 않게).
+              'absolute right-3 top-28 z-10 max-h-[calc(100%-8rem)] w-[min(360px,calc(100%-1.5rem))] overflow-y-auto md:right-4'
+          }
+        />
+      )}
       <div
         data-testid="trip-map-stats"
         data-map-fit-bottom=""

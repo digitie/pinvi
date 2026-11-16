@@ -106,3 +106,21 @@ export const PoiResponseSchema = z.object({
   updated_at: Iso8601Schema,
 });
 export type PoiResponse = z.infer<typeof PoiResponseSchema>;
+
+/**
+ * 장소 영업 정보 — `GET|POST /trips/{id}/pois/{poi}/place-details[/refresh]`.
+ * `status`: ready(값 있음) / empty(출처에 값 없음) / unavailable(출처 장애, 저장 안 됨).
+ * `sources`: 필드 이름 → 출처 이름(`kor_travel_map`).
+ */
+export const PoiPlaceDetailsSchema = z.object({
+  poi_id: z.string().uuid(),
+  status: z.enum(['ready', 'empty', 'unavailable']),
+  opening_hours: z.array(z.string()).default([]),
+  closed_days: z.string().nullable().default(null),
+  phone: z.string().nullable().default(null),
+  website: z.string().nullable().default(null),
+  sources: z.record(z.string(), z.string()).default({}),
+  fetched_at: Iso8601Schema.nullable().default(null),
+  refresh_available_at: Iso8601Schema.nullable().default(null),
+});
+export type PoiPlaceDetails = z.infer<typeof PoiPlaceDetailsSchema>;
