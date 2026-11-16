@@ -35,11 +35,11 @@ function fakeMap(zoom = 10) {
   let moving = false;
   const map = {
     getZoom: vi.fn(() => zoom),
-    flyTo: vi.fn(() => {
-      moving = true;
+    flyTo: vi.fn((options: Record<string, unknown>) => {
+      moving = options != null;
     }),
-    easeTo: vi.fn(() => {
-      moving = true;
+    easeTo: vi.fn((options: Record<string, unknown>) => {
+      moving = options != null;
     }),
     isMoving: vi.fn(() => moving),
     on: vi.fn((type: string, fn: Handler) => handlers.set(type, fn)),
