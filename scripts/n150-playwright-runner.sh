@@ -270,6 +270,21 @@ if [[ -n "${PINVI_M05_UI_VERIFICATION_ID:-}" ]]; then
   fi
 fi
 
+# Node/npm toolchain — #738 root anchor(package.json engines·.nvmrc·.npmrc engine-strict).
+# 공식 Playwright 이미지(digest 고정, M04/M05 게이트가 검사)는 자체 Node(v1.65.0-noble = v26)를
+# 싣고 있어 `npm ci --engine-strict`가 EBADENGINE으로 죽는다(2026-11-16 live catalog). 이미지는
+# 그대로 두고, 컨테이너 안에서 nodejs.org 공식 tarball을 아래 SHA-256(SHASUMS256.txt 값)으로
+# 검증해 PATH 앞에 둔 뒤 npm ci와 테스트 명령을 그 Node로 돌린다. 버전은 .nvmrc·engines와
+# 같아야 한다(어긋나면 여기서 멈춘다).
+runner_node_version="22.23.1"
+runner_npm_version="12.0.1"
+runner_node_sha256_x64="7a8cb04b4a1df4eaf432125324b81b29a088e73570a23259a8de1c65d07fc129"
+runner_node_sha256_arm64="543fa39e57d4c07855939459a323f4deb9a79dd1bb45e6e99458b0f2de10db8d"
+if [[ -f "$repo_root/.nvmrc" ]] && [[ "$(tr -d '[:space:]' < "$repo_root/.nvmrc")" != "$runner_node_version" ]]; then
+  echo "error: runner Node $runner_node_version does not match .nvmrc — update the pinned tarball and SHA-256" >&2
+  exit 1
+fi
+
 docker_args=(
   run
   --rm
@@ -281,6 +296,10 @@ docker_args=(
   -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
   -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
   -e PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI="$skip_npm_ci"
+  -e "PINVI_PLAYWRIGHT_RUNNER_NODE_VERSION=$runner_node_version"
+  -e "PINVI_PLAYWRIGHT_RUNNER_NPM_VERSION=$runner_npm_version"
+  -e "PINVI_PLAYWRIGHT_RUNNER_NODE_SHA256_X64=$runner_node_sha256_x64"
+  -e "PINVI_PLAYWRIGHT_RUNNER_NODE_SHA256_ARM64=$runner_node_sha256_arm64"
 )
 
 allowed_env_names=(
@@ -422,6 +441,46 @@ docker_args+=(
   bash
   -lc
   'set -euo pipefail
+node_version="$PINVI_PLAYWRIGHT_RUNNER_NODE_VERSION"
+case "$(uname -m)" in
+  x86_64) node_arch=x64; node_sha256="$PINVI_PLAYWRIGHT_RUNNER_NODE_SHA256_X64" ;;
+  aarch64) node_arch=arm64; node_sha256="$PINVI_PLAYWRIGHT_RUNNER_NODE_SHA256_ARM64" ;;
+  *) echo "error: no pinned Node tarball for $(uname -m)" >&2; exit 1 ;;
+esac
+node_dist="node-v${node_version}-linux-${node_arch}"
+node_cache=/tmp/.npm/_pinvi-node
+node_tarball="$node_cache/${node_dist}.tar.gz"
+mkdir -p "$node_cache"
+if [[ ! -f "$node_tarball" ]] || ! printf "%s  %s
+" "$node_sha256" "$node_tarball" | sha256sum -c --status; then
+  rm -f "$node_tarball"
+  node_part="$(mktemp "$node_cache/.${node_dist}.XXXXXX")"
+  # 이미지의 Node fetch로 내려받는다(curl 의존 없음). 신뢰는 아래 고정 SHA-256 검증에서 온다.
+  node -e "fetch(process.argv[1]).then(async (r) => { if (!r.ok) throw new Error(\"HTTP \" + r.status); require(\"fs\").writeFileSync(process.argv[2], Buffer.from(await r.arrayBuffer())); }).catch((e) => { console.error(e.message); process.exit(1); })"     "https://nodejs.org/dist/v${node_version}/${node_dist}.tar.gz" "$node_part"
+  if ! printf "%s  %s
+" "$node_sha256" "$node_part" | sha256sum -c --status; then
+    rm -f "$node_part"
+    echo "error: ${node_dist}.tar.gz SHA-256 mismatch" >&2
+    exit 1
+  fi
+  mv -f "$node_part" "$node_tarball"
+fi
+node_root=/opt/pinvi-node
+mkdir -p "$node_root"
+tar -xzf "$node_tarball" -C "$node_root" --strip-components=1 --no-same-owner
+export PATH="$node_root/bin:$PATH"
+hash -r
+if [[ "$(node --version)" != "v${node_version}" ]]; then
+  echo "error: expected Node v${node_version}, got $(node --version)" >&2
+  exit 1
+fi
+npm install --global --no-audit --no-fund "npm@${PINVI_PLAYWRIGHT_RUNNER_NPM_VERSION}" >/dev/null
+hash -r
+if [[ "$(npm --version)" != "$PINVI_PLAYWRIGHT_RUNNER_NPM_VERSION" ]]; then
+  echo "error: expected npm ${PINVI_PLAYWRIGHT_RUNNER_NPM_VERSION}, got $(npm --version)" >&2
+  exit 1
+fi
+echo "playwright_runner_node=$(node --version) npm=$(npm --version)"
 if [[ "${PINVI_PLAYWRIGHT_RUNNER_SKIP_NPM_CI:-0}" != "1" ]]; then
   npx --yes npm@12.0.1 ci --no-audit --no-fund --engine-strict
 fi

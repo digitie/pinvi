@@ -209,6 +209,12 @@ CI의 Node job은 npm `12.0.1`을 명시 선택한다. Docker의 fresh build sta
 bare `npm` 명령의 버전을 고정하는 것으로 간주하지 않는다. 기존 Node image의
 배포판·libc·digest는 유지한다.
 
+n150 Playwright runner(`scripts/n150-playwright-runner.sh`)의 공식 Playwright 이미지는
+digest를 유지하되 자체 Node(v1.65.0-noble = v26)를 쓰지 않는다. 컨테이너 안에서
+nodejs.org `node-v22.23.1` tarball을 runner에 고정한 SHA-256으로 검증해 PATH 앞에 두고
+npm `12.0.1`을 설치한 뒤 `npm ci --engine-strict`와 테스트 명령을 실행한다. `.nvmrc`를
+올리면 runner의 Node 버전·SHA-256도 함께 올려야 한다(어긋나면 runner가 시작 전에 멈춘다).
+
 이 toolchain metadata 변경만으로 lock 의존성 graph/version/SRI를 재생성하지 않는다.
 NativeWind5 RC·Tailwind4·C11 packages와 physical device/EAS/store `NOT_RUN`은
 그대로다. toolchain 실제 설치·native/웹 전체 build 검증은 별도 슬롯에서 수행한다.
