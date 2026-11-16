@@ -287,7 +287,8 @@ def _near_page(items: list[tuple[str, float, float]], *, truncated: bool = False
     body = fx.list_body("fuel-stations", truncated=truncated)
     template = body["data"]["items"][0]
     body["data"]["items"] = [
-        {**template, "feature_id": fid, "coord": {"lon": lon, "lat": lat}} for fid, lon, lat in items
+        {**template, "feature_id": fid, "coord": {"lon": lon, "lat": lat}}
+        for fid, lon, lat in items
     ]
     return body
 

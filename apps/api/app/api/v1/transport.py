@@ -221,7 +221,10 @@ def _parse_points(raw: str) -> list[tuple[float, float]]:
         except ValueError as exc:
             raise invalid from exc
         if not (
-            math.isfinite(lon) and math.isfinite(lat) and 124.0 <= lon <= 132.0 and 33.0 <= lat <= 43.0
+            math.isfinite(lon)
+            and math.isfinite(lat)
+            and 124.0 <= lon <= 132.0
+            and 33.0 <= lat <= 43.0
         ):
             raise invalid
         point = (round(lon, 6), round(lat, 6))

@@ -420,8 +420,9 @@ export async function clickTransportMarker(
     if (!(await expandClusterToward(page, layer, expandToward))) break;
     candidates = await topmostTransportMarkers(page, layer);
   }
+  const excluded = new Set(excludeTitles);
   for (const item of candidates) {
-    if (excludeTitles.includes(item.title)) continue;
+    if (excluded.has(item.title)) continue;
     const marker = page.locator(
       '.maplibregl-marker[data-interaction-id=' +
         JSON.stringify('transport:' + layer + ':' + item.id) +

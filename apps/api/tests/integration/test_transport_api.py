@@ -278,7 +278,9 @@ async def test_markers_near_flag_off_never_calls_map(
 ) -> None:
     settings.pinvi_kor_travel_map_transport_enabled = False
     fake = _install(_ok)
-    resp = await _get(client, auth_cookies, verified_user, "/transport/markers-near?points=127,37.5")
+    resp = await _get(
+        client, auth_cookies, verified_user, "/transport/markers-near?points=127,37.5"
+    )
     assert resp.status_code == 200
     assert {r["status"] for r in resp.json()["data"]["layers"]} == {"disabled"}
     assert fake.requests == []
