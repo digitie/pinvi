@@ -14,7 +14,7 @@ SPRINT-4 산출물 `apps/api/app/services/trip_view_builder.py`.
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, assert_never
 
 from sqlalchemy import select
@@ -35,13 +35,16 @@ from app.core.config import settings
 from app.core.markers import resolve_display_marker_color
 from app.db.session import release_read_connection
 from app.models.companion import TripCompanion
-from app.models.kasi import KasiSpecialDay, TripDayRiseSet
+from app.models.kasi import KasiSpecialDay, TripDayRiseSet, TripPoiRiseSet
 from app.models.poi import TripDayPoi
 from app.models.share_link import TripShareLink
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.services.feature_cache import CachedFeature, cache_generation_observer, feature_cache
-from app.services.poi import get_poi_rise_sets, poi_rise_set_to_dict
+from app.services.kasi import extract_feature_coordinates
+from app.services.poi import get_poi_rise_sets
+from app.services.sun_times import sun_rise_set_dict
+from app.services.trip_day_rise_set import DayReference, resolve_day_reference
 from app.services.trip_weather_batch import (
     build_trip_weather_via_kor_travel_map,
     build_trip_weather_via_kor_travel_weather,
@@ -101,7 +104,8 @@ async def build_trip_view(
     days_result = await db.execute(day_query)
     days = list(days_result.scalars())
 
-    # ADR-055 §6: 일자 rise/set 행(전용 table) 로드 — day header 일출/일몰 표시용.
+    # ADR-055 §6: 일자 rise/set 행(전용 table) — 일출·일몰은 아래에서 astral로 계산하고, 이 행은 KASI가 채운
+    # 달 출몰(같은 날짜로 성공했을 때만)에만 쓴다.
     day_rise_sets = {
         row.day_index: row
         for row in await db.scalars(
@@ -327,6 +331,19 @@ async def build_trip_view(
         }
         weather_cards_by_day_index = {day.day_index: {} for day in days}
 
+    # 일출·일몰은 좌표·날짜로 바로 계산한다(2026-11-16 소유자 요청 18, `services/sun_times.py`). 일자 기준
+    # 좌표는 그 일자 POI들의 centroid, 기준 라벨은 가장 먼저 추가된 장소(`resolve_day_reference`)다.
+    computed_at = datetime.now(UTC)
+    day_references: dict[int, DayReference | None] = {
+        day.day_index: resolve_day_reference(
+            sorted(
+                (poi for poi in pois if poi.day_index == day.day_index),
+                key=lambda poi: (poi.created_at, poi.attachment_id),
+            )
+        )
+        for day in days
+    }
+
     # day_index → POI 리스트
     pois_by_day_index: dict[int, list[dict[str, Any]]] = {}
     broken_count = 0
@@ -373,7 +390,17 @@ async def build_trip_view(
                 "actual_amount": poi.actual_amount,
                 "currency": poi.currency,
                 "user_url": poi.user_url,
-                "rise_set": poi_rise_set_to_dict(rise_sets_by_poi_id.get(poi.attachment_id)),
+                "rise_set": sun_rise_set_dict(
+                    locdate=day_effective_date.get(poi.day_index),
+                    coord=extract_feature_coordinates(
+                        poi.feature_snapshot if isinstance(poi.feature_snapshot, dict) else {}
+                    ),
+                    moon=_kasi_moon(
+                        rise_sets_by_poi_id.get(poi.attachment_id),
+                        day_effective_date.get(poi.day_index),
+                    ),
+                    now=computed_at,
+                ),
                 "feature_link_broken_at": poi.feature_link_broken_at,
                 "version": poi.version,
                 "created_at": poi.created_at,
@@ -394,9 +421,20 @@ async def build_trip_view(
                 "note": d.note,
                 "version": d.version,
                 "holidays": day_holidays[d.day_index],
-                "rise_set": _day_rise_set_to_dict(day_rise_sets.get(d.day_index)),
+                "rise_set": sun_rise_set_dict(
+                    locdate=day_effective_date[d.day_index],
+                    coord=(
+                        (ref.longitude, ref.latitude)
+                        if (ref := day_references.get(d.day_index)) is not None
+                        else None
+                    ),
+                    moon=_kasi_moon(
+                        day_rise_sets.get(d.day_index), day_effective_date[d.day_index]
+                    ),
+                    now=computed_at,
+                ),
                 "rise_set_reference": (
-                    ref.reference_label if (ref := day_rise_sets.get(d.day_index)) else None
+                    ref.reference_label if (ref := day_references.get(d.day_index)) else None
                 ),
                 "weather_cards": weather_cards_by_day_index[d.day_index],
                 "weather_by_feature_id": weather_by_day_index[d.day_index],
@@ -410,20 +448,15 @@ async def build_trip_view(
     }
 
 
-def _day_rise_set_to_dict(rise_set: TripDayRiseSet | None) -> dict[str, Any] | None:
-    """일자 rise/set → `PoiRiseSetResponse` 셰입(POI rise/set과 동일 표시 계약)."""
-    if rise_set is None:
+def _kasi_moon(
+    rise_set: TripDayRiseSet | TripPoiRiseSet | None, locdate: date | None
+) -> dict[str, Any] | None:
+    """KASI가 **같은 날짜로** 채운 달 출몰만 싣는다(낡은 날짜의 값을 보이지 않는다)."""
+    if rise_set is None or rise_set.status != "success" or rise_set.locdate != locdate:
         return None
-    return {
-        "status": rise_set.status,
-        "locdate": rise_set.locdate,
-        "sunrise_at": rise_set.sunrise_at,
-        "sunset_at": rise_set.sunset_at,
-        "moonrise_at": rise_set.moonrise_at,
-        "moonset_at": rise_set.moonset_at,
-        "fetched_at": rise_set.fetched_at,
-        "updated_at": rise_set.updated_at,
-    }
+    if isinstance(rise_set, TripDayRiseSet) and rise_set.stale:
+        return None
+    return {"moonrise_at": rise_set.moonrise_at, "moonset_at": rise_set.moonset_at}
 
 
 def _trip_to_dict(trip: Trip) -> dict[str, Any]:

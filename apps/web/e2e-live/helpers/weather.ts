@@ -143,6 +143,7 @@ export interface WxDay {
     locdate?: string | null;
   } | null;
   rise_set_reference: string | null;
+  holidays?: { date: string; name: string; dataset: string }[];
   weather_cards: Record<string, WxCard>;
   weather_by_feature_id: Record<string, WxResolution>;
   pois: WxPoi[];

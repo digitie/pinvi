@@ -18,6 +18,7 @@ from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.services.kasi import build_initial_poi_rise_set
+from app.services.sun_times import sun_rise_set_dict
 from app.services.trip import TripNotFoundError, validate_trip_day_payload
 
 _REGION_CODE_RE = re.compile(r"^[0-9]{2,10}$")
@@ -305,18 +306,24 @@ async def get_poi_rise_sets(
 
 
 def poi_rise_set_to_dict(rise_set: TripPoiRiseSet | None) -> dict[str, Any] | None:
+    """POI 단건 응답의 일출·일몰 — 행이 기록한 날짜·좌표로 astral 계산한다(요청 18, `sun_times.py`).
+
+    행 자체(`trip_poi_rise_sets`)는 입력 기록으로 남는다(KASI 달 출몰을 채울 수 있는 자리). trip 상세 응답은
+    `trip_view_builder`가 현재 일자 날짜·좌표로 같은 계산을 한다.
+    """
     if rise_set is None:
         return None
-    return {
-        "status": rise_set.status,
-        "locdate": rise_set.locdate,
-        "sunrise_at": rise_set.sunrise_at,
-        "sunset_at": rise_set.sunset_at,
-        "moonrise_at": rise_set.moonrise_at,
-        "moonset_at": rise_set.moonset_at,
-        "fetched_at": rise_set.fetched_at,
-        "updated_at": rise_set.updated_at,
-    }
+    coord = (
+        (rise_set.longitude, rise_set.latitude)
+        if rise_set.longitude is not None and rise_set.latitude is not None
+        else None
+    )
+    moon = (
+        {"moonrise_at": rise_set.moonrise_at, "moonset_at": rise_set.moonset_at}
+        if rise_set.status == "success"
+        else None
+    )
+    return sun_rise_set_dict(locdate=rise_set.locdate, coord=coord, moon=moon)
 
 
 async def reorder_pois(

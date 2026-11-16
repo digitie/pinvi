@@ -1044,3 +1044,22 @@
   automation: scripted
   spec: specs/trip/trip-list-panel.live.spec.ts#TRIP-070
   notes: "2026-11-16 소유자 요청 12·13. 배포 뒤에만 통과한다(이전 UI는 버튼 44px·파일 섹션이 일정 본문)."
+
+- id: TRIP-071
+  title: 일자 목록 요일 표시 — 토요일 파랑, 일요일·공휴일 빨강, 공휴일 이름 뱃지(KASI 특일)
+  priority: P2
+  tags: [desktop, mutating]
+  preconditions:
+    - "account: test@test.com (user)"
+    - "data: kasi_special_days 에 2026-12-25 공휴일(KASI 특일 ETL kasi_special_days_job)"
+  data_sources: [pinvi:trips, pinvi:kasi_special_days]
+  steps:
+    - "여행 2026-12-25 ~ 2026-12-28 생성 → 일정 탭 일자 목록"
+  expected:
+    - "1~4일차 'trip-day-weekday' (금)(토)(일)(월), data-day-tone holiday·saturday·holiday·없음"
+    - "1일차 'trip-day-holiday' 에 KASI 공휴일 이름(기독탄신일)"
+  cleanup:
+    - "생성한 여행 삭제"
+  automation: scripted
+  spec: specs/weather/weather-sun-astral.live.spec.ts#TRIP-071
+  notes: "2026-11-16 소유자 요청 17. 배포 뒤에만 통과한다(요일 표시는 이번 변경)."

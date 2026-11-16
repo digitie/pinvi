@@ -1,8 +1,44 @@
 'use client';
 
 import { AlertTriangle, Sunrise, Sunset } from 'lucide-react';
-import type { TripViewDay } from '@pinvi/schemas';
-import { formatKstTime, formatTripDate } from '@/lib/tripDateLabels';
+import type { TripDayHoliday, TripViewDay } from '@pinvi/schemas';
+import { formatKstTime, formatTripDate, tripDayTone, tripWeekday } from '@/lib/tripDateLabels';
+
+/**
+ * 날짜 + 요일 — 일요일·공휴일은 빨강, 토요일은 파랑(달력 관례, 2026-11-16 소유자 요청 17).
+ * 공휴일 이름은 호출부가 따로 뱃지로 보인다(KASI 특일 `is_holiday`, PinVi ETL `kasi_special_days_job`).
+ */
+export function TripDayDateLabel({
+  value,
+  holidays,
+  className,
+}: {
+  value: string | null;
+  holidays?: TripDayHoliday[];
+  className?: string;
+}) {
+  const weekday = tripWeekday(value);
+  const tone = tripDayTone(value, holidays);
+  return (
+    <span className={className} data-testid="trip-day-date" data-day-tone={tone ?? undefined}>
+      {formatTripDate(value)}
+      {weekday && (
+        <span
+          className={
+            tone === 'holiday'
+              ? 'ml-1 font-semibold text-error-text'
+              : tone === 'saturday'
+                ? 'ml-1 font-semibold text-legal-link'
+                : 'ml-1'
+          }
+          data-testid="trip-day-weekday"
+        >
+          ({weekday.label})
+        </span>
+      )}
+    </span>
+  );
+}
 
 export interface TripDayHeaderProps {
   day: Pick<
@@ -35,13 +71,16 @@ export function TripDayHeader({
   showSummary = true,
   readOnly = false,
 }: TripDayHeaderProps) {
-  const dateLabel = formatTripDate(day.effective_date ?? day.date);
   const holidayNames = Array.from(new Set(day.holidays.map((h) => h.name).filter(Boolean)));
   return (
     <div className={className} data-testid="trip-day-header">
       {showSummary && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-ink">{dateLabel}</span>
+          <TripDayDateLabel
+            value={day.effective_date ?? day.date}
+            holidays={day.holidays}
+            className="text-sm font-semibold text-ink"
+          />
           {day.out_of_range && (
             <span
               className="inline-flex items-center gap-1 rounded-sm bg-error-bg px-1.5 py-0.5 text-xs font-semibold text-error-text"
@@ -63,9 +102,45 @@ export function TripDayHeader({
           ))}
         </div>
       )}
-      {day.note && <p className="mt-2 whitespace-pre-wrap break-words text-sm text-body" data-testid="trip-day-note">{day.note}</p>}
+      {day.note && (
+        <p
+          className="mt-2 whitespace-pre-wrap break-words text-sm text-body"
+          data-testid="trip-day-note"
+        >
+          {day.note}
+        </p>
+      )}
       <TripDayRiseSet day={day} readOnly={readOnly} />
     </div>
+  );
+}
+
+/**
+ * 장소 좌표 기준 일출·일몰 한 줄(장소 날씨 아래) — 서버가 astral로 계산한 `poi.rise_set`(요청 18).
+ * 계산되지 않은 상태(pending_*·failed)는 아무것도 보이지 않는다(일자 머리글이 안내를 맡는다).
+ */
+export function PoiRiseSetLine({ riseSet }: { riseSet: TripViewDay['rise_set'] | undefined }) {
+  const sunrise = formatKstTime(riseSet?.sunrise_at);
+  const sunset = formatKstTime(riseSet?.sunset_at);
+  if (riseSet?.status !== 'success' || (!sunrise && !sunset)) return null;
+  return (
+    <p
+      className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted"
+      data-testid="trip-poi-rise-set"
+    >
+      {sunrise && (
+        <span className="inline-flex items-center gap-1">
+          <Sunrise className="h-3.5 w-3.5" aria-hidden="true" />
+          일출 {sunrise}
+        </span>
+      )}
+      {sunset && (
+        <span className="inline-flex items-center gap-1">
+          <Sunset className="h-3.5 w-3.5" aria-hidden="true" />
+          일몰 {sunset}
+        </span>
+      )}
+    </p>
   );
 }
 

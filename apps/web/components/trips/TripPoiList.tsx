@@ -2,6 +2,7 @@
 
 import { PoiEditor } from '@/components/trips/PoiEditor';
 import { TripAttachmentsDisclosure } from '@/components/trips/TripAttachments';
+import { PoiRiseSetLine } from '@/components/trips/TripDayHeader';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 import { arrayMove, featureResolutionNotice, formatKstTime, paletteHex } from '@pinvi/domain';
 import type {
@@ -290,6 +291,7 @@ export function TripPoiList({
                           compact
                         />
                       )}
+                      {showWeather && <PoiRiseSetLine riseSet={poi.rise_set} />}
                     </div>
                   )}
                 </div>

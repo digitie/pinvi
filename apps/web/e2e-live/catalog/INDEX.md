@@ -7,19 +7,19 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 
 | area | total | scripted | manual | blocked |
 |---|---:|---:|---:|---:|
-| trip | 59 | 55 | 2 | 2 |
+| trip | 60 | 56 | 2 | 2 |
 | search | 55 | 47 | 6 | 2 |
 | nearby | 43 | 36 | 2 | 5 |
-| weather | 29 | 24 | 2 | 3 |
+| weather | 30 | 25 | 2 | 3 |
 | share | 35 | 31 | 1 | 3 |
 | poi | 34 | 27 | 5 | 2 |
 | notify | 32 | 23 | 4 | 5 |
 | admin | 44 | 37 | 5 | 2 |
 | core | 31 | 30 | 1 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **552** | **500** | **28** | **24** |
+| **all** | **554** | **502** | **28** | **24** |
 
-Spec files: 59.
+Spec files: 60.
 
 ## Cases
 
@@ -84,6 +84,7 @@ Spec files: 59.
 | TRIP-057 | trip | 두 번째 사용자 격리 — user1의 비공개 여행은 user2 목록에 없고 URL 직접 접근도 거부 | P2 | desktop, mutating, auth | scripted | `specs/trip/trip-user2.live.spec.ts#TRIP-057` |
 | TRIP-058 | trip | 휴지통 30일 보존 — 만료 시각 = 삭제 시각 + 30일, 복원 가능, 복원 응답은 기한 해제 | P1 | desktop, mobile, mutating | scripted | `specs/trip/trip-list.live.spec.ts#TRIP-058` |
 | TRIP-070 | trip | 일자 편집·삭제 버튼 축소(접근 이름·24px 이상 유지), 일자 파일 버튼은 편집 옆·목록은 날짜 아래 | P2 | desktop, mutating, a11y | scripted | `specs/trip/trip-list-panel.live.spec.ts#TRIP-070` |
+| TRIP-071 | trip | 일자 목록 요일 표시 — 토요일 파랑, 일요일·공휴일 빨강, 공휴일 이름 뱃지(KASI 특일) | P2 | desktop, mutating | scripted | `specs/weather/weather-sun-astral.live.spec.ts#TRIP-071` |
 | SRCH-001 | search | 탐색 지도에서 2글자 검색('설악') → 8초 내 결과 목록 + 소스 배지 | P1 | desktop, mobile, search, perf | scripted | `specs/search/search-basic.live.spec.ts#SRCH-001` |
 | SRCH-002 | search | 정확한 이름 '안동하회마을' 검색 → '장소' 배지 행이 첫 번째, 둘째 줄은 카테고리 라벨 | P1 | desktop, search, poi | scripted | `specs/search/search-basic.live.spec.ts#SRCH-002` |
 | SRCH-003 | search | 1글자 입력('설')은 검색을 발화하지 않는다(MIN_CHARS=2) | P2 | desktop, search | scripted | `specs/search/search-basic.live.spec.ts#SRCH-003` |
@@ -211,6 +212,7 @@ Spec files: 59.
 | WX-027 | weather | 장소 전부 삭제 시 '날짜 날씨' 섹션이 사라지고 일출·일몰이 pending_coord 로 돌아간다 | P3 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-027` |
 | WX-028 | weather | 14일 여행 — 1·8일차 found, 12·14일차 no_data, unavailable 없음 | P3 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-028` |
 | WX-029 | weather | 접근성 — 날씨 섹션 aria-label, 아이콘 aria-hidden, 일출·일몰 아이콘 aria-hidden | P3 | desktop, a11y, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-029` |
+| WX-040 | weather | 일출·일몰 즉시 계산(astral) — 장소 추가 뒤 새로고침 한 번에 일자·장소 일출·일몰 표시 | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-sun-astral.live.spec.ts#WX-040` |
 | SHR-001 | share | 공유 링크 생성 — 1회성 URL 배너와 목록 상태(활성·무기한) | P1 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-001` |
 | SHR-002 | share | 로그아웃 컨텍스트에서 공유 페이지 읽기 전용 렌더링(지도·일자·장소) | P1 | desktop, mutating, share, poi | scripted | `specs/share/share-links.live.spec.ts#SHR-002` |
 | SHR-003 | share | 공유 링크 철회 — 목록 '철회' 상태, 철회된 링크는 404 안내 | P1 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-003` |

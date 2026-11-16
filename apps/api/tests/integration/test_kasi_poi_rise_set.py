@@ -42,9 +42,11 @@ async def test_create_poi_with_date_and_coord_marks_rise_set_pending_fetch(
     assert resp.status_code == 201, resp.text
     poi_data = resp.json()["data"]
     poi_id = poi_data["attachment_id"]
-    assert poi_data["rise_set"]["status"] == "pending_fetch"
+    # 응답의 일출·일몰은 KASI ETL을 기다리지 않고 astral로 바로 계산한다(요청 18).
+    assert poi_data["rise_set"]["status"] == "success"
     assert poi_data["rise_set"]["locdate"] == "2026-05-06"
-    assert poi_data["rise_set"]["sunrise_at"] is None
+    assert poi_data["rise_set"]["sunrise_at"] == "2026-05-06T05:32:00+09:00"
+    assert poi_data["rise_set"]["sunset_at"] == "2026-05-06T19:25:00+09:00"
     assert poi_data["rise_set"]["fetched_at"] is None
 
     async with session_factory() as db:
@@ -68,8 +70,9 @@ async def test_create_poi_with_date_and_coord_marks_rise_set_pending_fetch(
     detail_day = next(day for day in detail.json()["data"]["days"] if day["day_index"] == 2)
     detail_poi = detail_day["pois"][0]
     assert detail_poi["poi_id"] == poi_id
-    assert detail_poi["rise_set"]["status"] == "pending_fetch"
+    assert detail_poi["rise_set"]["status"] == "success"
     assert detail_poi["rise_set"]["locdate"] == "2026-05-06"
+    assert detail_poi["rise_set"]["sunrise_at"] == poi_data["rise_set"]["sunrise_at"]
 
 
 async def test_create_poi_without_day_date_marks_rise_set_pending_date(

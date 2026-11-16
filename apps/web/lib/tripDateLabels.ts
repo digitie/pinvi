@@ -7,4 +7,7 @@ export {
   holidaysByDate,
   formatTripDateWithHoliday,
   formatTripDateRange,
+  formatTripDateWithWeekday,
+  tripDayTone,
+  tripWeekday,
 } from '@pinvi/domain';

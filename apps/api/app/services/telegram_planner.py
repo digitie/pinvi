@@ -23,13 +23,13 @@ from app.clients.kor_travel_weather import KorTravelWeatherClient
 from app.core.config import settings
 from app.db import session as db_session
 from app.db.session import SESSION_TIMEOUT_SERVER_SETTINGS
-from app.models.kasi import TripDayRiseSet
 from app.models.poi import TripDayPoi
 from app.models.telegram_notification import TelegramNotification, TelegramPreferences
 from app.models.telegram_target import TelegramTarget
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
 from app.models.user import User
+from app.services.sun_times import compute_sun_times
 from app.services.telegram_itinerary import KST, effective_date, local_time, summary
 from app.services.telegram_metrics import PLANNING_FAILURES
 from app.services.telegram_notifications import (
@@ -40,6 +40,7 @@ from app.services.telegram_notifications import (
     preferences,
 )
 from app.services.telegram_weather import plan_weather, prepare_weather
+from app.services.trip_day_rise_set import resolve_day_reference
 from app.services.trip_weather_batch import (
     build_trip_weather_via_kor_travel_map,
     build_trip_weather_via_kor_travel_weather,
@@ -158,15 +159,28 @@ async def _prepare_daily_contexts(
 
 
 async def _sunrise_context(db: AsyncSession, trip: Trip, day: TripDay) -> str:
-    rise = await db.get(TripDayRiseSet, (trip.trip_id, day.day_index))
-    sunrise = (
-        local_time(rise.sunrise_at)
-        if rise is not None
-        and rise.locdate == effective_date(trip, day)
-        and rise.status == "success"
-        and not rise.stale
-        else "정보 없음"
+    # 일정 화면과 같은 값 — 그 일자 장소 centroid·날짜로 astral 계산(`services/sun_times.py`, 요청 18).
+    target = effective_date(trip, day)
+    pois = list(
+        await db.scalars(
+            select(TripDayPoi)
+            .where(
+                TripDayPoi.trip_id == trip.trip_id,
+                TripDayPoi.day_index == day.day_index,
+                TripDayPoi.deleted_at.is_(None),
+            )
+            .order_by(TripDayPoi.created_at, TripDayPoi.attachment_id)
+        )
     )
+    reference = resolve_day_reference(pois)
+    sunrise_at = (
+        compute_sun_times(
+            longitude=reference.longitude, latitude=reference.latitude, on=target
+        ).sunrise_at
+        if target is not None and reference is not None
+        else None
+    )
+    sunrise = local_time(sunrise_at) if sunrise_at is not None else "정보 없음"
     return f"일출: {sunrise} (KST)"
 
 

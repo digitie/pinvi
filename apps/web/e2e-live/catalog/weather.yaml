@@ -545,3 +545,22 @@
     - 생성한 여행 삭제
   automation: scripted
   spec: specs/weather/weather-trip-days.live.spec.ts#WX-029
+
+- id: WX-040
+  title: 일출·일몰 즉시 계산(astral) — 장소 추가 뒤 새로고침 한 번에 일자·장소 일출·일몰 표시
+  priority: P1
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 고씨굴
+  data_sources: [map, pinvi:astral]
+  steps:
+    - 여행 D+1 당일 → 1일차 '고씨굴' 추가 → trip view 재조회 → 1일차
+  expected:
+    - days[0].rise_set.status=success(ETL 20분 주기를 기다리지 않음), 'trip-day-rise-set-pending' 없음
+    - 장소 행 'trip-poi-rise-set'에 일출·일몰, NOAA 계산과 ±3분, 일자 값과 같음(장소 하나 = centroid)
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-sun-astral.live.spec.ts#WX-040
+  notes: 2026-11-16 소유자 요청 18. 배포 뒤에만 통과한다(이전 API는 pending_fetch → ETL 대기, 장소 줄은 없음).

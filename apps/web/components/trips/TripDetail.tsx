@@ -7,7 +7,7 @@ import { TripAttachments, TripAttachmentsDisclosure } from '@/components/trips/T
 import { TripComments } from '@/components/trips/TripComments';
 import { TripCompanions } from '@/components/trips/TripCompanions';
 import { TripDayControls } from '@/components/trips/TripDayControls';
-import { TripDayHeader } from '@/components/trips/TripDayHeader';
+import { TripDayDateLabel, TripDayHeader } from '@/components/trips/TripDayHeader';
 import { TripDayOptimize } from '@/components/trips/TripDayOptimize';
 import { TripEditDialog } from '@/components/trips/TripEditDialog';
 import { TripExportButton } from '@/components/trips/TripExportButton';
@@ -2159,8 +2159,12 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
                               </span>
                               <span className="mt-1 block text-xs text-muted">
                                 {/* ADR-055: date는 override-only → effective_date 표시. */}
-                                {formatTripDate(day.effective_date ?? day.date)} ·{' '}
-                                {visible ? '표시' : '숨김'}
+                                {/* 요일·공휴일 강조(요청 17). */}
+                                <TripDayDateLabel
+                                  value={day.effective_date ?? day.date}
+                                  holidays={day.holidays}
+                                />{' '}
+                                · {visible ? '표시' : '숨김'}
                               </span>
                               {day.out_of_range && (
                                 <span

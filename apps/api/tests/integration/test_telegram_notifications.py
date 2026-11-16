@@ -319,7 +319,7 @@ async def test_enqueue_does_not_take_multiple_destination_locks(
 async def test_kst_daily_weekly_dedup_and_consent_revocation(
     client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any, provider: Provider
 ) -> None:
-    from app.models.kasi import TripDayRiseSet
+    from app.models.poi import TripDayPoi
     from app.services.telegram_planner import plan_due
 
     trip_id, target_id, cookies = await setup_trip(
@@ -335,14 +335,16 @@ async def test_kst_daily_weekly_dedup_and_consent_revocation(
     endpoint = "/users/me/telegram-notification-preferences"
     assert (await client.put(endpoint, json=body, cookies=cookies)).status_code == 200
     async with session_factory() as db:
+        # 일출은 그 일자 장소 좌표·날짜로 astral 계산한다(요청 18) — 부산 2026-11-05 KASI 고시 06:48.
         db.add(
-            TripDayRiseSet(
+            TripDayPoi(
                 trip_id=uuid.UUID(trip_id),
                 day_index=1,
-                locdate=date(2026, 11, 5),
-                sunrise_at=datetime(2026, 11, 4, 21, 30, tzinfo=UTC),
-                status="success",
-                stale=False,
+                sort_order="a0",
+                feature_id=None,
+                feature_snapshot={"name": "광안리", "coord": {"lon": 129.118, "lat": 35.153}},
+                added_by_user_id=uuid.UUID(verified_user[0]),
+                currency="KRW",
             )
         )
         await db.commit()
@@ -362,7 +364,8 @@ async def test_kst_daily_weekly_dedup_and_consent_revocation(
         assert len(rows) == 3
         daily = [row for row in rows if row.category == "daily_brief"]
         assert len(daily) == 2
-        assert any("일출: 06:30" in "".join(row.chunks) for row in daily)
+        assert any("일출: 06:48" in "".join(row.chunks) for row in daily)
+        assert any("일출: 정보 없음" in "".join(row.chunks) for row in daily)  # 장소 없는 2일차
         assert all("날씨:" in "".join(row.chunks) for row in daily)
         assert all(
             "2026-11-05" in row.occurrence_key or "2026-11-06" in row.occurrence_key for row in rows
