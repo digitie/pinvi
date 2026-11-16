@@ -520,3 +520,100 @@
   automation: scripted
   spec: specs/core/core-i18n.live.spec.ts#CORE-031
   notes: TripDayOptimize 트리거 selector unverified against origin/main(soft). TripPoiList.formatTime은 hour12 미지정 → ko-KR 기본(오전/오후 가능) — open question.
+
+- id: CORE-040
+  title: 장소 마커는 원 + 상자 없는 이름 라벨(+ 현재 날씨 아이콘) — 구글 지도식
+  priority: P1
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage]
+  steps:
+    - '[e2e]' 당일 여행 + 장소 2곳(영월 고씨굴·안동하회마을) → 지도 마커 측정
+  expected:
+    - 원 지름 ≤24px, 가로=세로
+    - 라벨 배경 투명·그림자 없음, 원 오른쪽
+    - 범례 data-marker-weather가 있으면 place-weather-glyph 1개, 없으면 0개
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-map-markers.live.spec.ts#CORE-040
+
+- id: CORE-041
+  title: 마커 아이콘을 텍스트 입력 대신 아이콘 칩으로 골라 저장
+  priority: P1
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage]
+  steps:
+    - 장소 행 '마커 편집' → '마커 아이콘' 칩 묶음에서 '카페' → 저장
+  expected:
+    - 'maki 아이콘' 입력칸 없음, 칩 aria-pressed
+    - PATCH /pois 2xx, 범례 data-marker-icon=cafe
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-map-markers.live.spec.ts#CORE-041
+
+- id: CORE-042
+  title: (모바일) 패널은 아래 시트 — 위로 보이는 지도가 시트보다 크다, 펼치기/줄이기
+  priority: P1
+  tags: [mobile, mutating]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage]
+  steps:
+    - '패널 열기' → 시트 상자 측정 → '패널 펼치기' → '패널 줄이기'
+  expected:
+    - 시트 = 지도 전폭·지도 바닥에 붙음
+    - 작업 헤더 아래~시트 위 지도 높이 > 시트 높이
+    - 펼치면 더 높다
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-map-markers.live.spec.ts#CORE-042
+
+- id: CORE-043
+  title: (모바일) 목록에서 장소를 누르면 시트를 닫고 그 장소를 지도 가운데로 — 지도를 옮긴 뒤 다시 눌러도
+  priority: P1
+  tags: [mobile, mutating]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage]
+  steps:
+    - 패널 열기 → 장소 행 탭 → 지도 끌기 → 같은 행 다시 탭
+  expected:
+    - 시트 닫힘, 원 중심이 지도 가로 가운데 ±6px, 세로 1/4 안
+    - 다시 눌러도 가운데로 복귀
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-map-markers.live.spec.ts#CORE-043
+
+- id: CORE-044
+  title: 내 위치 버튼 — 따라가기 모드, 지도를 끌면 해제, 다시 누르면 복귀
+  priority: P1
+  tags: [desktop, mobile, mutating]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage]
+  steps:
+    - geolocation 권한·좌표 부여 → '내 위치로 이동'(동의 다이얼로그면 동의) → 지도 끌기 → 다시 누르기
+  expected:
+    - 버튼 ≥40px, data-follow-mode off→follow
+    - 끌면 tracking('내 위치로 돌아가기'), 다시 누르면 follow
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-map-markers.live.spec.ts#CORE-044
+
+- id: CORE-045
+  title: (모바일) 탐색 지도 장소를 누르면 상세 시트만 — 지도 팝업과 이중 표시 없음
+  priority: P1
+  tags: [mobile]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage]
+  steps:
+    - /map → 화면 안 feature 마커 탭
+  expected:
+    - feature-detail-modal 표시, .maplibregl-popup 0개
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-map-markers.live.spec.ts#CORE-045

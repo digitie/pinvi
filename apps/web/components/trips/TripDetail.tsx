@@ -40,6 +40,7 @@ import {
 } from '@/lib/tripDateLabels';
 import { type PendingCreatedPoi, withCreatedPois } from '@/lib/tripViewCreatedPoi';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
+import { placeWeatherCards } from '@/lib/placeWeather';
 import {
   ApiError,
   TripRealtimeClient,
@@ -74,6 +75,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
+  ChevronDown,
+  ChevronUp,
   Layers,
   Loader2,
   MapPin,
@@ -86,6 +89,7 @@ import {
   Share2,
   Users,
   Wifi,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -468,6 +472,17 @@ function usePanelScrollAccess(mobileWebLayout: boolean) {
   return { panelScrollFocusable, setPanelScrollElement, setPanelScrollFocused };
 }
 
+/**
+ * 모바일 상세 패널 = 아래 시트. 왼쪽 서랍(화면 86% 폭·전체 높이)이 지도를 거의 다 덮었다(소유자 2026-11-16
+ * "지도 아닌 영역이 지도보다 크다"). 구글·네이버·카카오 지도처럼 접힌 상태(44svh)에서도 위쪽 지도와 핀이
+ * 보이고, 펼치면 위 작업 헤더(top-2 + h-12) 아래까지 덮는다.
+ */
+function mobileSheetClassName(open: boolean, expanded: boolean): string {
+  const visibility = open ? 'flex' : 'hidden';
+  const height = expanded ? 'top-16' : 'h-[44svh]';
+  return `${visibility} absolute inset-x-0 bottom-0 z-30 ${height} min-h-0 flex-col rounded-t-md border-t border-hairline bg-canvas shadow-overlay`;
+}
+
 function useTripDetailModel({ tripId }: TripDetailProps) {
   const mobileWebLayout = useMobileWebLayout();
   // 서버 조회 결과와 그 조회의 출발 순번. 화면의 `view`는 그 결과에, 이 조회가 출발한 뒤 POST로 만들어진
@@ -491,6 +506,8 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
   const [presence, setPresence] = useState<Map<string, PresenceEntry>>(() => new Map());
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null);
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
+  // 장소를 고를 때마다 늘린다 — 같은 장소를 다시 골라도 지도가 그 장소를 다시 가운데로 가져온다.
+  const [poiFocusRequest, setPoiFocusRequest] = useState(0);
   // ADR-055 F2: POI가 있는 일자 삭제는 확인 다이얼로그를 거친다(409 DAY_HAS_POIS → force 재요청).
   const [dayDeleteConfirm, setDayDeleteConfirm] = useState<{
     dayIndex: number;
@@ -500,6 +517,8 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
   const { panelScrollFocusable, setPanelScrollElement, setPanelScrollFocused } =
     usePanelScrollAccess(mobileWebLayout);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+  // 모바일 패널은 아래 시트다 — 기본은 화면 절반 남짓이라 지도가 위에 보이고, 펼치면 헤더 아래까지 덮는다.
+  const [mobilePanelExpanded, setMobilePanelExpanded] = useState(false);
   const [desktopPanelCollapsed, setDesktopPanelCollapsed] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   // 외부(kakao/naver) pick 추가 후 best-effort auto-request 안내(F4). 다음 변경 시 자동 소거.
@@ -649,6 +668,8 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
   const { visibleDayIndexes, setVisibleDayIndexes } = useDayVisibility(dayIndexes);
 
   const allMapPoints = useMemo(() => (view ? tripDaysToMapPoints(view.days) : []), [view]);
+  // 마커 이름 옆 현재 날씨 아이콘 — 이미 받은 일자별 날씨 카드에서 뽑는다(새 조회 없음).
+  const weatherCardsByPoiId = useMemo(() => placeWeatherCards(view?.days ?? []), [view]);
   // 장소 검색 지역 편향 — 이 여행의 장소 범위가 먼저, 장소가 없으면 지금 지도 화면(2026-11-02 결정).
   const tripBias = useMemo(() => tripSearchBias(allMapPoints), [allMapPoints]);
   const viewportBiasRef = useRef<string | null>(null);
@@ -740,6 +761,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     }
     setActivePanel('plan');
     setSelectedPoiId(poiId);
+    setPoiFocusRequest((value) => value + 1);
     const dayIndex = poiDay.get(poiId);
     if (dayIndex != null) {
       setSelectedDayIndex(dayIndex);
@@ -1377,9 +1399,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
       ? 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]'
       : 'relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[420px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[460px_minmax(0,1fr)]';
   const detailPanelClassName = mobileWebLayout
-    ? `${
-        mobilePanelOpen ? 'flex' : 'hidden'
-      } absolute inset-y-0 left-0 z-30 w-[min(86vw,360px)] max-w-[calc(100%-2.5rem)] min-h-0 flex-col border-r border-hairline bg-canvas shadow-card`
+    ? mobileSheetClassName(mobilePanelOpen, mobilePanelExpanded)
     : `${
         mobilePanelOpen ? 'flex' : 'hidden'
       } absolute inset-y-0 left-0 z-30 w-[min(82vw,360px)] max-w-[calc(100%-3rem)] min-h-0 flex-col border-r border-hairline bg-canvas shadow-card lg:static lg:h-full lg:w-auto lg:max-w-none lg:shadow-none ${
@@ -1436,6 +1456,10 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     mobilePanelOpen,
     mobileWebLayout,
     mutationError,
+    weatherCardsByPoiId,
+    poiFocusRequest,
+    mobilePanelExpanded,
+    setMobilePanelExpanded,
     onlinePresence,
     openTripEdit,
     panelScrollFocusable,
@@ -1572,6 +1596,9 @@ function TripDetailSection2_0({ viewModel }: { viewModel: TripDetailView2Model }
     selectedPoiId,
     tripId,
     visibleLayerCount,
+    weatherCardsByPoiId,
+    poiFocusRequest,
+    tripId,
   } = viewModel;
   const selectedPoint = selectedPoi
     ? (mapPoints.find((point) => point.poiId === selectedPoi.poi_id) ?? null)
@@ -1595,7 +1622,9 @@ function TripDetailSection2_0({ viewModel }: { viewModel: TripDetailView2Model }
         // 덮는다(2026-11-02 prod e2e).
         overlayTopLeft={
           <div
-            className="rounded-sm border border-hairline bg-canvas/95 p-2 shadow-card backdrop-blur"
+            className={`rounded-sm border border-hairline bg-canvas/95 shadow-card backdrop-blur ${
+              mobileWebLayout ? 'p-1' : 'p-2'
+            }`}
             data-testid="trip-map-place-search"
           >
             {selectedDay ? (
@@ -1607,12 +1636,17 @@ function TripDetailSection2_0({ viewModel }: { viewModel: TripDetailView2Model }
         }
         overlayTopLeftClassName={
           mobileWebLayout
-            ? 'pointer-events-none absolute left-2 right-2 top-20 z-10 max-h-[calc(100%-6rem)] overflow-y-auto'
+            ? // 위 작업 헤더(top-2 + h-12 = 56px) 바로 아래 — 옛 top-20은 16px을 비워 두었다.
+              'pointer-events-none absolute left-2 right-2 top-16 z-10 max-h-[calc(100%-5rem)] overflow-y-auto'
             : 'pointer-events-none absolute left-3 right-3 top-3 z-10 max-h-[calc(100%-1.5rem)] overflow-y-auto md:left-4 md:right-auto md:w-[min(560px,calc(100%-2rem))]'
         }
         apiKey={VWORLD_API_KEY}
         points={mapPoints}
+        weatherCardsByPoiId={weatherCardsByPoiId}
+        tripId={tripId}
         selectedPoiId={selectedPoiId}
+        focusRequest={poiFocusRequest}
+        showMyLocation
         showFeatures
         hiddenFeatureIds={plannedFeatureIds}
         transportLayers
@@ -1629,39 +1663,55 @@ function TripDetailSection2_0({ viewModel }: { viewModel: TripDetailView2Model }
       />
       {selectedPoi && (
         // 마커(또는 목록 행)를 고르면 장소 정보 패널 — 데스크톱은 지도 오른쪽 위, 모바일은 지도 아래쪽.
-        <PlaceInfoPanel
-          key={selectedPoi.poi_id}
-          tripId={tripId}
-          poi={selectedPoi}
-          coord={
-            selectedPoint
-              ? { lon: selectedPoint.lon, lat: selectedPoint.lat }
-              : extractCoord(selectedPoi.feature)
-          }
-          onClose={() => handleSelectPoi(null)}
+        // 모바일 패널은 지도 맞춤의 아래 영역(`data-map-fit-bottom`)이다 — 목록에서 고른 장소를 가운데로 옮길 때
+        // 패널 위로 보이는 지도의 가운데에 둔다(패널 밑에 숨지 않게).
+        <div
           className={
             mobileWebLayout
-              ? 'absolute inset-x-2 bottom-16 z-10 max-h-[55%] overflow-y-auto'
+              ? 'absolute inset-x-2 bottom-16 z-10 flex max-h-[55%] flex-col'
               : // 오른쪽 위 확대/축소 컨트롤 아래에 둔다(컨트롤을 가리지 않게).
-              'absolute right-3 top-28 z-10 max-h-[calc(100%-8rem)] w-[min(360px,calc(100%-1.5rem))] overflow-y-auto md:right-4'
+                'absolute right-3 top-28 z-10 flex max-h-[calc(100%-8rem)] w-[min(360px,calc(100%-1.5rem))] flex-col md:right-4'
           }
-        />
+          data-map-fit-bottom={mobileWebLayout ? '' : undefined}
+        >
+          <PlaceInfoPanel
+            key={selectedPoi.poi_id}
+            tripId={tripId}
+            poi={selectedPoi}
+            coord={
+              selectedPoint
+                ? { lon: selectedPoint.lon, lat: selectedPoint.lat }
+                : extractCoord(selectedPoi.feature)
+            }
+            onClose={() => handleSelectPoi(null)}
+            className="min-h-0 overflow-y-auto"
+          />
+        </div>
       )}
       <div
         data-testid="trip-map-stats"
         data-map-fit-bottom=""
         className={
           mobileWebLayout
-            ? 'pointer-events-none absolute bottom-16 left-3 z-10 flex flex-wrap gap-2'
+            ? 'pointer-events-none absolute bottom-10 left-2 z-10 flex flex-wrap gap-2'
             : 'pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap gap-2 md:bottom-4 md:left-4'
         }
       >
-        <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
-          {visibleLayerCount}일 표시
-        </span>
-        <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
-          장소 {mapPoints.length}곳
-        </span>
+        {mobileWebLayout ? (
+          // 모바일은 칩 하나로 줄인다 — 지도 아래쪽을 덜 가린다(소유자 2026-11-16 지도 비율).
+          <span className="rounded-sm bg-canvas/95 px-2 py-1 text-xs font-semibold text-ink shadow-card">
+            장소 {mapPoints.length}곳 · {visibleLayerCount}일 표시
+          </span>
+        ) : (
+          <>
+            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+              {visibleLayerCount}일 표시
+            </span>
+            <span className="rounded-sm bg-canvas/95 px-3 py-2 text-xs font-semibold text-ink shadow-card">
+              장소 {mapPoints.length}곳
+            </span>
+          </>
+        )}
       </div>
     </section>
   );
@@ -1921,6 +1971,8 @@ function TripDetailView2Part2({ viewModel }: { viewModel: TripDetailView2Model }
 
 function TripDetailView2Part3({ viewModel }: { viewModel: TripDetailView2Model }) {
   const {
+    mobilePanelExpanded,
+    setMobilePanelExpanded,
     trip,
     holidayMap,
     setMobilePanelOpen,
@@ -1941,28 +1993,46 @@ function TripDetailView2Part3({ viewModel }: { viewModel: TripDetailView2Model }
     realtimeClientRef,
   } = viewModel;
   return (
-    <div className="shrink-0 border-b border-hairline bg-canvas p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-ink">{trip.title}</p>
-          <p className="mt-1 text-xs text-muted">
-            {formatTripDateRange(trip.start_date, trip.end_date, holidayMap)}
-          </p>
+    <div className="shrink-0 border-b border-hairline bg-canvas px-3 pb-2">
+      {/* 시트 손잡이 줄 — 제목은 위 작업 헤더가 이미 보여 주므로 여기서는 기간과 펼치기·닫기만 둔다. */}
+      <div className="flex items-center justify-between gap-2" data-testid="trip-panel-sheet-header">
+        <span
+          aria-hidden="true"
+          className="absolute left-1/2 top-1.5 h-1 w-9 -translate-x-1/2 rounded-full bg-hairline"
+        />
+        <p className="min-w-0 truncate pt-2 text-xs text-muted">
+          <span className="sr-only">{trip.title} · </span>
+          {formatTripDateRange(trip.start_date, trip.end_date, holidayMap)}
+        </p>
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={() => setMobilePanelExpanded((expanded) => !expanded)}
+            aria-label={mobilePanelExpanded ? '패널 줄이기' : '패널 펼치기'}
+            data-testid="trip-panel-expand"
+            className="inline-flex size-11 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
+          >
+            {mobilePanelExpanded ? (
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ChevronUp className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobilePanelOpen(false)}
+            aria-label="패널 닫기"
+            className="inline-flex size-11 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setMobilePanelOpen(false)}
-          aria-label="패널 닫기"
-          className="inline-flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
-        >
-          <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
-        </button>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <button
           type="button"
           onClick={openTripEdit}
-          className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2.5 text-sm font-semibold text-ink hover:bg-surface-soft"
+          className="inline-flex min-h-11 items-center gap-1 rounded-sm border border-hairline bg-canvas px-2 text-sm font-semibold text-ink hover:bg-surface-soft"
         >
           <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
           편집
@@ -1974,7 +2044,7 @@ function TripDetailView2Part3({ viewModel }: { viewModel: TripDetailView2Model }
           title={addDayTitle}
           aria-label={addDayLabel}
           aria-describedby={addDayDisabledReason ? 'trip-drawer-add-disabled-reason' : undefined}
-          className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-ink px-2.5 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-1 rounded-sm bg-ink px-2 text-sm font-semibold text-canvas hover:bg-ink/90 disabled:opacity-50"
           data-testid="trip-add-day-drawer"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1987,10 +2057,10 @@ function TripDetailView2Part3({ viewModel }: { viewModel: TripDetailView2Model }
           {addDayDisabledReason}
         </p>
       )}
-      <div className="mt-3 flex gap-1 overflow-x-auto" role="tablist" aria-label="여행 작업 탭">
+      <div className="mt-2 flex gap-1 overflow-x-auto" role="tablist" aria-label="여행 작업 탭">
         {renderPanelTabs()}
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-2 empty:hidden">
         {view.broken_feature_count > 0 && (
           <p className="inline-flex items-center gap-1.5 rounded-sm bg-error-bg px-2 py-1 text-xs text-error-text">
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />

@@ -1,3 +1,12 @@
+## 2026-11-16 — 지도 마커·라벨·모바일 지도 동작(소유자 요청 1·2·4·8·9·10·16)
+
+- 마커: 물방울 핀(27×40) → 흰 테두리 원(여행 22px·주변 feature 18px), 원 중심=좌표(`anchor:left` + 반지름 offset). 이름은 상자 없는 halo 글자, 옆에 일자 날씨 카드(`weather_by_feature_id`)에서 뽑은 날씨 아이콘(`lib/placeWeather.ts`, 새 조회 없음). 맞춤 여백의 핀 높이 48→21.
+- 아이콘 고르기: PoiEditor의 `maki 아이콘` 텍스트 입력 → maki 아이콘 칩(36종, `lib/makiIcons.ts`). 저장 필드는 기존 `custom_marker_icon`(마이그레이션 없음). 목록 밖 지금 아이콘은 맨 앞 칩으로 보존.
+- 내 위치: `useLocationFollow`(watchPosition, follow/tracking, `dragstart`로만 해제) + `MyLocationControl`(LBS 동의 확인). 여행 상세 지도에 켬. 탐색 지도의 기존 1회성 버튼은 그대로.
+- 모바일: 상세 패널을 왼쪽 서랍(86vw·전체 높이) → 아래 시트(44svh, 펼치기). 목록 탭은 `focusRequest`로 같은 장소도 다시 가운데로.
+- 이중 표시(#4) 원인: 모바일 마커 탭이 `setSelected`(팝업)와 상세 시트를 함께 열었다(ADR-056 주석은 "팝업 없이"). 시트가 열려 있으면 feature·geometry·POI 이름 팝업을 그리지 않는다(탐색·여행 지도).
+- 검증: vitest(placeWeather·CirclePlaceMarker·PoiEditorIconPicker·useLocationFollow·tripMapViewFit), mocked e2e(trip-detail 새 5건, canvas 2건은 map-canvas grep에 추가), live CORE-040~045 추가(전체 live 카탈로그는 배포 뒤 소유자 실행).
+
 ## 2026-11-16 — 날씨 없음 옆 새로고침(소유자 요청 15)
 
 - `POST /trips/{id}/days/{n}/weather/refresh`(body `poi_id` 선택). PinVi 쪽 캐시는 날씨 위치 해석(`weather_location_links`, TTL 7일)뿐이고 날씨 값은 Map Valkey 상태(Map Dagster 적재)라 상류 수집을 당기는 API가 없다. 그래서 새로고침은 그 장소의 위치 집합을 Map `/nearest`·`/locations?near=`로 즉시 다시 해석해 저장한다(해석 당시 적재 전이던 예보 격자가 7일간 빠지는 경우를 고친다). 직접 경로(플래그 off)는 stale 표시.

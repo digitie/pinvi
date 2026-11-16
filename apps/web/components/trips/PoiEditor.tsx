@@ -7,6 +7,8 @@ import { MARKER_PALETTE, type MarkerColorKey } from '@pinvi/design-tokens';
 import { buildPoiDetailPatch, isoToDatetimeLocal, type PoiDetailForm } from '@pinvi/domain';
 import { FormField } from '@/components/forms/FormField';
 import { FormTextArea } from '@/components/forms/FormTextArea';
+import { MakiIcon } from '@/components/map/MakiIcon';
+import { MARKER_ICON_OPTIONS, type MarkerIconOption } from '@/lib/makiIcons';
 
 const COLOR_KEYS = Object.keys(MARKER_PALETTE) as MarkerColorKey[];
 
@@ -20,6 +22,12 @@ export interface PoiEditorProps {
   saving?: boolean;
   onSave: (patch: PoiUpdate) => void;
   onCancel: () => void;
+}
+
+/** 고르기 목록 + (목록에 없으면) 지금 아이콘을 맨 앞에 — 카테고리가 준 아이콘을 저장으로 잃지 않게. */
+function iconOptionsFor(current: string): readonly MarkerIconOption[] {
+  if (MARKER_ICON_OPTIONS.some((option) => option.icon === current)) return MARKER_ICON_OPTIONS;
+  return [{ icon: current, label: '지금 아이콘' }, ...MARKER_ICON_OPTIONS];
 }
 
 function colorKeyOf(value: string | null): MarkerColorKey {
@@ -110,6 +118,8 @@ export function PoiEditor({
   });
 
   const update = (patch: Partial<PoiDetailForm>) => setForm((prev) => ({ ...prev, ...patch }));
+  const [iconOptions] = useState(() => iconOptionsFor(form.icon));
+  const selectedHex = MARKER_PALETTE[form.color].hex;
 
   return (
     <div
@@ -157,17 +167,43 @@ export function PoiEditor({
         </div>
       </EditorSection>
 
-      <EditorSection id="poi-edit-section-icon" title="아이콘" summary={form.icon || 'marker'}>
-        <FormField
-          id="poi-edit-icon"
-          label="maki 아이콘"
-          labelClassName={POI_LABEL}
-          className={POI_INPUT}
-          value={form.icon}
-          onChange={(event) => update({ icon: event.target.value })}
-          maxLength={64}
-          placeholder="marker"
-        />
+      <EditorSection
+        id="poi-edit-section-icon"
+        title="아이콘"
+        summary={iconOptions.find((option) => option.icon === form.icon)?.label ?? form.icon}
+      >
+        <fieldset data-testid="poi-edit-icon">
+          <legend className="sr-only">마커 아이콘</legend>
+          {/* 색 칩과 같은 방식의 아이콘 칩 — 고른 색 원 위에 흰 아이콘으로 지도 마커와 같게 보여 준다. */}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-1">
+            {iconOptions.map((option) => {
+              const active = option.icon === form.icon;
+              return (
+                <button
+                  key={option.icon}
+                  type="button"
+                  aria-pressed={active}
+                  aria-label={option.label}
+                  title={option.label}
+                  data-marker-icon-option={option.icon}
+                  onClick={() => update({ icon: option.icon })}
+                  className={
+                    active
+                      ? 'flex size-11 items-center justify-center rounded-sm bg-surface-soft ring-2 ring-ink'
+                      : 'flex size-11 items-center justify-center rounded-sm hover:bg-surface-soft'
+                  }
+                >
+                  <span
+                    className="flex size-7 items-center justify-center rounded-full"
+                    style={{ backgroundColor: selectedHex }}
+                  >
+                    <MakiIcon icon={option.icon} size={15} testId="poi-edit-icon-glyph" />
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
       </EditorSection>
 
       <EditorSection

@@ -119,7 +119,8 @@ test.describe('CORE mobile', () => {
       await expect(day2).toHaveAttribute('aria-selected', 'true');
       await expect(page.getByRole('tab', { name: '1일차', exact: true })).toHaveAttribute('aria-selected', 'false');
       // swipe gesture on the drawer should NOT break anything (no handler exists — documented gap)
-      await page.touchscreen.tap(10, 400);
+      // 패널은 아래 시트(44svh)다 — 시트 안쪽을 누른다(위쪽 400px 줄은 이제 지도·교통 컨트롤이다).
+      await page.touchscreen.tap(10, 700);
       await shot(page, 'CORE-020', 'day2');
       await page.locator('button[aria-controls="trip-detail-panel"][aria-expanded="true"]:visible').first().tap();
       await expect(panel).toBeHidden();

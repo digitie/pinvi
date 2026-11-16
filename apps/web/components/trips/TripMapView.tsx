@@ -8,8 +8,8 @@ import {
   ClusterLayer,
   MapFallback,
   MapLoadingSkeleton,
-  PinMarker,
   Popup,
+  UserLocationMarker,
   VWorldMap,
   type ClusterPoint,
   type MapLibreMap,
@@ -18,7 +18,7 @@ import { apiClient } from '@/lib/api';
 import type { GeometryFeature } from '@/lib/featureGeometry';
 import { useFeatureGeometry } from '@/lib/useFeatureGeometry';
 import { ApiError, featureApi } from '@pinvi/api-client';
-import type { FeatureSummary } from '@pinvi/schemas';
+import type { FeatureSummary, TripWeatherCard } from '@pinvi/schemas';
 import {
   useCallback,
   useEffect,
@@ -30,7 +30,10 @@ import {
   type TouchEvent,
 } from 'react';
 
+import { CirclePlaceMarker } from '@/components/map/CirclePlaceMarker';
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
+import { MakiIcon } from '@/components/map/MakiIcon';
+import { MyLocationControl, useMyLocationControl } from '@/components/map/MyLocationControl';
 import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
 import { MapLayerControls } from '@/components/map/MapLayerControls';
 import { TransportMarkerLegend, TransportMarkers } from '@/components/map/TransportMarkers';
@@ -43,7 +46,9 @@ import {
   fitPanelRect,
   pinBoxIntersects,
 } from '@/lib/mapFitPadding';
+import { makiIconName } from '@/lib/makiIcons';
 import { markerZIndex } from '@/lib/markerStacking';
+import { usePlaceWeather } from '@/components/map/PlaceWeatherGlyph';
 import { viewportSearchBias } from '@/lib/searchBias';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { useTransportLayers } from '@/lib/useTransportLayers';
@@ -74,26 +79,15 @@ function syncMapSize(map: MapLibreMap): void {
   }
 }
 const DEFAULT_ZOOM = 7;
-const TRIP_MAP_MARKER_SIZE = 27;
-// PinMarker는 너비 size, 높이 size×1.5(40.5px) 물방울을 아래 꼭짓점(anchor bottom)에 건다. 선택된 핀은
-// 1.18배(≈48px)로 커지고, 실지도 확인에서 마커 상자 위쪽이 앵커보다 ≈49px 위에 잡힌 적이 있어 넉넉히 잡는다.
-const TRIP_MAP_PIN_HEIGHT = Math.ceil(TRIP_MAP_MARKER_SIZE * 1.5 * 1.18);
-const FEATURE_MARKER_SIZE = 22;
+// 구글 지도식 원형 마커(원의 중심이 좌표). 옛 물방울 핀(27×40px)보다 작게 — 여행 장소는 22px,
+// 주변 추천 feature는 18px. 터치는 원 + 이름 라벨 전체가 받는다.
+const TRIP_MAP_MARKER_SIZE = 22;
+const TRIP_MAP_ICON_SIZE = 13;
+// 맞춤 여백이 피할 "앵커 위로 솟는 높이" — 원 중심에서 선택 확대(1.18배) 원의 위 끝까지 + 여유.
+const TRIP_MAP_PIN_HEIGHT = Math.ceil((TRIP_MAP_MARKER_SIZE * 1.18) / 2) + 8;
+const FEATURE_MARKER_SIZE = 18;
+const FEATURE_ICON_SIZE = 11;
 const FEATURE_DEBOUNCE_MS = 250;
-const MAKI_ICON_BASE_URL = 'https://unpkg.com/@mapbox/maki@8.0.0/icons';
-const MAKI_ICON_ALIASES: Record<string, string> = {
-  alert: 'danger',
-  camera: 'viewpoint',
-  walking: 'mountain',
-};
-
-function makiIconName(icon: string): string {
-  return MAKI_ICON_ALIASES[icon] ?? icon;
-}
-
-function makiIconUrl(icon: string): string {
-  return `${MAKI_ICON_BASE_URL}/${encodeURIComponent(icon)}.svg`;
-}
 
 function isKoreaCoord(coord: { lon: number; lat: number }): boolean {
   return coord.lon >= 124 && coord.lon <= 132 && coord.lat >= 33 && coord.lat <= 43;
@@ -105,37 +99,6 @@ function ignoreLongPressTarget(target: EventTarget | null): boolean {
     target.closest(
       '.maplibregl-marker, button, a, input, textarea, select, [role="button"], [role="menu"], [data-map-overlay]',
     ) != null
-  );
-}
-
-function TripMakiIcon({ icon, title }: { icon: string; title: string }) {
-  const renderedIcon = makiIconName(icon);
-  const [src, setSrc] = useState(() => makiIconUrl(renderedIcon));
-  // icon(따라서 renderedIcon)이 바뀌면 이전 onError fallback 상태를 지우고 새 아이콘으로
-  // 되돌린다 — src는 onError로도 독립적으로 바뀔 수 있어 순수 파생값이 아니다.
-  const [prevRenderedIcon, setPrevRenderedIcon] = useState(renderedIcon);
-  if (renderedIcon !== prevRenderedIcon) {
-    setPrevRenderedIcon(renderedIcon);
-    setSrc(makiIconUrl(renderedIcon));
-  }
-
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt=""
-      aria-hidden="true"
-      data-testid="trip-map-maki-icon"
-      data-maki-icon={icon}
-      data-maki-rendered-icon={src.endsWith('/marker.svg') ? 'marker' : renderedIcon}
-      className="block h-[18px] w-[18px] object-contain"
-      style={{ filter: 'brightness(0) invert(1)' }}
-      title={title}
-      onError={() => {
-        const fallbackSrc = makiIconUrl('marker');
-        if (src !== fallbackSrc) setSrc(fallbackSrc);
-      }}
-    />
   );
 }
 
@@ -185,6 +148,21 @@ export interface TripMapViewProps {
    * 기본 켜짐.
    */
   showSelectedPoiPopup?: boolean;
+  /**
+   * 마커 이름 옆 현재 날씨 아이콘의 출처 — POI별 일자 날씨 카드(`placeWeatherCards`)와, 장소 목록 배지가 받은
+   * 장소 현재 카드 공유 캐시의 키(`tripId`). 새 요청은 만들지 않는다.
+   */
+  weatherCardsByPoiId?: Readonly<Record<string, TripWeatherCard>>;
+  tripId?: string;
+  /**
+   * "내 위치" 버튼(따라가기 모드). 위치 동의 API가 로그인을 요구하므로 비로그인 공유 화면에서는 켜지 않는다.
+   */
+  showMyLocation?: boolean;
+  /**
+   * 목록에서 장소를 고를 때마다 늘리는 값. 이미 선택된 장소를 목록에서 다시 눌러도(그 사이 지도를 끌어
+   * 옮겼어도) 그 장소를 다시 지도 가운데로 가져온다 — `selectedPoiId`만으로는 값이 그대로라 이동이 없었다.
+   */
+  focusRequest?: number;
 }
 
 export function TripMapView(...args: Parameters<typeof useTripMapViewModel>) {
@@ -212,6 +190,10 @@ function useTripMapViewModel({
   overlayTopLeftClassName = 'pointer-events-none absolute left-2 right-2 top-2 z-10',
   onViewportBboxChange,
   showSelectedPoiPopup = true,
+  weatherCardsByPoiId,
+  tripId,
+  showMyLocation = false,
+  focusRequest = 0,
 }: TripMapViewProps) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const overlayStackRef = useRef<HTMLDivElement | null>(null);
@@ -227,6 +209,8 @@ function useTripMapViewModel({
   // F5: feature 상세 풀스크린 모달(weather 제외).
   const [detailFeatureId, setDetailFeatureId] = useState<string | null>(null);
   const mobileLayout = useMobileWebLayout();
+  const getMap = useCallback(() => mapRef.current, []);
+  const myLocation = useMyLocationControl(getMap);
   // 여행 지도의 교통 레이어는 화면 범위가 아니라 여행 장소 반경(주유소 10 km·교통 돌발 20 km)이다.
   const transportNearPoints = useMemo(() => {
     const seen = new Set<string>();
@@ -608,7 +592,7 @@ function useTripMapViewModel({
         offset: [0, (padding.top - padding.bottom) / 2],
       });
     }
-  }, [selected]);
+  }, [selected, focusRequest]);
 
   const coordFromClientPoint = useCallback((clientX: number, clientY: number) => {
     const map = mapRef.current;
@@ -736,6 +720,10 @@ function useTripMapViewModel({
     transport,
     layerControls,
     userMovedRef,
+    weatherCardsByPoiId,
+    tripId,
+    myLocation,
+    showMyLocation,
   };
 }
 
@@ -766,18 +754,19 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
     onSelectPoi,
     openCoordinatePoiDialog,
     overlayTopLeft,
-    selected,
     selectedFeature,
     selectedPoiId,
-    selectedResolutionNotice,
     setDetailFeatureId,
     setSelectedFeature,
     showFeatures,
     showNavigationControls,
-    showSelectedPoiPopup,
     surfaceClassName,
     transport,
     userMovedRef,
+    weatherCardsByPoiId,
+    tripId,
+    myLocation,
+    showMyLocation,
   } = viewModel;
   return (
     <div className={className} data-testid="trip-map">
@@ -840,7 +829,6 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
           unsupportedTileFallback={{ label: 'VWorld tile' }}
         >
           <FeatureGeometryLayers state={geometry} />
-          <FeatureGeometryPopup state={geometry} onOpenDetail={setDetailFeatureId} />
           <ClusterLayer
             points={markerPoints}
             radius={28}
@@ -849,18 +837,27 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
               const marker = clusterPoint as MarkerPoint;
               const resolutionNotice = featureResolutionNotice(marker.point.featureResolutionState);
               return (
-                <PinMarker
+                <CirclePlaceMarker
                   key={marker.point.poiId}
                   lngLat={marker.lngLat}
-                  icon={<TripMakiIcon icon={marker.point.icon} title={marker.point.title} />}
+                  icon={
+                    <MakiIcon
+                      icon={marker.point.icon}
+                      size={TRIP_MAP_ICON_SIZE}
+                    />
+                  }
                   color={marker.point.color}
                   size={TRIP_MAP_MARKER_SIZE}
-                  showInnerCircle={false}
+                  label={marker.point.title}
+                  weather={{
+                    tripId,
+                    poiId: marker.point.poiId,
+                    dayCard: weatherCardsByPoiId?.[marker.point.poiId] ?? null,
+                  }}
                   className="trip-map-marker"
+                  // 이름은 라벨로 늘 보인다 — hover 상자는 확인 필요 안내가 있을 때만 띄운다.
                   title={
-                    resolutionNotice
-                      ? `${marker.point.title} (${resolutionNotice})`
-                      : marker.point.title
+                    resolutionNotice ? `${marker.point.title} (${resolutionNotice})` : undefined
                   }
                   selected={marker.point.poiId === selectedPoiId}
                   zIndex={markerZIndex(marker.point.poiId === selectedPoiId)}
@@ -888,13 +885,12 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
               renderMarker={(clusterPoint) => {
                 const marker = clusterPoint as FeaturePoint;
                 return (
-                  <PinMarker
+                  <CirclePlaceMarker
                     key={marker.feature.feature_id}
                     lngLat={marker.lngLat}
-                    icon={<TripMakiIcon icon={marker.icon} title={marker.feature.name} />}
+                    icon={<MakiIcon icon={marker.icon} size={FEATURE_ICON_SIZE} />}
                     color={marker.color}
                     size={FEATURE_MARKER_SIZE}
-                    showInnerCircle={false}
                     className="trip-map-feature-marker"
                     zIndex={markerZIndex(selectedFeature?.feature_id === marker.feature.feature_id)}
                     title={marker.feature.name}
@@ -914,6 +910,7 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
               }}
             />
           )}
+          <TripMapUserLocation viewModel={viewModel} />
           {transport.visible && (
             <TransportMarkers
               points={transport.points}
@@ -924,25 +921,15 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
               }}
             />
           )}
-          {selected && !geometry.selection && showSelectedPoiPopup && (
-            <Popup
-              key={selected.poiId}
-              lngLat={[selected.lon, selected.lat]}
-              maxWidth="240px"
-              closeButton={false}
-              onClose={() => onSelectPoi?.(null)}
-            >
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-ink">{selected.title}</p>
-                {selectedResolutionNotice && (
-                  <p className="text-xs text-error-text">{selectedResolutionNotice}</p>
-                )}
-              </div>
-            </Popup>
-          )}
-          {selectedFeature?.coord && <TripMapViewView0Part2 viewModel={viewModel} />}
+          <TripMapPopups viewModel={viewModel} />
         </VWorldMap>
         <TransportMarkerLegend points={transport.points} />
+        <MyLocationControl
+          state={myLocation}
+          hidden={!showMyLocation}
+          // 오른쪽 아래, 축척 막대·출처 표기(아래 ~80px) 위 — 구글·네이버 지도의 내 위치 버튼 자리.
+          className="absolute bottom-24 right-3 z-10"
+        />
         <TripMapViewView0Part3 viewModel={viewModel} />
         <div className="sr-only" aria-hidden="true" data-testid="trip-map-feature-legend">
           {featurePoints.map((point) => (
@@ -1064,29 +1051,105 @@ function TripMapViewView0Part2({ viewModel }: { viewModel: TripMapViewView0Model
 }
 
 function TripMapViewView0Part3({ viewModel }: { viewModel: TripMapViewView0Model }) {
-  const { points, selectedPoiId } = viewModel;
+  const { points, selectedPoiId, weatherCardsByPoiId, tripId } = viewModel;
   return (
     <div className="sr-only" aria-hidden="true" data-testid="trip-map-marker-legend">
       {points.map((point) => (
-        <span
+        <TripMapMarkerLegendRow
           key={point.poiId}
-          data-testid="trip-map-marker-style"
-          data-poi-id={point.poiId}
-          data-day-index={point.dayIndex}
-          data-marker-color={point.markerColor}
-          data-marker-hex={point.color}
-          data-marker-icon={point.icon}
-          data-marker-rendered-icon={makiIconName(point.icon)}
-          data-marker-size={TRIP_MAP_MARKER_SIZE}
-          data-marker-source={point.markerSource}
-          data-marker-selected={point.poiId === selectedPoiId ? 'true' : 'false'}
-          data-feature-resolution-state={point.featureResolutionState}
-          data-marker-category={point.category ?? ''}
-          data-marker-kind={point.kind ?? ''}
-        >
-          {point.title}
-        </span>
+          point={point}
+          selected={point.poiId === selectedPoiId}
+          tripId={tripId}
+          dayCard={weatherCardsByPoiId?.[point.poiId] ?? null}
+        />
       ))}
     </div>
   );
+}
+
+function TripMapMarkerLegendRow({
+  point,
+  selected,
+  tripId,
+  dayCard,
+}: {
+  point: TripMapPoint;
+  selected: boolean;
+  tripId: string | undefined;
+  dayCard: TripWeatherCard | null;
+}) {
+  const weather = usePlaceWeather({ tripId, poiId: point.poiId, dayCard });
+  return (
+    <span
+      data-testid="trip-map-marker-style"
+      data-poi-id={point.poiId}
+      data-day-index={point.dayIndex}
+      data-marker-color={point.markerColor}
+      data-marker-hex={point.color}
+      data-marker-icon={point.icon}
+      data-marker-rendered-icon={makiIconName(point.icon)}
+      data-marker-size={TRIP_MAP_MARKER_SIZE}
+      data-marker-source={point.markerSource}
+      data-marker-selected={selected ? 'true' : 'false'}
+      data-feature-resolution-state={point.featureResolutionState}
+      data-marker-category={point.category ?? ''}
+      data-marker-kind={point.kind ?? ''}
+      data-marker-weather={weather?.condition ?? ''}
+    >
+      {point.title}
+    </span>
+  );
+}
+
+/**
+ * 지도 위 선택 팝업들. 모바일은 탭하면 상세 시트가 바로 뜬다(ADR-056) — 시트가 열려 있으면 같은 장소를
+ * 팝업으로 한 번 더 그리지 않는다(모바일 "장소가 두 번 보인다": 팝업 + 상세 시트). 여행 장소 이름은 마커
+ * 라벨이 이미 보여 주므로 모바일에서는 연결 확인 안내가 있을 때만 이름 팝업을 띄운다.
+ */
+function TripMapPopups({ viewModel }: { viewModel: TripMapViewView0Model }) {
+  const {
+    detailFeatureId,
+    geometry,
+    mobileLayout,
+    onSelectPoi,
+    selected,
+    selectedFeature,
+    selectedResolutionNotice,
+    setDetailFeatureId,
+    showSelectedPoiPopup,
+  } = viewModel;
+  if (mobileLayout && detailFeatureId != null) return null;
+  const showPoiPopup =
+    showSelectedPoiPopup &&
+    selected != null &&
+    !geometry.selection &&
+    (!mobileLayout || selectedResolutionNotice != null);
+  return (
+    <>
+      <FeatureGeometryPopup state={geometry} onOpenDetail={setDetailFeatureId} />
+      {showPoiPopup && selected && (
+          <Popup
+            key={selected.poiId}
+            lngLat={[selected.lon, selected.lat]}
+            maxWidth="240px"
+            closeButton={false}
+            onClose={() => onSelectPoi?.(null)}
+          >
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-ink">{selected.title}</p>
+              {selectedResolutionNotice && (
+                <p className="text-xs text-error-text">{selectedResolutionNotice}</p>
+              )}
+            </div>
+          </Popup>
+      )}
+      {selectedFeature?.coord && <TripMapViewView0Part2 viewModel={viewModel} />}
+    </>
+  );
+}
+
+function TripMapUserLocation({ viewModel }: { viewModel: TripMapViewView0Model }) {
+  const { showMyLocation, myLocation } = viewModel;
+  if (!showMyLocation || !myLocation.position) return null;
+  return <UserLocationMarker lngLat={myLocation.position} />;
 }

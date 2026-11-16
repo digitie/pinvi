@@ -383,22 +383,37 @@ async function expectMyMapsDetailLayout(page: Page) {
   expect(mapBox?.height ?? 0).toBeGreaterThan(500);
 }
 
-async function expectMobileDrawerLayout(page: Page) {
+/**
+ * 모바일 패널은 아래 시트다(소유자 2026-11-16: 지도 아닌 영역이 지도보다 컸다). 접힌 시트는 지도 아래쪽에
+ * 붙어 지도 폭 전체를 쓰고, 위 작업 헤더와 시트 사이에 보이는 지도가 시트보다 크다.
+ */
+async function expectMobileSheetLayout(page: Page) {
   const panel = page.getByTestId('trip-detail-panel');
   const map = page.getByTestId('trip-detail-map');
+  const topPanel = page.getByTestId('trip-top-panel');
 
   await expect(panel).toBeVisible();
   await expect(map).toBeVisible();
 
-  const panelBox = await panel.boundingBox();
-  const mapBox = await map.boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect(mapBox).not.toBeNull();
-  expect(panelBox?.x ?? 0).toBeGreaterThanOrEqual(mapBox?.x ?? 0);
-  expect(panelBox?.x ?? 0).toBeLessThan((mapBox?.x ?? 0) + 4);
-  expect(panelBox?.y ?? 0).toBeGreaterThanOrEqual((mapBox?.y ?? 0) - 1);
-  expect(panelBox?.width ?? 0).toBeLessThan(mapBox?.width ?? 0);
-  expect(mapBox?.height ?? 0).toBeGreaterThan(500);
+  const panelBox = (await panel.boundingBox())!;
+  const mapBox = (await map.boundingBox())!;
+  const topBox = (await topPanel.boundingBox())!;
+  expect(mapBox.height).toBeGreaterThan(500);
+  // 아래에 붙은 전폭 시트
+  expect(Math.abs(panelBox.x - mapBox.x)).toBeLessThan(2);
+  expect(Math.abs(panelBox.width - mapBox.width)).toBeLessThan(2);
+  expect(Math.abs(panelBox.y + panelBox.height - (mapBox.y + mapBox.height))).toBeLessThan(2);
+  // 헤더 아래·시트 위로 보이는 지도 > 시트
+  const visibleMap = panelBox.y - (topBox.y + topBox.height);
+  expect(visibleMap).toBeGreaterThan(panelBox.height);
+
+  // 펼치면 작업 헤더 아래까지 덮고, 다시 줄일 수 있다.
+  await page.getByRole('button', { name: '패널 펼치기' }).click();
+  const expanded = (await panel.boundingBox())!;
+  expect(expanded.y).toBeGreaterThanOrEqual(topBox.y + topBox.height - 1);
+  expect(expanded.height).toBeGreaterThan(panelBox.height);
+  await page.getByRole('button', { name: '패널 줄이기' }).click();
+  expect((await panel.boundingBox())!.height).toBeCloseTo(panelBox.height, 0);
 }
 
 async function expectMobileMapFirstLayout(page: Page) {
@@ -515,7 +530,7 @@ test.describe('Samsung Internet 모바일 상세 레이아웃', () => {
       'Mozilla/5.0 (Linux; Android 14; SAMSUNG SM-S921N) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36',
   });
 
-  test('큰 layout viewport에서도 상단 메뉴만 남기고 상세 패널을 왼쪽 드로어로 연다', async ({
+  test('큰 layout viewport에서도 상단 메뉴만 남기고 상세 패널을 아래 시트로 연다', async ({
     page,
   }) => {
     await mockTripDetailRoutes(page);
@@ -528,7 +543,7 @@ test.describe('Samsung Internet 모바일 상세 레이아웃', () => {
     await expect(page.getByTestId('trip-detail-panel')).toBeHidden();
     await expect(page.getByTestId('trip-detail-map')).toBeVisible();
     await page.getByRole('button', { name: '패널 열기' }).click();
-    await expectMobileDrawerLayout(page);
+    await expectMobileSheetLayout(page);
     await expect(page.getByTestId('trip-detail-panel')).toContainText('1일차');
     await expect(page.getByTestId('trip-detail-panel')).not.toContainText('Day plan');
     await expect(page.getByTestId('trip-detail-panel')).not.toContainText('지도 레이어');
@@ -593,20 +608,20 @@ test('여행 지도 marker는 5상태와 transport unverified를 구분한다', 
   await expect(custom).toHaveAttribute('data-marker-color', 'P-10');
   await expect(custom).toHaveAttribute('data-marker-icon', 'lodging');
   await expect(custom).toHaveAttribute('data-marker-rendered-icon', 'lodging');
-  await expect(custom).toHaveAttribute('data-marker-size', '27');
+  await expect(custom).toHaveAttribute('data-marker-size', '22');
   await expect(custom).toHaveAttribute('data-marker-source', 'resolved');
 
   await expect(snapshot).toHaveAttribute('data-marker-color', 'P-03');
   await expect(snapshot).toHaveAttribute('data-marker-icon', 'monument');
   await expect(snapshot).toHaveAttribute('data-marker-rendered-icon', 'monument');
-  await expect(snapshot).toHaveAttribute('data-marker-size', '27');
+  await expect(snapshot).toHaveAttribute('data-marker-size', '22');
   await expect(snapshot).toHaveAttribute('data-marker-source', 'snapshot');
   await expect(snapshot).toHaveAttribute('data-marker-category', '국가유산');
 
   await expect(broken).toHaveAttribute('data-marker-color', 'P-14');
   await expect(broken).toHaveAttribute('data-marker-icon', 'alert');
   await expect(broken).toHaveAttribute('data-marker-rendered-icon', 'danger');
-  await expect(broken).toHaveAttribute('data-marker-size', '27');
+  await expect(broken).toHaveAttribute('data-marker-size', '22');
   await expect(broken).toHaveAttribute('data-marker-source', 'category');
   await expect(broken).toHaveAttribute('data-feature-resolution-state', 'missing');
 
@@ -1655,14 +1670,14 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
       });
 
       if (minFitSpanPath) {
-        // 전제: 검색 줄 clearance(핀 48+간격 24)와 기본 아래 여백 64를 빼면 MIN_FIT_SPAN(120)보다 좁다.
+        // 전제: 검색 줄 clearance(원형 마커 21+간격 24)와 기본 아래 여백 64를 빼면 MIN_FIT_SPAN(120)보다 좁다.
         // 지도 위 장소 검색(일정 패널 안의 같은 검색 상자가 아니라).
         const anchor = (await page
           .getByTestId('trip-map-place-search')
           .locator('[data-map-fit-anchor]')
           .boundingBox())!;
         const surfaceTop = surfaceBox.y;
-        const topClearance = Math.min(anchor.y + anchor.height - surfaceTop + 72, surfaceBox.height * 0.6);
+        const topClearance = Math.min(anchor.y + anchor.height - surfaceTop + 45, surfaceBox.height * 0.6);
         expect(surfaceBox.height - Math.max(64, topClearance) - 64).toBeLessThan(120);
       }
 
@@ -1673,8 +1688,14 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
       await expect(markers.first()).toBeVisible({ timeout: 20_000 });
       await expect
         .poll(async () => {
+          // 원형 마커는 원의 중심이 좌표다 — 이름 라벨을 뺀 원 상자를 잰다.
           const boxes = await markers.evaluateAll((elements) =>
-            elements.map((element) => element.getBoundingClientRect().toJSON() as DOMRect),
+            elements.map(
+              (element) =>
+                (
+                  element.querySelector('[data-testid="circle-place-marker-dot"]') ?? element
+                ).getBoundingClientRect().toJSON() as DOMRect,
+            ),
           );
           const visibleBottom = Math.min(mapBox!.y + mapBox!.height, viewport.height);
           return boxes.filter(
@@ -1796,5 +1817,195 @@ test.describe('모바일 여행 지도 교통 결과(#712)', () => {
     await expect(page.getByTestId('transport-incident-list')).toBeVisible();
     await page.waitForTimeout(800);
     expect(markersRequests).toHaveLength(1);
+  });
+});
+
+// 2026-11-16 소유자 요청 — 구글 지도식 원형 마커·이름 라벨·날씨 아이콘, 아이콘 고르기, 내 위치 따라가기,
+// 모바일 목록 탭 → 지도 가운데, 모바일 아래 시트.
+// 시각은 테스트 실행 시점 기준 — 마커 날씨는 장소 목록 배지와 같은 '현재' 규칙(실황 ±몇 시간)이다.
+const OBSERVED_NOW = new Date(Date.now() - 10 * 60_000).toISOString();
+const RAINY_WEATHER_VIEW = {
+  ...TRIP_VIEW,
+  days: [
+    {
+      ...TRIP_VIEW.days[0],
+      weather_cards: {
+        'card-1': {
+          asof: OBSERVED_NOW,
+          latest_at: null,
+          is_stale: false,
+          source_styles: ['nowcast'],
+          metrics: [
+            {
+              metric_key: 'PTY',
+              forecast_style: 'nowcast',
+              provider: 'python-kma-api',
+              observed_at: OBSERVED_NOW,
+              value_number: 1,
+            },
+            {
+              metric_key: 'T1H',
+              forecast_style: 'nowcast',
+              provider: 'python-kma-api',
+              observed_at: OBSERVED_NOW,
+              value_number: 21,
+              unit: 'deg_c',
+            },
+          ],
+        },
+      },
+      weather_by_feature_id: { 'feat-haeundae': { state: 'found', card_key: 'card-1' } },
+    },
+  ],
+};
+
+test('여행 장소 마커는 원형 + 상자 없는 이름 라벨 + 현재 날씨 아이콘이다', async ({ page }) => {
+  await mockTripDetailRoutes(page, RAINY_WEATHER_VIEW);
+  await stubTilesInCanvasMode(page);
+  await page.goto(`/trips/${tripId}`);
+  const legend = page.locator(`[data-testid="trip-map-marker-style"][data-poi-id="${poiId}"]`);
+  await expect(legend).toHaveAttribute('data-marker-size', '22');
+  await expect(legend).toHaveAttribute('data-marker-weather', 'rain');
+
+  test.skip(process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1', 'VWorld canvas 검증 환경에서 실행');
+  const marker = page.locator('.maplibregl-marker.trip-map-marker').first();
+  await expect(marker).toBeVisible({ timeout: 20_000 });
+  const dot = marker.getByTestId('circle-place-marker-dot');
+  const dotBox = (await dot.boundingBox())!;
+  expect(Math.round(dotBox.width)).toBe(22);
+  expect(Math.round(dotBox.height)).toBe(22);
+  expect(await dot.evaluate((el) => getComputedStyle(el).borderRadius)).not.toBe('0px');
+  const label = marker.getByTestId('circle-place-marker-label');
+  await expect(label).toContainText('해운대 해수욕장');
+  // 상자 없는 글자 — 배경·테두리·그림자 없음, 원 오른쪽.
+  const labelStyle = await label.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { bg: style.backgroundColor, shadow: style.boxShadow, border: style.borderTopWidth };
+  });
+  expect(labelStyle).toEqual({ bg: 'rgba(0, 0, 0, 0)', shadow: 'none', border: '0px' });
+  expect((await label.boundingBox())!.x).toBeGreaterThan(dotBox.x + dotBox.width - 1);
+  await expect(marker.getByTestId('place-weather-glyph')).toHaveAttribute(
+    'data-weather-kind',
+    'rain',
+  );
+  // 라벨을 눌러도 장소가 선택된다.
+  await label.click();
+  await expect(legend).toHaveAttribute('data-marker-selected', 'true');
+});
+
+test('마커 아이콘은 텍스트 대신 아이콘 칩으로 고르고 custom_marker_icon으로 저장한다', async ({
+  page,
+}) => {
+  let patchedBody: Record<string, unknown> | null = null;
+  await page.route(/.*\/trips\/[0-9a-f-]{36}\/pois\/[0-9a-f-]{36}$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.fallback();
+    if (request.method() !== 'PATCH') return route.fallback();
+    patchedBody = request.postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { ...TRIP_VIEW.days[0]!.pois[0], ...patchedBody, version: 2 },
+      }),
+    });
+  });
+  await mockTripDetailRoutes(page);
+  await page.goto(`/trips/${tripId}`);
+  await page.getByRole('button', { name: '마커 편집' }).first().click();
+  const editor = page.getByTestId('poi-editor');
+  // 아이콘은 접힌 편집 항목 안에 있다 — 요약은 지금 아이콘 이름.
+  await expect(editor.getByTestId('poi-edit-section-icon-summary')).toHaveText('물놀이');
+  await editor.getByRole('button', { name: '아이콘', exact: true }).click();
+  await expect(editor.getByLabel('maki 아이콘')).toHaveCount(0);
+  const icons = editor.getByRole('group', { name: '마커 아이콘' });
+  await expect(icons.getByRole('button', { name: '물놀이' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await icons.getByRole('button', { name: '카페' }).click();
+  await expect(icons.getByRole('button', { name: '카페' })).toHaveAttribute('aria-pressed', 'true');
+  await editor.getByRole('button', { name: '저장' }).click();
+  await expect.poll(() => patchedBody?.custom_marker_icon).toBe('cafe');
+});
+
+test.describe('모바일 지도 비율·목록 탭 가운데·내 위치(2026-11-16)', () => {
+  test.use({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    permissions: ['geolocation'],
+    geolocation: { latitude: 35.158, longitude: 129.16 },
+  });
+
+  test('패널은 아래 시트 — 위로 지도가 보이고, 목록에서 장소를 누르면 시트를 닫고 지도 가운데로', async ({
+    page,
+  }) => {
+    await mockTripDetailRoutes(page, {
+      ...TRIP_VIEW,
+      days: [{ ...BASE_MARKER_DAY, pois: LONG_PANEL_POIS.slice(0, 6) }],
+    });
+    await stubTilesInCanvasMode(page);
+    await page.goto(`/trips/${tripId}`);
+    await page.getByRole('button', { name: '패널 열기' }).click();
+    await expectMobileSheetLayout(page);
+    const target = LONG_PANEL_POIS[0]!;
+    await page.getByRole('button', { name: new RegExp(`${target.title}$`) }).first().click();
+    await expect(page.getByTestId('trip-detail-panel')).toBeHidden();
+    const legend = page.locator(
+      `[data-testid="trip-map-marker-style"][data-poi-id="${target.poi_id}"]`,
+    );
+    await expect(legend).toHaveAttribute('data-marker-selected', 'true');
+
+    test.skip(process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1', 'VWorld canvas 검증 환경에서 실행');
+    const dot = page
+      .locator(`.maplibregl-marker.trip-map-marker[data-interaction-id="poi:${target.poi_id}"]`)
+      .getByTestId('circle-place-marker-dot');
+    const offCentre = async () => {
+      const map = (await page.getByTestId('trip-detail-map').boundingBox())!;
+      const box = (await dot.boundingBox())!;
+      return {
+        dx: Math.abs(box.x + box.width / 2 - (map.x + map.width / 2)),
+        dy: Math.abs(box.y + box.height / 2 - (map.y + map.height / 2)),
+      };
+    };
+    // 가로는 정확히 가운데, 세로는 검색 줄·아래 칩을 피한 보이는 영역의 가운데(지도 높이 1/4 안).
+    await expect.poll(async () => (await offCentre()).dx, { timeout: 10_000 }).toBeLessThan(4);
+    expect((await offCentre()).dy).toBeLessThan(844 / 4);
+    // 지도를 끌어 옮긴 뒤 같은 장소를 목록에서 다시 누르면 다시 가운데로 온다.
+    await page.mouse.move(200, 500);
+    await page.mouse.down();
+    await page.mouse.move(60, 300, { steps: 10 });
+    await page.mouse.up();
+    await expect.poll(async () => (await offCentre()).dx).toBeGreaterThan(40);
+    await page.getByRole('button', { name: '패널 열기' }).click();
+    await page.getByRole('button', { name: new RegExp(`${target.title}$`) }).first().click();
+    await expect.poll(async () => (await offCentre()).dx, { timeout: 10_000 }).toBeLessThan(4);
+  });
+
+  test('내 위치 버튼 — 동의 후 따라가기 모드, 40px 이상 터치 타깃', async ({ page }) => {
+    await page.route(/.*\/users\/me\/consents$/, async (route, request) => {
+      if (!isFetch(request.resourceType())) return route.fallback();
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: ['lbs_tos', 'location_collection'].map((consent_type) => ({
+            consent_type,
+            version: 'v1.0',
+            agreed_at: '2026-06-10T00:00:00Z',
+            withdrawn_at: null,
+          })),
+        }),
+      });
+    });
+    await mockTripDetailRoutes(page);
+    await page.goto(`/trips/${tripId}`);
+    const button = page.getByTestId('map-my-location');
+    await expect(button).toHaveAttribute('data-follow-mode', 'off');
+    const box = (await button.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(40);
+    expect(box.height).toBeGreaterThanOrEqual(40);
+    await button.click();
+    await expect(button).toHaveAttribute('data-follow-mode', 'follow');
+    await expect(button).toHaveAttribute('aria-pressed', 'true');
+    await expect(button).toHaveAccessibleName('내 위치를 따라가는 중');
   });
 });

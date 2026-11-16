@@ -79,7 +79,7 @@ export function featureMarkers(page: Page) {
   return featureMarkerButtons(page);
 }
 
-/** Trip-map POI pins (`PinMarker className="trip-map-marker"`). */
+/** Trip-map POI markers (`CirclePlaceMarker className="trip-map-marker"` — circle + name label). */
 export function tripPins(page: Page) {
   return page.locator('.maplibregl-marker.trip-map-marker');
 }

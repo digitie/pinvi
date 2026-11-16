@@ -19,7 +19,9 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
 import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
+import { CirclePlaceMarker } from '@/components/map/CirclePlaceMarker';
 import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
+import { MakiIcon } from '@/components/map/MakiIcon';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
 import { MapLayerControls } from '@/components/map/MapLayerControls';
@@ -79,6 +81,9 @@ let autoCenterSession: { done: true; coord: { lon: number; lat: number } | null 
 const CLUSTER_COLOR = '#37404a';
 const CLUSTER_MARKER_COLOR = 'cluster';
 const DEBOUNCE_MS = 250;
+// 탐색 지도 장소 마커 — 여행 지도 장소 마커와 같은 원 크기.
+const EXPLORE_MARKER_SIZE = 22;
+const EXPLORE_ICON_SIZE = 13;
 const VIEWPORT_CACHE_MAX = 32;
 const VIEWPORT_CACHE_TTL_MS = 60_000;
 /**
@@ -815,6 +820,7 @@ function useFeatureMapViewModel({
     userLocation,
     weather,
     weatherPoints,
+    mobileLayout,
   };
 }
 
@@ -856,7 +862,10 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
     transport,
     userLocation,
     weatherPoints,
+    mobileLayout,
   } = viewModel;
+  // 모바일 상세 시트가 열려 있으면 지도 위 팝업은 같은 장소의 중복 표시다.
+  const sheetOpen = mobileLayout && detailFeatureId != null;
   return (
     // 높이는 셸이 흘려보낸다 — 바깥 래퍼까지 flex 사슬을 이어야 `h-full`이 실제로 해소된다
     // (사슬이 끊기면 content 높이로 붕괴한다, T-316 리뷰 P1).
@@ -894,7 +903,11 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
               unsupportedTileFallback={{ label: 'VWorld tile' }}
             >
               <FeatureGeometryLayers state={geometry} />
-              <FeatureGeometryPopup state={geometry} onOpenDetail={setDetailFeatureId} />
+              {/* 모바일은 탭하면 상세 시트가 바로 뜬다(ADR-056) — 같은 장소를 팝업으로 한 번 더 그리지
+                  않는다(모바일 "장소가 두 번 보인다": 팝업 + 상세 시트가 함께 떴다). */}
+              {!sheetOpen && (
+                <FeatureGeometryPopup state={geometry} onOpenDetail={setDetailFeatureId} />
+              )}
               <ClusterLayer
                 points={points}
                 radius={48}
@@ -903,6 +916,25 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
                   const mapPoint = point as MapPoint;
                   const isSelected =
                     mapPoint.featureId != null && mapPoint.featureId === selected?.featureId;
+                  if (mapPoint.kind === 'feature') {
+                    // 구글 지도식 원형 마커(여행 지도와 같은 모양). 탐색 지도는 장소가 많아 이름 라벨은
+                    // 붙이지 않고 hover 이름만 둔다.
+                    return (
+                      <CirclePlaceMarker
+                        key={mapPoint.id}
+                        lngLat={mapPoint.lngLat}
+                        icon={<MakiIcon icon={mapPoint.icon} size={EXPLORE_ICON_SIZE} />}
+                        color={mapPoint.color}
+                        size={EXPLORE_MARKER_SIZE}
+                        title={mapPoint.title}
+                        selected={isSelected}
+                        zIndex={markerZIndex(isSelected)}
+                        ariaLabel={mapPoint.title}
+                        interactionId={'feature:' + mapPoint.featureId}
+                        onClick={() => handlePointClick(mapPoint)}
+                      />
+                    );
+                  }
                   return (
                     <MakiMarker
                       key={mapPoint.id}
@@ -913,9 +945,6 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
                       selected={isSelected}
                       zIndex={markerZIndex(isSelected)}
                       ariaLabel={mapPoint.title}
-                      interactionId={
-                        mapPoint.kind === 'feature' ? 'feature:' + mapPoint.featureId : undefined
-                      }
                       onClick={() => handlePointClick(mapPoint)}
                     />
                   );
@@ -956,7 +985,7 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
                 onSelect={openTransportDetail}
               />
               {userLocation && <UserLocationMarker lngLat={userLocation} />}
-              {selected && <FeatureMapViewView0Part1 viewModel={viewModel} />}
+              {selected && !sheetOpen && <FeatureMapViewView0Part1 viewModel={viewModel} />}
               {/* T-368 — weather marker는 feature가 아니므로 상세보기가 없다. 값은 marker 자체
                   (`selectedWeatherMarker`)에 이미 있어 선택 시 별도 fetch가 필요 없다. */}
               {selectedWeatherMarker && <FeatureMapViewView0Part2 viewModel={viewModel} />}

@@ -37,9 +37,27 @@ function cacheKey(tripId: string, poiId: string): string {
   return `${tripId}/${poiId}`;
 }
 
+// 요청을 붙잡지 않는 구독(지도 마커 라벨). `listeners`와 따로 둔다 — 큐 정리·새로고침이 "보고 있는
+// 장소"를 셀 때 이 구독은 세지 않는다.
+const peekListeners = new Map<string, Set<() => void>>();
+
 function setState(key: string, state: PoiWeatherState) {
   states.set(key, state);
   listeners.get(key)?.forEach((listener) => listener());
+  peekListeners.get(key)?.forEach((listener) => listener());
+}
+
+function subscribePeek(key: string, listener: () => void): () => void {
+  let set = peekListeners.get(key);
+  if (!set) {
+    set = new Set();
+    peekListeners.set(key, set);
+  }
+  set.add(listener);
+  return () => {
+    set.delete(listener);
+    if (set.size === 0) peekListeners.delete(key);
+  };
 }
 
 function previousCard(key: string): FeatureWeatherCard | null {
@@ -112,6 +130,23 @@ export function usePoiWeather(
   return { ...state, refresh };
 }
 
+/**
+ * 요청을 만들지 않고 이미 받은 카드만 읽는다 — 지도 마커 라벨의 날씨 아이콘이 목록 배지·팝업이 받은
+ * 카드를 나눠 쓴다(지도에 보이는 모든 장소의 날씨를 새로 부르지 않는다). 없으면 null.
+ */
+export function usePoiWeatherPeek(
+  tripId: string | null | undefined,
+  poiId: string | null | undefined,
+): FeatureWeatherCard | null {
+  const key = tripId && poiId ? cacheKey(tripId, poiId) : null;
+  const state = useSyncExternalStore(
+    useCallback((listener: () => void) => (key ? subscribePeek(key, listener) : () => {}), [key]),
+    () => (key ? (states.get(key) ?? IDLE) : IDLE),
+    () => IDLE,
+  );
+  return 'card' in state ? state.card : null;
+}
+
 // 분 단위 공유 시계 — 렌더 중 Date.now()를 직접 부르지 않고(순수성) 모든 배지가 같은 시각을 본다.
 let minuteNow = 0;
 const clockListeners = new Set<() => void>();
@@ -160,6 +195,7 @@ export function refreshPoiWeather(tripId: string, poiId?: string): void {
 export function __resetPoiWeatherForTest(next?: Loader): void {
   states.clear();
   listeners.clear();
+  peekListeners.clear();
   queue.length = 0;
   running = 0;
   minuteNow = 0;
