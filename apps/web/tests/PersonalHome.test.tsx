@@ -42,10 +42,31 @@ const home: UserHome = {
   },
   next_trip: trip,
   upcoming_trips: [
-    { ...trip, trip_id: '44444444-4444-4444-8444-444444444444', title: '언젠가', start_date: null, end_date: null, phase: 'undated', days_until: null, place_count: 0, region_name: null, region_hint: null },
+    {
+      ...trip,
+      trip_id: '44444444-4444-4444-8444-444444444444',
+      title: '언젠가',
+      start_date: null,
+      end_date: null,
+      phase: 'undated',
+      days_until: null,
+      place_count: 0,
+      region_name: null,
+      region_hint: null,
+    },
   ],
   recent_trips: [
-    { ...trip, trip_id: '33333333-3333-4333-8333-333333333333', title: '지난 강릉', region_name: '강원', start_date: '2026-11-01', end_date: '2026-11-02', phase: 'completed', days_until: null, place_count: 4 },
+    {
+      ...trip,
+      trip_id: '33333333-3333-4333-8333-333333333333',
+      title: '지난 강릉',
+      region_name: '강원',
+      start_date: '2026-11-01',
+      end_date: '2026-11-02',
+      phase: 'completed',
+      days_until: null,
+      place_count: 4,
+    },
   ],
   recent_places: [
     {
@@ -97,7 +118,16 @@ describe('개인 홈', () => {
   it('여행이 없으면 첫 여행 만들기를 안내하고 빈 목록은 그리지 않는다', async () => {
     api.getHome.mockResolvedValue({
       ...home,
-      stats: { ...home.stats, trip_count: 0, completed_trip_count: 0, upcoming_trip_count: 0, undated_trip_count: 0, travel_day_count: 0, visited_place_count: 0, region_count: 0 },
+      stats: {
+        ...home.stats,
+        trip_count: 0,
+        completed_trip_count: 0,
+        upcoming_trip_count: 0,
+        undated_trip_count: 0,
+        travel_day_count: 0,
+        visited_place_count: 0,
+        region_count: 0,
+      },
       next_trip: null,
       upcoming_trips: [],
       recent_trips: [],
@@ -107,7 +137,10 @@ describe('개인 홈', () => {
     render(<PersonalHome />);
     const empty = await screen.findByTestId('home-next-trip-empty');
     expect(empty).toHaveTextContent('아직 여행이 없습니다.');
-    expect(within(empty).getByRole('link', { name: '새 여행 만들기' })).toHaveAttribute('href', '/trips');
+    expect(within(empty).getByRole('link', { name: '새 여행 만들기' })).toHaveAttribute(
+      'href',
+      '/trips',
+    );
     expect(screen.queryByTestId('home-recent')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-places')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-regions')).not.toBeInTheDocument();

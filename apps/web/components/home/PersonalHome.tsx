@@ -148,9 +148,24 @@ function HomeBody({ home }: { home: UserHome }) {
           여행 통계
         </h2>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-5 border-y border-hairline py-5 sm:grid-cols-4">
-          <Stat testId="home-stat-trips" label="다녀온 여행" value={stats.completed_trip_count} unit="번" />
-          <Stat testId="home-stat-days" label="여행한 날" value={stats.travel_day_count} unit="일" />
-          <Stat testId="home-stat-places" label="다녀온 장소" value={stats.visited_place_count} unit="곳" />
+          <Stat
+            testId="home-stat-trips"
+            label="다녀온 여행"
+            value={stats.completed_trip_count}
+            unit="번"
+          />
+          <Stat
+            testId="home-stat-days"
+            label="여행한 날"
+            value={stats.travel_day_count}
+            unit="일"
+          />
+          <Stat
+            testId="home-stat-places"
+            label="다녀온 장소"
+            value={stats.visited_place_count}
+            unit="곳"
+          />
           <Stat
             testId="home-stat-regions"
             label="다녀온 지역"

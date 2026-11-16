@@ -6,7 +6,7 @@
   여행, 시작일 없음 = 날짜 미정. 사용자가 고르는 `status`(초안·완료 등)는 쓰지 않는다 — 다녀왔는지는
   날짜가 정한다.
 - 여행한 날: 진행 중·다녀온 여행의 [시작일, min(종료일, 오늘)] 날짜의 합집합(겹치는 여행은 한 번).
-- 다녀온 장소: 일자의 실제 날짜(일자 날짜 override, 없으면 시작일 + (일차 − 1))가 오늘 이전·오늘인
+- 다녀온 장소: 일자의 실제 날짜(일자 날짜 override, 없으면 시작일 + (일차 - 1))가 오늘 이전·오늘인
   일자에 담긴 장소. 같은 지도 feature(또는 이름+좌표가 같은 직접 추가 장소)는 한 곳으로 센다.
 - 다녀온 지역: 다녀온 장소의 시도(장소 snapshot의 코드·주소 → 여행 지역 코드 → 여행 지역 메모 순),
   장소가 없는 진행·다녀온 여행은 여행 자체의 시도.
@@ -150,7 +150,10 @@ def summarize_home(
         for sido in counter:
             region_trips[sido].add(trip_id)
     for trip in trips:
-        if phases[trip.trip_id] in ("ongoing", "completed") and trip.trip_id not in place_sidos_by_trip:
+        if (
+            phases[trip.trip_id] in ("ongoing", "completed")
+            and trip.trip_id not in place_sidos_by_trip
+        ):
             sido = _trip_sido(trip)
             if sido is not None:
                 region_trips[sido].add(trip.trip_id)
@@ -275,7 +278,7 @@ async def build_user_home(db: AsyncSession, *, user_id: uuid.UUID, today: date) 
     ).all()
     place_counts = {trip_id: int(count) for trip_id, count in count_rows}
 
-    # 일자의 실제 날짜 = override, 없으면 시작일 + (일차 − 1) (ADR-055, `telegram_itinerary.effective_date`).
+    # 일자의 실제 날짜 = override, 없으면 시작일 + (일차 - 1) (ADR-055, `telegram_itinerary.effective_date`).
     effective_date = func.coalesce(
         TripDay.date,
         Trip.start_date + (TripDay.day_index - 1),

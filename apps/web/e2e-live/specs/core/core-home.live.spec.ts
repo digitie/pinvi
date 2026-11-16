@@ -59,7 +59,9 @@ test.describe('CORE personal home', () => {
     await shot(page, 'CORE-032', isMobile(testInfo) ? 'home-mobile' : 'home-desktop');
   });
 
-  test('CORE-033 로그인 사용자의 홈 메뉴와 랜딩(/)은 개인 홈으로 간다', async ({ page }, testInfo) => {
+  test('CORE-033 로그인 사용자의 홈 메뉴와 랜딩(/)은 개인 홈으로 간다', async ({
+    page,
+  }, testInfo) => {
     await loginAsUser(page);
     await page.goto('/map');
     if (isMobile(testInfo)) {
@@ -101,7 +103,9 @@ test.describe('CORE personal home', () => {
       expect(after.trip_count).toBe(before.trip_count + 1);
       expect(after.completed_trip_count).toBe(before.completed_trip_count + 1);
       expect(after.travel_day_count).toBeGreaterThanOrEqual(before.travel_day_count);
-      expect(after.visited_place_count).toBeGreaterThanOrEqual(Math.max(1, before.visited_place_count));
+      expect(after.visited_place_count).toBeGreaterThanOrEqual(
+        Math.max(1, before.visited_place_count),
+      );
       expect(after.region_count).toBeGreaterThanOrEqual(1);
 
       await page.goto('/home');

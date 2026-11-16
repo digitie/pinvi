@@ -86,7 +86,9 @@ async def test_home_aggregates_own_trips_only(  # type: ignore[no-untyped-def]
         "DELETE", f"/trips/{trashed}", json={"mode": "soft_delete"}, cookies=cookies
     )
     assert deleted.status_code == 204, deleted.text
-    other_id = await _create_verified_user(session_factory, f"home-other-{uuid.uuid4().hex[:8]}@pinvi.test")
+    other_id = await _create_verified_user(
+        session_factory, f"home-other-{uuid.uuid4().hex[:8]}@pinvi.test"
+    )
     await _trip(
         client,
         auth_cookies(other_id),
