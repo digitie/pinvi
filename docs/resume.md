@@ -1,3 +1,8 @@
+## 일정 목록 레이아웃 (2026-11-16)
+
+PR claude/trip-list-layout: 장소 편집기 접힘 항목·예산 위치, 일자·장소 파일 버튼 이동, 일자 버튼 축소(요청 11·12·13).
+다음: 배포 뒤 live TRIP-070·POI-040·POI-041과 POI-011·013·021·022·028 재실행.
+
 ## 2026-11-16 — 지도 레이어 패널·여행 장소 반경 교통 정보·PC 바탕지도 (feat/map-overlays-pc-tiles)
 
 공항·휴게소를 지도에서 빼고 주유소·교통 돌발을 경로·영역과 같은 체크박스 줄로 합쳤다. 여행 지도는 `/transport/markers-near`(여행 장소 주유소 10 km·교통 돌발 20 km)로 조회한다. Firefox·Safari 바탕지도 누락은 `lib/vworldTileProtocol.ts`로 고쳤다. 다음: 배포 뒤 live `--project desktop-firefox --area core`(CORE-016)와 NEAR 재작성 케이스 확인, maplibre-vworld-react `vworld.ts` 정본 수정 후 vendor 갱신.
