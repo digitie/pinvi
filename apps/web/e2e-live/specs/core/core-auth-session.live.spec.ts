@@ -107,6 +107,13 @@ test.describe('CORE auth/session', () => {
     const page2 = await context.newPage();
     await page2.goto('/trips');
     await expect(page2).not.toHaveURL(/\/login/);
+    // 두 번째 탭의 첫 로드가 끝난 뒤에 만료시킨다. 그 로드의 갱신이 아직 날아가는 중에 access 쿠키를 지우면
+    // 늦게 온 갱신 응답이 새 access 쿠키를 다시 심어, 아래 두 탭 이동이 갱신 없이 통과한다(2026-11-16
+    // live: API 로그에 POST /auth/refresh 200이 있는데 수집은 0건).
+    await expect(page2.getByTestId('trip-list').or(page2.getByText('아직 여행이 없습니다.'))).toBeVisible({
+      timeout: 20_000,
+    });
+    await page2.waitForLoadState('networkidle');
     await expireAccessCookie(context);
     const refreshStatuses: number[] = [];
     const collect = (r: import('@playwright/test').Response) => {
