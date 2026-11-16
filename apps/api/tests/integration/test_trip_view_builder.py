@@ -84,7 +84,6 @@ class _BatchOutcomeFeatureClient:
 
 
 async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> None:  # type: ignore[no-untyped-def]
-    from app.models.kasi import TripPoiRiseSet
     from app.models.poi import TripDayPoi
     from app.models.trip import Trip
     from app.models.trip_day import TripDay
@@ -126,16 +125,6 @@ async def test_build_trip_view_batches_opaque_feature_ids(session_factory) -> No
             currency="KRW",
         )
         db.add(poi)
-        await db.flush()
-        db.add(
-            TripPoiRiseSet(
-                poi_id=poi.attachment_id,
-                locdate=date(2026, 5, 6),
-                status="success",
-                sunrise_at=datetime(2026, 5, 6, 5, 30, tzinfo=UTC),
-                sunset_at=datetime(2026, 5, 6, 19, 30, tzinfo=UTC),
-            )
-        )
         await db.commit()
         await db.refresh(trip)
 

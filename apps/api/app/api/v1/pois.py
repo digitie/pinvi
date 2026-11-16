@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, HTTPException, status
 
 from app.core.deps import CurrentUserId, DbSession
 from app.db import session as db_session
-from app.db.session import release_read_connection
-from app.models.kasi import TripPoiRiseSet
 from app.models.poi import TripDayPoi
 from app.schemas.envelope import Envelope
 from app.schemas.feature import ExternalRef
@@ -22,9 +20,7 @@ from app.services.poi import (
     SortOrderConflictError,
     create_poi,
     get_poi,
-    get_poi_rise_set,
-    get_poi_rise_sets,
-    poi_rise_set_to_dict,
+    poi_rise_sets,
     reorder_pois,
     soft_delete_poi,
     update_poi,
@@ -36,7 +32,6 @@ from app.services.trip import (
     TripPermissionError,
     get_trip_for_user_write,
 )
-from app.services.trip_day_rise_set import sync_trip_day_rise_sets
 
 router = APIRouter(prefix="/trips/{trip_id}/pois", tags=["pois"])
 
@@ -44,7 +39,7 @@ router = APIRouter(prefix="/trips/{trip_id}/pois", tags=["pois"])
 def _to_response(
     poi: TripDayPoi,
     *,
-    rise_set: TripPoiRiseSet | None = None,
+    rise_set: dict[str, Any] | None = None,
 ) -> PoiResponse:
     return PoiResponse(
         attachment_id=poi.attachment_id,
@@ -65,7 +60,7 @@ def _to_response(
         actual_amount=poi.actual_amount,
         currency=poi.currency,
         user_url=poi.user_url,
-        rise_set=poi_rise_set_to_dict(rise_set),
+        rise_set=rise_set,
         version=poi.version,
         created_at=poi.created_at,
         updated_at=poi.updated_at,
@@ -183,8 +178,8 @@ async def create_poi_endpoint(
         )
         await db.refresh(poi)
 
-    rise_set = await get_poi_rise_set(db, poi_id=poi.attachment_id)
-    response = _to_response(poi, rise_set=rise_set)
+    rise_sets = await poi_rise_sets(db, [poi])
+    response = _to_response(poi, rise_set=rise_sets[poi.attachment_id])
     realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.created",
@@ -223,14 +218,8 @@ async def update_poi_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    # 이동은 양쪽 일자의 대표 일출/일몰 기준도 바꾼다.
-    if body.day_index is not None:
-        # 읽기 전용 호출 경계. 미커밋 변경이 남으면 유지 작업을 건너뛴다.
-        await release_read_connection(db)
-        if not db.in_transaction():
-            await sync_trip_day_rise_sets(trip_id=trip_id)
-    rise_set = await get_poi_rise_set(db, poi_id=poi.attachment_id)
-    response = _to_response(poi, rise_set=rise_set)
+    rise_sets = await poi_rise_sets(db, [poi])
+    response = _to_response(poi, rise_set=rise_sets[poi.attachment_id])
     realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.updated",
@@ -290,8 +279,8 @@ async def reorder_pois_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    rise_sets = await get_poi_rise_sets(db, poi_ids=[p.attachment_id for p in updated])
-    response = [_to_response(p, rise_set=rise_sets.get(p.attachment_id)) for p in updated]
+    rise_sets = await poi_rise_sets(db, updated)
+    response = [_to_response(p, rise_set=rise_sets[p.attachment_id]) for p in updated]
     realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.reordered",

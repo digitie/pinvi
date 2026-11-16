@@ -1,4 +1,4 @@
-"""astral 일출·일몰 계산(2026-11-16 소유자 요청 18) — KASI 고시값과 분 단위로 맞는지."""
+"""astral 해·달 출몰 계산(2026-11-16 요청 18, 11-17 달 이관) — KASI 고시값과 분 단위로 맞는지."""
 
 from __future__ import annotations
 
@@ -57,15 +57,52 @@ def test_pending_states_follow_missing_input() -> None:
     assert no_coord["updated_at"] == now
 
 
-def test_success_shape_keeps_kasi_moon_and_no_fetched_at() -> None:
-    moonrise = datetime(2026, 11, 16, 1, 0, tzinfo=UTC)
-    result = sun_rise_set_dict(
-        locdate=date(2026, 11, 16),
-        coord=(126.978, 37.5665),
-        moon={"moonrise_at": moonrise, "moonset_at": None},
-    )
+# KASI 출몰시각(운영 `trip_day_rise_sets` 성공 행, 2026-11-17 표본 25건 모두 ±1분)에서 고른 값.
+@pytest.mark.parametrize(
+    ("lon", "lat", "on", "expected"),
+    [
+        (128.5289, 36.5503, date(2026, 11, 8), ("06:56", "17:23", "05:47", "16:24")),
+        (128.4974, 38.1638, date(2026, 11, 19), ("07:11", "17:11", "13:52", "00:56")),
+        (128.5309, 36.8400, date(2026, 11, 5), ("06:53", "17:25", "02:36", "15:05")),
+        (128.5289, 36.5503, date(2026, 11, 16), ("07:05", "17:17", "12:34", "22:56")),
+    ],
+)
+def test_sun_and_moon_match_kasi_within_a_minute(
+    lon: float, lat: float, on: date, expected: tuple[str, str, str, str]
+) -> None:
+    times = compute_sun_times(longitude=lon, latitude=lat, on=on)
+    got = (times.sunrise_at, times.sunset_at, times.moonrise_at, times.moonset_at)
+    for value, want in zip(got, expected, strict=True):
+        assert value is not None
+        assert value.astimezone(KST).date() == on
+        minutes = value.astimezone(KST).hour * 60 + value.astimezone(KST).minute
+        want_minutes = int(want[:2]) * 60 + int(want[3:])
+        assert abs(minutes - want_minutes) <= 1, (on, value, want)
+
+
+def test_moon_event_before_9am_kst_is_found() -> None:
+    """astral moonset(tzinfo=KST)은 UTC 날짜만 봐서 서울 2026-05-06 08시대 월몰을 놓친다(ValueError)."""
+    times = compute_sun_times(longitude=127.1, latitude=37.5, on=date(2026, 5, 6))
+    assert _hm(times.moonset_at) == "08:08"
+    assert _hm(times.moonrise_at) == "23:51"
+
+
+def test_day_without_moonset_is_none_not_neighbouring_day() -> None:
+    # 서울 2026-11-17: 13:10에 떠서 자정을 넘겨 진다 — 그날 월몰은 없다(다음날 값을 끌어오지 않는다).
+    times = compute_sun_times(longitude=126.978, latitude=37.5665, on=date(2026, 11, 17))
+    assert _hm(times.moonrise_at) == "13:10"
+    assert times.moonset_at is None
+
+
+def test_success_shape_has_computed_moon_and_no_fetched_at() -> None:
+    result = sun_rise_set_dict(locdate=date(2026, 6, 10), coord=(129.118, 35.153))
     assert result["status"] == "success"
     assert result["fetched_at"] is None
-    assert result["moonrise_at"] == moonrise
-    assert result["locdate"] == date(2026, 11, 16)
-    assert _hm(result["sunrise_at"]) is not None and _hm(result["sunset_at"]) is not None
+    assert _hm(result["moonrise_at"]) == "01:12"
+    assert _hm(result["moonset_at"]) == "14:07"
+    assert result["locdate"] == date(2026, 6, 10)
+
+
+def test_pending_states_have_no_moon() -> None:
+    assert sun_rise_set_dict(locdate=None, coord=(127.0, 37.5))["moonrise_at"] is None
+    assert sun_rise_set_dict(locdate=date(2026, 6, 10), coord=None)["moonset_at"] is None

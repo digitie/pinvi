@@ -18,7 +18,6 @@ from dagster import DefaultSensorStatus, RunFailureSensorContext, run_failure_se
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from pinvi.etl.jobs import kasi_poi_rise_set_job
 from pinvi.etl.schedules import (
     kasi_special_days_job,
     pinvi_email_outbox_job,
@@ -26,14 +25,12 @@ from pinvi.etl.schedules import (
     pinvi_pii_retention_job,
     pinvi_telegram_notification_planner_job,
     pinvi_telegram_system_outbox_job,
-    pinvi_trip_day_rise_sets_job,
     pinvi_weather_retention_horizon_job,
 )
 
 # ADR-050: app-owned Dagster job 전체를 실패 통지 대상으로 명시한다. monitored_jobs를
 # 비우면 Dagster가 sensor.jobs 조회 시 raise하므로 반드시 채운다.
 _MONITORED_JOBS = [
-    kasi_poi_rise_set_job,
     kasi_special_days_job,
     pinvi_email_outbox_job,
     pinvi_pii_retention_job,
@@ -41,7 +38,6 @@ _MONITORED_JOBS = [
     pinvi_telegram_system_outbox_job,
     pinvi_telegram_notification_planner_job,
     pinvi_weather_retention_horizon_job,
-    pinvi_trip_day_rise_sets_job,
 ]
 
 OUTBOX_CATEGORY = "etl_run_failure"

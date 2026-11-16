@@ -106,9 +106,8 @@ scripts/n150-live-catalog.sh --head --project desktop-firefox --area core   # @f
 
 - **시드 여행** `[e2e-seed] weather-sun`(test@test.com 소유, 5일, 일자당 장소 1개: 영월 고씨굴 →
   성산일출봉 → 설악산 → 서울역 → 울릉도). global setup 이 없으면 만든다(멱등). 제목이 `[e2e]` 로
-  시작하지 않아 sweep 대상이 아니다. WX-011/012 는 이 여행의 일출·일몰을 읽는데 KASI 채움은
-  20분 cron(`pinvi_trip_day_rise_sets_schedule`)이라 **막 만든 첫 run 에서는 그 두 건이 skip**
-  될 수 있다(다음 run 부터 정상).
+  시작하지 않아 sweep 대상이 아니다. WX-011/012 는 이 여행의 일출·일몰을 읽는다(0109부터 응답 때
+  astral 계산이라 첫 run 에서도 값이 있다).
 - global setup: env fail-fast → 로그인 smoke → 남은 `[e2e]` 여행 sweep → 시드 확인/생성.
 - global teardown: `[e2e]` 여행 sweep(공유 링크·동행·댓글·Telegram 링크는 cascade) → `/files` 의
   `[e2e]` 파일 삭제(POI 첨부는 여행을 지워도 남는다, #629) → `[e2e]` 라벨 Telegram 대상 삭제.

@@ -1294,5 +1294,9 @@ SQL
   if [ "${applied_revision}" = "20261116_0108" ]; then
     apply_runtime_acl_repair
   fi
+  # 0109는 KASI 해·달 출몰 표 두 개를 지운다(새 표 없음). exact head 복구 규칙을 그대로 잇는다.
+  if [ "${applied_revision}" = "20261117_0109" ]; then
+    apply_runtime_acl_repair
+  fi
 
 fi

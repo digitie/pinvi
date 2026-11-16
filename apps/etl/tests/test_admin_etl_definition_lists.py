@@ -118,6 +118,6 @@ def test_static_jobs_match_definitions() -> None:
         (e["name"], frozenset(e.get("asset_keys") or []))
         for e in _static_entries("PINVI_ETL_JOBS", "AdminEtlDefinitionJob")
     ]
-    assert len(defined) >= 8
+    assert len(defined) >= 7  # 0109: KASI 해·달 출몰 job 둘 은퇴
     assert len(static) == len(set(static)), "중복 항목"
     assert set(static) == defined

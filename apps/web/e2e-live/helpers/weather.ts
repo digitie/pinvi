@@ -140,6 +140,8 @@ export interface WxDay {
     status: string;
     sunrise_at: string | null;
     sunset_at: string | null;
+    moonrise_at?: string | null;
+    moonset_at?: string | null;
     locdate?: string | null;
   } | null;
   rise_set_reference: string | null;

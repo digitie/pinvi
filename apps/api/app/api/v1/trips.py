@@ -17,7 +17,6 @@ from app.clients.kor_travel_map import OptionalKorTravelMapHttpClientDep
 from app.clients.kor_travel_weather import OptionalKorTravelWeatherClientDep
 from app.core.config import settings
 from app.core.deps import CurrentUserId, DbSession
-from app.db.session import release_read_connection
 from app.models.attachment import CuratedPlanAttachment
 from app.models.trip import Trip
 from app.schemas.envelope import Envelope, EnvelopeMeta, EnvelopeWithMeta
@@ -117,7 +116,6 @@ from app.services.trip import (
     update_trip_day,
     validate_trip_day_payload,
 )
-from app.services.trip_day_rise_set import sync_trip_day_rise_sets
 from app.services.trip_view_builder import build_trip_view
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -442,13 +440,6 @@ async def get_trip_endpoint(
         trip, role = await get_trip_access(db, trip_id=trip_id, user_id=uuid.UUID(current_user_id))
     except (TripNotFoundError, TripPermissionError) as exc:
         _raise_trip_http(exc)
-    # ADR-055 §6: 관리 권한 열람 시 일자 rise/set 행을 재계산·유지한다(좌표/날짜 변경분은 refetch 표시).
-    # best-effort — 실패해도 조회를 막지 않는다. ETL asset이 pending_fetch를 채운다.
-    if can_manage_trip(role):
-        # 읽기 전용 호출 경계. 미커밋 변경이 남으면 유지 작업을 건너뛴다.
-        await release_read_connection(db)
-        if not db.in_transaction():
-            await sync_trip_day_rise_sets(trip_id=trip_id)
     return Envelope.of(
         TripView.model_validate(
             await build_trip_view(

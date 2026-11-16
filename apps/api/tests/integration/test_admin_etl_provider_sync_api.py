@@ -914,13 +914,11 @@ async def test_admin_etl_summary_combines_pinvi_registry_and_upstream_ops(
     assert data["pinvi"]["recent_runs"][0]["tags"] == {}
     assert {job["name"] for job in data["pinvi"]["jobs"]} == {
         "kasi_special_days_job",
-        "kasi_poi_rise_set_job",
         "pinvi_email_outbox_job",
         "pinvi_telegram_system_outbox_job",
         "pinvi_telegram_notification_planner_job",
         "pinvi_pii_retention_job",
         "pinvi_location_log_archive_job",
-        "pinvi_trip_day_rise_sets_job",
         "pinvi_weather_retention_horizon_job",
     }
     assert data["pinvi"]["email_outbox"]["pending_due"] == 1

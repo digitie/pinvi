@@ -1,3 +1,8 @@
+## 달 출몰 astral·KASI 출몰 은퇴 (2026-11-17)
+
+PR claude/astral-moon-retire-kasi-riseset: 0109(두 표 삭제), Dagster job 둘 은퇴.
+다음: 배포 때 0109 적용 후 Dagster code location 재적재(옛 schedule 상태는 Dagster가 고아로 둔다), live WX-040·WX-010.
+
 ## causal canary 시험 결정화 (2026-11-17)
 
 PR claude/fix-causal-canary-flake: 시간 창 대신 pg_blocking_pids 상태 판정.

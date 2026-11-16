@@ -1,4 +1,4 @@
-"""`app.services.trip_day_rise_set` 단위 테스트 — 기준 좌표 해석(ADR-055 §6)."""
+"""`app.services.sun_times.resolve_day_reference` 단위 테스트 — 기준 좌표 해석(ADR-055 §6)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import uuid
 from typing import Any
 
 from app.models.poi import TripDayPoi
-from app.services.trip_day_rise_set import resolve_day_reference
+from app.services.sun_times import resolve_day_reference
 
 
 def _poi(name: str, lon: float | None, lat: float | None) -> TripDayPoi:

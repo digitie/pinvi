@@ -42,12 +42,6 @@ pinvi_telegram_system_outbox_job = define_asset_job(
     tags=job_tags("pinvi_telegram_system_outbox_job"),
 )
 
-pinvi_trip_day_rise_sets_job = define_asset_job(
-    "pinvi_trip_day_rise_sets_job",
-    selection=["pinvi_trip_day_rise_sets"],
-    tags=job_tags("pinvi_trip_day_rise_sets_job"),
-)
-
 pinvi_weather_retention_horizon_job = define_asset_job(
     "pinvi_weather_retention_horizon_job",
     selection=["pinvi_weather_retention_horizon_guard"],
@@ -111,16 +105,6 @@ schedules = [
         name="pinvi_telegram_system_outbox_schedule",
         job=pinvi_telegram_system_outbox_job,
         cron_schedule="*/15 * * * *",
-        execution_timezone="Asia/Seoul",
-        default_status=DefaultScheduleStatus.RUNNING,
-    ),
-    # 사용자가 일정 중 POI를 추가/이동하면 pending_fetch 일자 rise/set이 생기므로 자주 채운다.
-    coalescing_schedule(
-        project=PINVI_PROJECT,
-        location_name=PINVI_LOCATION_NAME,
-        name="pinvi_trip_day_rise_sets_schedule",
-        job=pinvi_trip_day_rise_sets_job,
-        cron_schedule="*/20 * * * *",
         execution_timezone="Asia/Seoul",
         default_status=DefaultScheduleStatus.RUNNING,
     ),

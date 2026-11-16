@@ -17,12 +17,10 @@ from app.models.audit import AdminAuditLog
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.user import User
-from app.services.kasi import build_initial_poi_rise_set
 from app.services.poi import (
     SortOrderConflictError,
     _fill_trip_primary_region_from_snapshot,
     ensure_trip_day,
-    trip_day_effective_locdate,
 )
 
 
@@ -152,11 +150,7 @@ async def create_admin_poi(
     if trip is None:
         raise AdminPoiTripNotFoundError("여행을 찾을 수 없습니다.")
 
-    day = await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
-    # ADR-055: day.date는 override-only. rise/set seed는 effective_date(override 또는 파생)로.
-    locdate = await trip_day_effective_locdate(
-        db, trip_id=trip_id, day_index=day_index, override=day.date
-    )
+    await ensure_trip_day(db, trip_id=trip_id, day_index=day_index)
     poi = TripDayPoi(
         trip_id=trip_id,
         day_index=day_index,
@@ -184,13 +178,6 @@ async def create_admin_poi(
         await db.flush()
     except IntegrityError as exc:
         raise SortOrderConflictError("같은 위치(sort_order)에 이미 POI가 있습니다.") from exc
-    db.add(
-        build_initial_poi_rise_set(
-            poi=poi,
-            locdate=locdate,
-            feature_snapshot=feature_snapshot,
-        )
-    )
     return poi
 
 
