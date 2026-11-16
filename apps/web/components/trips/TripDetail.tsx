@@ -1692,7 +1692,8 @@ function TripDetailSection2_0({ viewModel }: { viewModel: TripDetailView2Model }
         data-map-fit-bottom=""
         className={
           mobileWebLayout
-            ? 'pointer-events-none absolute bottom-10 left-2 z-10 flex flex-wrap gap-2'
+            ? // 축척 막대·출처 표기(아래 ~40px) 위 — 맞춤의 아래 기준이라 더 내리면 아래쪽 핀이 축척 막대에 가린다.
+              'pointer-events-none absolute bottom-16 left-3 z-10 flex flex-wrap gap-2'
             : 'pointer-events-none absolute bottom-3 left-3 z-10 flex flex-wrap gap-2 md:bottom-4 md:left-4'
         }
       >
