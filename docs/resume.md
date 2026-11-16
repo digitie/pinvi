@@ -1,3 +1,8 @@
+## 일출·일몰 astral·요일 (2026-11-16)
+
+PR claude/trip-sun-holiday: 일출·일몰 응답 시 astral 계산(ETL 대기 없음), 일자 요일·공휴일 강조(요청 17·18), 의존성 astral 3.2.
+다음: 배포 뒤 live WX-040·TRIP-071·WX-010. KASI 출몰 ETL(`pinvi_trip_day_rise_sets`)·`trip_poi_rise_sets` 정리 여부는 소유자 결정.
+
 ## 일정 목록 레이아웃 (2026-11-16)
 
 PR claude/trip-list-layout: 장소 편집기 접힘 항목·예산 위치, 일자·장소 파일 버튼 이동, 일자 버튼 축소(요청 11·12·13).
