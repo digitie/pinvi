@@ -24,6 +24,7 @@ from app.schemas.feature import (
     PriceItem,
 )
 from app.services.category_labels import EMPTY_CATEGORY_LABELS, CategoryLabels
+from app.services.opening_hours import opening_hours_text
 from app.services.place_search import kakao_document_to_result, naver_item_to_result
 
 # name 유사도/거리 임계 — 둘 다 만족해야 confident match(오귀속 방지, ADR-056).
@@ -104,6 +105,18 @@ def _phone(detail: Any) -> str | None:
                 return cleaned
     facility = detail.get("facility_info")
     return _pick(facility, "tel", "phone") or _pick(detail, "phone", "tel", "telephone")
+
+
+def _business_hours(detail: Any) -> str | None:
+    """Map place detail 영업시간 — 구조화 `business_hours`(`FeatureOpeningHours`)를 요일별 줄로 펴고,
+    없으면 예전 평면 문자열 키를 쓴다. 예전에는 문자열만 읽어 구조화 값이 카드에서 빠졌다."""
+    if not isinstance(detail, dict):
+        return None
+    for key in ("business_hours", "opening_hours"):
+        text = opening_hours_text(detail.get(key))
+        if text:
+            return text
+    return _pick(detail, "hours", "open_hours")
 
 
 def _http_url(value: str | None) -> str | None:
@@ -189,7 +202,7 @@ def build_detail_card(
         return PlaceDetailCard(
             **common,
             phone=_phone(detail),
-            business_hours=_pick(detail, "business_hours", "hours", "open_hours", "opening_hours"),
+            business_hours=_business_hours(detail),
         )
     if kind == "event":
         return EventDetailCard(

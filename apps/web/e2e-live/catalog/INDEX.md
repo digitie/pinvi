@@ -12,12 +12,12 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | nearby | 43 | 36 | 2 | 5 |
 | weather | 33 | 28 | 2 | 3 |
 | share | 35 | 31 | 1 | 3 |
-| poi | 38 | 31 | 5 | 2 |
+| poi | 40 | 32 | 6 | 2 |
 | notify | 32 | 23 | 4 | 5 |
 | admin | 44 | 37 | 5 | 2 |
 | core | 37 | 36 | 1 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **567** | **515** | **28** | **24** |
+| **all** | **569** | **516** | **29** | **24** |
 
 Spec files: 64.
 
@@ -289,6 +289,8 @@ Spec files: 64.
 | POI-046 | poi | 장소 정보 '다시 읽어오기' — 성공 시 덮어쓰기 안내, 60초 안 재요청은 429 안내 | P1 | desktop, mutating, poi, search | scripted | `specs/poi/poi-place-info.live.spec.ts#POI-046` |
 | POI-047 | poi | 장소 삭제 후 다시 추가하면 영업 정보를 새로 받는다(장소별 저장, 삭제 시 함께 삭제) | P2 | desktop, mutating, poi, search | scripted | `specs/poi/poi-place-info.live.spec.ts#POI-047` |
 | POI-048 | poi | 모바일 — 마커 탭 → 지도 아래쪽 장소 정보 패널, 지도 앱 링크(앱 딥링크는 웹 href로 표시) | P2 | mobile, mutating, poi, search | scripted | `specs/poi/poi-place-info.live.spec.ts#POI-048` |
+| POI-049 | poi | 장소 정보 영업 정보 — 저장 전화가 없을 때만 Kakao 라이브 전화(‘전화 (카카오)’, 카카오맵 출처 링크, 미저장) | P2 | desktop, mutating, poi, search | scripted | `specs/poi/poi-place-info.live.spec.ts#POI-049` |
+| POI-050 | poi | 지도 장소 상세 카드 — 구조화 영업시간을 요일별 줄로 표시 | P3 | desktop, poi | manual |  |
 | NTF-001 | notify | 설정 > Telegram 알림 진입 — 탭·안내문·Chat ID 폼 라벨·그룹 경고 표시 | P1 | desktop, mobile, telegram, a11y | scripted | `specs/notify/notify-settings.live.spec.ts#NTF-001` |
 | NTF-002 | notify | Chat ID 비움 제출 → 필드 오류·aria-invalid·포커스, API 호출 없음 | P2 | desktop, mobile, telegram, a11y | scripted | `specs/notify/notify-settings.live.spec.ts#NTF-002` |
 | NTF-003 | notify | 존재하지 않는 chat ID 등록 → verify 실패(invalid_chat) 알림, 목록 미추가, 입력 보존 | P1 | desktop, telegram | scripted | `specs/notify/notify-settings.live.spec.ts#NTF-003` |

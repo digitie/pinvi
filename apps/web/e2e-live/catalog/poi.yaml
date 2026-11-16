@@ -704,3 +704,42 @@
   automation: scripted
   spec: specs/poi/poi-place-info.live.spec.ts#POI-048
   notes: 실제 앱 열기(intent/nmap/kakaomap)는 기기 의존이라 수동 확인 영역 — 단위 테스트(mapLinks.test.ts)가 분기를 검증한다.
+
+- id: POI-049
+  title: 장소 정보 영업 정보 — 저장 전화가 없을 때만 Kakao 라이브 전화(‘전화 (카카오)’, 카카오맵 출처 링크, 미저장)
+  priority: P2
+  tags: [desktop, mutating, poi, search]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 안동하회마을
+    - deploy: GET /trips/{id}/pois/{poi}/place-details/kakao-phone 배포 필요(Kakao 라이브 전화 PR)
+  data_sources: [map:heritage, kakao:local]
+  steps:
+    - 여행 생성 → 1일차 '안동하회마을' 추가(선택됨) → 영업 정보 항목 펼치기 → 접었다 다시 펼치기
+  expected:
+    - 저장 전화(place-info-phone)가 있으면 kakao-phone 요청 0건, 'place-info-kakao-phone' 없음
+    - 없으면 kakao-phone 200 — matched면 '전화 (카카오)' + place.map.kakao.com 링크, 아니면 표시 없음
+    - 다시 펼쳐도 kakao-phone 요청은 1건(메모리 캐시)
+  cleanup:
+    - 여행 삭제
+  automation: scripted
+  spec: specs/poi/poi-place-info.live.spec.ts#POI-049
+  notes: 2026-11-17 소유자 결정 1(ADR-054 유지 — 표시 전용·미저장).
+
+- id: POI-050
+  title: 지도 장소 상세 카드 — 구조화 영업시간을 요일별 줄로 표시
+  priority: P3
+  tags: [desktop, poi]
+  preconditions:
+    - account: test@test.com (user)
+    - data: business_hours(periods 또는 weekday_text)가 채워진 Map place feature
+    - deploy: 상세 카드 영업시간 PR 배포 필요
+  data_sources: [map]
+  steps:
+    - 지도에서 영업시간이 있는 장소 마커 → '상세보기'
+  expected:
+    - feature-detail-card-body-hours 에 '월요일: 09:00~18:00' 같은 요일별 줄(줄바꿈), '[object Object]' 없음
+  cleanup:
+    - 없음(읽기 전용)
+  automation: manual
+  notes: 현재 Map 데이터셋 중 business_hours를 채우는 곳이 드물어 고정 대상 장소를 정할 수 없다 — 대상이 생기면 scripted로 전환.

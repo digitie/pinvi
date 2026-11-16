@@ -250,9 +250,25 @@ migration `20261116_0108`). 전역 장소 데이터로 보관하지 않는다.
 HTML 화면 스크래핑은 하지 않는다. 지도 feature가 없는 직접 추가 장소(manual/kakao/naver)는 저장 가능한
 출처가 없어 `empty`다.
 
+### Kakao 전화 라이브 표시 (`GET .../place-details/kakao-phone`, 2026-11-17 소유자 결정)
+
+저장된 영업 정보에 전화가 없을 때만 패널(영업 정보 항목을 펼쳤을 때)이 부른다. PinVi 백엔드가 Kakao Local
+키워드 검색(장소 이름 + 장소 자신의 좌표)에서 이름·300 m 가드를 통과한 장소의 전화와 카카오맵 back-link를
+`ExternalEnrichment`(provider=`kakao`)로 돌려준다. **DB에 저장하지 않는다**(ADR-054 유지) — 서버 프로세스
+메모리 캐시(10분, 최대 1024건)와 브라우저 세션 메모리만 쓴다. 저장된 전화가 있으면 Kakao를 부르지 않는다.
+못 찾거나 장애면 200 `matched=false`이고 화면에는 아무것도 더하지 않는다. 화면은 '전화 (카카오)' 라벨과
+'출처: 카카오맵' 링크로 출처를 표시한다. Google Places는 쓰지 않는다(같은 결정).
+
 ### 지도 앱 링크
 
 네이버·카카오·구글 지도 링크는 공개 URL 규약만 써서 키가 필요 없다(`apps/web/lib/mapLinks.ts`). PC는 웹
 주소를 새 탭으로, 모바일은 앱을 먼저 연다 — Android `intent://…;S.browser_fallback_url=`(앱 없으면 웹),
 iOS 앱 스킴(`nmap://`, `kakaomap://`) 뒤 화면이 그대로면 1.5초 뒤 웹으로. 구글은 `google.com/maps/search/?api=1`
 주소가 모바일에서 앱을 직접 연다.
+
+## 지도 장소 상세 카드 영업시간
+
+`GET /features/{id}/detail-card`의 `business_hours`는 Map의 구조화 영업시간(`FeatureOpeningHours`)을
+요일별 줄(`월요일: 09:00~18:00`, 쉬는 요일은 `휴무`)로 펴 줄바꿈으로 이은 문자열이다(`weekday_text`가
+있으면 그대로). 예전에는 문자열만 읽어 구조화 값이 카드에서 빠졌다. 장소 영업 정보 저장과 같은 규칙
+(`app/services/opening_hours.py`)을 쓴다.

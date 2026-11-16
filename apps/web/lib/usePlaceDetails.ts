@@ -2,7 +2,7 @@
 
 import { apiClient } from '@/lib/api';
 import { ApiError, poiApi } from '@pinvi/api-client';
-import type { PoiPlaceDetails } from '@pinvi/schemas';
+import type { ExternalEnrichment, PoiPlaceDetails } from '@pinvi/schemas';
 import { useCallback, useEffect, useState } from 'react';
 
 export type PlaceDetailsState =
@@ -65,4 +65,45 @@ export function usePlaceDetails(tripId: string, poiId: string) {
   }, [tripId, poiId]);
 
   return { state, refreshState, refresh };
+}
+
+// 세션 메모리 캐시 — 같은 장소의 영업 정보를 다시 펼칠 때 Kakao를 또 부르지 않는다(저장하지 않음).
+const kakaoPhoneCache = new Map<string, ExternalEnrichment>();
+
+/** 테스트 전용. */
+export function __clearKakaoPhoneCacheForTest(): void {
+  kakaoPhoneCache.clear();
+}
+
+/**
+ * 저장된 전화가 없을 때만(`enabled`) Kakao Local 라이브 전화를 받는다(ADR-054 — 표시 전용, 미저장).
+ * 못 찾거나 실패하면 null이다(조용히).
+ */
+export function useKakaoPhone(
+  tripId: string,
+  poiId: string,
+  enabled: boolean,
+): ExternalEnrichment | null {
+  const key = `${tripId}/${poiId}`;
+  const [result, setResult] = useState<{ key: string; value: ExternalEnrichment } | null>(null);
+  useEffect(() => {
+    if (!enabled || kakaoPhoneCache.has(key)) return;
+    const controller = new AbortController();
+    poiApi(apiClient)
+      .kakaoPhone(tripId, poiId, { signal: controller.signal })
+      .then(
+        (value) => {
+          if (controller.signal.aborted) return;
+          kakaoPhoneCache.set(key, value);
+          setResult({ key, value });
+        },
+        () => {
+          // 선택 정보 — 실패는 표시하지 않는다.
+        },
+      );
+    return () => controller.abort();
+  }, [enabled, key, tripId, poiId]);
+  if (!enabled) return null;
+  const value = kakaoPhoneCache.get(key) ?? (result?.key === key ? result.value : null);
+  return value?.matched && value.phone ? value : null;
 }

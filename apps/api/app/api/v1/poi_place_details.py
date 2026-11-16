@@ -4,6 +4,8 @@
   장애는 200 `status="unavailable"`로 조용히 알린다(저장하지 않는다).
 - `POST .../refresh`: "다시 읽어오기" — 편집 권한(owner/co_owner/editor)만. 같은 장소 60초에 1회
   (`429 RATE_LIMITED` + `Retry-After`). 출처 장애는 `503 PLACE_DETAILS_UNAVAILABLE`이고 기존 값을 둔다.
+- `GET .../kakao-phone`: 저장된 전화가 없을 때 패널이 표시 시점에 부르는 Kakao Local 라이브 조회(멤버).
+  저장하지 않는다(ADR-054, 메모리 캐시만). 못 찾거나 장애면 200 `matched=false`.
 """
 
 from __future__ import annotations
@@ -12,13 +14,16 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 
+from app.clients.kakao_local import KakaoLocalClientDep
 from app.clients.kor_travel_map import OptionalKorTravelMapHttpClientDep
 from app.core.deps import CurrentUserId, DbSession
 from app.models.poi import TripDayPoi
 from app.models.poi_place_detail import TripPoiPlaceDetail
 from app.schemas.envelope import Envelope
+from app.schemas.feature import ExternalEnrichment
 from app.schemas.poi import PoiPlaceDetails
 from app.services.poi import PoiNotFoundError, get_poi
+from app.services.poi_kakao_phone import kakao_phone_for_poi
 from app.services.poi_place_details import (
     REFRESH_INTERVAL,
     PlaceDetailsRefreshTooSoon,
@@ -116,3 +121,15 @@ async def refresh_poi_place_details(
             },
         ) from exc
     return Envelope.of(_to_response(row))
+
+
+@router.get("/{poi_id}/place-details/kakao-phone", response_model=Envelope[ExternalEnrichment])
+async def get_poi_kakao_phone(
+    trip_id: uuid.UUID,
+    poi_id: uuid.UUID,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    kakao_local: KakaoLocalClientDep,
+) -> Envelope[ExternalEnrichment]:
+    poi = await _load_poi(db, trip_id, poi_id, current_user_id, write=False)
+    return Envelope.of(await kakao_phone_for_poi(db, poi=poi, kakao=kakao_local))
