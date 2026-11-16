@@ -10,16 +10,16 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | trip | 60 | 56 | 2 | 2 |
 | search | 55 | 47 | 6 | 2 |
 | nearby | 43 | 36 | 2 | 5 |
-| weather | 30 | 25 | 2 | 3 |
+| weather | 32 | 27 | 2 | 3 |
 | share | 35 | 31 | 1 | 3 |
 | poi | 34 | 27 | 5 | 2 |
 | notify | 32 | 23 | 4 | 5 |
 | admin | 44 | 37 | 5 | 2 |
 | core | 31 | 30 | 1 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **554** | **502** | **28** | **24** |
+| **all** | **556** | **504** | **28** | **24** |
 
-Spec files: 60.
+Spec files: 61.
 
 ## Cases
 
@@ -213,6 +213,8 @@ Spec files: 60.
 | WX-028 | weather | 14일 여행 — 1·8일차 found, 12·14일차 no_data, unavailable 없음 | P3 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-028` |
 | WX-029 | weather | 접근성 — 날씨 섹션 aria-label, 아이콘 aria-hidden, 일출·일몰 아이콘 aria-hidden | P3 | desktop, a11y, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-029` |
 | WX-040 | weather | 일출·일몰 즉시 계산(astral) — 장소 추가 뒤 새로고침 한 번에 일자·장소 일출·일몰 표시 | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-sun-astral.live.spec.ts#WX-040` |
+| WX-041 | weather | 장소 목록 이름 옆 현재 날씨 배지(아이콘·현재 기온·오늘 최고/최저) → 예보 팝업(시간별·일별·출처) | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-poi-badge.live.spec.ts#WX-041` |
+| WX-042 | weather | 모바일 — 장소 날씨 배지 탭 → 하단 시트 예보, 행 선택 없음 | P2 | mobile, mutating, weather | scripted | `specs/weather/weather-poi-badge.live.spec.ts#WX-042` |
 | SHR-001 | share | 공유 링크 생성 — 1회성 URL 배너와 목록 상태(활성·무기한) | P1 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-001` |
 | SHR-002 | share | 로그아웃 컨텍스트에서 공유 페이지 읽기 전용 렌더링(지도·일자·장소) | P1 | desktop, mutating, share, poi | scripted | `specs/share/share-links.live.spec.ts#SHR-002` |
 | SHR-003 | share | 공유 링크 철회 — 목록 '철회' 상태, 철회된 링크는 404 안내 | P1 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-003` |
