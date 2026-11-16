@@ -103,4 +103,7 @@ def downgrade() -> None:
         "DELETE FROM app.ktm_cache_target_boundary_audits WHERE schema_revision = '20261117_0109'"
     )
     _boundary(_PRIOR)
-    op.execute(_RECREATE)
+    # asyncpg는 한 prepared statement에 여러 명령을 받지 않는다 — 문장마다 실행한다.
+    for statement in _RECREATE.split(";"):
+        if statement.strip():
+            op.execute(statement)
