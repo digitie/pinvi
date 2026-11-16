@@ -8,7 +8,7 @@ import { userApi } from '@pinvi/api-client';
 import type { HomeTripCard, HomeVisitedPlace, UserHome } from '@pinvi/schemas';
 import { CalendarDays, ChevronRight, MapPin } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench(app) · design-system: DESIGN.md · designed-as-app
  * 참조: Google 지도 '내 장소/타임라인', 네이버·카카오맵 'MY' — 다음 여행 1장 → 통계 열 → 목록(예정·최근·장소·지역).
@@ -28,26 +28,31 @@ function tripMeta(trip: HomeTripCard): string {
 }
 
 export function PersonalHome() {
-  const [home, setHome] = useState<UserHome | null>(null);
-  const [error, setError] = useState(false);
-
-  const load = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const value = await userApi(apiClient).getHome();
-      if (signal?.aborted) return;
-      setHome(value);
-      setError(false);
-    } catch {
-      // 401은 apiClient가 로그인 화면으로 보낸다(onUnauthorized). 나머지는 원인 + 다시 시도.
-      if (!signal?.aborted) setError(true);
-    }
-  }, []);
+  // 결과를 요청 차수(revision)에 묶는다 — effect 안에서 동기 setState 없이 로딩·재시도를 파생한다.
+  const [revision, setRevision] = useState(0);
+  const [result, setResult] = useState<{ revision: number; home?: UserHome } | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void load(controller.signal);
-    return () => controller.abort();
-  }, [load]);
+    let cancelled = false;
+    userApi(apiClient)
+      .getHome()
+      .then(
+        (home) => {
+          if (!cancelled) setResult({ revision, home });
+        },
+        () => {
+          // 401은 apiClient가 로그인 화면으로 보낸다(onUnauthorized). 나머지는 원인 + 다시 시도.
+          if (!cancelled) setResult({ revision });
+        },
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [revision]);
+
+  const settled = result?.revision === revision;
+  const home = settled ? (result?.home ?? null) : null;
+  const error = settled && !result?.home;
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-8 pb-6" data-testid="personal-home">
@@ -63,7 +68,7 @@ export function PersonalHome() {
         </Link>
       </header>
 
-      {error && !home ? (
+      {error ? (
         <div
           role="alert"
           className="rounded-sm border border-hairline bg-canvas p-4"
@@ -75,10 +80,7 @@ export function PersonalHome() {
           </p>
           <button
             type="button"
-            onClick={() => {
-              setError(false);
-              void load();
-            }}
+            onClick={() => setRevision((value) => value + 1)}
             className={buttonClassName({ variant: 'secondary', className: 'mt-3' })}
           >
             다시 시도
