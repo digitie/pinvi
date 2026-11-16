@@ -35,6 +35,8 @@ import {
   wxTitle,
   type WxResolution,
   cardKeyOf,
+  beyondForecast,
+  BEYOND_FORECAST_RE,
 } from '../../helpers/weather';
 
 test.describe('weather · trip days', () => {
@@ -112,7 +114,7 @@ test.describe('weather · trip days', () => {
     await shot(page, 'WX-002', 'mid-forecast');
   });
 
-  test('WX-003 10일 넘게 남은 일자: no_data 문구, unavailable 아님', async ({ page }) => {
+  test('WX-003 10일 넘게 남은 일자: 예보 범위 안내(N일 앞까지), unavailable 아님', async ({ page }) => {
     const { id } = await createTrip(page, { title: wxTitle('WX-003'), start: D(15), end: D(16) });
     trips.track(id);
     await page.goto(`/trips/${id}`);
@@ -126,7 +128,13 @@ test.describe('weather · trip days', () => {
     const section = daySection(article);
     const kind = await expectWeatherConsistent(section, res, day1.weather_cards, day1.effective_date!);
     expect(kind).toBe('status');
-    await expect(section).toContainText(TEXT.noData);
+    // 2026-11-17 결정 3: 범위 밖 날짜는 '예보는 N일 앞(M월 D일)까지만 제공됩니다.'(N은 실제 받은 예보의 마지막 날짜).
+    expect(res?.state).toBe('no_data');
+    const until = beyondForecast(res, day1.effective_date!);
+    expect(until, 'no_data.forecast_until').toBeTruthy();
+    annotate(`forecast_until=${until}`);
+    await expect(section.locator('p').first()).toHaveText(BEYOND_FORECAST_RE);
+    await expect(section).not.toContainText(TEXT.noData);
     await expect(section).not.toContainText(TEXT.unavailable);
     await shot(page, 'WX-003', 'beyond-horizon');
   });
@@ -346,7 +354,8 @@ test.describe('weather · trip days', () => {
       if (dayIndex === 8) expect.soft(kind, 'D+7 은 중기예보 범위').toBe('summary');
       if (dayIndex >= 12) {
         expect(kind).toBe('status');
-        await expect(daySection(article)).toContainText(TEXT.noData);
+        // 예보 범위 밖 — 전용 안내(결정 3). expectWeatherConsistent 가 문구·새로고침 없음까지 본다.
+        expect(beyondForecast(res, day.effective_date!), `${dayIndex}일차 forecast_until`).toBeTruthy();
       }
     }
     annotate(`states=${JSON.stringify(states)}`);

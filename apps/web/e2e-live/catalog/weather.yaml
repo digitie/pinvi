@@ -46,7 +46,7 @@
   notes: "#673. 정본의 핵심 기온·하늘·강수 사실을 앞세우며 FEELS_LIKE/deg_c를 원문으로 표시하지 않는다. 원천에 핵심 사실이 없는 경우는 데이터 공백으로 기록하며 체감온도를 기온으로 바꾸지 않는다."
 
 - id: WX-003
-  title: 10일 넘게 남은 일자는 '이 날짜의 날씨 정보가 없습니다.'(no_data), unavailable 아님
+  title: 10일 넘게 남은 일자는 '예보는 N일 앞(M월 D일)까지만 제공됩니다.'(no_data + forecast_until), unavailable 아님
   priority: P1
   tags: [desktop, mutating, weather]
   preconditions:
@@ -56,8 +56,9 @@
   steps:
     - 여행 생성 D+15~D+16, 1일차에 '고씨굴' 추가 → 새로고침 → 1일차 탭
   expected:
-    - JSON state ∈ {found, no_data} (unavailable 금지)
-    - UI data-testid=trip-weather-status 텍스트 '이 날짜의 날씨 정보가 없습니다.'
+    - JSON state no_data, forecast_until(받은 예보의 마지막 KST 날짜) 있음 (unavailable 금지)
+    - UI data-testid=trip-weather-status[data-weather-reason=beyond_forecast] 텍스트 '예보는 N일 앞(M월 D일)까지만 제공됩니다.'(N = forecast_until − 오늘), 새로고침 버튼 없음
+  notes: 2026-11-17 결정 3으로 문구가 바뀌었다 — 배포 뒤에만 통과한다.
   cleanup:
     - 생성한 여행 삭제
   automation: scripted
@@ -521,7 +522,7 @@
   steps:
     - 여행 D~D+13, 1·8·12·14일차에 '안동하회마을' 추가 → 각 탭 확인
   expected:
-    - 1일차 summary(현재/예보), 8일차 summary(예보) [soft], 12·14일차 no_data 문구
+    - 1일차 summary(현재/예보), 8일차 summary(예보) [soft], 12·14일차 no_data + forecast_until, '예보는 N일 앞(M월 D일)까지만 제공됩니다.'(2026-11-17 결정 3, 배포 뒤)
     - 어느 일자도 unavailable 아님
   cleanup:
     - 생성한 여행 삭제
@@ -608,7 +609,7 @@
   spec: specs/weather/weather-poi-badge.live.spec.ts#WX-042
 
 - id: WX-045
-  title: 날씨 새로고침 — '이 날짜의 날씨 정보가 없습니다.' 옆 버튼, POST refresh 200, 같은 장소 재시도는 60초 쿨다운
+  title: 예보 범위 밖 날짜는 새로고침 없이 '예보는 N일 앞까지만' 안내, refresh API는 200·같은 장소 60초 쿨다운
   priority: P2
   tags: [desktop, mutating, weather]
   preconditions:
@@ -616,13 +617,13 @@
     - data: Map has 고씨굴
   data_sources: [map:weather-state, pinvi:weather_location_links]
   steps:
-    - 여행 D+30 당일(예보 범위 밖) → 1일차 '고씨굴' 추가 → 날짜 날씨의 '날씨 새로고침'
-    - 이어서 장소 날씨의 '날씨 새로고침'
+    - 여행 D+30 당일(예보 범위 밖) → 1일차 '고씨굴' 추가 → trip view 재조회 → 1일차 날짜 날씨
+    - POST /trips/{id}/days/1/weather/refresh {poi_id} 두 번(API 직접)
   expected:
-    - 첫 POST /trips/{id}/days/1/weather/refresh 200, refreshed+cooldown+no_data=1, 결과 안내 문구, 여전히 '이 날짜의 날씨 정보가 없습니다.'
-    - 두 번째 응답 cooldown=1·retry_after_seconds>0, 장소 날씨에 '…초 뒤 다시 시도' 안내
+    - no_data.forecast_until 있음, 날짜 날씨 문구가 '예보는 N일 앞(M월 D일)까지만 제공됩니다.', '날씨 새로고침' 버튼 없음
+    - 첫 응답 200·refreshed+cooldown+no_data=1, 두 번째 cooldown=1·retry_after_seconds>0
   cleanup:
     - 생성한 여행 삭제
   automation: scripted
   spec: specs/weather/weather-refresh.live.spec.ts#WX-045
-  notes: 2026-11-16 소유자 요청 15. 배포 뒤에만 통과한다(새 엔드포인트). 날씨 값은 Map이 적재하므로 새로고침은 PinVi의 위치 해석 캐시만 새로 한다.
+  notes: 2026-11-16 요청 15 + 2026-11-17 결정 3. 배포 뒤에만 통과한다. 새로고침 버튼(범위 안 빈 날짜)은 live에서 결정적으로 만들 수 없어 단위 시험이 맡는다.

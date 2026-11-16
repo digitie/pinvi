@@ -1,3 +1,9 @@
+## 2026-11-17 — 예보 범위 밖 날짜 전용 안내(결정 3)
+
+- 범위는 고정 일수가 아니라 받은 예보에서 낸다: Map 경로가 예보 창을 오늘부터 열고(카드는 날짜별로 잘라 써서 내용 불변, 상한은 Map 예보 범위 약 열흘), `forecast_horizon`이 `ok` 예보 부분의 마지막 대상 시각을 KST 날짜로 낸다. 그 뒤 날짜의 `no_data`에 `forecast_until`을 싣는다. 예보가 하나도 없으면(적재 전·직접 경로) null이라 기존 문구가 남는다.
+- 웹: `forecast_until`보다 뒤 날짜는 '예보는 N일 앞(M월 D일)까지만 제공됩니다.'(N = forecast_until − KST 오늘), 새로고침 버튼 없음(`data-weather-reason=beyond_forecast`).
+- 검증: 단위 `test_trip_weather_horizon`·`forecastHorizon`, 통합 `test_weather_via_map`(D+20 → forecast_until, forecast_from ≤ 오늘) 포함 weather 통합 69건 로컬 통과. live WX-003·WX-028·WX-045·share 문구 허용 갱신(배포 뒤).
+
 ## 2026-11-17 — 달 출몰도 astral, KASI 해·달 출몰 job·표 은퇴(0109)
 
 - 소유자 승인(11-17): 월출·월몰도 응답 때 `astral`로 계산하고 KASI 출몰 job(`pinvi_trip_day_rise_sets`, `kasi_poi_rise_set_job`)과 저장 표를 은퇴한다. 두 표(`trip_day_rise_sets`·`trip_poi_rise_sets`)는 job이 유일한 채움이었고, 달까지 계산으로 옮기면 남는 읽는 곳이 없어 0109에서 함께 지웠다. `sync_trip_day_rise_sets`(GET 여행·POI 이동 때 쓰던 유지 쓰기)도 없앴다.

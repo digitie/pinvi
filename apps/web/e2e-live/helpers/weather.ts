@@ -115,7 +115,18 @@ export interface WxCard {
   source_styles: string[];
   metrics: WxMetric[];
 }
-export type WxResolution = { state: 'found'; card_key: string } | { state: string };
+export type WxResolution =
+  | { state: 'found'; card_key: string }
+  | { state: string; forecast_until?: string | null };
+
+/** 예보 범위 밖 날짜의 전용 안내(2026-11-17 결정 3) — `TripWeatherSummary` `forecastHorizonMessage`. */
+export const BEYOND_FORECAST_RE = /^예보는 (\d+)일 앞\((\d+)월 (\d+)일\)까지만 제공됩니다\.$|^예보는 오늘까지만 제공됩니다\.$/;
+
+/** no_data가 예보 범위 밖이라서인지(API가 forecast_until을 실었고 그 날짜가 그 뒤인지). */
+export function beyondForecast(res: WxResolution | undefined, isoDate: string): string | null {
+  const until = res && 'forecast_until' in res ? (res.forecast_until ?? null) : null;
+  return until && isoDate > until ? until : null;
+}
 
 /** `card_key` of a `found` resolution; throws with the actual state otherwise (contract invariant). */
 export function cardKeyOf(res: WxResolution | undefined): string {
@@ -315,6 +326,11 @@ export async function expectWeatherConsistent(
     } else {
       await expect(section).toContainText(/현재|예보|미세먼지|시간대별/);
     }
+  } else if (beyondForecast(resolution, isoDate)) {
+    expect(kind, '예보 범위 밖 no_data 는 status 섹션').toBe('status');
+    await expect(section).toHaveAttribute('data-weather-reason', 'beyond_forecast');
+    await expect(section.locator('p').first()).toHaveText(BEYOND_FORECAST_RE);
+    await expect(section.getByRole('button', { name: '날씨 새로고침' })).toHaveCount(0);
   } else {
     expect(kind, `${resolution!.state} 는 status 섹션`).toBe('status');
     await expect(section).toContainText(STATUS_TEXT[resolution!.state] ?? '');

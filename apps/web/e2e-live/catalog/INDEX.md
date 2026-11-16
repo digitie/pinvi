@@ -185,7 +185,7 @@ Spec files: 64.
 | NEAR-043 | nearby | 낮은 desktop 창(1280x600)에서도 여행 지도 핀이 fold 위에 있고 문서가 스크롤되지 않는다(#704, NEAR-042b) | P1 | desktop, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-043` |
 | WX-001 | weather | 오늘~모레 여행 1일차 '날짜 날씨'에 현재·예보(초단기/단기) 그룹 표시 | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-001` |
 | WX-002 | weather | 3~10일 뒤 여행 일자에 중기(mid) 예보 그룹 표시 | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-002` |
-| WX-003 | weather | 10일 넘게 남은 일자는 '이 날짜의 날씨 정보가 없습니다.'(no_data), unavailable 아님 | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-003` |
+| WX-003 | weather | 10일 넘게 남은 일자는 '예보는 N일 앞(M월 D일)까지만 제공됩니다.'(no_data + forecast_until), unavailable 아님 | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-003` |
 | WX-004 | weather | 지난 날짜 여행은 Map 세 구간 요약('시간대별')으로 표시 | P2 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-004` |
 | WX-005 | weather | 같은 일자 서울역+성산일출봉 — 장소별 '장소 날씨' 카드가 서로 다르고 '날짜 날씨'는 첫 장소와 일치 | P2 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-005` |
 | WX-006 | weather | 바다 지역(제주 성산일출봉) 기온·습도·강수확률 값 범위 타당성 | P2 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-006` |
@@ -215,7 +215,7 @@ Spec files: 64.
 | WX-040 | weather | 일출·일몰 즉시 계산(astral) — 장소 추가 뒤 새로고침 한 번에 일자·장소 일출·일몰 표시 | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-sun-astral.live.spec.ts#WX-040` |
 | WX-041 | weather | 장소 목록 이름 옆 현재 날씨 배지(아이콘·현재 기온·오늘 최고/최저) → 예보 팝업(시간별·일별·출처) | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-poi-badge.live.spec.ts#WX-041` |
 | WX-042 | weather | 모바일 — 장소 날씨 배지 탭 → 하단 시트 예보, 행 선택 없음 | P2 | mobile, mutating, weather | scripted | `specs/weather/weather-poi-badge.live.spec.ts#WX-042` |
-| WX-045 | weather | 날씨 새로고침 — '이 날짜의 날씨 정보가 없습니다.' 옆 버튼, POST refresh 200, 같은 장소 재시도는 60초 쿨다운 | P2 | desktop, mutating, weather | scripted | `specs/weather/weather-refresh.live.spec.ts#WX-045` |
+| WX-045 | weather | 예보 범위 밖 날짜는 새로고침 없이 '예보는 N일 앞까지만' 안내, refresh API는 200·같은 장소 60초 쿨다운 | P2 | desktop, mutating, weather | scripted | `specs/weather/weather-refresh.live.spec.ts#WX-045` |
 | SHR-001 | share | 공유 링크 생성 — 1회성 URL 배너와 목록 상태(활성·무기한) | P1 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-001` |
 | SHR-002 | share | 로그아웃 컨텍스트에서 공유 페이지 읽기 전용 렌더링(지도·일자·장소) | P1 | desktop, mutating, share, poi | scripted | `specs/share/share-links.live.spec.ts#SHR-002` |
 | SHR-003 | share | 공유 링크 철회 — 목록 '철회' 상태, 철회된 링크는 404 안내 | P1 | desktop, mutating, share | scripted | `specs/share/share-links.live.spec.ts#SHR-003` |

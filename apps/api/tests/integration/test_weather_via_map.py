@@ -798,6 +798,44 @@ async def test_trip_view_flag_on_all_sections_empty_is_no_data(session_factory: 
     assert _day(view, 1)["weather_by_feature_id"][feature_id] == {"state": "no_data"}
 
 
+async def test_trip_view_date_beyond_forecast_range_reports_forecast_until(
+    session_factory: Any,
+) -> None:
+    """예보 범위 밖 날짜(D+20)는 `no_data`에 받은 예보의 마지막 날짜를 싣는다(2026-11-17 결정 3).
+
+    여행 날짜만 요청하면 예보가 하나도 오지 않아 범위를 알 수 없으므로 예보 창은 오늘부터 연다.
+    """
+    settings.pinvi_kor_travel_map_weather_enabled = True
+    today = datetime.now(KST).date()
+    future = today + timedelta(days=20)
+    last_target = datetime.combine(today + timedelta(days=9), datetime.min.time(), tzinfo=KST)
+    last_target += timedelta(hours=15)
+
+    def batch(ids: list[str]) -> httpx.Response:
+        data = fx.kma_bundle(ids[0])
+        data["forecasts"]["mid"] = fx.forecast_section(
+            "mid",
+            location_id=ids[0],
+            groups=[fx.forecast_group({"TMN": [3.0]}, target_at=[last_target.isoformat()])],
+        )
+        return httpx.Response(200, json=fx.batch_body([data]))
+
+    fake = _Map(_nearest_then_batch(batch=batch))
+    feature_id = f"fh_{uuid.uuid4().hex[:8]}"
+    view = await _trip_view(
+        session_factory, pois=[(1, future, feature_id)], map_client=fake.client, weather_client=None
+    )
+    assert _day(view, 1)["weather_by_feature_id"][feature_id] == {
+        "state": "no_data",
+        "forecast_until": today + timedelta(days=9),
+    }
+    [body] = [
+        json.loads(r.content) for r in fake.weather_requests() if r.url.path.endswith("/batch")
+    ]
+    assert "forecasts" in body["sections"]
+    assert datetime.fromisoformat(body["forecast_from"]).date() <= today
+
+
 async def test_trip_view_flag_on_without_map_client_is_unavailable(session_factory: Any) -> None:
     settings.pinvi_kor_travel_map_weather_enabled = True
     feature_id = f"fn_{uuid.uuid4().hex[:8]}"

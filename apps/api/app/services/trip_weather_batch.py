@@ -56,7 +56,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import logging
-from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
@@ -80,7 +80,12 @@ from app.services.weather_location_resolver import (
     resolve_weather_location,
 )
 from app.services.weather_map_resolver import resolve_many_via_map
-from app.services.weather_map_state import bundle_values, fetch_alerts, fetch_location_bundles
+from app.services.weather_map_state import (
+    MapWeatherBundle,
+    bundle_values,
+    fetch_alerts,
+    fetch_location_bundles,
+)
 from app.services.weather_metrics import (
     WeatherFact,
     dedupe_by_provider_priority,
@@ -128,6 +133,20 @@ def _value_seoul_date(value: WeatherFact) -> date | None:
     if instant is None:
         return None
     return instant.astimezone(_SEOUL).date()
+
+
+def forecast_horizon(bundles: Iterable[MapWeatherBundle]) -> date | None:
+    """받은 예보(`ok` 부분)의 마지막 대상 시각의 KST 날짜. 예보가 하나도 없으면 None(범위를 모른다)."""
+    latest: datetime | None = None
+    for bundle in bundles:
+        for _style, section in bundle.forecasts.by_style():
+            if section.status != "ok":
+                continue
+            for group in section.groups:
+                for target in group.target_at:
+                    if latest is None or target > latest:
+                        latest = target
+    return latest.astimezone(_SEOUL).date() if latest is not None else None
 
 
 def _chunked(items: Sequence[str], size: int) -> list[list[str]]:
@@ -306,8 +325,13 @@ def _project(
     bundles: _Bundles,
     values_by_location: Mapping[str, Sequence[WeatherFact]],
     location_failed: Mapping[str, bool],
+    forecast_until: date | None = None,
 ) -> None:
-    """5) card_key별로 dedupe된 값을 day마다 그 날짜로 슬라이스해 카드/상태를 만든다."""
+    """5) card_key별로 dedupe된 값을 day마다 그 날짜로 슬라이스해 카드/상태를 만든다.
+
+    `forecast_until`(받은 예보의 마지막 KST 날짜)이 있으면 그 뒤 날짜의 `no_data`에 실어 화면이 "예보는 N일
+    앞까지만" 안내를 하게 한다(2026-11-17 소유자 승인 결정 3). 값이 없는 이유가 예보 범위 밖일 때만 싣는다.
+    """
     deduped_by_card_key: dict[str, list[WeatherFact]] = {
         card_key: dedupe_by_provider_priority(
             [value for location_id in bundle for value in values_by_location.get(location_id, ())]
@@ -345,6 +369,11 @@ def _project(
                 }
             elif any_failed_by_card_key[card_key]:
                 pending.weather_by_day_index[day_index][feature_id] = {"state": "unavailable"}
+            elif forecast_until is not None and effective_date > forecast_until:
+                pending.weather_by_day_index[day_index][feature_id] = {
+                    "state": "no_data",
+                    "forecast_until": forecast_until,
+                }
             else:
                 pending.weather_by_day_index[day_index][feature_id] = {"state": "no_data"}
 
@@ -488,7 +517,9 @@ async def build_trip_weather_via_kor_travel_map(
         bundles = _bundles(pending, found)
         now = datetime.now(UTC)
         today = now.astimezone(_SEOUL).date()
-        range_from = _weather_target_at(bundles.needed_dates[0])
+        # 예보는 오늘부터 받는다 — 여행 날짜가 예보 범위 밖이어도 받은 예보의 마지막 날짜로 범위를 알린다(결정 3).
+        # 값은 아래 `_project`가 날짜별로 잘라 쓰므로 창을 넓혀도 카드 내용은 같다. 예보 범위(약 열흘)가 상한이다.
+        range_from = _weather_target_at(min(bundles.needed_dates[0], today))
         range_to = _weather_target_at(bundles.needed_dates[-1]) + timedelta(days=1)
         # 오늘은 끝난 구간의 요약도 낸다 — Map은 지난 예보 시각을 떼고 주므로(W5) 그날의 지난 시간대는 요약이 채운다.
         daily_dates = [d for d in bundles.needed_dates if d <= today]
@@ -544,5 +575,14 @@ async def build_trip_weather_via_kor_travel_map(
             location_failed[location_id] = location_id in batch.failed or (
                 bundle is None and location_id not in batch.missing
             )
-        _project(pending, found, bundles, values_by_location, location_failed)
+        _project(
+            pending,
+            found,
+            bundles,
+            values_by_location,
+            location_failed,
+            forecast_until=forecast_horizon(batch.bundles.values())
+            if "forecasts" in sections
+            else None,
+        )
         return pending.result()
