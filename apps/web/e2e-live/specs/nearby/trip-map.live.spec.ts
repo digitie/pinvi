@@ -276,7 +276,8 @@ test.describe('NEAR trip map — four-place trip', () => {
     const panel = (await page.getByTestId('trip-detail-panel').boundingBox())!;
     expect(panel.y + panel.height, 'left panel is inside the window').toBeLessThanOrEqual(viewport.height + 1);
     for (const marker of await tripMarkers(page).all()) {
-      const box = (await marker.boundingBox())!;
+      // 원형 마커는 원의 중심이 좌표다 — 오른쪽 이름 라벨까지 넣은 마커 상자의 가운데가 아니라 원을 잰다.
+      const box = (await marker.getByTestId('circle-place-marker-dot').boundingBox())!;
       const label = await marker.getAttribute('aria-label');
       const tipX = box.x + box.width / 2;
       const tipY = box.y + box.height;

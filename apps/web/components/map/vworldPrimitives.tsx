@@ -12,6 +12,7 @@ import type {
   ClusterLayerProps,
   MakiMarkerProps,
   MapContextMenuProps,
+  MarkerProps,
   PinMarkerProps,
   PolygonAreaProps,
   PopupProps,
@@ -108,6 +109,11 @@ const DynamicMakiMarker = dynamic<MakiMarkerProps>(
   { ssr: false },
 );
 
+const DynamicMarker = dynamic<MarkerProps>(
+  () => import('vworld-map-web').then((module) => module.Marker),
+  { ssr: false },
+);
+
 const DynamicPinMarker = dynamic<PinMarkerProps>(
   () => import('vworld-map-web').then((module) => module.PinMarker),
   { ssr: false },
@@ -163,6 +169,11 @@ export function ClusterLayer(props: ClusterLayerProps) {
 
 export function MakiMarker(props: MakiMarkerProps) {
   return <DynamicMakiMarker {...props} />;
+}
+
+/** children을 그대로 그리는 기본 마커(원형 장소 마커처럼 모양을 앱이 정할 때). */
+export function Marker(props: MarkerProps) {
+  return <DynamicMarker {...props} />;
 }
 
 export function PinMarker(props: PinMarkerProps) {

@@ -15,11 +15,11 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | poi | 38 | 31 | 5 | 2 |
 | notify | 32 | 23 | 4 | 5 |
 | admin | 44 | 37 | 5 | 2 |
-| core | 31 | 30 | 1 | 0 |
+| core | 37 | 36 | 1 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **561** | **509** | **28** | **24** |
+| **all** | **567** | **515** | **28** | **24** |
 
-Spec files: 63.
+Spec files: 64.
 
 ## Cases
 
@@ -396,6 +396,12 @@ Spec files: 63.
 | CORE-029 | core | axe-core critical 위반 0 — /login, /trips, /map | P2 | desktop, mobile, a11y | scripted | `specs/core/core-a11y-perf.live.spec.ts#CORE-029` |
 | CORE-030 | core | perf 스모크 — 여행 목록 TTI, 여행 상세(첫 핀), 탐색 지도(첫 마커) 기록 | P2 | desktop, mobile, perf, mutating | scripted | `specs/core/core-a11y-perf.live.spec.ts#CORE-030` |
 | CORE-031 | core | 한국어 날짜 '2026년 11월 5일', 24h 시각, km 거리 포맷 | P2 | desktop, mobile, mutating, search | scripted | `specs/core/core-i18n.live.spec.ts#CORE-031` |
+| CORE-040 | core | 장소 마커는 원 + 상자 없는 이름 라벨(+ 현재 날씨 아이콘) — 구글 지도식 | P1 | desktop, mobile, mutating | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-040` |
+| CORE-041 | core | 마커 아이콘을 텍스트 입력 대신 아이콘 칩으로 골라 저장 | P1 | desktop, mobile, mutating | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-041` |
+| CORE-042 | core | (모바일) 패널은 아래 시트 — 위로 보이는 지도가 시트보다 크다, 펼치기/줄이기 | P1 | mobile, mutating | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-042` |
+| CORE-043 | core | (모바일) 목록에서 장소를 누르면 시트를 닫고 그 장소를 지도 가운데로 — 지도를 옮긴 뒤 다시 눌러도 | P1 | mobile, mutating | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-043` |
+| CORE-044 | core | 내 위치 버튼 — 따라가기 모드, 지도를 끌면 해제, 다시 누르면 복귀 | P1 | desktop, mobile, mutating | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-044` |
+| CORE-045 | core | (모바일) 탐색 지도 장소를 누르면 상세 시트만 — 지도 팝업과 이중 표시 없음 | P1 | mobile | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-045` |
 | TRS-CG-001 | trs | 서울 궁궐 1박2일 — 경복궁·북촌·한옥스테이 | P1 | heritage, culture, food, lodging, market, mobile | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-002 | trs | 명동·남산 도심 당일 — 만두·곰탕·DDP | P2 | food, culture, park | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |
 | TRS-CG-003 | trs | 서울 박물관·미술관 2박3일 | P2 | museum, lodging, food, heritage, culture, market, transport | scripted | `specs/trip-scenarios/scenarios.live.spec.ts` |

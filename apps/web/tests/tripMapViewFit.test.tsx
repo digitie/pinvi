@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   popupClose: null as (() => void) | null,
   map: null as unknown,
   onMoveEnd: null as ((event: unknown) => void) | null,
+  mobile: true,
 }));
 
 vi.mock('@/components/map/vworldPrimitives', () => ({
@@ -32,7 +33,7 @@ vi.mock('@/components/map/vworldPrimitives', () => ({
     return <div>{children}</div>;
   },
   ClusterLayer: () => null,
-  PinMarker: () => null,
+  Marker: () => null,
   Popup: ({ onClose }: { onClose?: () => void }) => {
     h.popupClose = onClose ?? null;
     return null;
@@ -64,7 +65,7 @@ vi.mock('@/components/map/TransportDetailDialog', () => ({ TransportDetailDialog
 vi.mock('@/components/map/FeatureDetailModalController', () => ({
   FeatureDetailModalController: () => null,
 }));
-vi.mock('@/lib/useMobileWebLayout', () => ({ useMobileWebLayout: () => true }));
+vi.mock('@/lib/useMobileWebLayout', () => ({ useMobileWebLayout: () => h.mobile }));
 
 import { TripMapView } from '@/components/trips/TripMapView';
 
@@ -144,6 +145,7 @@ afterEach(() => {
   h.transportVisible = false;
   h.onMoveEnd = null;
   h.popupClose = null;
+  h.mobile = true;
 });
 
 describe('TripMapView 맞춤 배선', () => {
@@ -154,10 +156,14 @@ describe('TripMapView 맞춤 배선', () => {
       const map = fakeMap({ x: 72, y: 207 });
       h.map = map;
       const view = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
-      // 1차·패널 재맞춤 모두: 위 여백은 60% 상한(180) 그대로, 아래 여백이 먼저 줄어든다.
+      // 1차는 검색 줄 아래(132)+원형 마커 21+간격 24, 패널 재맞춤은 패널 아래(288)+45가 60% 상한(180)에
+      // 묶인다. 두 번 모두 아래 여백이 먼저 줄어든다.
       expect(map.fitBounds).toHaveBeenCalledTimes(2);
+      expect(map.fitBounds.mock.calls.map((call) => call[1].padding.top)).toEqual([
+        132 + 21 + 24,
+        180,
+      ]);
       for (const call of map.fitBounds.mock.calls) {
-        expect(call[1].padding.top).toBe(180);
         expect(call[1].padding.bottom).toBeLessThan(64);
         expect(300 - call[1].padding.top - call[1].padding.bottom).toBeGreaterThan(0);
       }
@@ -181,10 +187,10 @@ describe('TripMapView 맞춤 배선', () => {
     render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
 
     expect(map.fitBounds).toHaveBeenCalledTimes(2);
-    // 1차: 검색 줄 아래(132) + 핀 48 + 간격 24
-    expect(map.fitBounds.mock.calls[0]?.[1].padding.top).toBe(132 + 48 + 24);
-    // 2차: 패널 아래(288) + 핀 48 + 간격 24
-    expect(map.fitBounds.mock.calls[1]?.[1].padding.top).toBe(288 + 48 + 24);
+    // 1차: 검색 줄 아래(132) + 원형 마커 21 + 간격 24
+    expect(map.fitBounds.mock.calls[0]?.[1].padding.top).toBe(132 + 21 + 24);
+    // 2차: 패널 아래(288) + 원형 마커 21 + 간격 24
+    expect(map.fitBounds.mock.calls[1]?.[1].padding.top).toBe(288 + 21 + 24);
   });
 
   it('패널 밑에 핀이 없으면 다시 맞추지 않는다', () => {
@@ -204,8 +210,8 @@ describe('TripMapView 맞춤 배선', () => {
 
     expect(map.fitBounds).not.toHaveBeenCalled();
     expect(map.flyTo).toHaveBeenCalledTimes(1);
-    // (패널 아래 288 + 48 + 24) - 아래 여백 64, 절반
-    expect(map.flyTo.mock.calls[0]?.[0].offset).toEqual([0, (288 + 48 + 24 - 64) / 2]);
+    // (패널 아래 288 + 21 + 24) - 아래 여백 64, 절반
+    expect(map.flyTo.mock.calls[0]?.[0].offset).toEqual([0, (288 + 21 + 24 - 64) / 2]);
   });
 
   it('장소가 하나라도 패널이 가운데 열 밖이면(데스크톱) 검색 줄만 기준으로 한다', () => {
@@ -216,7 +222,7 @@ describe('TripMapView 맞춤 배선', () => {
       h.map = map;
       render(<TripMapView points={[POINTS[0]!]} transportLayers overlayTopLeft={overlay} />);
 
-      expect(map.flyTo.mock.calls[0]?.[0].offset).toEqual([0, (132 + 48 + 24 - 64) / 2]);
+      expect(map.flyTo.mock.calls[0]?.[0].offset).toEqual([0, (132 + 21 + 24 - 64) / 2]);
     } finally {
       RECTS['fit-container'] = box(0, 0, 390, 700);
     }
@@ -233,7 +239,7 @@ describe('TripMapView 맞춤 배선', () => {
     h.transportVisible = true;
     view.rerender(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
     expect(map.fitBounds).toHaveBeenCalledTimes(3);
-    expect(map.fitBounds.mock.calls[2]?.[1].padding.top).toBe(288 + 48 + 24);
+    expect(map.fitBounds.mock.calls[2]?.[1].padding.top).toBe(288 + 21 + 24);
 
     // 새로 마운트: 로드 뒤 사용자가 끌어 옮기고 나서 패널이 나타난다
     view.unmount();
@@ -248,13 +254,20 @@ describe('TripMapView 맞춤 배선', () => {
   });
 });
 
-it('제어된 POI popup이 native로 닫히면 선택 해제를 소유자에게 전달한다', () => {
+it('제어된 POI popup이 native로 닫히면 선택 해제를 소유자에게 전달한다(데스크톱)', () => {
+  h.mobile = false;
   h.map = fakeMap({ x: 300, y: 300 });
   const select = vi.fn();
   render(<TripMapView points={POINTS} selectedPoiId="north" onSelectPoi={select} />);
   expect(h.popupClose).toEqual(expect.any(Function));
   h.popupClose!();
   expect(select).toHaveBeenCalledWith(null);
+});
+
+it('모바일은 선택한 장소의 이름 팝업을 띄우지 않는다 — 이름은 마커 라벨이 이미 보여 준다(이중 표시)', () => {
+  h.map = fakeMap({ x: 300, y: 300 });
+  render(<TripMapView points={POINTS} selectedPoiId="north" onSelectPoi={vi.fn()} />);
+  expect(h.popupClose).toBeNull();
 });
 
 it('외부 POI 선택은 가운데 열의 검색·교통 패널 아래로 offset을 준다', () => {
@@ -268,7 +281,7 @@ it('외부 POI 선택은 가운데 열의 검색·교통 패널 아래로 offset
   );
   expect(map.flyTo).toHaveBeenCalledWith(expect.objectContaining({
     center: [128.53, 37.13],
-    offset: [0, (288 + 48 + 24 - 64) / 2],
+    offset: [0, (288 + 21 + 24 - 64) / 2],
   }));
 });
 

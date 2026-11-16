@@ -5,6 +5,7 @@ import { TripComments } from '@/components/trips/TripComments';
 import { TripDayHeader } from '@/components/trips/TripDayHeader';
 import { TripExportButton } from '@/components/trips/TripExportButton';
 import { TripMapView } from '@/components/trips/TripMapView';
+import { placeWeatherCards } from '@/lib/placeWeather';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 import { ButtonLink } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';
@@ -75,6 +76,7 @@ function useSharedTripContentModel({ tripId, token }: SharedTripViewProps) {
   }, [tripId, token]);
 
   const mapPoints = useMemo(() => (view ? tripDaysToMapPoints(view.days) : []), [view]);
+  const weatherCardsByPoiId = useMemo(() => placeWeatherCards(view?.days ?? []), [view]);
   const poiDay = useMemo(() => {
     const map = new Map<string, number>();
     for (const point of mapPoints) map.set(point.poiId, point.dayIndex);
@@ -107,6 +109,7 @@ function useSharedTripContentModel({ tripId, token }: SharedTripViewProps) {
     handleSelectPoi,
     holidayMap,
     mapPoints,
+    weatherCardsByPoiId,
     selectedDay,
     selectedDayIndex,
     selectedPoiId,
@@ -173,6 +176,7 @@ function SharedTripContentView2({ viewModel }: { viewModel: SharedTripContentVie
     handleSelectPoi,
     holidayMap,
     mapPoints,
+    weatherCardsByPoiId,
     selectedDay,
     selectedDayIndex,
     selectedPoiId,
@@ -267,6 +271,7 @@ function SharedTripContentView2({ viewModel }: { viewModel: SharedTripContentVie
           <TripMapView
             apiKey={VWORLD_API_KEY}
             points={mapPoints}
+            weatherCardsByPoiId={weatherCardsByPoiId}
             selectedPoiId={selectedPoiId}
             onSelectPoi={handleSelectPoi}
             className="h-full"
