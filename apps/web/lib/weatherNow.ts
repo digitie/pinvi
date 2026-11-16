@@ -41,6 +41,10 @@ export const CONDITION_LABELS: Record<WeatherConditionKind, string> = {
   unknown: '날씨 정보 없음',
 };
 
+export function conditionLabel(condition: WeatherConditionKind): string {
+  return CONDITION_LABELS[condition];
+}
+
 const PROVIDER_ORDER = [
   'python-kma-api',
   'python-airkorea-api',

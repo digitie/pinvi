@@ -1,9 +1,15 @@
 'use client';
 
 import { WeatherForecastPopup } from '@/components/weather/WeatherForecastPopup';
-import { WeatherIcon, conditionLabel } from '@/components/weather/WeatherIcon';
+import { WeatherIcon } from '@/components/weather/WeatherIcon';
 import { useMinuteNow, usePoiWeather } from '@/lib/usePoiWeather';
-import { activeAlerts, currentWeather, formatTemp, todayRange } from '@/lib/weatherNow';
+import {
+  activeAlerts,
+  conditionLabel,
+  currentWeather,
+  formatTemp,
+  todayRange,
+} from '@/lib/weatherNow';
 import type { FeatureWeatherCard } from '@pinvi/schemas';
 import { AlertTriangle } from 'lucide-react';
 import { useMemo, useState } from 'react';
