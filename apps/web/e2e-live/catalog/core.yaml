@@ -617,3 +617,33 @@
   cleanup: [여행 삭제]
   automation: scripted
   spec: specs/core/core-map-markers.live.spec.ts#CORE-045
+
+- id: CORE-046
+  title: 탐색 지도(/map) 내 위치 버튼 — 따라가기 모드, 지도를 끌면 해제, 다시 누르면 복귀
+  priority: P1
+  tags: [desktop, mobile]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage]
+  steps:
+    - geolocation 권한·좌표 부여 → /map → '내 위치로 이동'(동의 다이얼로그면 동의) → 지도 끌기 → 다시 누르기
+  expected:
+    - data-follow-mode off→follow, 끌면 tracking, 다시 누르면 follow
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-map-markers.live.spec.ts#CORE-046
+
+- id: CORE-047
+  title: (모바일) 장소 정보 패널이 열리면 내 위치 버튼이 패널 위로 올라간다 — 가려지지 않는다
+  priority: P1
+  tags: [mobile, mutating]
+  preconditions:
+    - account: test@test.com
+  data_sources: [map:heritage]
+  steps:
+    - '[e2e]' 여행 + 장소 2곳 → 패널 열기 → 장소 행 탭 → 장소 정보 패널
+  expected:
+    - map-my-location-control data-lifted=true, 버튼 아래 끝 ≤ 패널 위 끝, 버튼이 실제로 눌린다
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-map-markers.live.spec.ts#CORE-047

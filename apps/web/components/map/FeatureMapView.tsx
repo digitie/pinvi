@@ -7,20 +7,19 @@ import {
 import { apiClient } from '@/lib/api';
 import type { GeometryFeature } from '@/lib/featureGeometry';
 import { useFeatureGeometry } from '@/lib/useFeatureGeometry';
-import { ApiError, featureApi, userApi, weatherApi } from '@pinvi/api-client';
+import { ApiError, featureApi, weatherApi } from '@pinvi/api-client';
 import type {
   FeaturesInBoundsResponse,
   FeatureWeatherCard,
   PlaceSearchResult,
   WeatherMarkersInBoundsResponse,
 } from '@pinvi/schemas';
-import { LocateFixed } from 'lucide-react';
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
 import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
 import { CirclePlaceMarker } from '@/components/map/CirclePlaceMarker';
-import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
+import { MyLocationControl, useMyLocationControl } from '@/components/map/MyLocationControl';
 import { MakiIcon } from '@/components/map/MakiIcon';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
@@ -44,7 +43,7 @@ import {
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import { webLocationAdapter } from '@/lib/locationAdapter';
-import { getLocationConsentState, setLocationConsentGranted } from '@/lib/locationConsent';
+import { getLocationConsentState } from '@/lib/locationConsent';
 import { markerZIndex } from '@/lib/markerStacking';
 import { viewportSearchBias } from '@/lib/searchBias';
 import { useAbortableLoad } from '@/lib/useAbortableLoad';
@@ -57,8 +56,6 @@ import {
   coarseCoordText,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
-  locationConsentItems,
-  MY_LOCATION_ZOOM,
   resolveMapCenter,
   resolveMarkerStyle,
   shouldAutoLocate,
@@ -66,7 +63,6 @@ import {
   type LocationConsentState,
   type LocationPermissionState,
 } from '@pinvi/domain';
-import { useUserLocation } from '@pinvi/hooks';
 
 const DEFAULT_CENTER: [number, number] = [...DEFAULT_MAP_CENTER] as [number, number];
 const DEFAULT_ZOOM = DEFAULT_MAP_ZOOM;
@@ -260,9 +256,6 @@ function useFeatureMapViewModel({
   const [weather, setWeather] = useState<FeatureWeatherCard | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [consentOpen, setConsentOpen] = useState(false);
-  const [consentSaving, setConsentSaving] = useState(false);
-  const [consentError, setConsentError] = useState<string | null>(null);
   const [requestCoord, setRequestCoord] = useState<{ lon: number; lat: number } | null>(
     initialSuggestCoord,
   );
@@ -588,56 +581,10 @@ function useFeatureMapViewModel({
     [flyTo, clearGeometrySelection],
   );
 
-  // 사용자가 버튼으로 명시 요청한 경로 — 높은 정확도, 가까운 줌(user-location.md §1 표).
-  const { loading: locating, refresh: locateNow } = useUserLocation(webLocationAdapter, {
-    high_accuracy: true,
-    max_age_ms: 30_000,
-    on_success: (loc) => {
-      setUserLocation([loc.coord.lon, loc.coord.lat]);
-      setNotice(null);
-      flyTo(loc.coord.lon, loc.coord.lat, MY_LOCATION_ZOOM);
-    },
-    on_error: (err) =>
-      setNotice(
-        err.code === 'PERMISSION_DENIED'
-          ? '위치 권한이 거부되어 있습니다. 브라우저 설정에서 이 사이트의 위치 권한을 허용해 주세요.'
-          : err.code === 'UNSUPPORTED'
-            ? '이 브라우저는 위치를 지원하지 않습니다.'
-            : '위치를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.',
-      ),
-  });
-
-  // 위치 기능은 LBS 동의(lbs_tos + location_collection) 확인 후에만(위치정보법 제15·16조).
-  const handleMyLocation = useCallback(async () => {
-    // 로컬 boolean으로 단축하지 않는다. 세션에 굳힌 동의 플래그는 `true`로만 바뀌는 단방향
-    // 래치라, 한 번 동의한 세션은 사용자가 설정에서 철회해도 계속 위치를 잡았다 — 위치정보법
-    // 제16조 "철회 즉시 위치 기능 비활성"과 어긋난다. 버튼은 사용자의 명시 액션이므로 매번
-    // 서버에 확인하는 비용(요청 1회)이 정당하고, 그래야 다른 탭에서의 철회도 즉시 반영된다.
-    const state = await getLocationConsentState({ force: true });
-    if (state === 'granted') {
-      void locateNow();
-      return;
-    }
-    // 버튼은 사용자의 명시 액션이므로 여기서는 동의 다이얼로그를 띄운다(자동 경로와 다른 점).
-    setConsentError(null);
-    setConsentOpen(true);
-  }, [locateNow]);
-
-  const handleConsentAgree = useCallback(async () => {
-    setConsentSaving(true);
-    setConsentError(null);
-    try {
-      await userApi(apiClient).putConsents(locationConsentItems());
-      // 방금 기록한 동의를 공유 캐시에도 반영해 다른 표면이 서버를 다시 묻지 않게 한다.
-      setLocationConsentGranted();
-      setConsentOpen(false);
-      void locateNow();
-    } catch (err) {
-      setConsentError(err instanceof ApiError ? err.message : '동의 저장에 실패했습니다.');
-    } finally {
-      setConsentSaving(false);
-    }
-  }, [locateNow]);
+  // "내 위치" 버튼 — 여행 지도와 같은 따라가기 모드(누르면 이동·따라가기, 손으로 끌면 해제, 다시 누르면 복귀).
+  // 동의는 버튼을 누를 때마다 서버에서 다시 확인한다(위치정보법 제16조, `useMyLocationControl`).
+  const getMap = useCallback(() => mapRef.current, []);
+  const myLocation = useMyLocationControl(getMap);
 
   /**
    * 진입 시 자동 센터링(T-325, `docs/architecture/user-location.md` §1 "지도 초기 중심점").
@@ -776,9 +723,6 @@ function useFeatureMapViewModel({
     camera,
     className,
     clearGeometrySelection,
-    consentError,
-    consentOpen,
-    consentSaving,
     contextMenu,
     copyCoord,
     currentTemp,
@@ -792,24 +736,21 @@ function useFeatureMapViewModel({
     flyTo,
     geometry,
     getSearchBias,
-    handleConsentAgree,
     handleContextMenu,
     handleMapLoad,
-    handleMyLocation,
     handlePointClick,
     handleSearchSelect,
     handleViewportChange,
     loaded,
     loading,
-    locating,
     mapRef,
+    myLocation,
     notice,
     openTransportDetail,
     points,
     requestCoord,
     selected,
     selectedWeatherMarker,
-    setConsentOpen,
     setContextMenu,
     setDetailFeatureId,
     setNotice,
@@ -834,15 +775,11 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
     camera,
     className,
     clearGeometrySelection,
-    consentError,
-    consentOpen,
-    consentSaving,
     contextMenu,
     copyCoord,
     detailFeatureId,
     flyTo,
     geometry,
-    handleConsentAgree,
     handleContextMenu,
     handleMapLoad,
     handlePointClick,
@@ -852,7 +789,6 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
     requestCoord,
     selected,
     selectedWeatherMarker,
-    setConsentOpen,
     setContextMenu,
     setDetailFeatureId,
     setNotice,
@@ -861,9 +797,12 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
     setSelectedWeatherMarker,
     transport,
     userLocation,
+    myLocation,
     weatherPoints,
     mobileLayout,
   } = viewModel;
+  // 따라가기 중이면 그 위치, 아니면 자동 센터링이 잡은 위치.
+  const shownLocation = myLocation.position ?? userLocation;
   // 모바일 상세 시트가 열려 있으면 지도 위 팝업은 같은 장소의 중복 표시다.
   const sheetOpen = mobileLayout && detailFeatureId != null;
   return (
@@ -984,7 +923,7 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
                 selectedId={transport.selectedId}
                 onSelect={openTransportDetail}
               />
-              {userLocation && <UserLocationMarker lngLat={userLocation} />}
+              {shownLocation && <UserLocationMarker lngLat={shownLocation} />}
               {selected && !sheetOpen && <FeatureMapViewView0Part1 viewModel={viewModel} />}
               {/* T-368 — weather marker는 feature가 아니므로 상세보기가 없다. 값은 marker 자체
                   (`selectedWeatherMarker`)에 이미 있어 선택 시 별도 fetch가 필요 없다. */}
@@ -1039,13 +978,6 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
           )}
         </div>
       </div>
-      <LocationConsentDialog
-        open={consentOpen}
-        saving={consentSaving}
-        error={consentError}
-        onAgree={() => void handleConsentAgree()}
-        onCancel={() => setConsentOpen(false)}
-      />
       {requestCoord && (
         <FeatureRequestDialog
           coord={requestCoord}
@@ -1077,8 +1009,7 @@ function FeatureMapViewView0Part0({ viewModel }: { viewModel: FeatureMapViewView
     geometry,
     transport,
     openTransportDetail,
-    handleMyLocation,
-    locating,
+    myLocation,
     autoCenter,
     camera,
   } = viewModel;
@@ -1135,17 +1066,7 @@ function FeatureMapViewView0Part0({ viewModel }: { viewModel: FeatureMapViewView
           className="mt-1"
         />
       </div>
-      <button
-        type="button"
-        onClick={() => void handleMyLocation()}
-        aria-label="내 위치로 이동"
-        aria-busy={locating}
-        disabled={locating}
-        data-testid="map-my-location"
-        className="focus-ring pointer-events-auto absolute bottom-4 right-3 flex size-11 items-center justify-center rounded-full border border-hairline bg-canvas text-ink shadow-card hover:bg-surface-soft disabled:cursor-not-allowed disabled:text-muted"
-      >
-        <LocateFixed className={`h-5 w-5 ${locating ? 'animate-pulse' : ''}`} aria-hidden="true" />
-      </button>
+      <MyLocationControl state={myLocation} className="absolute bottom-4 right-3" />
       {/* 자동 센터링 결정의 관측 창구. CI e2e에는 VWorld 키가 없어 실제 카메라를 볼 수 없으므로
                 결정 자체를 노출해야 검증된다. 좌표는 4자리로 절사해 원좌표를 DOM에 싣지 않는다. */}
       <div

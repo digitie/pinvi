@@ -122,6 +122,29 @@ export function useLocationFollow({
     };
   }, [watching, source, changeMode]);
 
+  // 첫 위치가 지도 로드보다 먼저 오면(버튼을 일찍 누름) 지도를 기다렸다가 붙이고, 따라가는 중이면 그때
+  // 위치로 옮긴다 — 그러지 않으면 끌기 감지가 붙지 않아 따라가기가 풀리지 않는다.
+  const positionRef = useRef<[number, number] | null>(null);
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+  useEffect(() => {
+    if (followMap || (mode !== 'follow' && mode !== 'tracking')) return undefined;
+    const timer = setInterval(() => {
+      const map = getMapRef.current();
+      if (!map) return;
+      clearInterval(timer);
+      setFollowMap(map);
+      const at = positionRef.current;
+      if (modeRef.current === 'follow' && at) {
+        map.flyTo({ center: at, zoom: Math.max(map.getZoom(), FOLLOW_INITIAL_ZOOM) });
+      }
+    }, 250);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [mode, followMap]);
+
   // 손으로 끈 이동만 따라가기를 끈다. 우리가 부른 easeTo/flyTo는 dragstart를 내지 않는다.
   useEffect(() => {
     if (!followMap) return undefined;

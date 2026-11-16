@@ -1672,6 +1672,8 @@ function TripDetailSection2_0({ viewModel }: { viewModel: TripDetailView2Model }
                 'absolute right-3 top-28 z-10 flex max-h-[calc(100%-8rem)] w-[min(360px,calc(100%-1.5rem))] flex-col md:right-4'
           }
           data-map-fit-bottom={mobileWebLayout ? '' : undefined}
+          // 모바일: "내 위치" 버튼이 이 패널 위로 올라간다(가려지지 않게, `useLiftAboveObstacle`).
+          data-map-location-avoid={mobileWebLayout ? '' : undefined}
         >
           <PlaceInfoPanel
             key={selectedPoi.poi_id}

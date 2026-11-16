@@ -4,6 +4,7 @@ import { LocationConsentDialog } from '@/components/map/LocationConsentDialog';
 import type { MapLibreMap } from '@/components/map/vworldPrimitives';
 import { apiClient } from '@/lib/api';
 import { getLocationConsentState, setLocationConsentGranted } from '@/lib/locationConsent';
+import { useLiftAboveObstacle } from '@/lib/useLiftAboveObstacle';
 import { useLocationFollow, type LocationFollowMode } from '@/lib/useLocationFollow';
 import { ApiError, userApi } from '@pinvi/api-client';
 import { locationConsentItems } from '@pinvi/domain';
@@ -85,11 +86,21 @@ export function MyLocationControl({
   hidden?: boolean;
 }) {
   const { mode } = state;
+  // 아래에서 올라온 장소 패널(`data-map-location-avoid`)이 있으면 그 위로 올린다 — 패널에 가려지지 않게.
+  const [root, setRoot] = useState<HTMLDivElement | null>(null);
+  const lift = useLiftAboveObstacle(root);
   if (hidden) return null;
   const icon = mode === 'follow' ? Navigation : mode === 'tracking' ? Locate : LocateFixed;
   return (
     <>
-      <div className={`pointer-events-none flex flex-col items-end gap-1 ${className}`} data-map-overlay="">
+      <div
+        ref={setRoot}
+        className={`pointer-events-none flex flex-col items-end gap-1 ${className}`}
+        style={lift != null ? { bottom: lift } : undefined}
+        data-map-overlay=""
+        data-lifted={lift != null ? 'true' : 'false'}
+        data-testid="map-my-location-control"
+      >
         {state.error && (
           <p
             role="status"
