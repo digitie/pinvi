@@ -28,21 +28,37 @@ function fakeSource() {
   return { state, source };
 }
 
+type Handler = (event?: { originalEvent?: Event }) => void;
+
 function fakeMap(zoom = 10) {
-  const handlers = new Map<string, () => void>();
+  const handlers = new Map<string, Handler>();
+  let moving = false;
   const map = {
     getZoom: vi.fn(() => zoom),
-    flyTo: vi.fn(),
-    easeTo: vi.fn(),
-    on: vi.fn((type: string, fn: () => void) => handlers.set(type, fn)),
+    flyTo: vi.fn(() => {
+      moving = true;
+    }),
+    easeTo: vi.fn(() => {
+      moving = true;
+    }),
+    isMoving: vi.fn(() => moving),
+    on: vi.fn((type: string, fn: Handler) => handlers.set(type, fn)),
     off: vi.fn((type: string) => handlers.delete(type)),
   };
-  return { map, drag: () => handlers.get('dragstart')?.() };
+  return {
+    map,
+    drag: () => handlers.get('dragstart')?.(),
+    move: (originalEvent?: Event) => handlers.get('move')?.({ originalEvent }),
+    moveEnd: () => {
+      moving = false;
+      handlers.get('moveend')?.();
+    },
+  };
 }
 
 function setup({ consent = true } = {}) {
   const { state, source } = fakeSource();
-  const { map, drag } = fakeMap();
+  const { map, drag, move, moveEnd } = fakeMap();
   const ensureConsent = vi.fn(async () => consent);
   const hook = renderHook(() =>
     useLocationFollow({
@@ -51,7 +67,7 @@ function setup({ consent = true } = {}) {
       source,
     }),
   );
-  return { hook, state, map, drag, ensureConsent };
+  return { hook, state, map, drag, move, moveEnd, ensureConsent };
 }
 
 describe('useLocationFollow(내 위치 따라가기)', () => {
@@ -145,5 +161,32 @@ describe('useLocationFollow — 첫 위치가 지도 로드보다 먼저 올 때
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('useLocationFollow — 카메라 애니메이션 중 끌기·준비 상태(#759 CI 경합)', () => {
+  it('따라가기 카메라가 움직이는 동안에도 손으로 옮기면(마우스·터치 move) 따라가기가 풀린다', async () => {
+    const { hook, state, move } = setup();
+    await act(() => hook.result.current.activate());
+    act(() => state.onPosition?.([127.1, 37.5]));
+    expect(hook.result.current.mode).toBe('follow');
+    // 우리가 부른 이동(originalEvent 없음)·휠 확대는 풀지 않는다.
+    act(() => move());
+    act(() => move(new WheelEvent('wheel')));
+    expect(hook.result.current.mode).toBe('follow');
+    act(() => move(new MouseEvent('mousemove')));
+    expect(hook.result.current.mode).toBe('tracking');
+  });
+
+  it('ready는 지도에 붙고 따라가기 카메라 이동이 끝난 뒤에만 true', async () => {
+    const { hook, state, moveEnd } = setup();
+    expect(hook.result.current.ready).toBe(false);
+    await act(() => hook.result.current.activate());
+    act(() => state.onPosition?.([127.1, 37.5]));
+    // flyTo가 진행 중 — 아직 준비 아님(다음 프레임에도 isMoving이 true).
+    await act(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+    expect(hook.result.current.ready).toBe(false);
+    act(() => moveEnd());
+    expect(hook.result.current.ready).toBe(true);
   });
 });

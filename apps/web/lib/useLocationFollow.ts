@@ -58,6 +58,11 @@ export function locationErrorMessage(code: LocationErrorCode): string {
   return '위치를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.';
 }
 
+/** 손으로 지도를 옮기는 원본 이벤트(마우스·터치·포인터 이동). 휠 확대 등은 따라가기를 풀지 않는다. */
+export function isUserPanEvent(event: Event): boolean {
+  return /^(mouse|touch|pointer)move$/.test(event.type);
+}
+
 export interface UseLocationFollowOptions {
   getMap: () => MapLibreMap | null;
   /** 위치 동의 확인. true면 바로 측위, false면 호출부가 동의 다이얼로그를 띄운다. */
@@ -77,6 +82,9 @@ export function useLocationFollow({
   const [watching, setWatching] = useState(false);
   // 끌기 감지를 붙일 지도(첫 위치 때 정해진다). 붙이고 떼는 일은 effect가 맡는다.
   const [followMap, setFollowMap] = useState<MapLibreMap | null>(null);
+  // 우리가 부른 카메라 이동(flyTo/easeTo)이 진행 중인가 — 끝나면(moveend) false. 화면·검사가 "따라가기 시점이
+  // 자리 잡았다"를 알 수 있게 `ready`로 내보낸다.
+  const [cameraMoving, setCameraMoving] = useState(false);
   const modeRef = useRef<LocationFollowMode>('off');
   const getMapRef = useRef(getMap);
   useEffect(() => {
@@ -87,6 +95,23 @@ export function useLocationFollow({
     modeRef.current = next;
     setMode(next);
   }, []);
+
+  const moveCamera = useCallback(
+    (map: MapLibreMap | null, kind: 'fly' | 'ease', center: [number, number], duration?: number) => {
+      if (!map) return;
+      setCameraMoving(true);
+      if (kind === 'fly') {
+        map.flyTo({ center, zoom: Math.max(map.getZoom(), FOLLOW_INITIAL_ZOOM) });
+      } else {
+        map.easeTo({ center, duration });
+      }
+      // 이미 그 자리라 움직이지 않으면 moveend가 오지 않을 수 있다 — 다음 프레임에 확인한다.
+      requestAnimationFrame(() => {
+        if (typeof map.isMoving !== 'function' || !map.isMoving()) setCameraMoving(false);
+      });
+    },
+    [],
+  );
 
   const stop = useCallback(() => {
     setWatching(false);
@@ -104,10 +129,10 @@ export function useLocationFollow({
         if (first) {
           first = false;
           changeMode('follow');
-          map?.flyTo({ center: coord, zoom: Math.max(map.getZoom(), FOLLOW_INITIAL_ZOOM) });
+          moveCamera(map, 'fly', coord);
           return;
         }
-        if (modeRef.current === 'follow') map?.easeTo({ center: coord, duration: 600 });
+        if (modeRef.current === 'follow') moveCamera(map, 'ease', coord, 600);
       },
       (code) => {
         // 일시적 timeout은 watch가 계속 재시도한다 — 아직 위치를 못 받았을 때만 알린다.
@@ -120,7 +145,7 @@ export function useLocationFollow({
     return () => {
       unwatch();
     };
-  }, [watching, source, changeMode]);
+  }, [watching, source, changeMode, moveCamera]);
 
   // 첫 위치가 지도 로드보다 먼저 오면(버튼을 일찍 누름) 지도를 기다렸다가 붙이고, 따라가는 중이면 그때
   // 위치로 옮긴다 — 그러지 않으면 끌기 감지가 붙지 않아 따라가기가 풀리지 않는다.
@@ -136,24 +161,32 @@ export function useLocationFollow({
       clearInterval(timer);
       setFollowMap(map);
       const at = positionRef.current;
-      if (modeRef.current === 'follow' && at) {
-        map.flyTo({ center: at, zoom: Math.max(map.getZoom(), FOLLOW_INITIAL_ZOOM) });
-      }
+      if (modeRef.current === 'follow' && at) moveCamera(map, 'fly', at);
     }, 250);
     return () => {
       clearInterval(timer);
     };
-  }, [mode, followMap]);
+  }, [mode, followMap, moveCamera]);
 
-  // 손으로 끈 이동만 따라가기를 끈다. 우리가 부른 easeTo/flyTo는 dragstart를 내지 않는다.
+  // 손으로 끈 이동만 따라가기를 끈다(구글·네이버). 우리가 부른 easeTo/flyTo는 originalEvent가 없다.
+  // 따라가기 카메라 애니메이션 도중에 끌어도 사용자 의도다 — dragstart만 보면 애니메이션 중 끌기가 놓일 수
+  // 있어(CI #759 canvas 1회) 마우스·터치·포인터 원본 이벤트가 있는 move도 함께 본다.
   useEffect(() => {
     if (!followMap) return undefined;
-    const handleDragStart = () => {
+    const release = () => {
       if (modeRef.current === 'follow') changeMode('tracking');
     };
-    followMap.on('dragstart', handleDragStart);
+    const handleMove = (event: { originalEvent?: Event }) => {
+      if (event.originalEvent && isUserPanEvent(event.originalEvent)) release();
+    };
+    const handleMoveEnd = () => setCameraMoving(false);
+    followMap.on('dragstart', release);
+    followMap.on('move', handleMove);
+    followMap.on('moveend', handleMoveEnd);
     return () => {
-      followMap.off('dragstart', handleDragStart);
+      followMap.off('dragstart', release);
+      followMap.off('move', handleMove);
+      followMap.off('moveend', handleMoveEnd);
     };
   }, [followMap, changeMode]);
 
@@ -168,13 +201,25 @@ export function useLocationFollow({
   const activate = useCallback(async () => {
     if (modeRef.current === 'tracking' && position) {
       changeMode('follow');
-      getMapRef.current()?.easeTo({ center: position, duration: 500 });
+      moveCamera(getMapRef.current(), 'ease', position, 500);
       return;
     }
     if (modeRef.current !== 'off') return;
     if (!(await ensureConsent())) return;
     startWatch();
-  }, [changeMode, ensureConsent, position, startWatch]);
+  }, [changeMode, ensureConsent, moveCamera, position, startWatch]);
 
-  return { mode, position, error, activate, startWatch, stop, clearError: () => setError(null) };
+  // 따라가기(또는 해제) 중 지도에 붙었고 우리가 부른 카메라 이동이 끝났다 — 이 뒤의 끌기는 확실히 사용자 이동이다.
+  const ready = mode !== 'off' && mode !== 'locating' && followMap != null && !cameraMoving;
+
+  return {
+    mode,
+    position,
+    error,
+    ready,
+    activate,
+    startWatch,
+    stop,
+    clearError: () => setError(null),
+  };
 }
