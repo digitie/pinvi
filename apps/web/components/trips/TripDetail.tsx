@@ -1598,7 +1598,6 @@ function TripDetailSection2_0({ viewModel }: { viewModel: TripDetailView2Model }
     visibleLayerCount,
     weatherCardsByPoiId,
     poiFocusRequest,
-    tripId,
   } = viewModel;
   const selectedPoint = selectedPoi
     ? (mapPoints.find((point) => point.poiId === selectedPoi.poi_id) ?? null)
