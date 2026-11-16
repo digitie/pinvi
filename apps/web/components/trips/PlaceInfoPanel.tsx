@@ -47,9 +47,8 @@ export function usePlaceDetails(tripId: string, poiId: string) {
   const [state, setState] = useState<DetailsState>({ status: 'loading', data: null });
   const [refreshState, setRefreshState] = useState<RefreshState>({ status: 'idle' });
   useEffect(() => {
+    // 장소가 바뀌면 호출부가 key로 패널을 새로 만든다 — 초기 상태가 곧 loading이다.
     const controller = new AbortController();
-    setState({ status: 'loading', data: null });
-    setRefreshState({ status: 'idle' });
     poiApi(apiClient)
       .placeDetails(tripId, poiId, { signal: controller.signal })
       .then(
