@@ -10,6 +10,7 @@ import type {
   PoiUpdate,
   TripViewPoi,
   TripWeatherCard,
+  TripWeatherRefreshResponse,
   TripWeatherResolution,
 } from '@pinvi/schemas';
 import { AlertTriangle, CloudOff, EyeOff, GripVertical, Pencil, Trash2 } from 'lucide-react';
@@ -46,6 +47,8 @@ export interface TripPoiListProps {
   /** 편집 중 POI(외부 제어 — 지도 마커 우클릭 등). 미지정 시 내부 상태. */
   editingPoiId?: string | null;
   onEditToggle?: (poiId: string | null) => void;
+  /** 장소 날씨가 비었을 때 새로고침(요청 15). 없으면 버튼을 그리지 않는다. */
+  onRefreshWeather?: (poiId: string) => Promise<TripWeatherRefreshResponse>;
 }
 
 type AttachmentParts = { trigger: ReactNode; panel: ReactNode };
@@ -92,6 +95,7 @@ export function TripPoiList({
   savingPoiId = null,
   editingPoiId: editingPoiIdProp,
   onEditToggle,
+  onRefreshWeather,
 }: TripPoiListProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [editingInternal, setEditingInternal] = useState<string | null>(null);
@@ -304,6 +308,9 @@ export function TripPoiList({
                           date={dayDate}
                           label="장소 날씨"
                           compact
+                          onRefresh={
+                            onRefreshWeather ? () => onRefreshWeather(poi.poi_id) : undefined
+                          }
                         />
                       )}
                       {showWeather && <PoiRiseSetLine riseSet={poi.rise_set} />}

@@ -2049,6 +2049,21 @@ function TripDesktopHeader({ viewModel }: { viewModel: TripDetailView2Model }) {
   );
 }
 
+/**
+ * 날씨 새로고침(요청 15) — 서버가 날씨 위치 해석을 새로 한 뒤 trip을 다시 읽어 화면에 반영한다.
+ * 날짜 날씨는 그 일자 첫 장소의 날씨라 그 장소만 새로 한다.
+ */
+async function refreshTripWeather(
+  tripId: string,
+  dayIndex: number,
+  poiId: string,
+  reload: () => Promise<unknown>,
+) {
+  const result = await tripApi(apiClient).refreshDayWeather(tripId, dayIndex, { poi_id: poiId });
+  if (result.refreshed > 0) await reload();
+  return result;
+}
+
 function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
   const {
     addDayDisabledReason,
@@ -2221,6 +2236,17 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
                         date={day.effective_date}
                         label="날짜 날씨"
                         compact={mobileWebLayout}
+                        onRefresh={
+                          day.pois[0]?.feature_id
+                            ? () =>
+                                refreshTripWeather(
+                                  tripId,
+                                  day.day_index,
+                                  day.pois[0]!.poi_id,
+                                  reload,
+                                )
+                            : undefined
+                        }
                       />
                       <MapSearchBox onSelect={handleAddPlace} getBias={getSearchBias} />
                       <TripDayOptimize
@@ -2271,6 +2297,9 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
                         savingPoiId={savingPoiId}
                         editingPoiId={editingPoiId}
                         onEditToggle={setEditingPoiId}
+                        onRefreshWeather={(poiId) =>
+                          refreshTripWeather(tripId, day.day_index, poiId, reload)
+                        }
                       />
                     </div>
                   ) : (

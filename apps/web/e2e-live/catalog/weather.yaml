@@ -605,3 +605,23 @@
     - 생성한 여행 삭제
   automation: scripted
   spec: specs/weather/weather-poi-badge.live.spec.ts#WX-042
+
+- id: WX-045
+  title: 날씨 새로고침 — '이 날짜의 날씨 정보가 없습니다.' 옆 버튼, POST refresh 200, 같은 장소 재시도는 60초 쿨다운
+  priority: P2
+  tags: [desktop, mutating, weather]
+  preconditions:
+    - account: test@test.com (user)
+    - data: Map has 고씨굴
+  data_sources: [map:weather-state, pinvi:weather_location_links]
+  steps:
+    - 여행 D+30 당일(예보 범위 밖) → 1일차 '고씨굴' 추가 → 날짜 날씨의 '날씨 새로고침'
+    - 이어서 장소 날씨의 '날씨 새로고침'
+  expected:
+    - 첫 POST /trips/{id}/days/1/weather/refresh 200, refreshed+cooldown+no_data=1, 결과 안내 문구, 여전히 '이 날짜의 날씨 정보가 없습니다.'
+    - 두 번째 응답 cooldown=1·retry_after_seconds>0, 장소 날씨에 '…초 뒤 다시 시도' 안내
+  cleanup:
+    - 생성한 여행 삭제
+  automation: scripted
+  spec: specs/weather/weather-refresh.live.spec.ts#WX-045
+  notes: 2026-11-16 소유자 요청 15. 배포 뒤에만 통과한다(새 엔드포인트). 날씨 값은 Map이 적재하므로 새로고침은 PinVi의 위치 해석 캐시만 새로 한다.

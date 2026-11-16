@@ -859,3 +859,6 @@ export {
   StorageRetentionResultSchema,
 } from './storage';
 export type { StorageRetentionStatus, StorageRetentionResult } from './storage';
+
+export { TripWeatherRefreshRequestSchema, TripWeatherRefreshResponseSchema } from './tripWeather';
+export type { TripWeatherRefreshRequest, TripWeatherRefreshResponse } from './tripWeather';
