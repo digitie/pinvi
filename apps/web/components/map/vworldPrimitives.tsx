@@ -7,6 +7,7 @@
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 import dynamic from 'next/dynamic';
+import { vworldTileProtocol } from '@/lib/vworldTileProtocol';
 import type {
   ClusterLayerProps,
   MakiMarkerProps,
@@ -87,6 +88,11 @@ const DynamicVWorldMap = dynamic<VWorldMapViewProps>(
     Promise.all([import('maplibre-gl'), import('vworld-map-web')]).then(([maplibre, module]) => {
       // maplibre 기본값처럼 버전을 붙인다 — public 파일은 해시가 없어 프록시 캐시가 옛 worker를 줄 수 있다.
       maplibre.setWorkerUrl(`${MAPLIBRE_WORKER_URL}?v=${maplibre.getVersion()}`);
+      // 라이브러리 등록을 먼저 끝내 두고(이후 호출은 no-op) 표준 URL 규칙을 지키는 handler로 덮는다 —
+      // 라이브러리 handler는 Firefox·Safari에서 `vworld://`를 그대로 fetch해 바탕지도가 비었다
+      // (`lib/vworldTileProtocol.ts`).
+      module.registerVWorldProtocol();
+      maplibre.addProtocol('vworld', vworldTileProtocol);
       return module.VWorldMapView;
     }),
   { ssr: false, loading: () => <MapLoadingSkeleton /> },

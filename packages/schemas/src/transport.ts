@@ -161,6 +161,13 @@ export type TransportMarkersInBoundsResponse = z.infer<
   typeof TransportMarkersInBoundsResponseSchema
 >;
 
+/** `GET /transport/markers-near` — 여행 장소 반경(주유소 10 km·교통 돌발 20 km). */
+export const TransportMarkersNearResponseSchema = z.object({
+  radius_m: z.partialRecord(TransportLayerSchema, z.number().int()),
+  layers: z.array(TransportLayerResultSchema),
+});
+export type TransportMarkersNearResponse = z.infer<typeof TransportMarkersNearResponseSchema>;
+
 export const TransportLayerStatusSchema = z.object({
   layer: TransportLayerSchema,
   available: z.boolean(),

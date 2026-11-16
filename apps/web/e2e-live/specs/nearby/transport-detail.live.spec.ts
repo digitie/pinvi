@@ -1,7 +1,7 @@
 /**
- * NEAR — transport detail dialog on the explore map: fuel station (prices, history), rest area
- * (route, facilities incl. EV flag), highway incident, airport; namespace separation (ADR-076 D7);
- * switching and closing.
+ * NEAR — transport detail dialog on the explore map: fuel station (prices, history), highway
+ * incident; namespace separation (ADR-076 D7); switching and closing. 휴게소·공항은 2026-11-16 지도에서
+ * 뺐다(NEAR-006·NEAR-009 blocked).
  *
  * UI reference (PinVi main b1cef056): apps/web/components/map/TransportDetailDialog.tsx wraps
  * FeatureDetailModal with testId "transport-detail" → `transport-detail-body|loading|error|footer`,
@@ -17,7 +17,6 @@ import {
   LAYER_PATH,
   clickTransportMarker,
   closeDetail,
-  openTransportNear,
   detailBody,
   detailDialog,
   detailError,
@@ -98,47 +97,6 @@ test.describe('NEAR transport detail dialog', () => {
     await closeDetail(page);
   });
 
-  test('NEAR-006 휴게소 detail: route row, facility rows (주유소/LPG 충전/전기차 충전) and optional fuel block', async ({ page }) => {
-    await page.goto('/map');
-    await waitForControls(page);
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 9));
-    const res = await toggleExpectingRequest(page, 'rest_area');
-    const rest = (await markersBody(res)).layers.find((l) => l.layer === 'rest_area')!;
-    test.skip(rest.status !== 'ok' || rest.items.length === 0, 'no rest areas in viewport');
-    const detail = waitForRequest(page, new RegExp(`/transport/${LAYER_PATH.rest_area}/`));
-    // zoom 9의 휴게소는 상·하행 쌍이라 대부분 '묶음'이다(#686) — 사용자처럼 휴게소 쪽 묶음을 펼친 뒤 누른다.
-    const coords = rest.items.flatMap((i) => (i.coord ? [i.coord] : []));
-    const title = await clickTransportMarker(page, 'rest_area', coords);
-    const dres = await detail;
-    expect(dres.ok()).toBe(true);
-    const item = ((await dres.json()) as { data: { item: Record<string, unknown>; fuel_price_freshness: unknown } }).data;
-    await expect(detailDialog(page)).toContainText(title);
-    await expect(detailDialog(page)).toContainText('휴게소');
-    const body = detailBody(page);
-    if (item.item.route_name) await expect(body).toContainText(String(item.item.route_name));
-    for (const [key, label] of [
-      ['has_gas_station', '주유소'],
-      ['has_lpg_station', 'LPG 충전'],
-      ['has_ev_charger', '전기차 충전'],
-    ] as const) {
-      const value = item.item[key];
-      if (value == null) continue;
-      const row = body.locator('dt', { hasText: label }).first();
-      await expect(row).toBeVisible();
-      await expect(row.locator('xpath=following-sibling::dd[1]')).toHaveText(value ? '있음' : '없음');
-    }
-    if (item.item.fuel_prices) {
-      await expect(page.getByTestId('transport-fuel-prices')).toContainText('휘발유');
-      await expect(page.getByTestId('transport-fuel-prices')).toContainText('경유');
-    }
-    if (item.fuel_price_freshness) {
-      await expect(detailFooter(page)).toContainText('유가');
-    }
-    await expect(detailFooter(page)).toContainText(SOURCE_CAPTION);
-    await shot(page, 'NEAR-006', 'rest-area-detail');
-    await closeDetail(page);
-  });
-
   test('NEAR-008 incident row → detail with type/status/route/occurred rows, freshness, closes cleanly', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
@@ -173,39 +131,16 @@ test.describe('NEAR transport detail dialog', () => {
     await expect(incidentList(page)).toBeVisible();
   });
 
-  test('NEAR-009 공항 at country scale → ≥5 airports; detail shows 영문명 and a 3-letter IATA code', async ({ page }) => {
-    await page.goto('/map');
-    await waitForControls(page);
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 6));
-    const res = await toggleExpectingRequest(page, 'airport', (q) => q.zoom <= 6);
-    const airports = (await markersBody(res)).layers.find((l) => l.layer === 'airport')!;
-    test.skip(airports.status !== 'ok', `airport layer ${airports.reason ?? ''}`);
-    expect(airports.items.length, 'operating airports nationwide (15 in the krairport bundle)').toBeGreaterThanOrEqual(5);
-    // country scale proves the count; the detail opens from an individually rendered pin (clustered at zoom 6)
-    const detail = waitForRequest(page, new RegExp(`/transport/${LAYER_PATH.airport}/`));
-    const title = await openTransportNear(page, 'airport', '김포국제공항');
-    const item = ((await (await detail).json()) as { data: { item: { iata_code: string; name_english: string } } }).data.item;
-    await expect(detailDialog(page)).toContainText(title);
-    await expect(detailDialog(page)).toContainText('공항');
-    const body = detailBody(page);
-    await expect(body.locator('dt', { hasText: '영문명' })).toBeVisible();
-    await expect(body).toContainText(item.name_english);
-    await expect(body.locator('dt', { hasText: '코드' })).toBeVisible();
-    expect(item.iata_code).toMatch(/^[A-Z]{3}$/);
-    await expect(body).toContainText(item.iata_code);
-    await shot(page, 'NEAR-009', 'airport-detail');
-    await closeDetail(page);
-  });
+  // NEAR-006(휴게소 상세)·NEAR-009(공항 상세)는 2026-11-16 두 레이어를 지도에서 빼며 blocked로 돌렸다.
 
   test('NEAR-017 transport dialog has no POI linkage (no 일정에 추가 / 상세보기 / feature link) — ADR-076 D7', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 6));
-    const res = await toggleExpectingRequest(page, 'airport');
-    const airports = (await markersBody(res)).layers.find((l) => l.layer === 'airport')!;
-    test.skip(airports.status !== 'ok' || airports.items.length === 0, 'no airports to open');
-    // airports are clustered at country scale — open one from an individually rendered pin
-    await openTransportNear(page, 'airport', '김포국제공항');
+    await searchAndFly(page, '서울역'); // zoom 15 — individual (unclustered) fuel markers
+    const res = await toggleExpectingRequest(page, 'fuel_station', (q) => q.zoom === 15 && q.layers.includes('fuel_station'));
+    const fuel = (await markersBody(res)).layers.find((l) => l.layer === 'fuel_station')!;
+    test.skip(fuel.status !== 'ok' || fuel.items.length === 0, 'no fuel stations to open');
+    await clickTransportMarker(page, 'fuel_station');
     const dialog = detailDialog(page);
     await expect(dialog.getByRole('button', { name: '일정에 추가' })).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: '상세보기' })).toHaveCount(0);
@@ -219,24 +154,23 @@ test.describe('NEAR transport detail dialog', () => {
   test('NEAR-018 opening another marker swaps the dialog content; Escape closes and markers remain', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
-    await zoomBy(page, -(DEFAULT_EXPLORE_ZOOM - 6));
-    const res = await toggleExpectingRequest(page, 'airport');
-    const airports = (await markersBody(res)).layers.find((l) => l.layer === 'airport')!;
-    test.skip(airports.status !== 'ok' || airports.items.length < 2, 'need two airports');
-    // airports are clustered at country scale — open them one at a time near each airport
-    const first = await openTransportNear(page, 'airport', '김포국제공항');
+    await searchAndFly(page, '서울역');
+    const res = await toggleExpectingRequest(page, 'fuel_station', (q) => q.zoom === 15 && q.layers.includes('fuel_station'));
+    const fuel = (await markersBody(res)).layers.find((l) => l.layer === 'fuel_station')!;
+    test.skip(fuel.status !== 'ok' || fuel.items.length < 2, 'need two fuel stations around 서울역');
+    const first = await clickTransportMarker(page, 'fuel_station');
     await expect(detailDialog(page)).toContainText(first);
     await closeDetail(page);
     let second: string | null = null;
     try {
-      second = await openTransportNear(page, 'airport', '김해국제공항');
+      second = await clickTransportMarker(page, 'fuel_station', [], [first]);
     } catch {
       second = null;
     }
-    test.skip(second == null || second === first, 'data: no second individually rendered airport near 김해공항');
+    test.skip(second == null, 'data: no second individually rendered fuel station on screen');
     await expect(detailDialog(page)).toContainText(second!);
     await expect(detailDialog(page)).not.toContainText(first);
     await closeDetail(page);
-    await expect(page.locator('[data-testid="transport-marker"][data-layer="airport"]').first()).toBeAttached();
+    await expect(page.locator('[data-testid="transport-marker"][data-layer="fuel_station"]').first()).toBeAttached();
   });
 });

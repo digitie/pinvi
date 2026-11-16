@@ -1,3 +1,20 @@
+## 2026-11-16 — 지도 레이어 패널 통합·여행 장소 반경 교통 정보·PC 바탕지도
+
+- 소유자 요청: 교통 정보에서 공항·휴게소 제거, 남은 주유소·교통 돌발을 '경로'·'영역'(옛 '경로 표시'/'영역 표시')과
+  같은 체크박스 줄로(`MapLayerControls`), 여행 지도의 주유소는 여행 장소 10 km·교통 돌발 20 km 안만.
+- 반경 거르기는 서버다: 새 `GET /transport/markers-near`(docs/api/transport.md)가 Map 근처 검색(`lon`·`lat`·`radius_m`,
+  Valkey GEOSEARCH — Map에 이미 있어 Map PR 불필요)을 2 km 안 장소 묶음마다 반경+2 km로 부르고, 대원 거리로
+  다시 걸러 합친다. 반경은 서버 정책이다. 여행 지도는 지도 이동·핀 선택으로 다시 조회하지 않는다. 탐색 지도는
+  viewport 그대로. API 계약의 `rest_area`·`airport`(상세 경로 포함)는 남겼다 — 화면만 뺐다.
+- PC 바탕지도: vworld-map-web 1.0.3 handler가 `new URL('vworld://…').protocol = 'https:'`로 스킴을 바꾸는데 WHATWG
+  URL은 비특수→특수 스킴 전환을 무시한다. Firefox(Safari도 표준)는 `vworld://`를 그대로 fetch해 "CORS request not
+  http"로 타일 0건, Chromium은 비표준으로 바꿔 줘 가려졌다(live e2e는 Chromium뿐). 운영 Firefox 1440x900 실측:
+  수정 전 api.vworld.kr 0건, 같은 스킴 처리를 넣으면 200 35건. `lib/vworldTileProtocol.ts`로 덮고, live e2e에
+  opt-in `desktop-firefox` 프로젝트(`@firefox` — CORE-016)를 더했다. 정본 수정은 maplibre-vworld-react
+  `packages/vworld-map-web/src/vworld.ts`(고친 판 vendor 후 이 파일을 지운다).
+- live 카탈로그: NEAR-001/002/024/025/026/029/041 재작성(041은 blocked→scripted), NEAR-006·009 blocked,
+  NEAR-036에 markers-near 검증. 배포 전이라 live는 배포 뒤 소유자 전체 실행에서 확인한다.
+
 ## 2026-11-13 — 규칙 예외 없는 같은 origin의401 문서 복귀
 
 c412의 인라인 ESLint 예외는 preserve-ignores 요구와 맞지 않아 후속 commit으로 제거한다. 표준 URL로 현재 origin·포트를 보존한 절대 로그인 주소를 만들고 기존 location.href 문서 reload와 safeLoginReturnTo 정리를 유지한다. config·ignore·규칙 예외 추가0이며 실제 전체 web lint 경고0, 경고1개 대조 old exit0→new exit1, 기존 인증·복귀 경로와 새 origin/포트 회귀를 확인했다. c412의 CI 성공·부적합 소스와9fdb Doctor 실패 이력은 별도 보존한다. Expo3patch/launcher·Common36/C11은 동일하며 최종 새 정확 CI와 원2 검토·이미지 runtime 수용은 대기다. 운영·native 실기기/EAS/store는 NOT_RUN이다.

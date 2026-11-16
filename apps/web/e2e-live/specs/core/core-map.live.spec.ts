@@ -158,7 +158,9 @@ test.describe('CORE map — explore map (/map)', () => {
     await expect(btn).toBeEnabled({ timeout: 15_000 });
   });
 
-  test('CORE-016 타일 로드 — VWorld 타일 200, 디코드/worker 오류 없음', async ({ page }, testInfo) => {
+  // @firefox: 2026-11-16 PC(Firefox·Safari) 바탕지도 누락 — vworld-map-web handler가 `vworld://`를 https로
+  // 바꾸지 못해 타일 요청이 0건이었다. Chromium은 비표준 전환을 허용해 desktop·mobile 프로젝트로는 안 잡힌다.
+  test('CORE-016 타일 로드 — VWorld 타일 200, 디코드/worker 오류 없음 @firefox', async ({ page }, testInfo) => {
     const rec = recordConsole(page);
     let tileOk = 0;
     let tileBad = 0;
@@ -181,6 +183,9 @@ test.describe('CORE map — explore map (/map)', () => {
     expect(decode, 'tile decode / worker errors').toEqual([]);
     expect(tileBad, 'non-200 tile responses (키 만료 시 전부 4xx — 운영 이슈)').toBe(0);
     expect(tileErrors, 'vworld-tile-error events').toEqual([]);
+    // 스킴을 못 바꾼 타일 fetch는 Firefox에서 "CORS request not http"(vworld://…)로 남는다.
+    const rawScheme = [...rec.errors, ...rec.pageErrors].filter((m) => /vworld:\/\//.test(m));
+    expect(rawScheme, 'vworld:// 그대로 fetch한 타일 없음').toEqual([]);
     annotate(testInfo, 'metric', `tiles ok=${tileOk} bad=${tileBad}`);
     await shot(page, 'CORE-016', 'tiles');
   });
@@ -255,7 +260,7 @@ test.describe('CORE map — trip map first render & fit (#613/#619)', () => {
     await page.waitForTimeout(1500);
     const surface = (await page.getByTestId('trip-map-surface').boundingBox()) as Box;
     const search = (await page.getByTestId('trip-map-place-search').boundingBox()) as Box;
-    const panelLoc = page.getByTestId('transport-layer-controls');
+    const panelLoc = page.getByTestId('map-layer-controls');
     const panel = (await panelLoc.count()) > 0 ? ((await panelLoc.boundingBox()) as Box) : null;
     const stats = (await page.getByTestId('trip-map-stats').boundingBox()) as Box;
     const n = await pins.count();

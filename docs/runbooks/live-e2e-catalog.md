@@ -43,7 +43,11 @@ scripts/n150-live-catalog.sh --head            # HEAD 를 그대로 핀 (릴리�
 scripts/n150-live-catalog.sh --head --area weather --area share --project desktop
 scripts/n150-live-catalog.sh --head --grep 'TRIP-00[1-3]'
 scripts/n150-live-catalog.sh --head --project session       # TRIP-046(@slow, ~13분) 만
+scripts/n150-live-catalog.sh --head --project desktop-firefox --area core   # @firefox 케이스만 Firefox로
 ```
+
+`desktop-firefox`는 기본 실행에 들지 않는다. 2026-11-16 PC 바탕지도 누락은 Firefox·Safari에서만 났고(비표준 URL
+스킴 전환을 허용하는 Chromium이 가렸다), 그 회귀를 잡는 `@firefox` 케이스(CORE-016)만 Firefox 데스크톱으로 돈다.
 
 끝나면 영역×프로젝트별 pass/fail/skip 표가 찍힌다(`scripts/live-catalog-summary.mjs`,
 값·URL·오류 본문은 찍지 않는다). 종료 코드는 Playwright 의 것이다.

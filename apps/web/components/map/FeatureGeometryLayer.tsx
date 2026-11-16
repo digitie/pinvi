@@ -96,32 +96,29 @@ export function FeatureGeometryLayers({ state }: { state: FeatureGeometryState }
   );
 }
 
-export function FeatureGeometryControls({
-  state,
-  className = '',
-}: {
-  state: FeatureGeometryState;
-  className?: string;
-}) {
+/** 경로·영역 체크박스 — 지도 레이어 패널(`MapLayerControls`)의 한 줄에 교통 레이어와 함께 놓인다. */
+export function GeometryLayerToggles({ state }: { state: FeatureGeometryState }) {
   return (
-    <section
-      aria-label="경로·영역 레이어"
-      data-map-overlay=""
-      className={`rounded-sm border border-hairline bg-canvas p-2 text-xs text-ink shadow-card ${className}`}
-    >
-      <div className="flex flex-wrap gap-3">
-        {(['route', 'area'] as const).map((kind) => (
-          <label className="flex min-h-9 cursor-pointer items-center gap-1.5" key={kind}>
-            <input
-              type="checkbox"
-              checked={state.kinds.includes(kind)}
-              data-testid={`geometry-${kind}-toggle`}
-              onChange={(event) => state.toggle(kind, event.target.checked)}
-            />
-            {kind === 'route' ? '경로 표시' : '영역 표시'}
-          </label>
-        ))}
-      </div>
+    <>
+      {(['route', 'area'] as const).map((kind) => (
+        <label className="flex min-h-11 cursor-pointer items-center gap-1.5" key={kind}>
+          <input
+            type="checkbox"
+            checked={state.kinds.includes(kind)}
+            data-testid={`geometry-${kind}-toggle`}
+            onChange={(event) => state.toggle(kind, event.target.checked)}
+          />
+          {kind === 'route' ? '경로' : '영역'}
+        </label>
+      ))}
+    </>
+  );
+}
+
+/** 경로·영역 상태(줌 안내·불러오는 중·오류·잘림·목록). */
+export function GeometryLayerStatus({ state }: { state: FeatureGeometryState }) {
+  return (
+    <>
       {state.kinds.length > 0 && !state.eligible && (
         <p className="text-muted">지도를 14단계 이상 확대하면 표시됩니다.</p>
       )}
@@ -165,7 +162,7 @@ export function FeatureGeometryControls({
           </ul>
         </details>
       )}
-    </section>
+    </>
   );
 }
 

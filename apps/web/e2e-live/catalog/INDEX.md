@@ -9,7 +9,7 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 |---|---:|---:|---:|---:|
 | trip | 58 | 54 | 2 | 2 |
 | search | 55 | 47 | 6 | 2 |
-| nearby | 43 | 37 | 2 | 4 |
+| nearby | 43 | 36 | 2 | 5 |
 | weather | 29 | 24 | 2 | 3 |
 | share | 35 | 31 | 1 | 3 |
 | poi | 32 | 25 | 5 | 2 |
@@ -17,7 +17,7 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | admin | 44 | 37 | 5 | 2 |
 | core | 31 | 30 | 1 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **549** | **498** | **28** | **23** |
+| **all** | **549** | **497** | **28** | **24** |
 
 Spec files: 58.
 
@@ -138,47 +138,47 @@ Spec files: 58.
 | SRCH-053 | search | 병원은 마지막 | P2 | desktop, search | scripted | `specs/search/search-ranking.live.spec.ts#SRCH-053` |
 | SRCH-054 | search | 역 정확 일치 — '서울역'은 '서울역'이 첫 행(서울역사박물관 등 아님) | P2 | desktop, search | scripted | `specs/search/search-ranking.live.spec.ts#SRCH-054` |
 | SRCH-055 | search | 2글자 검색 성능 스윕('설악','부산','제주') < 8s, 상세 카드 < 3s(기록·soft) | P2 | desktop, search, perf | scripted | `specs/search/search-perf.live.spec.ts#SRCH-055` |
-| NEAR-001 | nearby | 탐색 지도 교통 정보 패널 — 4개 칩(주유소·휴게소·교통 돌발·공항) 순서·초기 꺼짐·요청 없음 | P1 | desktop, mobile, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-001` |
-| NEAR-002 | nearby | 휴게소 칩 켜기(서울 zoom 9) — 요청 layers=rest_area·limit=200, 'N곳 · n분 전 갱신' 줄, legend 마커 수 일치 | P1 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-002` |
+| NEAR-001 | nearby | 탐색 지도 레이어 패널 — 체크박스 4개(경로·영역·주유소·교통 돌발) 순서·교통 초기 꺼짐·요청 없음 | P1 | desktop, mobile, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-001` |
+| NEAR-002 | nearby | 공항·휴게소 제거 — 체크박스·라벨 없음, 두 레이어를 다 켜도 rest_area·airport 요청·마커·상태 줄 없음 | P1 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-002` |
 | NEAR-003 | nearby | 주유소 줌 문턱 — zoom 10에서 '확대하면 보여요'·요청 없음, zoom 12에서 요청·마커 | P1 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-003` |
 | NEAR-004 | nearby | 주유소 마커 → 상세 대화상자(유종별 가격·상표·편의·신선도·출처) | P1 | desktop, nearby | scripted | `specs/nearby/transport-detail.live.spec.ts#NEAR-004` |
 | NEAR-005 | nearby | '가격 추이 보기' — 30일 이력 표 또는 비오류 unavailable 안내 | P2 | desktop, nearby | scripted | `specs/nearby/transport-detail.live.spec.ts#NEAR-005` |
-| NEAR-006 | nearby | 휴게소 상세 — 노선·방향, 편의(주유소/LPG 충전/전기차 충전 있음·없음), 휴게소 유가 블록·'유가' 신선도 | P1 | desktop, nearby | scripted | `specs/nearby/transport-detail.live.spec.ts#NEAR-006` |
+| NEAR-006 | nearby | 휴게소 상세 — 노선·방향, 편의(주유소/LPG 충전/전기차 충전 있음·없음), 휴게소 유가 블록·'유가' 신선도 | P1 | desktop, nearby | blocked |  |
 | NEAR-007 | nearby | 교통 돌발(zoom 7) — '이 지역 교통 돌발 N건' 헤더, 최대 5행, legend 수 = 응답 수 | P1 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-007` |
 | NEAR-008 | nearby | 돌발 목록 행 클릭 → 상세(유형·처리 상태·노선·위치·발생·내용)·신선도, 닫으면 목록 유지 | P2 | desktop, nearby | scripted | `specs/nearby/transport-detail.live.spec.ts#NEAR-008` |
-| NEAR-009 | nearby | 공항(zoom 6, 전국) — 공항 ≥5, 상세에 영문명·IATA 3자 코드 | P1 | desktop, nearby | scripted | `specs/nearby/transport-detail.live.spec.ts#NEAR-009` |
+| NEAR-009 | nearby | 공항(zoom 6, 전국) — 공항 ≥5, 상세에 영문명·IATA 3자 코드 | P1 | desktop, nearby | blocked |  |
 | NEAR-010 | nearby | 레이어 끄기 — 마커·상태 줄 즉시 제거, 추가 요청 없음 | P2 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-010` |
-| NEAR-011 | nearby | 두 레이어(공항+휴게소) — 한 요청에 layers 표시 순서(rest_area,airport), 상태 줄 둘 | P2 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-011` |
+| NEAR-011 | nearby | 두 레이어(주유소+교통 돌발) — 한 요청에 layers 표시 순서(fuel_station,highway_incident), 상태 줄 둘 | P2 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-011` |
 | NEAR-012 | nearby | 지도 이동(moveend) → 같은 zoom·다른 bbox로 재조회 | P2 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-012` |
 | NEAR-013 | nearby | 잘림 표시 — 응답 truncated=true일 때만 '일부만 표시 — 확대하세요' | P2 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-013` |
 | NEAR-014 | nearby | 신선도 라벨·'오래된 정보' 배지가 응답 freshness(age_seconds·stale)를 그대로 반영 | P2 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-014` |
-| NEAR-015 | nearby | /transport/status 기준 unavailable 레이어도 칩은 보이고 켜면 사유와 함께 강등, 오류 배너 없음 | P2 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-015` |
-| NEAR-016 | nearby | soft-fail 보장 — 4개 레이어 모두 켜도 장소 마커·장소 검색은 그대로 동작 | P1 | desktop, nearby, search | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-016` |
+| NEAR-015 | nearby | /transport/status 기준 unavailable 레이어도 체크박스는 보이고 켜면 사유와 함께 강등, 오류 배너 없음 | P2 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-015` |
+| NEAR-016 | nearby | soft-fail 보장 — 교통 레이어를 모두 켜도 장소 마커·장소 검색은 그대로 동작 | P1 | desktop, nearby, search | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-016` |
 | NEAR-017 | nearby | transport 상세에는 POI 연결이 없다(일정에 추가·상세보기·feature 모달·외부 링크 없음) — ADR-076 D7 | P2 | desktop, nearby | scripted | `specs/nearby/transport-detail.live.spec.ts#NEAR-017` |
 | NEAR-018 | nearby | 다른 마커를 열면 내용이 바뀌고, Escape로 닫아도 마커는 남는다 | P2 | desktop, nearby | scripted | `specs/nearby/transport-detail.live.spec.ts#NEAR-018` |
 | NEAR-019 | nearby | 비로그인 /map → /login으로 이동, 패널 없음, markers 요청 없음 | P1 | desktop, mobile, auth, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-019` |
-| NEAR-020 | nearby | 모바일(390px) 패널이 검색창 아래에 쌓이고(80vw 이하) 입력란·칩이 눌린다 | P1 | mobile, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-020` |
+| NEAR-020 | nearby | 모바일(390px) 지도 레이어 패널이 검색창 아래에 쌓이고(80vw 이하) 입력란·체크박스가 눌린다 | P1 | mobile, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-020` |
 | NEAR-021 | nearby | 모바일 돌발 행 탭 → 풀스크린 시트, 닫힘 | P2 | mobile, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-021` |
-| NEAR-022 | nearby | 여행 지도 — 교통 패널이 장소 검색창 아래 한 스택에 있고 덮지 않는다(#613), 결과가 펼쳐지면 내려간다 | P1 | desktop, mobile, mutating, nearby, search | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-022` |
+| NEAR-022 | nearby | 여행 지도 — 지도 레이어 패널이 장소 검색창 아래 한 스택에 있고 덮지 않는다(#613), 결과가 펼쳐지면 내려간다 | P1 | desktop, mobile, mutating, nearby, search | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-022` |
 | NEAR-023 | nearby | 여행 지도 첫 렌더 — 핀 4개 모두 그려지고, 북쪽 핀(고씨굴)이 검색 입력 줄·교통 패널에 가리지 않는다(#619) | P1 | desktop, mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-023` |
-| NEAR-024 | nearby | 여행 지도의 주변 정보는 여행 장소에 맞춘 뷰포트 기준(서울 기본값 아님) | P2 | desktop, mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-024` |
-| NEAR-025 | nearby | POI 핀 선택 → flyTo → 켜 둔 레이어 재조회(같은 zoom, 북쪽으로 이동한 bbox) | P2 | desktop, mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-025` |
-| NEAR-026 | nearby | 장소 없는 새 여행 — 전국 기본 시점(zoom 7)에서 공항 ≥5, 주유소는 '확대하면 보여요' | P2 | desktop, mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-026` |
+| NEAR-024 | nearby | 여행 지도 교통 정보는 여행 장소 반경 기준 — markers-near에 네 장소 좌표, bbox 없음, markers-in-bounds 0건 | P2 | desktop, mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-024` |
+| NEAR-025 | nearby | POI 핀 선택 → flyTo해도 다시 조회하지 않는다(반경은 장소 기준, 카메라 무관) | P2 | desktop, mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-025` |
+| NEAR-026 | nearby | 장소 없는 새 여행 — markers-near가 기준점 없이 '0곳 · 여행 장소 10km 이내', 줌 안내 없음 | P2 | desktop, mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-026` |
 | NEAR-027 | nearby | 공유 여행 화면(비로그인)에는 교통 패널이 없고 /transport 요청도 없다 | P2 | desktop, mutating, share, nearby | scripted | `specs/nearby/trip-shared.live.spec.ts#NEAR-027` |
 | NEAR-028 | nearby | 모바일 여행 지도 오버레이 스택 — max-height·세로 스크롤, 돌발 목록이 펼쳐져도 지도 밖으로 안 나감 | P2 | mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-028` |
-| NEAR-029 | nearby | 모바일 여행 지도 — 내비게이션 컨트롤 없음, 칩 토글·마커 탭 시트 동작 | P3 | mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-029` |
+| NEAR-029 | nearby | 모바일 여행 지도 — 내비게이션 컨트롤 없음, 공항·휴게소 레이어 없음, 주유소·교통 돌발 체크박스 켜고 끄기 | P3 | mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-029` |
 | NEAR-030 | nearby | 주차장은 Map feature로 노출 — '주차장' 검색 결과(장소 배지)·상세 카드 카테고리 '주차장' | P2 | desktop, nearby, search, poi | scripted | `specs/nearby/nearby-features-api.live.spec.ts#NEAR-030` |
 | NEAR-031 | nearby | 공중화장실(KNPS 05060000)이 국립공원(설악산) 주변 feature로 보이는지 | P3 | desktop, nearby, search | manual |  |
 | NEAR-032 | nearby | 전기차 충전소 주변 정보 | P3 | desktop, nearby | blocked |  |
 | NEAR-033 | nearby | 패널의 휴게소·주유소를 일정에 추가하는 결합 흐름 | P2 | desktop, nearby, poi | blocked |  |
 | NEAR-034 | nearby | transport 느림/503 — 레이어별 강등만 되고 지도·여행 화면은 안 깨진다 | P2 | desktop, mobile, nearby | blocked |  |
 | NEAR-035 | nearby | 존재하지 않는 transport id → 404 TRANSPORT_FEATURE_NOT_FOUND(4종 경로), 잘못된 id 형식 4xx | P2 | desktop, nearby | scripted | `specs/nearby/nearby-features-api.live.spec.ts#NEAR-035` |
-| NEAR-036 | nearby | markers-in-bounds 검증 오류(layers/bbox/zoom)는 4xx, 국외 bbox는 200 빈 ok, status 200 | P2 | desktop, nearby | scripted | `specs/nearby/nearby-features-api.live.spec.ts#NEAR-036` |
+| NEAR-036 | nearby | markers-in-bounds·markers-near 검증 오류는 400, 국외 bbox는 200 빈 ok, 기준점 없는 markers-near는 200 빈 ok | P2 | desktop, nearby | scripted | `specs/nearby/nearby-features-api.live.spec.ts#NEAR-036` |
 | NEAR-037 | nearby | 신선도 문구가 시간에 따라 갱신된다(30초 tick) | P3 | desktop, nearby | manual |  |
-| NEAR-038 | nearby | 칩 접근성 — group 이름, 키보드 Space/Enter 토글, 44px 터치 타깃 | P2 | desktop, mobile, a11y, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-038` |
+| NEAR-038 | nearby | 레이어 체크박스 접근성 — group 이름·체크박스 이름, 키보드 Space 토글, 44px 터치 타깃 | P2 | desktop, mobile, a11y, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-038` |
 | NEAR-039 | nearby | 우클릭 '여기서 주변 보기' → zoom 15로 이동 후 켜 둔 레이어 재조회 | P3 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-039` |
 | NEAR-040 | nearby | legend 마커 수 = 응답 items 중 coord 있는 수(레이어별), 마커 속성 형식(feature_id·icon·color) | P2 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-040` |
-| NEAR-041 | nearby | 선택 장소 기준 반경(radius)·거리(distance) 주변 조회와 거리 표시 | P2 | desktop, mobile, nearby | blocked |  |
+| NEAR-041 | nearby | 여행 지도 반경 — 모든 항목이 여행 장소에서 주유소 10 km·교통 돌발 20 km 안, distance_m=가장 가까운 장소까지, 가까운 순, 상태 줄 반경 문구 | P2 | desktop, mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-041` |
 | NEAR-042 | nearby | desktop 여행 지도는 창 안에 있고 맞춤 뒤 모든 핀이 화면에 보인다(#704) | P1 | desktop, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-042` |
 | NEAR-043 | nearby | 낮은 desktop 창(1280x600)에서도 여행 지도 핀이 fold 위에 있고 문서가 스크롤되지 않는다(#704, NEAR-042b) | P1 | desktop, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-043` |
 | WX-001 | weather | 오늘~모레 여행 1일차 '날짜 날씨'에 현재·예보(초단기/단기) 그룹 표시 | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-001` |
@@ -368,7 +368,7 @@ Spec files: 58.
 | CORE-013 | core | 마커 선택/해제 — 데스크톱 팝업, 모바일 상세 시트 직행 | P1 | desktop, mobile, poi | scripted | `specs/core/core-map.live.spec.ts#CORE-013` |
 | CORE-014 | core | 줌 컨트롤 — 축척 막대(m/px)가 ×2 줄었다 돌아온다 | P2 | desktop, poi | scripted | `specs/core/core-map.live.spec.ts#CORE-014` |
 | CORE-015 | core | 내 위치 버튼 — 권한/동의 없이도 동의 다이얼로그 또는 안내 문구, 오류 없음 | P3 | desktop, mobile | scripted | `specs/core/core-map.live.spec.ts#CORE-015` |
-| CORE-016 | core | 타일 로드 — VWorld WMTS 200, 디코드/worker/WebGL 오류·tile-error 이벤트 없음 | P1 | desktop, mobile | scripted | `specs/core/core-map.live.spec.ts#CORE-016` |
+| CORE-016 | core | 타일 로드 — VWorld WMTS 200, 디코드/worker/WebGL 오류·tile-error 이벤트 없음(Firefox 데스크톱 포함) | P1 | desktop, mobile, firefox | scripted | `specs/core/core-map.live.spec.ts#CORE-016` |
 | CORE-017 | core | maplibre worker — /maplibre/maplibre-gl-worker.mjs JS 서빙 + module worker 실기동(#613) | P1 | desktop, mobile | scripted | `specs/core/core-map.live.spec.ts#CORE-017` |
 | CORE-018 | core | VWorld attribution '공간정보 오픈플랫폼 브이월드' 노출 | P2 | desktop, mobile | scripted | `specs/core/core-map.live.spec.ts#CORE-018` |
 | CORE-019 | core | 모바일 상세 바텀시트 — 본문 스크롤, 배경 스크롤 잠금, Escape/닫기/배경 탭 닫힘 | P1 | mobile, poi | scripted | `specs/core/core-mobile.live.spec.ts#CORE-019` |

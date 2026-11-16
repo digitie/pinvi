@@ -9,20 +9,30 @@ import {
   transportFreshnessAgeSeconds,
   transportFreshnessLabel,
   transportMarkerId,
+  transportRadiusLabel,
+  TRANSPORT_LAYER_META,
 } from './transport';
 
 describe('requestableTransportLayers', () => {
   const all = new Set<TransportLayer>(['fuel_station', 'rest_area', 'highway_incident', 'airport']);
 
   it('줌이 낮으면 최소 줌 이상인 레이어만 요청한다', () => {
-    expect(requestableTransportLayers(all, 6)).toEqual(['airport']);
-    expect(requestableTransportLayers(all, 8)).toEqual(['rest_area', 'highway_incident', 'airport']);
-    expect(requestableTransportLayers(all, 11)).toEqual([
+    expect(requestableTransportLayers(all, 6)).toEqual([]);
+    expect(requestableTransportLayers(all, 8)).toEqual(['highway_incident']);
+    expect(requestableTransportLayers(all, 11)).toEqual(['fuel_station', 'highway_incident']);
+  });
+
+  it('휴게소·공항은 지도에서 뺐다 — 켜져 있어도 요청하지 않는다', () => {
+    expect(TRANSPORT_LAYER_META.map((meta) => meta.layer)).toEqual([
       'fuel_station',
-      'rest_area',
       'highway_incident',
-      'airport',
     ]);
+    expect(requestableTransportLayers(new Set(['rest_area', 'airport']), 15)).toEqual([]);
+  });
+
+  it('반경 문구', () => {
+    expect(transportRadiusLabel(10_000)).toBe('여행 장소 10km 이내');
+    expect(transportRadiusLabel(2_500)).toBe('여행 장소 2.5km 이내');
   });
 
   it('켜지 않은 레이어는 요청하지 않는다', () => {

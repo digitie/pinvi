@@ -12,7 +12,8 @@ deployed PinVi web app from N150, through the official Playwright Docker runner
 dated directory and a pass/fail/skip table per area is printed at the end.
 
 Options:
-  --project <name>   desktop | mobile | session (repeatable; default: desktop mobile).
+  --project <name>   desktop | mobile | session | desktop-firefox (repeatable; default: desktop mobile).
+                     `desktop-firefox` runs only @firefox cases (Firefox 1440x900).
                      `session` enables the ~13-min TRIP-046 (@slow) project.
   --area <area>      trip | search | nearby | weather | share | poi | notify | admin | core | trs
                      (repeatable; default: all areas). `trs` = the 190 data-driven trip scenarios
@@ -67,8 +68,8 @@ if [[ ${#projects[@]} -eq 0 ]]; then
 fi
 for p in "${projects[@]}"; do
   case "$p" in
-    desktop|mobile|session) ;;
-    *) echo "error: unknown project '$p' (desktop|mobile|session)" >&2; exit 2 ;;
+    desktop|mobile|session|desktop-firefox) ;;
+    *) echo "error: unknown project '$p' (desktop|mobile|session|desktop-firefox)" >&2; exit 2 ;;
   esac
 done
 for a in "${areas[@]}"; do

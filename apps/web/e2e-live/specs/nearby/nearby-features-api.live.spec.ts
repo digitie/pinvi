@@ -83,5 +83,29 @@ test.describe('NEAR transport API contract through the browser session', () => {
     expect(body.data.layers).toHaveLength(1);
     expect(body.data.layers[0]!.status).not.toBe('disabled');
     expect(body.data.layers[0]!.items).toHaveLength(0);
+
+    // 2026-11-16 여행 장소 반경 표면: 공항·휴게소·국외 좌표·60곳 초과는 400, 기준점 없으면 Map을 부르지 않고 빈 ok.
+    const near = `${origin}/transport/markers-near`;
+    for (const query of [
+      'points=128.47,37.24&layers=airport',
+      'points=128.47,37.24&layers=rest_area',
+      'points=139.7,35.6',
+      'points=not-a-point',
+      'points=' + Array.from({ length: 61 }, (_, i) => `127.${String(i).padStart(3, '0')},37.5`).join(';'),
+    ]) {
+      const res = await page.request.get(`${near}?${query}`);
+      expect(res.status(), query.slice(0, 40)).toBe(400);
+      expect(await res.text()).toContain('VALIDATION_ERROR');
+    }
+    const empty = await page.request.get(near);
+    expect(empty.status()).toBe(200);
+    const emptyBody = (await empty.json()) as {
+      data: { radius_m: Record<string, number>; layers: Array<{ layer: string; status: string; items: unknown[] }> };
+    };
+    expect(emptyBody.data.radius_m).toEqual({ fuel_station: 10000, highway_incident: 20000 });
+    expect(emptyBody.data.layers.map((l) => [l.layer, l.status, l.items.length])).toEqual([
+      ['fuel_station', 'ok', 0],
+      ['highway_incident', 'ok', 0],
+    ]);
   });
 });

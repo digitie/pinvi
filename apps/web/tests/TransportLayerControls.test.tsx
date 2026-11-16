@@ -1,8 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { HighwayIncidentItem, TransportLayer, TransportLayerResult } from '@pinvi/schemas';
-import { TransportLayerControls } from '@/components/map/TransportLayerControls';
-import type { TransportLayersState } from '@/lib/useTransportLayers';
+import { MapLayerControls } from '@/components/map/MapLayerControls';
+import type { FeatureGeometryState } from '@/lib/useFeatureGeometry';
+import type { TransportDetailTarget, TransportLayersState } from '@/lib/useTransportLayers';
+
+// 교통 레이어만 켠 지도 레이어 패널(경로·영역 없음).
+function TransportLayerControls({
+  state,
+  onOpenDetail,
+  collapseIncidents,
+}: {
+  state: TransportLayersState;
+  onOpenDetail: (target: TransportDetailTarget) => void;
+  collapseIncidents?: boolean;
+}) {
+  return (
+    <MapLayerControls
+      geometry={null}
+      transport={state}
+      onOpenTransportDetail={onOpenDetail}
+      collapseIncidents={collapseIncidents}
+    />
+  );
+}
 
 const FRESHNESS = {
   source_collected_at: '2026-10-23T09:00:00+09:00',
@@ -32,6 +53,8 @@ function makeState(over: Partial<TransportLayersState>): TransportLayersState {
     status: { enabled: true, layers: [] },
     enabled: new Set<TransportLayer>(),
     hasMap: true,
+    nearMode: false,
+    radiusM: null,
     zoom: 12,
     results: [],
     receivedAt: 1_000,
@@ -55,13 +78,69 @@ describe('TransportLayerControls', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('레이어 토글을 누르면 toggle을 부른다', () => {
-    const state = makeState({});
+  it('레이어 체크박스를 누르면 toggle을 부른다', () => {
+    const state = makeState({ enabled: new Set<TransportLayer>(['highway_incident']) });
     render(<TransportLayerControls state={state} onOpenDetail={vi.fn()} />);
-    const fuel = screen.getByTestId('transport-layer-toggle-fuel_station');
-    expect(fuel).toHaveAttribute('aria-pressed', 'false');
+    const fuel = screen.getByRole('checkbox', { name: '주유소' });
+    expect(fuel).toHaveAttribute('data-testid', 'transport-layer-toggle-fuel_station');
+    expect(fuel).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '교통 돌발' })).toBeChecked();
     fireEvent.click(fuel);
     expect(state.toggle).toHaveBeenCalledWith('fuel_station');
+  });
+
+  it('공항·휴게소는 없고, 교통 레이어는 경로·영역과 같은 줄의 체크박스다', () => {
+    const geometry = {
+      kinds: [],
+      eligible: true,
+      loading: false,
+      error: null,
+      truncated: false,
+      features: [],
+      toggle: vi.fn(),
+      retry: vi.fn(),
+      select: vi.fn(),
+    } as unknown as FeatureGeometryState;
+    render(
+      <MapLayerControls
+        geometry={geometry}
+        transport={makeState({})}
+        onOpenTransportDetail={vi.fn()}
+      />,
+    );
+    const group = screen.getByRole('group', { name: '지도 레이어 표시' });
+    const names = Array.from(group.querySelectorAll('label')).map((l) => l.textContent);
+    expect(names).toEqual(['경로', '영역', '주유소', '교통 돌발']);
+    expect(screen.queryByText('공항')).toBeNull();
+    expect(screen.queryByText('휴게소')).toBeNull();
+    expect(screen.queryByTestId('transport-layer-toggle-airport')).toBeNull();
+    expect(screen.queryByTestId('transport-layer-toggle-rest_area')).toBeNull();
+    // 예전 별도 '교통 정보' 패널 제목은 없다.
+    expect(screen.queryByText('교통 정보')).toBeNull();
+  });
+
+  it('여행 장소 반경 모드는 줌 안내 없이 반경을 알린다', () => {
+    render(
+      <TransportLayerControls
+        state={makeState({
+          nearMode: true,
+          radiusM: { fuel_station: 10_000, highway_incident: 20_000 },
+          zoom: 6,
+          enabled: new Set<TransportLayer>(['fuel_station', 'highway_incident']),
+          results: [
+            { layer: 'fuel_station', status: 'ok', truncated: true, freshness: FRESHNESS, items: [] },
+            { layer: 'highway_incident', status: 'ok', truncated: false, items: [] },
+          ],
+        })}
+        onOpenDetail={vi.fn()}
+      />,
+    );
+    const fuel = screen.getByTestId('transport-layer-state-fuel_station');
+    expect(fuel).not.toHaveTextContent('확대하면 보여요');
+    expect(fuel).toHaveTextContent('0곳 · 여행 장소 10km 이내 · 가까운 곳만 표시');
+    expect(screen.getByTestId('transport-layer-state-highway_incident')).toHaveTextContent(
+      '여행 장소 20km 이내',
+    );
   });
 
   it('켠 레이어는 결과 전에도 "불러오는 중" 한 줄을 미리 차지한다(#712)', () => {
@@ -101,14 +180,13 @@ describe('TransportLayerControls', () => {
 
   it('줌 안내·강등·신선도·잘림을 레이어별로 보인다', () => {
     const results: TransportLayerResult[] = [
-      { layer: 'rest_area', status: 'ok', truncated: true, freshness: FRESHNESS, items: [] },
-      { layer: 'airport', status: 'unavailable', reason: 'NOT_LOADED', truncated: false, items: [] },
+      { layer: 'highway_incident', status: 'ok', truncated: true, freshness: FRESHNESS, items: [] },
     ];
-    render(
+    const { rerender } = render(
       <TransportLayerControls
         state={makeState({
           zoom: 9,
-          enabled: new Set<TransportLayer>(['fuel_station', 'rest_area', 'airport']),
+          enabled: new Set<TransportLayer>(['fuel_station', 'highway_incident']),
           results,
           receivedAt: 1_000,
           nowMs: 61_000,
@@ -119,13 +197,31 @@ describe('TransportLayerControls', () => {
     expect(screen.getByTestId('transport-layer-state-fuel_station')).toHaveTextContent(
       '확대하면 보여요',
     );
-    const rest = screen.getByTestId('transport-layer-state-rest_area');
-    expect(rest).toHaveTextContent('일부만 표시 — 확대하세요');
+    const incidentLine = screen.getByTestId('transport-layer-state-highway_incident');
+    expect(incidentLine).toHaveTextContent('일부만 표시 — 확대하세요');
     // Map age 600초 + 받은 뒤 60초.
-    expect(rest).toHaveTextContent('11분 전 갱신');
-    const airport = screen.getByTestId('transport-layer-state-airport');
-    expect(airport).toHaveTextContent('일시적으로 불러올 수 없음');
-    expect(airport).toHaveAttribute('data-reason', 'NOT_LOADED');
+    expect(incidentLine).toHaveTextContent('11분 전 갱신');
+    rerender(
+      <TransportLayerControls
+        state={makeState({
+          zoom: 12,
+          enabled: new Set<TransportLayer>(['fuel_station']),
+          results: [
+            {
+              layer: 'fuel_station',
+              status: 'unavailable',
+              reason: 'NOT_LOADED',
+              truncated: false,
+              items: [],
+            },
+          ],
+        })}
+        onOpenDetail={vi.fn()}
+      />,
+    );
+    const fuel = screen.getByTestId('transport-layer-state-fuel_station');
+    expect(fuel).toHaveTextContent('일시적으로 불러올 수 없음');
+    expect(fuel).toHaveAttribute('data-reason', 'NOT_LOADED');
   });
 
   it('돌발 목록은 최근 순이고 누르면 상세를 연다', () => {

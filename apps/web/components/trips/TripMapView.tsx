@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  FeatureGeometryControls,
   FeatureGeometryLayers,
   FeatureGeometryPopup,
 } from '@/components/map/FeatureGeometryLayer';
@@ -33,7 +32,7 @@ import {
 
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
 import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
-import { TransportLayerControls } from '@/components/map/TransportLayerControls';
+import { MapLayerControls } from '@/components/map/MapLayerControls';
 import { TransportMarkerLegend, TransportMarkers } from '@/components/map/TransportMarkers';
 import { isAbortError } from '@/lib/abort';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
@@ -222,7 +221,17 @@ function useTripMapViewModel({
   // F5: feature 상세 풀스크린 모달(weather 제외).
   const [detailFeatureId, setDetailFeatureId] = useState<string | null>(null);
   const mobileLayout = useMobileWebLayout();
-  const transport = useTransportLayers({ active: transportLayers });
+  // 여행 지도의 교통 레이어는 화면 범위가 아니라 여행 장소 반경(주유소 10 km·교통 돌발 20 km)이다.
+  const transportNearPoints = useMemo(() => {
+    const seen = new Set<string>();
+    return points.flatMap((p) => {
+      const key = `${p.lon.toFixed(5)},${p.lat.toFixed(5)}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [{ lon: p.lon, lat: p.lat }];
+    });
+  }, [points]);
+  const transport = useTransportLayers({ active: transportLayers, nearPoints: transportNearPoints });
   const transportVisible = transport.visible;
   // fitToPoints가 읽는 값들 — 맞춤 함수가 바뀌어(=다시 맞춤) 사용자의 시점을 빼앗지 않게 ref로 둔다.
   const transportVisibleRef = useRef(transportVisible);
@@ -666,12 +675,14 @@ function useTripMapViewModel({
     [coordFromClientPoint, onCreatePoiAtCoordinate, openCoordinatePoiDialog],
   );
 
-  const transportControls = (
-    <TransportLayerControls
-      state={transport}
+  // 경로·영역·주유소·교통 돌발을 한 패널의 체크박스로 둔다(2026-11-16).
+  const layerControls = (
+    <MapLayerControls
+      geometry={showFeatures ? geometry : null}
+      transport={transport}
       // 맞춤 뒤에 돌발 목록이 저절로 펼쳐져 핀을 덮지 않게 접어 둔다(#729).
       collapseIncidents
-      onOpenDetail={(target) => {
+      onOpenTransportDetail={(target) => {
         setSelectedFeature(null);
         transport.openDetail(target);
       }}
@@ -716,7 +727,7 @@ function useTripMapViewModel({
     showNavigationControls,
     surfaceClassName,
     transport,
-    transportControls,
+    layerControls,
     userMovedRef,
   };
 }
@@ -958,9 +969,8 @@ function TripMapViewView0Part0({ viewModel }: { viewModel: TripMapViewView0Model
     overlayTopLeftClassName,
     overlayTopLeft,
     showFeatures,
-    geometry,
     transport,
-    transportControls,
+    layerControls,
   } = viewModel;
   return (
     <div
@@ -970,31 +980,23 @@ function TripMapViewView0Part0({ viewModel }: { viewModel: TripMapViewView0Model
       data-map-overlay=""
     >
       <div className="pointer-events-auto">{overlayTopLeft}</div>
-      {showFeatures && (
-        <div className="pointer-events-auto mt-2 w-64 max-w-[80%]" data-map-fit-panel="">
-          <FeatureGeometryControls state={geometry} />
-        </div>
-      )}
-      {transport.visible && (
-        <div className="pointer-events-auto mt-2 w-64 max-w-[70%]">{transportControls}</div>
+      {(showFeatures || transport.visible) && (
+        <div className="pointer-events-auto mt-2 w-64 max-w-[80%]">{layerControls}</div>
       )}
     </div>
   );
 }
 
 function TripMapViewView0Part1({ viewModel }: { viewModel: TripMapViewView0Model }) {
-  const { showFeatures, geometry, transport, transportControls } = viewModel;
+  const { showFeatures, transport, layerControls } = viewModel;
   return (
     <div
       className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]"
       data-map-overlay=""
     >
-      {showFeatures && (
-        <div className="pointer-events-auto">
-          <FeatureGeometryControls state={geometry} />
-        </div>
+      {(showFeatures || transport.visible) && (
+        <div className="pointer-events-auto">{layerControls}</div>
       )}
-      {transport.visible && <div className="pointer-events-auto mt-2">{transportControls}</div>}
     </div>
   );
 }

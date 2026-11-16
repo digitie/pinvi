@@ -19,7 +19,7 @@ import {
   searchAndAddPlace,
   shot,
 } from '../../helpers/live';
-import { TransportRecorder, controls } from '../../helpers/nearby';
+import { TransportRecorder, chip, controls } from '../../helpers/nearby';
 
 // 공유 토큰이 URL·네트워크 로그에 남으므로 공유 링크를 여는 스펙은 trace 를 기록하지 않는다(설정 정본: playwright.live-catalog.config.ts).
 test.use({ trace: 'off' });
@@ -44,7 +44,10 @@ test('NEAR-027 shared trip view has no transport controls and makes no /transpor
     await anon.goto(shareUrl);
     await expect(anon.locator('.maplibregl-canvas').first()).toBeVisible({ timeout: 30_000 });
     await expect(anon.locator('.maplibregl-marker.trip-map-marker')).toHaveCount(1, { timeout: 30_000 });
+    // 공유 화면은 지도 레이어 패널 자체가 없다(교통 레이어는 로그인 전용).
     await expect(controls(anon)).toHaveCount(0);
+    await expect(chip(anon, 'fuel_station')).toHaveCount(0);
+    await expect(chip(anon, 'highway_incident')).toHaveCount(0);
     expect(anon.url()).not.toMatch(/\/login/);
     await anon.waitForTimeout(1_500);
     expect(rec.urls, 'no /transport/* traffic from the shared page').toHaveLength(0);

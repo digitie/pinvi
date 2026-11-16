@@ -48,6 +48,30 @@
 - bbox는 국내 범위(경도 124~132, 위도 33~39)와 교차해 보낸다. 교차가 없으면 Map을 부르지 않고 빈 `ok`.
 - Map 영역 검색은 상자 중심에서 가까운 순으로 자른 뒤 사각형 밖을 거른다 — `items` 개수로 완전성을 추론하지 않는다.
 
+## `GET /transport/markers-near` — 여행 장소 반경
+
+여행 지도가 쓴다(2026-11-16 소유자 결정). 기준 장소(여행 장소)들에서 **레이어별 고정 반경** 안의 항목만 준다 —
+주유소 `fuel_station` 10 km, 교통 돌발 `highway_incident` 20 km. 반경은 서버 정책이라 query로 바꿀 수 없다.
+
+| query    | 필수 | 설명                                                                 |
+| -------- | ---- | -------------------------------------------------------------------- |
+| `points` |      | `lon,lat;lon,lat` 국내 좌표(경도 124~132, 위도 33~43), 최대 60곳. 비우면 Map을 부르지 않고 빈 `ok` |
+| `layers` |      | `fuel_station`·`highway_incident` 중 쉼표 구분. 생략하면 둘 다. 그 밖(휴게소·공항 포함)은 400 |
+| `limit`  |      | 레이어당 1~500, 기본 200                                             |
+
+```jsonc
+{ "data": { "radius_m": { "fuel_station": 10000, "highway_incident": 20000 }, "layers": [ {
+  "layer": "fuel_station", "status": "ok", "truncated": false, "freshness": { ... },
+  "items": [ { "layer": "fuel_station", "feature_id": "...", "distance_m": 812.4, ... } ]   // 가까운 순
+} ] } }
+```
+
+- 반경 거르기는 Map 근처 검색(`lon`·`lat`·`radius_m`, Valkey GEOSEARCH — Map ADR-114 D6)이 한다. PinVi는 2 km 안의
+  기준 장소를 한 조회로 묶어(반경 +2 km로 조회) 합치고, 모든 기준 장소까지의 대원 거리로 다시 걸러 중복을 없앤다.
+  `distance_m`은 가장 가까운 기준 장소까지의 거리다.
+- 5xx를 내지 않는다(`markers-in-bounds`와 같은 레이어별 강등, 레이어 기한 5초). Map 조회 하나라도 실패하면 그 레이어는 `unavailable`.
+- `truncated`: Map 조회 하나가 상한에 닿았거나 합친 결과가 `limit`을 넘었다.
+
 ## 상세 — `GET /transport/{fuel-stations|rest-areas|highway-incidents|airports}/{feature_id}`
 
 `feature_id`는 `^[A-Za-z0-9_-]{1,128}$`(아니면 422). 응답 `{item, freshness, fuel_price_freshness?}`.
