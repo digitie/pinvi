@@ -55,7 +55,11 @@ function useTripAttachmentsModel({
   const [items, setItems] = useState<TripAttachmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // 목록 불러오기 오류와 사용자 동작(파일 선택·업로드·다운로드·삭제) 오류를 나눈다. 하나로 두면 늦게 끝난
+  // 첫 목록 응답의 `setError(null)`이 그 사이 낸 형식 거부 안내를 지웠다(2026-11-16 live POI-023).
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
+  const error = actionError ?? loadError;
   const [busyId, setBusyId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
 
@@ -68,9 +72,9 @@ function useTripAttachmentsModel({
       } else {
         setItems(await tripApi(apiClient).listAttachments(tripId));
       }
-      setError(null);
+      setLoadError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '첨부를 불러오지 못했습니다.');
+      setLoadError(err instanceof ApiError ? err.message : '첨부를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
