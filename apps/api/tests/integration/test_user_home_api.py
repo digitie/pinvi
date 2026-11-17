@@ -138,7 +138,7 @@ async def test_home_counts_trips_joined_as_companion(  # type: ignore[no-untyped
     client, verified_user, auth_cookies, session_factory
 ) -> None:
     owner_id, _ = verified_user
-    friend_email = f"home-friend-{uuid.uuid4().hex[:8]}@pinvi.test"
+    friend_email = f"home-friend-{uuid.uuid4().hex[:8]}@example.com"
     friend_id = await _create_verified_user(session_factory, friend_email)
     today = kst_now().date()
     trip_id = await _trip(
