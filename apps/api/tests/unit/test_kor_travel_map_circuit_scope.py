@@ -381,3 +381,111 @@ async def test_pooled_connections_expire_before_map_keep_alive() -> None:
         assert pool._keepalive_expiry == KEEPALIVE_EXPIRY_SECONDS < 5.0
     finally:
         await client.aclose()
+
+
+# ── T-READ-PIN-04 — Map이 "예산을 다 썼다"고 답한 503은 다시 보내지 않는다 ─────────────────────────
+
+
+def _counting_503(code: str | None, status_code: int = 503) -> tuple[Handler, dict[str, int]]:
+    counter = {"sent": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        counter["sent"] += 1
+        body: dict[str, object] = {"type": "about:blank", "title": "unavailable"}
+        if code is not None:
+            body["code"] = code
+        return httpx.Response(
+            status_code, json=body, headers={"content-type": "application/problem+json"}
+        )
+
+    return handler, counter
+
+
+@pytest.mark.parametrize("code", ["READ_TIMEOUT", "POOL_BUSY"])
+async def test_map_budget_exhausted_503_is_sent_once(code: str) -> None:
+    handler, counter = _counting_503(code)
+    client = _client(handler)
+    with pytest.raises(KorTravelMapUnavailable) as info:
+        await _in_bounds(client)
+    # 같은 무거운 질의를 다시 보내면 멈춘 요청 하나가 세 번이 된다(Map T-READ-03의 전제).
+    assert counter["sent"] == 1
+    assert info.value.code == code
+    assert info.value.error_class == "HTTP503"
+    assert info.value.status_code == 503
+    await client.aclose()
+
+
+async def test_map_budget_exhausted_503_on_single_feature_get_is_sent_once() -> None:
+    handler, counter = _counting_503("READ_TIMEOUT")
+    client = _client(handler)
+    with pytest.raises(KorTravelMapUnavailable):
+        await client.get_feature("f_x")
+    assert counter["sent"] == 1
+    await client.aclose()
+
+
+async def test_map_budget_exhausted_503_on_trip_card_batch_is_sent_once_per_chunk() -> None:
+    # 여행 보기의 batch(POST, chunk 단위)도 같은 분기를 탄다 — chunk 하나가 한 번만 나간다.
+    handler, counter = _counting_503("POOL_BUSY")
+    client = _client(handler)
+    with pytest.raises(KorTravelMapUnavailable) as info:
+        await client.get_features(["f_a", "f_b"])
+    assert counter["sent"] == 1
+    assert info.value.code == "POOL_BUSY"
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
+    ("code", "status_code"),
+    [("LOCK_TIMEOUT", 503), (None, 500), ("UPSTREAM", 503), ("READ_TIMEOUT_LIKE", 503)],
+)
+async def test_other_5xx_still_retry_three_times(code: str | None, status_code: int) -> None:
+    handler, counter = _counting_503(code, status_code)
+    client = _client(handler)
+    with pytest.raises(KorTravelMapUnavailable) as info:
+        await _in_bounds(client)
+    assert counter["sent"] == 3
+    assert info.value.code is None
+    await client.aclose()
+
+
+async def test_non_json_5xx_still_retries() -> None:
+    sent = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal sent
+        sent += 1
+        return httpx.Response(502, text="<html>bad gateway</html>")
+
+    client = _client(handler)
+    with pytest.raises(KorTravelMapUnavailable):
+        await _in_bounds(client)
+    assert sent == 3
+    await client.aclose()
+
+
+async def test_map_budget_exhausted_503_counts_once_per_call_toward_the_circuit() -> None:
+    handler, counter = _counting_503("READ_TIMEOUT")
+    client = _client(handler)
+    # 회로 문턱(연속 3번)까지 한 호출에 한 번씩만 보낸다.
+    for _ in range(3):
+        with pytest.raises(KorTravelMapUnavailable) as info:
+            await _in_bounds(client)
+        assert info.value.code == "READ_TIMEOUT"
+    assert counter["sent"] == 3
+    # 세 호출이 세 실패로 세어져 회로가 열렸다 — 네 번째는 Map에 가지 않는다.
+    with pytest.raises(KorTravelMapUnavailable) as opened:
+        await _in_bounds(client)
+    assert opened.value.code == "CIRCUIT_OPEN"
+    assert counter["sent"] == 3
+    await client.aclose()
+
+
+async def test_map_budget_exhausted_503_without_retry_is_still_returned_as_response() -> None:
+    # retry=False 호출자(transport·weather 상태 표면)는 5xx 응답을 그대로 받아 code를 직접 읽는다.
+    handler, counter = _counting_503("READ_TIMEOUT")
+    client = _client(handler)
+    resp = await client._send("GET", "/v1/service/transport/status", retry=False, circuit=None)
+    assert resp.status_code == 503
+    assert counter["sent"] == 1
+    await client.aclose()

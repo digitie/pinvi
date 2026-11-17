@@ -180,29 +180,132 @@ async def test_factories_take_caps_from_settings() -> None:
         await weather.aclose()
 
 
-def test_default_caps_keep_map_total_near_the_old_shared_sixteen() -> None:
+def test_default_caps_keep_db_surfaces_near_the_old_shared_sixteen() -> None:
     from app.clients.kor_travel_map import FESTIVALS_MAX_CONCURRENT_REQUESTS
     from app.core.config import Settings
 
     defaults = Settings()
     assert defaults.pinvi_database_max_overflow == 5
     assert defaults.pinvi_database_pool_timeout_seconds <= 5
-    map_total = (
+    # Map PostgreSQL을 읽는 표면만 합한다 — transport·weather는 Map에서 Valkey 읽기다(T-READ-PIN-01).
+    db_total = (
         defaults.pinvi_kor_travel_map_features_max_concurrency
         + defaults.pinvi_kor_travel_map_viewport_max_concurrency
-        + defaults.pinvi_kor_travel_map_transport_max_concurrency
-        + defaults.pinvi_kor_travel_map_weather_max_concurrency
         + FESTIVALS_MAX_CONCURRENT_REQUESTS
     )
-    # 표면을 나눠도 worker당 Map 동시 부하가 예전 공용 16의 1.5배를 넘지 않는다.
-    assert map_total <= 24
-    # 상세·trip view(features)가 가장 큰 몫이다.
+    # 표면을 나눠도 worker당 Map DB 동시 부하가 예전 공용 16의 1.5배를 넘지 않는다.
+    assert db_total <= 24
+    # DB 표면 가운데 상세·trip view(features)가 가장 큰 몫이다.
     assert defaults.pinvi_kor_travel_map_features_max_concurrency == max(
         defaults.pinvi_kor_travel_map_features_max_concurrency,
         defaults.pinvi_kor_travel_map_viewport_max_concurrency,
-        defaults.pinvi_kor_travel_map_transport_max_concurrency,
-        defaults.pinvi_kor_travel_map_weather_max_concurrency,
     )
+
+
+def test_default_transport_and_weather_caps_cover_one_requests_fanout() -> None:
+    """T-READ-PIN-01 — 대기열 없는 상한이 한 요청의 내부 팬아웃보다 작으면 그 요청이 스스로 거부된다."""
+    from app.core.config import Settings
+    from app.services import transport_layers, weather_map_resolver, weather_map_state
+
+    defaults = Settings()
+    transport_fanout = transport_layers.NEAR_CONCURRENCY * len(transport_layers.NEAR_RADIUS_M)
+    weather_fanout = weather_map_resolver.RESOLVE_CONCURRENCY + weather_map_state._BATCH_CONCURRENCY
+    assert defaults.pinvi_kor_travel_map_transport_max_concurrency >= transport_fanout
+    assert defaults.pinvi_kor_travel_map_weather_max_concurrency >= weather_fanout
+    assert defaults.pinvi_kor_travel_map_transport_max_concurrency == 16
+    assert defaults.pinvi_kor_travel_map_weather_max_concurrency == 16
+
+
+def _default_capped_map(handler: Any) -> KorTravelMapClient:
+    """운영 기본값(Settings)의 표면별 상한을 쓰는 진짜 Map client — 대역은 HTTP transport뿐이다."""
+    from app.core.config import Settings
+
+    defaults = Settings()
+    return _map(
+        handler,
+        surface_concurrency={
+            "features": defaults.pinvi_kor_travel_map_features_max_concurrency,
+            "viewport": defaults.pinvi_kor_travel_map_viewport_max_concurrency,
+            "transport": defaults.pinvi_kor_travel_map_transport_max_concurrency,
+            "weather": defaults.pinvi_kor_travel_map_weather_max_concurrency,
+        },
+    )
+
+
+async def test_trip_transport_near_layers_are_not_rejected_by_their_own_fanout() -> None:
+    """레이어 2개 x 2 km 넘게 떨어진 장소 60곳, Map 호출마다 30 ms — 두 레이어 모두 상한 5초 안에 ``ok``.
+
+    상한이 2였을 때는 한 요청의 동시 근처 조회(레이어당 6)가 자기 자리를 넘어 ``BULKHEAD_FULL``로 레이어
+    전체가 ``unavailable``이었다. 즉시 답하는 대역은 자리를 오래 쥐지 않아 이 결함을 가리므로 지연을 넣는다.
+    """
+    from app.clients.kor_travel_map_transport import KorTravelMapTransportClient
+    from app.services import transport_layers
+    from tests import transport_map_fixtures as fx
+
+    sent = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal sent
+        sent += 1
+        await asyncio.sleep(0.03)
+        dataset = request.url.path.rstrip("/").rsplit("/", 1)[-1]
+        body = fx.list_body(dataset)
+        body["data"]["items"] = []
+        return httpx.Response(200, json=body)
+
+    before = _sample("kor_travel_map", "transport")
+    client = _default_capped_map(handler)
+    # 위도 0.05도(약 5.6 km) 간격 — 모두 2 km 묶음 밖이라 중심이 60개다.
+    points = [(127.0, 34.0 + i * 0.05) for i in range(60)]
+    try:
+        results = await transport_layers.markers_near_points(
+            KorTravelMapTransportClient(client),
+            points=points,
+            layers=["fuel_station", "highway_incident"],
+            limit=50,
+        )
+    finally:
+        await client.aclose()
+    assert [(r.layer, r.status, r.reason) for r in results] == [
+        ("fuel_station", "ok", None),
+        ("highway_incident", "ok", None),
+    ]
+    assert sent == 120
+    assert _sample("kor_travel_map", "transport") == before
+
+
+async def test_weather_resolve_and_batch_fanout_fit_the_default_weather_cap() -> None:
+    """해석 동시 4 + 값 묶음 동시 4가 한 worker의 weather 자리를 함께 써도 거부가 없다(지연 30 ms)."""
+    from app.clients.kor_travel_map_weather import KorTravelMapWeatherClient
+    from app.services import weather_map_resolver, weather_map_state
+
+    in_flight = 0
+    peak = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        try:
+            await asyncio.sleep(0.03)
+        finally:
+            in_flight -= 1
+        return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
+
+    before = _sample("kor_travel_map", "weather")
+    client = _default_capped_map(handler)
+    weather = KorTravelMapWeatherClient(client)
+    fanout = weather_map_resolver.RESOLVE_CONCURRENCY + weather_map_state._BATCH_CONCURRENCY
+    try:
+        outcomes = await asyncio.gather(
+            *(weather.nearest(lon=126.9 + i * 0.01, lat=37.5) for i in range(fanout)),
+            return_exceptions=True,
+        )
+    finally:
+        await client.aclose()
+    assert [o for o in outcomes if isinstance(o, BaseException)] == []
+    assert peak == fanout
+    assert _sample("kor_travel_map", "weather") == before
 
 
 def _telegram_handler(counter: dict[str, int], release: asyncio.Event) -> Any:
