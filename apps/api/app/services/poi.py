@@ -17,6 +17,7 @@ from app.models.poi import TripDayPoi
 from app.models.poi_place_detail import TripPoiPlaceDetail
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
+from app.services.poi_region import carry_geo_region
 from app.services.sun_times import snapshot_coord, sun_rise_set_dict
 from app.services.trip import TripNotFoundError, validate_trip_day_payload
 
@@ -224,6 +225,9 @@ async def update_poi(
             patch = {**patch, "sort_order": last + "0" if last is not None else "a0"}
             if len(patch["sort_order"]) > 80:
                 raise SortOrderConflictError("이동할 일자의 정렬 위치를 다시 정리해 주세요.")
+    new_snapshot = patch.get("feature_snapshot")
+    if isinstance(new_snapshot, dict):
+        patch = {**patch, "feature_snapshot": carry_geo_region(poi.feature_snapshot, new_snapshot)}
     for key, value in patch.items():
         if value is None and key not in {
             "custom_marker_color",

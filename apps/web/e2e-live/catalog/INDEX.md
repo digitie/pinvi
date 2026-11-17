@@ -15,12 +15,12 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | poi | 40 | 32 | 6 | 2 |
 | notify | 32 | 23 | 4 | 5 |
 | admin | 44 | 37 | 5 | 2 |
-| core | 45 | 44 | 1 | 0 |
+| core | 46 | 45 | 1 | 0 |
 | recommend | 3 | 3 | 0 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **580** | **527** | **29** | **24** |
+| **all** | **581** | **528** | **29** | **24** |
 
-Spec files: 66.
+Spec files: 67.
 
 ## Cases
 
@@ -413,6 +413,7 @@ Spec files: 66.
 | CORE-035 | core | 지난 여행에 장소를 담으면 개인 홈 통계·최근 여행·다녀온 지역에 반영된다 | P2 | desktop, mutating, search, home | scripted | `specs/core/core-home.live.spec.ts#CORE-035` |
 | CORE-036 | core | 모바일 하단 탭바 — 홈이 첫 탭, 홈·여행·추천·지도·더보기 5칸이 320·390px에서 44px 이상, 파일은 더보기 | P2 | mobile, home, a11y | scripted | `specs/core/core-home.live.spec.ts#CORE-036` |
 | CORE-037 | core | 동행으로 참여한 여행이 개인 홈 통계·최근 여행에 '동행' 표시로 보인다 | P2 | desktop, mutating, home, share | scripted | `specs/core/core-home.live.spec.ts#CORE-037` |
+| CORE-038 | core | 지역 메모 없는 지난 여행에 지도 검색으로 담은 장소도 서버 역지오코딩으로 시도가 잡혀 홈 '다녀온 지역'에 들어간다 | P2 | desktop, mutating, search, home | scripted | `specs/core/core-home-region.live.spec.ts#CORE-038` |
 | REC-001 | recommend | 추천 여행 카드 '주변 축제·큐레이션' 펼침 — 축제·큐레이션 두 구역이 항목/빈 문구/불가 안내 중 하나로 그려진다 | P1 | desktop, mobile | scripted | `specs/recommend/recommend-highlights.live.spec.ts#REC-001` |
 | REC-002 | recommend | 주변 큐레이션/축제 항목 '추가' → 새 [e2e] 여행의 1일차 끝에 장소가 들어간다 | P1 | desktop, mutating | scripted | `specs/recommend/recommend-highlights.live.spec.ts#REC-002` |
 | REC-003 | recommend | 모바일 — 펼친 주변 정보가 가로 스크롤 없이 카드 안에 들어가고 '더 보기'로 펼쳐진다 | P2 | mobile | scripted | `specs/recommend/recommend-highlights.live.spec.ts#REC-003` |

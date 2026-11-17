@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
 
 from app.core.deps import CurrentUserId, DbSession
 from app.db import session as db_session
@@ -24,6 +24,11 @@ from app.services.poi import (
     reorder_pois,
     soft_delete_poi,
     update_poi,
+)
+from app.services.poi_region import (
+    geo_client_from_app,
+    needs_region_lookup,
+    resolve_poi_region_in_background,
 )
 from app.services.realtime_broker import realtime_broker
 from app.services.trip import (
@@ -101,6 +106,17 @@ async def _auto_fire_feature_request(
     )
 
 
+def _schedule_region_lookup(
+    background_tasks: BackgroundTasks, request: Request, poi: TripDayPoi
+) -> None:
+    """좌표만 있는 장소의 시도를 응답 뒤에 조회한다(`services/poi_region`). geo가 없으면 건너뛴다."""
+    if not needs_region_lookup(poi.feature_snapshot):
+        return
+    client = geo_client_from_app(request.app)
+    if client is not None:
+        background_tasks.add_task(resolve_poi_region_in_background, client, poi.attachment_id)
+
+
 async def _trip_or_404(db, trip_id: uuid.UUID, user_id: uuid.UUID):  # type: ignore[no-untyped-def]
     try:
         return await get_trip_for_user_write(db, trip_id=trip_id, user_id=user_id)
@@ -126,6 +142,8 @@ async def create_poi_endpoint(
     body: PoiCreate,
     current_user_id: CurrentUserId,
     db: DbSession,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ) -> Envelope[PoiResponse]:
     actor_id = uuid.UUID(current_user_id)
     await _trip_or_404(db, trip_id, actor_id)
@@ -180,6 +198,7 @@ async def create_poi_endpoint(
 
     rise_sets = await poi_rise_sets(db, [poi])
     response = _to_response(poi, rise_set=rise_sets[poi.attachment_id])
+    _schedule_region_lookup(background_tasks, request, poi)
     realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.created",
@@ -198,6 +217,8 @@ async def update_poi_endpoint(
     current_user_id: CurrentUserId,
     db: DbSession,
     if_match: Annotated[int, Header(alias="If-Match")],
+    request: Request,
+    background_tasks: BackgroundTasks,
 ) -> Envelope[PoiResponse]:
     await _trip_or_404(db, trip_id, uuid.UUID(current_user_id))
     try:
@@ -220,6 +241,8 @@ async def update_poi_endpoint(
         ) from exc
     rise_sets = await poi_rise_sets(db, [poi])
     response = _to_response(poi, rise_set=rise_sets[poi.attachment_id])
+    if "feature_snapshot" in body.model_fields_set:
+        _schedule_region_lookup(background_tasks, request, poi)
     realtime_broker.publish_event_nowait(
         trip_id=trip_id,
         event_type="poi.updated",

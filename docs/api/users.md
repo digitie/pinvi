@@ -332,7 +332,7 @@ Cookie: pinvi_access=...
 | `stats.upcoming_trip_count` / `ongoing_trip_count` / `completed_trip_count` / `undated_trip_count` | 날짜 기준 단계 — 시작일 > 오늘 / 시작일 ≤ 오늘 ≤ 종료일 / 종료일 < 오늘 / 시작일 없음. 사용자 `status`는 보지 않는다 |
 | `stats.travel_day_count` | 진행 중·다녀온 여행의 [시작일, min(종료일, 오늘)] 날짜 합집합(겹친 날은 한 번) |
 | `stats.visited_place_count` | 실제 날짜(일자 override, 없으면 시작일 + 일차 - 1)가 오늘 이전·오늘인 일자의 장소. 같은 feature(또는 이름+좌표가 같은 직접 추가 장소)는 한 곳 |
-| `stats.region_count`, `regions[]` | 다녀온 장소의 시도(snapshot 코드·주소 → 여행 지역 코드 → 여행 지역 메모 순), 장소 없는 진행·다녀온 여행은 여행의 시도. 판정 못 하면 세지 않는다(좌표 역지오코딩 안 함). 2023 강원·2024 전북 코드 개편은 새 코드로 접는다 |
+| `stats.region_count`, `regions[]` | 다녀온 장소의 시도(snapshot 코드·주소·`geo_region` → 여행 지역 코드 → 여행 지역 메모 순), 장소 없는 진행·다녀온 여행은 여행의 시도. 좌표만 있는 장소는 장소를 담은 뒤 서버가 kor-travel-geo `/v2/reverse`로 한 번 조회해 `feature_snapshot.geo_region`에 시도·시군구를 남긴다(장애 시 비워 두고 `python -m app.commands.poi_region_backfill`이 다시 묻는다). 판정 못 하면 세지 않는다. 2023 강원·2024 전북 코드 개편은 새 코드로 접는다 |
 | `next_trip` | 진행 중 여행(시작일 순) 첫째, 없으면 가장 가까운 예정 여행. `days_until`은 예정일 때 남은 날 |
 | `upcoming_trips[]` | 다음 여행을 뺀 진행·예정(시작일 순) + 날짜 미정(최근 수정 순), 최대 4 |
 | `recent_trips[]` | 다녀온 여행(종료일 최신 순), 최대 4 |
