@@ -105,6 +105,7 @@ run-m05-isolated-e2e-once → activation attestation`이 재실행된 기록이 
 
 ## 사용자 요청: 공통화 재조사 (2026-11-17)
 
-- [ ] T-383 — kor-travel-common 공통화 재조사 계획의 PinVi 소유 task 추적. Common `T-484a`(ETL의 job별 인프라 재시도 sensor 5개를 `infrastructure_retry_sensor_for_jobs` 1개로, 선행 없음)와 `T-424`(`@kor-travel/ui` 0.3.0 재vendor와 guard 호출 SHA 갱신, Common `T-221` 뒤) 둘이다.
-      범위·수용 기준·되돌리기는 Common 저장소 `docs/tasks/`의 두 상세 파일과 `docs/plan/commonization-plan-2026-11-17.md`가 정본이며 여기 복제하지 않는다.
-      Manager compose의 pinvi-api healthcheck 교체(Common `T-486a`)는 Manager 저장소 작업이라 여기 세지 않는다.
+- [ ] T-383 — kor-travel-common 공통화 재조사 계획의 PinVi 소유 task 추적. Common `T-424`(guard 호출 SHA를 Common이 지정한 채택 커밋으로 갱신, Common `T-024` 뒤)와
+      `T-484a`(ETL의 job별 인프라 재시도 sensor 5개를 1개로. API의 정적 sensor 목록 `PINVI_ETL_SENSORS`와 관리자 화면, api→etl 배포 순서가 함께 바뀐다. 급하지 않다) 둘이다.
+      범위·수용 기준·되돌리기는 Common 저장소 `docs/tasks/`의 두 상세 파일과 `docs/plan/commonization-plan-2026-11-17.md`이 정본이며 여기 복제하지 않는다.
+      관리자 부품 묶음은 선택형 패키지(`@kor-travel/admin-kit`)로 나오므로 PinVi는 아무것도 하지 않아도 된다. Manager compose의 pinvi-api healthcheck 교체(Common `T-486a`)는 Manager 저장소 작업이다.
