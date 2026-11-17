@@ -4,6 +4,8 @@
 #
 # ⚠ pending deploy: 이 영역 전부 PinVi '추천 여행 주변 축제·큐레이션' PR 머지 + prod 배포 뒤에만 green 이다.
 #   배포 전 prod 에는 토글 버튼(notice-plan-highlights-toggle-*)이 없어 실패한다.
+# 2026-11-17: 축제는 plan 장소 bbox ±0.3°(Map festivals/monthly bbox) 안만 — REC-001 이 events 항목의
+#   distance_m ≤ 약 45km 를 annotation 으로 기록한다(좌표 있는 plan).
 # 데이터 전제: 공개된 추천 여행이 1개 이상 있고 그 POI에 좌표가 있어야 큐레이션 구역이 채워진다
 #   (Map 큐레이션 collection 을 import 한 plan). 축제는 기간·시도에 따라 0건일 수 있다 — 빈 문구도 통과.
 
@@ -23,6 +25,7 @@
     - 응답 200, data.window_basis ∈ {plan, upcoming}, data.region_scope ∈ {sido, nationwide}
     - 토글 aria-expanded=true, notice-plan-highlights-{id} 안에 notice-plan-events·notice-plan-curated 구역
     - 각 구역은 목록(li) 또는 빈 문구 또는 '지금은 불러올 수 없습니다' 중 하나 — unavailable 구역 수를 annotation 으로 기록
+    - events 의 최대 distance_m 을 annotation(events-max-distance-m)으로 기록 — 축제 bbox 동작 관찰용, 게이트 아님
     - 다시 클릭하면 패널이 닫힌다
   cleanup: [읽기 전용]
   automation: scripted

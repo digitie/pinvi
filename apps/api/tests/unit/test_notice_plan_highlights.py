@@ -264,6 +264,10 @@ async def test_build_queries_sido_months_and_bbox(monkeypatch: pytest.MonkeyPatc
     festival_calls = [r for r in seen if r.url.path == "/v1/public/festivals/monthly"]
     assert sorted(r.url.params["month"] for r in festival_calls) == ["11", "12"]
     assert {r.url.params["sido_code"] for r in festival_calls} == {"51"}
+    # 축제도 plan 장소 bbox(±0.3°)로 좁혀 보낸다.
+    for call in festival_calls:
+        assert float(call.url.params["min_lon"]) == pytest.approx(128.6)
+        assert float(call.url.params["max_lat"]) == pytest.approx(38.05)
     curation_call = next(r for r in seen if r.url.path == "/v1/curations")
     assert float(curation_call.url.params["min_lon"]) == pytest.approx(128.85)
     assert float(curation_call.url.params["max_lat"]) == pytest.approx(37.80)
@@ -336,3 +340,73 @@ async def test_build_without_map_client_marks_both_unavailable(
     )
     assert result.unavailable == ["curated", "events"]
     assert result.curated == [] and result.events == []
+
+
+async def test_build_follows_festival_cursor_up_to_page_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan_id = _patch_plan(monkeypatch, starts_on=None, ends_on=None, pois=[_poi("a", _GANGNEUNG)])
+    window_month = (TODAY.year, TODAY.month)
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/curations":
+            return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
+        calls.append(request)
+        month_calls = [r for r in calls if r.url.params["month"] == request.url.params["month"]]
+        page_no = len(month_calls)
+        item = _festival(
+            f"m{request.url.params['month']}-p{page_no}",
+            start="2026-11-20",
+            end="2026-12-20",
+        )
+        # 매 페이지가 다음 cursor를 준다 — 상한(3)에서 멈춰야 한다.
+        meta = {"page": {"next_cursor": f"c{page_no}"}}
+        return httpx.Response(200, json={"data": {"months": [], "items": [item]}, "meta": meta})
+
+    client = _client(handler)
+    try:
+        result = await hl.build_plan_highlights(
+            object(),  # type: ignore[arg-type]
+            notice_plan_id=plan_id,
+            client=client,
+            today=TODAY,
+        )
+    finally:
+        await client.aclose()
+
+    first_month = [r for r in calls if r.url.params["month"] == str(window_month[1])]
+    assert len(first_month) == hl.MAX_FESTIVAL_PAGES
+    assert [r.url.params.get("cursor") for r in first_month] == [None, "c1", "c2"]
+    assert len(calls) == hl.MAX_FESTIVAL_PAGES * 2  # 11월·12월
+    assert len(result.events) == len(calls)
+
+
+async def test_build_filters_festivals_outside_bbox_when_map_ignores_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """bbox를 모르는 옛 Map은 query를 버리고 시도 전체를 준다 — 응답 좌표로 다시 거른다."""
+    plan_id = _patch_plan(monkeypatch, starts_on=None, ends_on=None, pois=[_poi("a", _GANGNEUNG)])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/curations":
+            return httpx.Response(200, json={"data": {"items": []}, "meta": {}})
+        items = [
+            _festival("near", start="2026-11-20", end="2026-11-22"),
+            _festival("far", start="2026-11-20", end="2026-11-22", lon=127.0, lat=37.0),
+            _festival("nocoord", start="2026-11-20", end="2026-11-22", lon=None, lat=None),
+        ]
+        return httpx.Response(200, json={"data": {"months": [], "items": items}, "meta": {}})
+
+    client = _client(handler)
+    try:
+        result = await hl.build_plan_highlights(
+            object(),  # type: ignore[arg-type]
+            notice_plan_id=plan_id,
+            client=client,
+            today=TODAY,
+        )
+    finally:
+        await client.aclose()
+
+    assert [e.feature_id for e in result.events] == ["near"]

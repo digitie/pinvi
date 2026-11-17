@@ -71,6 +71,15 @@ test.describe('REC 추천 여행 주변 축제·큐레이션', () => {
       type: 'highlights',
       description: `events=${events} curated=${curated} unavailable=${JSON.stringify(body.unavailable)}`,
     });
+    // 2026-11-17: 축제는 plan 장소 bbox(±0.3°) 안에서만 고른다 — 가장 먼 행사 거리를 남긴다(게이트 아님:
+    // 여러 장소에 걸친 plan은 bbox 안이어도 모든 장소에서 멀 수 있다).
+    const distances = ((body.events as Array<{ distance_m: number | null }> | undefined) ?? [])
+      .map((e) => e.distance_m)
+      .filter((d): d is number => d != null);
+    testInfo.annotations.push({
+      type: 'events-max-distance-m',
+      description: distances.length ? String(Math.max(...distances)) : 'n/a',
+    });
 
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');

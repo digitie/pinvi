@@ -50,8 +50,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "d8253e85cbb81582b90fab657009e0ee47b52cc8"
-_SNAPSHOT_SHA256 = "84a539c2637037c08d5b0f85f23d6e2cea327588d240c7070f0f12069c137a22"
+_UPSTREAM_COMMIT = "f1788da922c118650fc93e05aae42b3d0f5159f3"
+_SNAPSHOT_SHA256 = "8c8a6f7ad4b949a6e0af6d8d79a6d6defeba225354094eb6f1d4374d50a2e644"
 
 # service profile 스냅샷 — byte-핀·재추출 절차는 cache-target 계약 테스트
 # (`test_kor_travel_map_cache_target_contract.py`)가 소유하고 본 파일은 읽기만 한다.
@@ -171,11 +171,16 @@ _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
         "max_items",
     },
     "/v1/public/beaches/{feature_id}": set(),
+    # bbox 4값은 Map 2026-11-17 추가(추천 여행 주변 축제).
     "/v1/public/festivals/monthly": {
         "year",
         "month",
         "sido_code",
         "sigungu_code",
+        "min_lon",
+        "min_lat",
+        "max_lon",
+        "max_lat",
         "page_size",
         "cursor",
         "include_months",
@@ -947,6 +952,10 @@ async def test_client_never_sends_a_query_the_snapshot_does_not_declare() -> Non
                 month=7,
                 sido_code="26",
                 sigungu_code="26350",
+                min_lon=129.0,
+                min_lat=35.0,
+                max_lon=129.2,
+                max_lat=35.2,
                 page_size=20,
                 cursor="c1",
                 include_months=True,
