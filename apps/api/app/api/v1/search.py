@@ -251,7 +251,12 @@ async def unified_search(
     # Kakao/Naver 보강을 막지 않게(주소 결과는 예전엔 매퍼 버그로 늘 0건이라 K에 들어간 적이 없다).
     internal_place_count = len(feature_results or []) + len(my_pois)
     if internal_place_count < settings.pinvi_place_search_internal_threshold:
-        if kakao_local is not None:
+        # Kakao와 Naver는 서로 독립인 외부 호출이라 함께 기다린다(T-READ-PIN-07) — 예전에는 Kakao가 끝난 뒤
+        # Naver를 불러 이 구간이 두 지연의 합이었다. 결과 순서(kakao → naver)와 `degraded_sources` 순서는
+        # 그대로다. 각 호출이 자기 오류만 `None`으로 바꾸므로 한쪽 실패가 다른 쪽 결과를 지우지 않는다.
+        async def _kakao_results() -> list[PlaceSearchResult] | None:
+            if kakao_local is None:
+                return None
             try:
                 if lat is not None and lon is not None:
                     # 좌표를 실제로 Kakao에 제3자 제공하는 지점 — 여기서만 감사 기록(§9).
@@ -269,23 +274,35 @@ async def unified_search(
                     x=lon if near_me else None,
                     y=lat if near_me else None,
                 )
-                for doc in kakao_data.get("documents") or []:
-                    if isinstance(doc, dict) and (r := kakao_document_to_result(doc)) is not None:
-                        results.append(r)
             except KakaoLocalError:
-                degraded.append("kakao")
-        else:
-            degraded.append("kakao")
+                return None
+            return [
+                r
+                for doc in kakao_data.get("documents") or []
+                if isinstance(doc, dict) and (r := kakao_document_to_result(doc)) is not None
+            ]
 
-        if naver_local is not None:
+        async def _naver_results() -> list[PlaceSearchResult] | None:
+            if naver_local is None:
+                return None
             try:
                 naver_data = await naver_local.search_local(query=q, display=limit)
-                for item in naver_data.get("items") or []:
-                    if isinstance(item, dict) and (r := naver_item_to_result(item)) is not None:
-                        results.append(r)
             except NaverLocalError:
-                degraded.append("naver")
+                return None
+            return [
+                r
+                for item in naver_data.get("items") or []
+                if isinstance(item, dict) and (r := naver_item_to_result(item)) is not None
+            ]
+
+        kakao_results, naver_results = await asyncio.gather(_kakao_results(), _naver_results())
+        if kakao_results is None:
+            degraded.append("kakao")
         else:
+            results.extend(kakao_results)
+        if naver_results is None:
             degraded.append("naver")
+        else:
+            results.extend(naver_results)
 
     return Envelope.of(PlaceSearchResponse(results=results, degraded_sources=degraded))
