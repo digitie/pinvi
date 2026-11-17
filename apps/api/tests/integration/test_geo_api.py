@@ -771,42 +771,6 @@ async def test_unified_search_waits_on_kakao_and_naver_together(
         _clear_search_clients()
 
 
-async def test_unified_search_provider_wait_is_the_slower_one_not_the_sum(
-    client: Any, verified_user: tuple[str, str], auth_cookies: Any
-) -> None:
-    import asyncio
-    import time
-
-    delay = 1.0
-
-    class _SlowKakao(_FakeKakaoLocalClient):
-        async def search_keyword(self, **kwargs: Any) -> dict[str, Any]:
-            await asyncio.sleep(delay)
-            return await super().search_keyword(**kwargs)
-
-    class _SlowNaver(_FakeNaverLocalClient):
-        async def search_local(self, **kwargs: Any) -> dict[str, Any]:
-            await asyncio.sleep(delay)
-            return await super().search_local(**kwargs)
-
-    user_id, _ = verified_user
-    _override_search_clients(
-        _FakeKorTravelMapClient(),
-        _FakeKorTravelGeoClient(),
-        kakao=_SlowKakao(),
-        naver=_SlowNaver(),
-    )
-    try:
-        started = time.perf_counter()
-        resp = await client.get("/search?q=광안", cookies=auth_cookies(user_id))
-        elapsed = time.perf_counter() - started
-        assert resp.status_code == 200, resp.text
-        # 합(2초)이 아니라 느린 쪽 하나(1초) + 나머지 처리(검사·DB 왕복 여유 0.9초).
-        assert delay <= elapsed < 1.9 * delay, elapsed
-    finally:
-        _clear_search_clients()
-
-
 @pytest.mark.parametrize("failing", ["kakao", "naver"])
 async def test_unified_search_one_provider_failure_keeps_the_others_results(
     client: Any, verified_user: tuple[str, str], auth_cookies: Any, failing: str
