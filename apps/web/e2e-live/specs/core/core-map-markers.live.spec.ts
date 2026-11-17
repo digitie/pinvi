@@ -169,6 +169,7 @@ test.describe('CORE map markers', () => {
     const consent = page.getByTestId('location-consent-agree');
     if (await consent.isVisible({ timeout: 3_000 }).catch(() => false)) await consent.click();
     await expect(button).toHaveAttribute('data-follow-mode', 'follow', { timeout: 20_000 });
+    await expect(button).toHaveAttribute('data-follow-ready', 'true', { timeout: 20_000 });
     await waitForMapIdle(page);
     const map = (await page.getByTestId('trip-detail-map').boundingBox()) as Box;
     await page.mouse.move(map.x + map.width / 2, map.y + map.height * 0.6);
@@ -207,6 +208,7 @@ test.describe('CORE map markers', () => {
     const consent = page.getByTestId('location-consent-agree');
     if (await consent.isVisible({ timeout: 3_000 }).catch(() => false)) await consent.click();
     await expect(button).toHaveAttribute('data-follow-mode', 'follow', { timeout: 20_000 });
+    await expect(button).toHaveAttribute('data-follow-ready', 'true', { timeout: 20_000 });
     await waitForMapIdle(page);
     const canvas = (await page.locator('.maplibregl-canvas').first().boundingBox()) as Box;
     await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height * 0.6);

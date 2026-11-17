@@ -119,6 +119,7 @@ export function MyLocationControl({
           aria-busy={mode === 'locating'}
           data-testid="map-my-location"
           data-follow-mode={mode}
+          data-follow-ready={state.ready ? 'true' : 'false'}
           className={`focus-ring pointer-events-auto flex size-11 items-center justify-center rounded-full border border-hairline bg-canvas shadow-card hover:bg-surface-soft ${
             mode === 'follow' ? 'text-primary' : 'text-ink'
           }`}

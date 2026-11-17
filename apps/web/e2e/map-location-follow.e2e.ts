@@ -73,6 +73,8 @@ test('탐색 지도 내 위치 버튼 — 동의가 있으면 바로 따라가�
   // 손으로 지도를 끌면 따라가기만 꺼진다(점은 남는다) — 다시 누르면 돌아와 따라간다.
   const canvas = page.locator('.maplibregl-canvas').first();
   await expect(canvas).toBeVisible();
+  // 따라가기 카메라(flyTo)가 지도에 붙어 자리 잡은 뒤에 끈다 — 그 전 끌기는 애니메이션과 겹친다(#759 CI).
+  await expect(button).toHaveAttribute('data-follow-ready', 'true', { timeout: 15_000 });
   const area = (await canvas.boundingBox())!;
   await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
   await page.mouse.down();
