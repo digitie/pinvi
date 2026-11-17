@@ -76,6 +76,11 @@ jobs:
       - name: Typecheck (@pinvi/mobile)
         run: npm --workspace @pinvi/mobile run typecheck
 
+      # 단위·컴포넌트 시험(vitest + jsdom, react-native → react-native-web). 이 job이 aggregate 필수 check라
+      # 별도 job 대신 여기서 막는다 — mobile-export·mobile-wasm-macos도 이 job을 기다린다.
+      - name: Unit/component tests (@pinvi/mobile)
+        run: npm --workspace @pinvi/mobile run test
+
   mobile-export:
     needs: [mobile-typecheck, mobile-lint, mobile-doctor]
     name: mobile-export

@@ -31,6 +31,16 @@ React Native 앱이다.
 > gate 필수 check다. React Doctor의 full/warning gate는 mobile-typecheck에서 실행하고, mobile-export와 mobile-wasm-macos도 필수다(`mobile-doctor`는 별도의 `expo-doctor` 정보성). `build` 스크립트는 없어 루트
 > `npm run build --if-present`에서는 건너뛴다.
 
+### 단위·컴포넌트 시험 (`npm --workspace @pinvi/mobile run test`)
+
+- 러너는 웹·공용 패키지와 같은 **vitest 5.1.0 + jsdom 31.0.0 + @testing-library/react 16.3.3**(공통 의존성
+  정책 `versions`에 고정된 값 그대로 — common 릴리스 불필요). 설정은 `vitest.config.mts`, 시험은 `tests/`.
+- `react-native` 본체는 Flow 소스라 vite가 읽지 못하므로 시험에서는 `react-native-web`(Expo Web이 이미
+  쓰는 의존성)으로 바꿔 jsdom에 그린다. 네이티브 지도(`vworld-map-rn`)·expo 모듈은 각 시험이 `vi.mock`으로
+  대신한다 — 실기기 렌더링 검증이 아니라 화면 로직·hook 규칙 검증이다.
+- `typecheck`는 앱(`tsconfig.json`)과 시험(`tests/tsconfig.json`, DOM lib 추가)을 모두 본다.
+- CI: `mobile.yml`의 `mobile-typecheck` job(Aggregate 필수 check)이 typecheck 다음에 `test`를 실행한다.
+
 남은 작업: development build 생성(아래) + 화면 구현(`docs/architecture/expo-implementation-plan.md`).
 
 ## v1.0 scope gate (T-284)

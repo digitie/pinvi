@@ -1,3 +1,15 @@
+## 2026-11-17 (claude) — 모바일 단위·컴포넌트 시험 러너 (브랜치 `feat/mobile-test-runner`)
+
+- 소유자 승인(11-17, 모바일 여행 지도 작업의 선행). `apps/mobile`에 시험 러너가 없었다(웹 vitest가 모바일 컴포넌트 몇 개를
+  mock으로 검증할 뿐). 러너는 **vitest 5.1.0 + jsdom 31.0.0 + @testing-library/react 16.3.3** — 공통 의존성 정책
+  `versions`에 이미 고정된 값이라 common 릴리스가 필요 없다(번들 검사기·중앙 검사기 @9e163936 + 현재 정책으로 로컬 통과,
+  lock 변경은 `apps/mobile` devDependencies 세 줄뿐). jest-expo는 Babel·Flow 체인과 정책 밖 패키지를 늘려 택하지 않았다.
+- `react-native` 본체는 Flow 소스라 시험에서 `react-native-web`으로 alias한다(정확히 `react-native`만). node_modules
+  패키지는 alias를 거치지 않으므로 `react-native-safe-area-context`는 setup에서 mock, 네이티브 지도·expo 모듈은 시험별 mock.
+- `typecheck`가 `tests/tsconfig.json`(DOM lib)도 본다. CI는 `mobile-typecheck` job(Aggregate 필수)에 `test` 단계를 더했다 —
+  새 job을 만들면 aggregate-ci.yml을 고쳐야 하고 그러면 API·ETL 전 suite가 함께 돈다.
+- 첫 시험: `cameraBbox`(순수), 탐색 지도 교통 칩(상태 조회 → 칩 → 켠 레이어만 markers-in-bounds).
+
 ## 2026-11-16 (claude) — 추천 여행에 주변 축제·큐레이션 표시 (브랜치 `feat/recommend-curated-events`)
 
 소유자 지시 "추천 여행에 curated feature 및 축제 등 정보 읽어서 보여주도록". 이전의 `/notice-plans`는
