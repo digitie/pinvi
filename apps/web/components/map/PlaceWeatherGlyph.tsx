@@ -1,9 +1,9 @@
 'use client';
 
 import { WeatherIcon } from '@/components/weather/WeatherIcon';
-import { placeCurrentWeather } from '@/lib/placeWeather';
+import { placeCurrentWeather } from '@pinvi/domain';
 import { useMinuteNow, usePoiWeatherPeek } from '@/lib/usePoiWeather';
-import { conditionLabel, formatTemp } from '@/lib/weatherNow';
+import { conditionLabel, formatTemp } from '@pinvi/domain';
 import type { TripWeatherCard } from '@pinvi/schemas';
 import { useMemo } from 'react';
 

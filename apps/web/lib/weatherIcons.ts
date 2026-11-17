@@ -1,8 +1,14 @@
 /**
- * 날씨 상태 → lucide 아이콘·색 매핑. `WeatherIcon` 컴포넌트와 지도 마커 라벨 등 다른 화면이 같은 매핑을
- * 쓴다(같은 날씨가 화면마다 다른 아이콘으로 보이지 않게).
+ * 날씨 상태 → lucide 아이콘·색. 어떤 상태를 어떤 그림·색 의미로 그릴지는 `@pinvi/domain`
+ * (`weatherGlyphName`, `WEATHER_TONES`)이 정본이다 — 모바일과 같은 날씨가 같은 그림으로 보인다.
  */
-import type { WeatherConditionKind } from '@/lib/weatherNow';
+import {
+  WEATHER_TONES,
+  weatherGlyphName,
+  type WeatherConditionKind,
+  type WeatherGlyphName,
+  type WeatherTone,
+} from '@pinvi/domain';
 import {
   Cloud,
   CloudDrizzle,
@@ -20,41 +26,34 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-const DAY_ICONS: Record<WeatherConditionKind, LucideIcon> = {
-  clear: Sun,
-  partly: CloudSun,
-  cloudy: Cloud,
-  overcast: Cloudy,
-  rain: CloudRain,
-  shower: CloudDrizzle,
-  sleet: CloudHail,
-  snow: CloudSnow,
-  thunder: CloudLightning,
-  fog: CloudFog,
-  unknown: Thermometer,
+const GLYPHS: Record<WeatherGlyphName, LucideIcon> = {
+  Sun,
+  CloudSun,
+  Cloud,
+  Cloudy,
+  CloudRain,
+  CloudDrizzle,
+  CloudHail,
+  CloudSnow,
+  CloudLightning,
+  CloudFog,
+  Thermometer,
+  Moon,
+  CloudMoon,
 };
 
-/** 해·구름이 섞인 상태만 밤 아이콘이 따로 있다. */
-const NIGHT_ICONS: Partial<Record<WeatherConditionKind, LucideIcon>> = {
-  clear: Moon,
-  partly: CloudMoon,
+const TONE_CLASS: Record<WeatherTone, string> = {
+  warning: 'text-warning-text',
+  primary: 'text-primary',
+  error: 'text-error-text',
+  muted: 'text-muted',
 };
 
-/** 상태별 색 — 맑음은 주황, 강수는 파랑, 그 밖은 본문색. 토큰 class만 쓴다. */
-export const WEATHER_TONE: Record<WeatherConditionKind, string> = {
-  clear: 'text-warning-text',
-  partly: 'text-warning-text',
-  cloudy: 'text-muted',
-  overcast: 'text-muted',
-  rain: 'text-primary',
-  shower: 'text-primary',
-  sleet: 'text-primary',
-  snow: 'text-primary',
-  thunder: 'text-error-text',
-  fog: 'text-muted',
-  unknown: 'text-muted',
-};
+/** 상태별 색 class(토큰 class만 쓴다). */
+export const WEATHER_TONE: Record<WeatherConditionKind, string> = Object.fromEntries(
+  Object.entries(WEATHER_TONES).map(([condition, tone]) => [condition, TONE_CLASS[tone]]),
+) as Record<WeatherConditionKind, string>;
 
 export function weatherIconFor(condition: WeatherConditionKind, night = false): LucideIcon {
-  return (night ? NIGHT_ICONS[condition] : undefined) ?? DAY_ICONS[condition];
+  return GLYPHS[weatherGlyphName(condition, night)];
 }

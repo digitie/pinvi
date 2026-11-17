@@ -1,6 +1,7 @@
 """모바일 전용 endpoint — `apps/mobile`(Expo Dev Client) 지원.
 
-- VWorld 지도 키: 앱에 번들하지 않고 인증된 클라이언트에 server-issued로 발급(ADR-043).
+- VWorld 지도 키: 앱에 번들하지 않고 인증된 클라이언트에 server-issued로 발급(ADR-043). 로그인 없는
+  공유 화면은 그 공유 토큰이 유효할 때만 같은 키를 발급한다(`/mobile/shared/{trip_id}/{token}/vworld/token`).
 - 모바일 인증(`/mobile/auth/*`): 웹은 httpOnly cookie를 쓰지만 모바일은 cookie를 못 쓰므로
   access/refresh 토큰을 **본문으로** 반환한다(expo-implementation-plan §5 #2). 같은 인증 서비스를
   재사용하며, 웹 `/auth/*`(cookie) 경로는 그대로 둔다.
@@ -8,6 +9,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
@@ -39,6 +41,7 @@ from app.services.oauth_google import (
     consume_mobile_exchange,
     issue_login_state,
 )
+from app.services.trip import TripNotFoundError, get_trip_for_share_token
 from app.services.user_registration import (
     EmailNotVerifiedError,
     InvalidCredentialsError,
@@ -50,6 +53,18 @@ from app.services.user_registration import (
 router = APIRouter(prefix="/mobile", tags=["mobile"])
 
 log = get_logger("mobile")
+
+
+def _vworld_key_or_503() -> str:
+    if not settings.pinvi_vworld_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "VWORLD_NOT_CONFIGURED",
+                "message": "VWorld 지도 키가 설정되지 않았습니다.",
+            },
+        )
+    return settings.pinvi_vworld_api_key
 
 
 @router.get("/vworld/token", response_model=Envelope[MobileVWorldTokenResponse])
@@ -66,14 +81,7 @@ async def get_vworld_token(
     아니다. 발급은 인증 게이트 + 구조화 감사 로그(user_id/ttl만; 키 원본은 절대 로깅하지 않음)로
     추적한다. 공개 배포 전에는 opaque 단기 token 또는 tile proxy로 대체한다(ADR-045 게이트).
     """
-    if not settings.pinvi_vworld_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "VWORLD_NOT_CONFIGURED",
-                "message": "VWorld 지도 키가 설정되지 않았습니다.",
-            },
-        )
+    api_key = _vworld_key_or_503()
     # 감사 로그 — 누가/언제 발급받았는지. 키 원본은 절대 싣지 않는다(ADR-045 §결정 3).
     log.info(
         "mobile.vworld_token_issued",
@@ -82,7 +90,44 @@ async def get_vworld_token(
     )
     return Envelope.of(
         MobileVWorldTokenResponse(
-            api_key=settings.pinvi_vworld_api_key,
+            api_key=api_key,
+            ttl_seconds=settings.pinvi_vworld_token_ttl_seconds,
+        )
+    )
+
+
+@router.get(
+    "/shared/{trip_id}/{token}/vworld/token",
+    response_model=Envelope[MobileVWorldTokenResponse],
+)
+async def get_shared_vworld_token(
+    trip_id: uuid.UUID,
+    token: str,
+    db: DbSession,
+) -> Envelope[MobileVWorldTokenResponse]:
+    """로그인 없는 공유 화면(모바일 `shared/[tripId]/[token]`)의 지도 키 — 공유 토큰 범위 발급.
+
+    웹 공유 화면은 빌드타임 공개 설정 `NEXT_PUBLIC_VWORLD_API_KEY`로 바탕지도를 그린다(로그인 없음).
+    모바일은 키를 번들하지 않으므로(ADR-043) 같은 키를 **그 여행의 유효한 공유 토큰을 가진 요청에만** 준다 —
+    공유 화면 본문(`GET /trips/{id}/shared/{token}`)과 같은 검증(해제·만료·삭제된 여행은 404)이다. 교통 등
+    로그인이 필요한 다른 endpoint의 인증은 바꾸지 않는다. 감사 로그에는 trip_id·ttl만 싣는다(토큰·키 원본 금지).
+    """
+    try:
+        await get_trip_for_share_token(db, trip_id=trip_id, token=token)
+    except TripNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    api_key = _vworld_key_or_503()
+    log.info(
+        "mobile.vworld_token_issued_shared",
+        trip_id=str(trip_id),
+        ttl_seconds=settings.pinvi_vworld_token_ttl_seconds,
+    )
+    return Envelope.of(
+        MobileVWorldTokenResponse(
+            api_key=api_key,
             ttl_seconds=settings.pinvi_vworld_token_ttl_seconds,
         )
     )

@@ -18,6 +18,11 @@ vi.mock('react-native', () => ({
 vi.mock('../../mobile/components/ui', () => ({
   Muted: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
 }));
+// 이름·아이콘 핀은 react-native-svg(네이티브 모듈)로 그린다 — 이 시험은 어댑터의 지도 계약만 본다
+// (핀 그림은 모바일 vitest `MapPin.test.tsx`).
+vi.mock('../../mobile/components/MapPin', () => ({
+  MapPin: ({ label }: { label?: string }) => <i data-map-pin={label ?? ''} />,
+}));
 vi.mock('vworld-map-web', () => ({
   VWorldMapView: (props: VWorldMapViewProps) => {
     observed.props = props;

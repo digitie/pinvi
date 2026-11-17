@@ -5,7 +5,7 @@ import { TripComments } from '@/components/trips/TripComments';
 import { TripDayHeader } from '@/components/trips/TripDayHeader';
 import { TripExportButton } from '@/components/trips/TripExportButton';
 import { TripMapView } from '@/components/trips/TripMapView';
-import { placeWeatherCards } from '@/lib/placeWeather';
+import { placeWeatherCards } from '@pinvi/domain';
 import { TripPoiList } from '@/components/trips/TripPoiList';
 import { ButtonLink } from '@/components/ui/Button';
 import { apiClient } from '@/lib/api';

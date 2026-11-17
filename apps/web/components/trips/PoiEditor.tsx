@@ -8,7 +8,7 @@ import { buildPoiDetailPatch, isoToDatetimeLocal, type PoiDetailForm } from '@pi
 import { FormField } from '@/components/forms/FormField';
 import { FormTextArea } from '@/components/forms/FormTextArea';
 import { MakiIcon } from '@/components/map/MakiIcon';
-import { MARKER_ICON_OPTIONS, type MarkerIconOption } from '@/lib/makiIcons';
+import { MARKER_ICON_OPTIONS, type MarkerIconOption } from '@pinvi/domain';
 
 const COLOR_KEYS = Object.keys(MARKER_PALETTE) as MarkerColorKey[];
 

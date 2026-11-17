@@ -21,3 +21,30 @@ vi.mock('react-native-safe-area-context', async () => {
     useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
   };
 });
+
+// lucide-react-native·react-native-svg도 진짜 `react-native`를 부른다 — 그림 대신 이름을 남기는 표식으로
+// 바꾼다. 표에 없는 그림을 앱이 부르면 "No export defined" 오류로 드러난다(그림 표가 공용 이름과 어긋나지 않게).
+vi.mock('lucide-react-native', async () => {
+  const { createElement } = await import('react');
+  const { MARKER_ICON_GLYPHS, WEATHER_GLYPH_NAMES } = await import('@pinvi/domain');
+  const names = new Set<string>([...Object.values(MARKER_ICON_GLYPHS), ...WEATHER_GLYPH_NAMES]);
+  return Object.fromEntries(
+    [...names].map((name) => [
+      name,
+      (props: { color?: string; size?: number }) =>
+        createElement('span', {
+          'data-lucide': name,
+          'data-color': props.color,
+          'data-size': props.size,
+        }),
+    ]),
+  );
+});
+
+vi.mock('react-native-svg', async () => {
+  const { createElement } = await import('react');
+  return {
+    SvgUri: (props: { uri: string; fill?: string }) =>
+      createElement('span', { 'data-svg-uri': props.uri, 'data-fill': props.fill }),
+  };
+});

@@ -32,6 +32,8 @@ export function VWorldMapView({ markers = [], onFeaturePress, ...props }: Platfo
             label={marker.label}
             selected={marker.selected}
             compact={marker.compact}
+            icon={marker.icon}
+            weather={marker.weather}
           />
         </Marker>
       ))}

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlatformMarkerItem, PlatformVWorldMapProps } from '../components/VWorldMap.types';
+import { rainyDayCard, rainyPoiCard } from './fixtures/weather';
 
 /**
  * 여행 상세 화면 — 네이티브 지도(`vworld-map-rn`)는 mock으로 바꾸고, 화면이 지도에 넘기는 마커·첫 시점·
@@ -43,14 +44,37 @@ vi.mock('../components/VWorldMap', () => ({
   },
 }));
 
+const auth = vi.hoisted(() => ({ userId: 'user-owner' as string | null }));
+vi.mock('../lib/auth', () => ({
+  useAuth: () => ({ user: auth.userId ? { user_id: auth.userId } : null }),
+}));
+
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ tripId: 'trip-1' }),
   useRouter: () => ({ push: vi.fn() }),
 }));
 
+const emptyWeather = (path: string): unknown => ({
+  feature_id: path,
+  is_stale: false,
+  source_styles: [],
+  metrics: [],
+});
+
 const server = vi.hoisted(() => ({
   paths: [] as string[],
   transportEnabled: true,
+  // 장소별 현재 날씨 — 기본은 빈 카드(날씨 모름).
+  weather: null as null | ((path: string) => unknown),
+  // 저장된 영업 정보 — 경포대만 전화가 있다.
+  placeDetails: (path: string): unknown => ({
+    opening_hours: ['매일 09:00~18:00'],
+    closed_days: null,
+    phone: path.includes('poi-a') ? '033-640-5000' : null,
+    website: null,
+    sources: { opening_hours: 'kor_travel_map' },
+    fetched_at: '2026-11-17T00:00:00Z',
+  }),
 }));
 
 function poi(id: string, title: string, coord: { lon: number; lat: number } | null, color: string) {
@@ -79,6 +103,8 @@ function day(index: number, pois: ReturnType<typeof poi>[]) {
     holidays: [],
     rise_set: null,
     rise_set_reference: null,
+    weather_cards: {},
+    weather_by_feature_id: {},
     pois,
   };
 }
@@ -91,7 +117,9 @@ const TRIP_VIEW = {
     end_date: '2026-11-21',
     description: null,
     status: 'planned',
+    owner_user_id: 'user-owner',
   },
+  companions: [{ user_id: 'user-viewer', role: 'viewer' }],
   days: [
     day(1, [
       poi('poi-a', '경포대', { lon: 128.9, lat: 37.8 }, 'P-01'),
@@ -129,6 +157,23 @@ vi.mock('../lib/api', () => ({
           ],
         };
       }
+      if (path.endsWith('/place-details/kakao-phone')) {
+        return {
+          provider: 'kakao',
+          matched: true,
+          name: null,
+          address: null,
+          phone: '033-111-2222',
+          provider_url: 'https://place.map.kakao.com/1',
+          external_id: '1',
+        };
+      }
+      if (path.endsWith('/place-details')) {
+        return server.placeDetails(path);
+      }
+      if (/^\/trips\/trip-1\/pois\/[^/]+\/weather$/.test(path)) {
+        return (server.weather ?? emptyWeather)(path);
+      }
       if (path.startsWith('/transport/markers-near')) {
         return {
           radius_m: { fuel_station: 10_000, highway_incident: 20_000 },
@@ -159,7 +204,14 @@ vi.mock('../lib/api', () => ({
   },
 }));
 
+// 경포대(poi-a)는 여행 응답의 일자 날씨 카드로 비가 온다(마커 날씨는 새 요청 없이 이 카드에서).
+Object.assign(TRIP_VIEW.days[0]!, {
+  weather_cards: { 'card-1': rainyDayCard() },
+  weather_by_feature_id: { 'feature-poi-a': { state: 'found', card_key: 'card-1' } },
+});
+
 const { default: TripDetailScreen } = await import('../app/(app)/trips/[tripId]/index');
+const { poiWeatherStore } = await import('../lib/poiWeather');
 
 function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -180,9 +232,35 @@ beforeEach(() => {
   map.mounts = 0;
   server.paths = [];
   server.transportEnabled = true;
+  server.weather = null;
+  auth.userId = 'user-owner';
+  poiWeatherStore.reset();
 });
 
 describe('모바일 여행 상세 지도', () => {
+  it('마커는 원 안 아이콘과 이름 옆 현재 날씨를 싣고, 목록 줄은 좌표를 아는 장소만 날씨를 묻는다', async () => {
+    server.weather = (path) => (path.includes('poi-b') ? rainyPoiCard() : emptyWeather(path));
+    renderScreen();
+    await screen.findByTestId('vworld-map');
+    const poiA = () => markers().find((m) => m.id === 'poi:poi-a');
+    const poiB = () => markers().find((m) => m.id === 'poi:poi-b');
+    // 아이콘 없는 장소도 기본 핀 아이콘(웹과 같은 해석).
+    expect(poiA()?.icon).toBeTruthy();
+    // 일자 카드에서 — 요청 없이.
+    await waitFor(() => expect(poiA()?.weather).toMatchObject({ condition: 'rain' }));
+    // 장소별 현재 카드(목록 배지가 받은 공유 캐시)에서.
+    await waitFor(() => expect(poiB()?.weather).toMatchObject({ condition: 'rain' }));
+    expect(markers().find((m) => m.id === 'poi:poi-c')?.weather).toBeNull();
+
+    const badge = await within(screen.getByTestId('trip-poi-row-poi-b')).findByTestId(
+      'weather-badge',
+    );
+    expect(badge.textContent).toContain('12');
+    const weatherRequests = server.paths.filter((p) => p.endsWith('/weather'));
+    expect(weatherRequests.some((p) => p.includes('poi-d'))).toBe(false);
+    expect(weatherRequests.filter((p) => p.includes('poi-b'))).toHaveLength(1);
+  });
+
   it('좌표 있는 여행 장소를 일자·마커 색 + 이름 라벨 마커로 그리고, 모두 담는 시점으로 연다', async () => {
     renderScreen();
     await screen.findByTestId('vworld-map');
@@ -297,5 +375,56 @@ describe('모바일 여행 상세 지도', () => {
     });
     expect(screen.queryByRole('button', { name: '주유소' })).toBeNull();
     expect(nearRequests()).toEqual([]);
+  });
+
+  it('지도 마커를 누르면 읽기 전용 장소 시트가 열리고, 요약만 보이며 항목은 접혀 있다', async () => {
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: 'marker 경포대' }));
+    const sheet = await screen.findByTestId('place-sheet');
+    expect(within(sheet).getByTestId('place-sheet-title').textContent).toBe('경포대');
+    expect(within(sheet).queryByTestId('place-sheet-hours')).toBeNull();
+    expect(within(sheet).queryByTestId('place-sheet-memo')).toBeNull();
+    // 저장된 영업시간 요약(오늘 줄)은 요약에 늘 보인다.
+    expect(await within(sheet).findByTestId('place-sheet-today-hours')).toBeTruthy();
+    // 편집할 수 있는 사람(소유자)에게만 편집 화면 연결.
+    expect(within(sheet).getByRole('button', { name: '장소 편집' })).toBeTruthy();
+  });
+
+  it('영업 정보: 저장된 전화가 있으면 카카오를 부르지 않고, 없으면 카카오 전화를 출처와 함께 보인다', async () => {
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: 'marker 경포대' }));
+    let sheet = await screen.findByTestId('place-sheet');
+    fireEvent.click(within(sheet).getByTestId('place-sheet-hours-toggle'));
+    expect((await within(sheet).findByTestId('place-sheet-phone')).textContent).toBe(
+      '033-640-5000',
+    );
+    expect(server.paths.some((p) => p.endsWith('/kakao-phone'))).toBe(false);
+    fireEvent.click(within(sheet).getByRole('button', { name: '닫기' }));
+    await waitFor(() => expect(screen.queryByTestId('place-sheet')).toBeNull());
+
+    // 목록 줄의 '정보' 버튼으로도 연다.
+    fireEvent.click(screen.getByRole('button', { name: '안목해변 장소 정보' }));
+    sheet = await screen.findByTestId('place-sheet');
+    fireEvent.click(within(sheet).getByTestId('place-sheet-hours-toggle'));
+    const kakao = await within(sheet).findByTestId('place-sheet-kakao-phone');
+    expect(kakao.textContent).toContain('033-111-2222');
+    expect(kakao.textContent).toContain('출처: 카카오맵');
+    expect(server.paths.filter((p) => p.endsWith('/kakao-phone'))).toHaveLength(1);
+  });
+
+  it('메모·지도 앱 항목, 보기 전용 동행에게는 편집 연결이 없다', async () => {
+    auth.userId = 'user-viewer';
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: 'marker 오죽헌' }));
+    const sheet = await screen.findByTestId('place-sheet');
+    expect(within(sheet).queryByRole('button', { name: '장소 편집' })).toBeNull();
+    fireEvent.click(within(sheet).getByTestId('place-sheet-memo-toggle'));
+    expect(within(sheet).getByTestId('place-sheet-memo').textContent).toContain('메모가 없습니다');
+    fireEvent.click(within(sheet).getByTestId('place-sheet-maps-toggle'));
+    expect(within(sheet).getByTestId('place-sheet-map-naver')).toBeTruthy();
+    expect(within(sheet).getByTestId('place-sheet-map-kakao')).toBeTruthy();
+    expect(within(sheet).getByTestId('place-sheet-map-google')).toBeTruthy();
+    // 메모를 펼치면 다른 항목은 접힌다(한 번에 하나).
+    expect(within(sheet).queryByTestId('place-sheet-memo')).toBeNull();
   });
 });

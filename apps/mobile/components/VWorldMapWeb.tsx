@@ -106,6 +106,8 @@ export function WebVWorldMap({
                 label={marker.label}
                 selected={marker.selected}
                 compact={marker.compact}
+                icon={marker.icon}
+                weather={marker.weather}
               />
             ) : (
               <View style={markerCircle(marker)} />

@@ -40,7 +40,7 @@ import {
 } from '@/lib/tripDateLabels';
 import { type PendingCreatedPoi, withCreatedPois } from '@/lib/tripViewCreatedPoi';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
-import { placeWeatherCards } from '@/lib/placeWeather';
+import { placeWeatherCards } from '@pinvi/domain';
 import {
   ApiError,
   TripRealtimeClient,

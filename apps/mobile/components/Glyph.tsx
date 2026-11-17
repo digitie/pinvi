@@ -1,0 +1,125 @@
+import {
+  Beer,
+  BedDouble,
+  Bike,
+  Bus,
+  Camera,
+  Car,
+  Castle,
+  Cloud,
+  CloudDrizzle,
+  CloudFog,
+  CloudHail,
+  CloudLightning,
+  CloudMoon,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
+  Cloudy,
+  Coffee,
+  Croissant,
+  Drama,
+  FerrisWheel,
+  Fish,
+  Flag,
+  Flower2,
+  Fuel,
+  Heart,
+  Hospital,
+  House,
+  Landmark,
+  MapPin,
+  Moon,
+  Mountain,
+  PawPrint,
+  Plane,
+  Ship,
+  ShoppingBag,
+  ShoppingCart,
+  Sparkles,
+  SquareParking,
+  Star,
+  Sun,
+  Tent,
+  Thermometer,
+  TrainFront,
+  Trees,
+  Umbrella,
+  UtensilsCrossed,
+  Waves,
+  type LucideIcon,
+} from 'lucide-react-native';
+import type { MarkerGlyphName, WeatherGlyphName } from '@pinvi/domain';
+
+export type GlyphName = MarkerGlyphName | WeatherGlyphName;
+
+/**
+ * 공용 그림 이름(`@pinvi/domain` `MARKER_ICON_GLYPHS`·`weatherGlyphName`) → lucide-react-native 컴포넌트.
+ * 웹은 같은 이름을 lucide-react로 그린다 — 같은 장소·날씨가 두 앱에서 같은 그림이다. 이름이 빠지면 타입 오류다.
+ */
+const GLYPHS: Record<GlyphName, LucideIcon> = {
+  MapPin,
+  Star,
+  Heart,
+  House,
+  BedDouble,
+  Tent,
+  UtensilsCrossed,
+  Coffee,
+  Croissant,
+  Beer,
+  ShoppingBag,
+  ShoppingCart,
+  Sparkles,
+  Camera,
+  Landmark,
+  Castle,
+  Flower2,
+  Trees,
+  Mountain,
+  Umbrella,
+  Waves,
+  FerrisWheel,
+  PawPrint,
+  Fish,
+  Drama,
+  Flag,
+  Bike,
+  SquareParking,
+  Fuel,
+  Car,
+  Bus,
+  TrainFront,
+  Plane,
+  Ship,
+  Hospital,
+  Sun,
+  CloudSun,
+  Cloud,
+  Cloudy,
+  CloudRain,
+  CloudDrizzle,
+  CloudHail,
+  CloudSnow,
+  CloudLightning,
+  CloudFog,
+  Thermometer,
+  Moon,
+  CloudMoon,
+};
+
+/** lucide 그림 하나(react-native-svg). */
+export function Glyph({
+  name,
+  size,
+  color,
+  strokeWidth = 2.25,
+}: {
+  name: GlyphName;
+  size: number;
+  color: string;
+  strokeWidth?: number;
+}) {
+  const Icon = GLYPHS[name];
+  return <Icon size={size} color={color} strokeWidth={strokeWidth} />;
+}
