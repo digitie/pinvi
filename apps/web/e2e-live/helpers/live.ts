@@ -285,6 +285,22 @@ export function watchRouterRequests(page: Page): (timeoutMs?: number) => Promise
   };
 }
 
+/**
+ * `page.goto` that survives one Firefox `NS_BINDING_ABORTED`. A soft navigation still in flight from the previous
+ * page (e.g. the post-login /home RSC fetch) can abort our goto in Firefox even after `watchRouterRequests`
+ * reported quiet (2026-11-17 cat12 CORE-016 @firefox: `page.goto('/map')`). Retrying once is enough: the stray
+ * navigation has committed by then. Any other error, or a second abort, is rethrown.
+ */
+export async function gotoTolerant(page: Page, url: string): Promise<void> {
+  try {
+    await page.goto(url);
+  } catch (err) {
+    if (!String(err).includes('NS_BINDING_ABORTED')) throw err;
+    await page.waitForLoadState('load').catch(() => undefined);
+    await page.goto(url);
+  }
+}
+
 export interface LoginOptions {
   /** Skip the session cache and log in through the form (auth/session cases that rotate tokens). */
   fresh?: boolean;

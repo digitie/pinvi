@@ -12,6 +12,7 @@ import {
   e2ePrefix,
   clickableFeatureMarkers,
   ensureFeatureMarkers,
+  gotoTolerant,
   loginAsUser,
   searchAndAddPlace,
   shot,
@@ -34,7 +35,7 @@ async function openExploreMap(page: Page) {
     (r) => r.url().includes('/features/in-bounds') && r.status() === 200,
     { timeout: 45_000 },
   );
-  await page.goto('/map');
+  await gotoTolerant(page, '/map');
   await waitForMapCanvas(page);
   await inBounds;
   // Default Seoul viewport can be all clusters — zoom in until an individual feature pin renders.

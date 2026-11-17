@@ -371,7 +371,8 @@ test.describe('NEAR explore map — mobile layout', () => {
     const panelBox = (await controls(page).boundingBox())!;
     expect(boxesOverlap(searchBox, panelBox)).toBe(false);
     expect(panelBox.y).toBeGreaterThanOrEqual(searchBox.y + searchBox.height);
-    expect(panelBox.width).toBeLessThanOrEqual(390 * 0.8 + 1); // max-w-[80vw]
+    // #775: the overlay stack is w-80 capped at calc(100% - 3.75rem), so it never reaches the zoom buttons.
+    expect(panelBox.width).toBeLessThanOrEqual(390 - 60 + 1);
     const input = search.getByRole('textbox', { name: '장소·주소 검색' });
     await input.click({ position: { x: 12, y: 12 } });
     await expect(input).toBeFocused();
