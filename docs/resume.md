@@ -1,3 +1,8 @@
+## 모바일 시험 러너 (2026-11-17)
+
+PR claude feat/mobile-test-runner: `apps/mobile` vitest + jsdom + RTL(react-native → react-native-web), CI는 mobile-typecheck 단계.
+다음: 모바일 여행 지도(장소 마커·목록 연동·여행 장소 반경 교통 칩) PR.
+
 ## 2026-11-16 (claude) — 추천 여행에 주변 축제·큐레이션 표시 (브랜치 `feat/recommend-curated-events`)
 
 소유자 지시 "추천 여행에 curated feature 및 축제 등 정보 읽어서 보여주도록". 이전의 `/notice-plans`는
