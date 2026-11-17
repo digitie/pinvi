@@ -1,14 +1,14 @@
 # 공통 산출물 출처 및 무결성
 
-현재 정본은 integration-11-review의 foundation 최초릴리스7종이다. 부모가 동결한 tgz·원장을 그대로 소비한다.
+현재 정본은 integration-12-review다(2026-11-17, common #58 동결: ui 0.2.1·tokens 0.1.2·vworld web 1.0.4/rn 1.0.2). 부모가 동결한 tgz·원장을 그대로 소비한다.
 common PR49는 main e8ed3ae75000be5cd22a3a11492bd97660635d78로 병합됐다.
 동일 버전의 bytes를 바꾸거나 독립 pack을 만들지 않는다. 후속 runtime 변경은 새 버전으로 소비한다.
 원장의 제작 시점 status 라벨은 정본 그대로 보존한다.
 
 | 패키지 | 정확 버전 | 실제 package.json 라이선스 | SHA512 |
 | --- | --- | --- | --- |
-| @kor-travel/tokens | 0.1.1 | GPL-3.0-or-later | sha512-85mqNJXqhTlA4RbtKUhmzx6rH6mOOeNmsXTJtCetQ5y8njLy+5XLZbdT6j1tf3ME9XQA6X63Ah4kmuLdqEZHbA== |
-| @kor-travel/ui | 0.2.0 | GPL-3.0-or-later | sha512-BsRRdnJUp6FQ2KWkXtINb7IkrxxwnWFlLP/oVlNN4UXBKren7uTlnYT4iJsdaO98iA4Tn2EMPX06eT2uB5jEDA== |
+| @kor-travel/tokens | 0.1.2 | GPL-3.0-or-later | sha512-IF5qTyPe0LrVFvHRHp2roruudcOO2U96b11zVr0D+Ir1Twsuc2UcAqkYoEL6LfMpDMiq6Xp+CfIDv7N/zkmo/w== |
+| @kor-travel/ui | 0.2.1 | GPL-3.0-or-later | sha512-Yk0TFRE3UUPhHH3ErzgYQtNft+pzy3J5oYZaLwc4MnhUVUT3KPlvCQJDZtj8MvbKdNcVmi4fduxx3Z0FcIfTnw== |
 | lightningcss | 1.33.0+nativecss.fix.4 | MPL-2.0 | sha512-zDQ03VJE37OlyBrLsRcsEdIVu0T4BXJKDH5y9//To6GlGN2UrKQGERFVAFblkPQ5ZEbhuOp5wpXxGARZNdbQLA== |
 | vworld-map-core | 1.0.1 | GPL-3.0-only | sha512-Djm14Arr7U0r7Sabj6P0V57CdzWIGaJmecklmY1hwrq1QUZJjMUFgkZfGRFalUo6AFzHEwwzOEzbJPMifGhINw== |
 | vworld-map-rn | 1.0.2 | GPL-3.0-only | sha512-ZJ6WmcABs8Jia6VZUOKutSYBPaWp7Ws/9wEMEcHwrVlpUwiBysCYOmvaUDtBj2HaSN3CgUMjzRQW2KlJs4yElQ== |
@@ -17,7 +17,7 @@ common PR49는 main e8ed3ae75000be5cd22a3a11492bd97660635d78로 병합됐다.
 
 ## 소스 정본
 
-- common: a35481349d6747b4f13b958ae64d9c0bbd0b5413
+- common: 938d1db701286414113324da714132db62e3311e (ui 0.2.1·tokens 0.1.2 producer, main push docs `packages` artifact `common-release-packs-938d1db…`)
 - maplibre-vworld-react: 79b70997de8dd4a6bcc9630233f14f273cb27991 (web 1.0.4 — #33 vworld:// 스킴 수정, rn 1.0.2 — #34 web 대조 수정. 세 tgz 모두 이 commit의 main push Marker CI pack이며 core 1.0.1·web 1.0.4는 이전 pack과 byte 동일)
 - lightningcss: 748651cbd845971e65c411166ddee101745dab21
 - serde-content: 18e53fcf6f8ace093a292891b34fa3411192617d

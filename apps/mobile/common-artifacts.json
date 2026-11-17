@@ -1,8 +1,8 @@
 {
   "status": "CANDIDATE_NOT_RELEASED",
-  "candidate": "integration-11-review",
+  "candidate": "integration-12-review",
   "sources": {
-    "common": "a35481349d6747b4f13b958ae64d9c0bbd0b5413",
+    "common": "938d1db701286414113324da714132db62e3311e",
     "maplibre-vworld-react": "79b70997de8dd4a6bcc9630233f14f273cb27991",
     "lightningcss": "748651cbd845971e65c411166ddee101745dab21",
     "serde-content": "18e53fcf6f8ace093a292891b34fa3411192617d",
@@ -10,16 +10,16 @@
   },
   "packages": {
     "@kor-travel/tokens": {
-      "version": "0.1.1",
-      "filename": "kor-travel-tokens-0.1.1.tgz",
-      "integrity": "sha512-85mqNJXqhTlA4RbtKUhmzx6rH6mOOeNmsXTJtCetQ5y8njLy+5XLZbdT6j1tf3ME9XQA6X63Ah4kmuLdqEZHbA==",
-      "file": "file:../web/vendor/kor-travel-tokens-0.1.1.tgz"
+      "version": "0.1.2",
+      "filename": "kor-travel-tokens-0.1.2.tgz",
+      "integrity": "sha512-IF5qTyPe0LrVFvHRHp2roruudcOO2U96b11zVr0D+Ir1Twsuc2UcAqkYoEL6LfMpDMiq6Xp+CfIDv7N/zkmo/w==",
+      "file": "file:../web/vendor/kor-travel-tokens-0.1.2.tgz"
     },
     "@kor-travel/ui": {
-      "version": "0.2.0",
-      "filename": "kor-travel-ui-0.2.0.tgz",
-      "integrity": "sha512-BsRRdnJUp6FQ2KWkXtINb7IkrxxwnWFlLP/oVlNN4UXBKren7uTlnYT4iJsdaO98iA4Tn2EMPX06eT2uB5jEDA==",
-      "file": "file:../web/vendor/kor-travel-ui-0.2.0.tgz"
+      "version": "0.2.1",
+      "filename": "kor-travel-ui-0.2.1.tgz",
+      "integrity": "sha512-Yk0TFRE3UUPhHH3ErzgYQtNft+pzy3J5oYZaLwc4MnhUVUT3KPlvCQJDZtj8MvbKdNcVmi4fduxx3Z0FcIfTnw==",
+      "file": "file:../web/vendor/kor-travel-ui-0.2.1.tgz"
     },
     "lightningcss": {
       "version": "1.33.0+nativecss.fix.4",
