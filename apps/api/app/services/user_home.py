@@ -275,7 +275,19 @@ async def build_user_home(db: AsyncSession, *, user_id: uuid.UUID, today: date) 
             ).where(_in_scope(user_id))
         )
     ).all()
-    trips = [HomeTripRow(*row[:7], joined=row[7] != user_id) for row in trip_rows]
+    trips = [
+        HomeTripRow(
+            trip_id=row.trip_id,
+            title=row.title,
+            region_hint=row.region_hint,
+            primary_region_code=row.primary_region_code,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            updated_at=row.updated_at,
+            joined=row.owner_user_id != user_id,
+        )
+        for row in trip_rows
+    ]
     if not trips:
         return summarize_home(today=today, trips=[], place_counts={}, visited=[])
 
