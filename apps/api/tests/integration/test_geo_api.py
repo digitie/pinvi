@@ -728,3 +728,82 @@ async def test_unified_search_bbox_is_validated_and_ignored_when_outside_korea(
         )
     finally:
         _clear_search_clients()
+
+
+# ── T-READ-PIN-07 — Kakao·Naver를 함께 기다린다 ────────────────────────────────────────────────
+
+
+async def test_unified_search_waits_on_kakao_and_naver_together(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    """Kakao는 Naver가 이미 출발했을 때만 답한다 — 차례로 부르면 Kakao가 Naver를 영영 기다린다."""
+    import asyncio
+
+    naver_started = asyncio.Event()
+
+    class _KakaoAfterNaver(_FakeKakaoLocalClient):
+        async def search_keyword(self, **kwargs: Any) -> dict[str, Any]:
+            await asyncio.wait_for(naver_started.wait(), timeout=2)
+            return await super().search_keyword(**kwargs)
+
+    class _NaverSignals(_FakeNaverLocalClient):
+        async def search_local(self, **kwargs: Any) -> dict[str, Any]:
+            naver_started.set()
+            await asyncio.sleep(0)
+            return await super().search_local(**kwargs)
+
+    user_id, _ = verified_user
+    _override_search_clients(
+        _FakeKorTravelMapClient(),
+        _FakeKorTravelGeoClient(),
+        kakao=_KakaoAfterNaver(),
+        naver=_NaverSignals(),
+    )
+    try:
+        resp = await client.get("/search?q=광안", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        sources = [r["source"] for r in data["results"]]
+        # 표시 순서는 종전과 같다: internal → kakao → naver.
+        assert sources.index("feature") < sources.index("kakao") < sources.index("naver")
+        assert data["degraded_sources"] == []
+    finally:
+        _clear_search_clients()
+
+
+@pytest.mark.parametrize("failing", ["kakao", "naver"])
+async def test_unified_search_one_provider_failure_keeps_the_others_results(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any, failing: str
+) -> None:
+    from app.clients.kakao_local import KakaoLocalUnavailable
+    from app.clients.naver_local import NaverLocalUnavailable
+
+    class _DownKakao(_FakeKakaoLocalClient):
+        async def search_keyword(self, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append(kwargs)
+            raise KakaoLocalUnavailable("down")
+
+    class _DownNaver(_FakeNaverLocalClient):
+        async def search_local(self, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append(kwargs)
+            raise NaverLocalUnavailable("down")
+
+    kakao = _DownKakao() if failing == "kakao" else _FakeKakaoLocalClient()
+    naver = _DownNaver() if failing == "naver" else _FakeNaverLocalClient()
+    user_id, _ = verified_user
+    _override_search_clients(
+        _FakeKorTravelMapClient(), _FakeKorTravelGeoClient(), kakao=kakao, naver=naver
+    )
+    try:
+        resp = await client.get("/search?q=광안", cookies=auth_cookies(user_id))
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        sources = [r["source"] for r in data["results"]]
+        assert data["degraded_sources"] == [failing]
+        assert failing not in sources
+        survivor = "naver" if failing == "kakao" else "kakao"
+        assert survivor in sources
+        assert len(kakao.calls) == 1
+        assert len(naver.calls) == 1
+    finally:
+        _clear_search_clients()

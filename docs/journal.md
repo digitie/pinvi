@@ -1,3 +1,18 @@
+## 2026-11-18 (claude) — rate-limit COMMIT 비동기 + 통합 검색 Kakao·Naver 동시 대기 (브랜치 `perf/read-pin-05-07-request-cost`)
+
+- 출처: Map 읽기 성능 계획 `T-READ-PIN-05`(분명히 낭비인 부분만)·`T-READ-PIN-07`. 소유자 결정(2026-11-18): 측정에 기대는 것은 미룬다.
+- `05`: 모든 요청이 handler 앞에서 rate-limit 판정 문장을 COMMIT하며 WAL flush(fsync)를 기다렸다 — 디스크가 밀리는 n150에서 상류 없는
+  route가 초 단위였던 바닥의 한 몫(F-13). 판정 문장의 한 행 자리에 `set_config('synchronous_commit', 'off', true)`를 넣어 그
+  transaction에만 비동기 COMMIT을 건다. 문장은 여전히 하나(왕복 증가 없음, 기존 "한 문장" 시험 유지), 설정은 transaction-local이라 pool
+  연결에 남지 않는다. 잃는 것은 crash 직전 몇백 ms의 개수뿐이다. **위치 감사 outbox는 동기 COMMIT 그대로**(시험). 사용자 조회는 요청당 PK
+  한 번이고 위치 감사 쓰기는 좌표를 선언한 route만이라 낭비가 아니어서 손대지 않았다. 구간 histogram(①)은 측정 창과 함께 한다.
+- `07`: Kakao와 Naver를 `asyncio.gather`로 함께 기다린다 — 그 구간이 합에서 느린 쪽 하나로. 결과·`degraded_sources` 순서, 위치 감사 선언
+  지점(Kakao 호출 직전), 호출 수는 같다. 예상 밖 예외는 종전처럼 500이다(위 feature·address gather와 같은 방식).
+- 미룸: `03`(이득 상한 1.5초가 운영 수치에 달림, 세션 분리 위험 중간), `02`(zoom 분포 `06` 필요). `06`은 n150 io-guard 75라 실행하지 않았다.
+- 시험(통합, 실제 PG): COMMIT 직전 `synchronous_commit`이 rate-limit에서 off·outbox에서 연결 기본값, 같은 연결에서 off → COMMIT 뒤 on(누수
+  없음, 비내구 시험 PG에서도 뜻이 있게 연결 기본값을 on으로 둔다), Kakao가 Naver 출발을 기다리는 Event 시험(차례로면 timeout), 한쪽 실패 시
+  다른 쪽 결과 유지(양방향). 적대 리뷰 1회(must-fix 없음, 시간 상한 시험은 n150 부하에서 흔들릴 수 있어 뺐다).
+
 ## 2026-11-18 (claude) — Map 예산 초과 503 재시도 중단 + 교통·날씨 동시 호출 상한 16 (브랜치 `perf/read-pin-04-01-map-client`)
 
 - 출처: Map [읽기 성능 계획](https://github.com/digitie/kor-travel-map/blob/main/docs/reports/2026-11-17-read-performance-plan.md)

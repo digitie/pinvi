@@ -166,6 +166,14 @@ class PostgresRateLimitBackend:
     )
     # override와 증가는 같은 statement snapshot에서 결정한다. configured cap이 있으면
     # 과거 allowed는 우회가 아니며 blocked는 생성 순서와 무관하게 우선한다.
+    #
+    # T-READ-PIN-05: 모든 요청이 handler 앞에서 이 문장을 COMMIT한다. 동기 COMMIT이면 요청마다 WAL flush
+    # (fsync)를 기다린다 — 디스크가 밀리는 호스트에서는 상류를 부르지 않는 route도 초 단위였다. 이 표는
+    # 1분 창의 개수이고 crash 직전 몇백 ms의 증가를 잃어도 한도 판정이 조금 느슨해질 뿐이므로, 이
+    # transaction에만 `synchronous_commit = off`를 건다(`set_config(..., true)` = `SET LOCAL`, COMMIT과 함께
+    # 사라져 pool 연결에 남지 않는다). 따로 `SET LOCAL`을 보내면 요청마다 왕복이 하나 늘어 FROM의 한 행
+    # 자리에서 함께 평가한다(volatile 함수라 planner가 지우지 않는다). 위치 감사 outbox 등 다른 쓰기에는
+    # 걸지 않는다 — 위치정보법 확인자료는 동기 COMMIT을 유지한다.
     _CHECK_SQL: Final = text(
         """
         WITH active_override AS MATERIALIZED (
@@ -195,7 +203,7 @@ class PostgresRateLimitBackend:
         )
         SELECT COALESCE((SELECT count FROM incremented), 0) AS count,
                active_override.override_id, active_override.action, active_override.expires_at
-        FROM (VALUES (1)) AS one_row(value)
+        FROM (SELECT set_config('synchronous_commit', 'off', true)) AS one_row(value)
         LEFT JOIN active_override ON true
         """
     )

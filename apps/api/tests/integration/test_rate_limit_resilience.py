@@ -379,3 +379,116 @@ async def test_periodic_cleanup_drains_backlog_in_one_tick_and_preserves_locked_
         finally:
             await worker.stop()
             await locked.rollback()
+
+
+# ── T-READ-PIN-05 — rate-limit COMMIT만 비동기, 위치 감사 outbox는 동기 COMMIT 유지 ────────────────
+
+
+def _probe_commit_setting(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """COMMIT 직전 그 transaction의 `synchronous_commit`(지금 값, 연결 기본값)을 기록한다.
+
+    문장 이름이 아니라 효과를 본다. 기본값(`reset_val`)을 함께 적는 이유: 비내구 시험 PG는 서버 기본값이
+    이미 off일 수 있다 — "이 transaction이 바꿨는가"는 지금 값과 기본값의 비교로만 갈린다. 조회가
+    transaction을 열어도(아직 flush 전인 `session.add`) 그 transaction이 곧 COMMIT되는 transaction이다.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    seen: list[tuple[str, str]] = []
+    original = AsyncSession.commit
+
+    async def probing(self: AsyncSession) -> None:
+        row = (
+            await self.execute(
+                text("SELECT setting, reset_val FROM pg_settings WHERE name = 'synchronous_commit'")
+            )
+        ).one()
+        seen.append((str(row.setting), str(row.reset_val)))
+        await original(self)
+
+    monkeypatch.setattr(AsyncSession, "commit", probing)
+    return seen
+
+
+async def test_rate_limit_check_commits_without_waiting_for_wal_flush(
+    session_factory: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.middleware.rate_limit import PostgresRateLimitBackend
+
+    seen = _probe_commit_setting(monkeypatch)
+    now = datetime.now(UTC)
+    result = await PostgresRateLimitBackend().check(
+        bucket_hash="d" * 64,
+        limit_name="authenticated_default",
+        window_start=now.replace(second=0, microsecond=0),
+        expires_at=now + timedelta(minutes=2),
+        now=now,
+    )
+    assert result.count == 1
+    assert [setting for setting, _default in seen] == ["off"]
+
+
+async def test_rate_limit_relaxed_commit_does_not_leak_to_the_connection(
+    session_factory: Any,
+) -> None:
+    from sqlalchemy import text
+
+    from app.middleware.rate_limit import PostgresRateLimitBackend
+
+    engine = session_factory.kw["bind"]
+    now = datetime.now(UTC)
+    params = {
+        "bucket_hash": "f" * 64,
+        "limit_name": "authenticated_default",
+        "window_start": now.replace(second=0, microsecond=0),
+        "expires_at": now + timedelta(minutes=2),
+        "now": now,
+        "prefer_blocked": False,
+    }
+    # 같은 연결에서 — pool이 이 연결을 다음 요청(위치 감사·사용자 쓰기)에 다시 줄 때를 흉내 낸다.
+    async with engine.connect() as conn:
+        # 서버 기본값과 무관하게 연결 기본값을 on으로 둔다(비내구 시험 PG에서도 이 검사가 뜻을 갖게).
+        await conn.execute(text("SET synchronous_commit = on"))
+        await conn.commit()
+        await conn.execute(PostgresRateLimitBackend._CHECK_SQL, params)
+        assert await conn.scalar(text("SHOW synchronous_commit")) == "off"
+        await conn.commit()
+        assert await conn.scalar(text("SHOW synchronous_commit")) == "on"
+        await conn.rollback()
+
+
+async def test_location_audit_outbox_keeps_synchronous_commit(
+    session_factory: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import uuid
+    from decimal import Decimal
+
+    from app.models.user import User
+    from app.services.location_audit import enqueue_location_audit_outbox
+
+    async with session_factory() as db:
+        user = User(
+            email=f"sync_commit_{uuid.uuid4().hex[:8]}@pinvi.test",
+            status="active",
+            email_verified_at=datetime.now(UTC),
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        user_id = user.user_id
+
+    seen = _probe_commit_setting(monkeypatch)
+    async with session_factory() as db:
+        await enqueue_location_audit_outbox(
+            db,
+            user_id=user_id,
+            endpoint="/features/nearby",
+            purpose="nearby_attractions",
+            lat=Decimal("37.5665"),
+            lng=Decimal("126.9780"),
+            request_id=uuid.uuid4(),
+            ip_hash="ab" * 32,
+        )
+    # 위치정보법 확인자료 — 이 transaction은 COMMIT 설정을 바꾸지 않는다(연결 기본값 그대로).
+    assert len(seen) == 1
+    assert all(setting == default for setting, default in seen), seen
