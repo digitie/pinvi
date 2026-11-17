@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MapFallback, isWebGLAvailable, mapFallbackCopy } from '@/components/map/vworldPrimitives';
+import { MapFallback } from '@/components/map/vworldPrimitives';
+import { isWebGLAvailable, mapFallbackCopy } from '@/lib/mapFallback';
 
 // 2026-11-17 live e2e: headless Firefox(WebGL 없음)에서 엔진 초기화가 실패했는데 fallback이
 // `NEXT_PUBLIC_VWORLD_API_KEY`를 보여 키 문제처럼 읽혔다. 사유별 문구를 고정한다.
