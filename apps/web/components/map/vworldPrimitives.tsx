@@ -7,6 +7,7 @@
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 import dynamic from 'next/dynamic';
+import { useState } from 'react';
 import type {
   ClusterLayerProps,
   MakiMarkerProps,
@@ -21,6 +22,7 @@ import type {
   VWorldMapViewProps,
   WeatherMarkerProps,
 } from 'vworld-map-web';
+import { isWebGLAvailable, mapFallbackCopy } from '@/lib/mapFallback';
 
 export type {
   ClusterPoint,
@@ -53,18 +55,19 @@ export function MapFallback({
   info: VWorldMapFallbackInfo;
   minHeightClassName?: string;
 }) {
-  const message =
-    info.reason === 'missing-api-key'
-      ? 'VWorld API 키가 설정되지 않았습니다.'
-      : '지도 엔진을 초기화할 수 없습니다.';
+  // fallback은 지도 엔진(ssr:false)이 브라우저에서 실패한 뒤에만 그려지므로 여기서 한 번 확인하면 된다.
+  const [webglAvailable] = useState(() => info.reason !== 'map-init-error' || isWebGLAvailable());
+  const { message, detail } = mapFallbackCopy(info, webglAvailable);
+  const reason = info.reason === 'map-init-error' && !webglAvailable ? 'webgl-unavailable' : info.reason;
   return (
     <div
       className={`flex h-full ${minHeightClassName} items-center justify-center bg-surface-soft px-6 text-center`}
       data-testid="vworld-map-fallback"
+      data-fallback-reason={reason}
     >
       <div className="max-w-sm space-y-2">
         <p className="text-base font-semibold text-ink">{message}</p>
-        <p className="text-sm text-muted">NEXT_PUBLIC_VWORLD_API_KEY</p>
+        <p className="text-sm text-muted">{detail}</p>
       </div>
     </div>
   );
