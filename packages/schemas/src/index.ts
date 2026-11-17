@@ -872,3 +872,19 @@ export type { StorageRetentionStatus, StorageRetentionResult } from './storage';
 
 export { TripWeatherRefreshRequestSchema, TripWeatherRefreshResponseSchema } from './tripWeather';
 export type { TripWeatherRefreshRequest, TripWeatherRefreshResponse } from './tripWeather';
+export {
+  HomeRegionStatSchema,
+  HomeStatsSchema,
+  HomeTripCardSchema,
+  HomeTripPhaseSchema,
+  HomeVisitedPlaceSchema,
+  UserHomeSchema,
+} from './home';
+export type {
+  HomeRegionStat,
+  HomeStats,
+  HomeTripCard,
+  HomeTripPhase,
+  HomeVisitedPlace,
+  UserHome,
+} from './home';

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from app.api.request_url import public_api_base_url
 from app.core.deps import CurrentUserId, DbSession
 from app.core.session_cookies import clear_session_cookies
+from app.core.time import kst_now
 from app.models.attachment import CuratedPlanAttachment
 from app.models.user import User
 from app.schemas.consent import (
@@ -44,6 +45,7 @@ from app.schemas.storage import (
     DownloadUrlResponse,
     UploadUrlResponse,
 )
+from app.schemas.user_home import UserHome
 from app.services.admin_user_lifecycle import self_delete_user
 from app.services.admin_users import AdminUserPermissionError, AdminUserRoleTransitionError
 from app.services.avatar_storage import (
@@ -97,6 +99,7 @@ from app.services.storage_policy import (
     get_user_library_attachment,
     list_user_file_library,
 )
+from app.services.user_home import build_user_home
 
 router = APIRouter(prefix="/users/me", tags=["users"])
 
@@ -111,6 +114,13 @@ async def _get_current_user(db: DbSession, current_user_id: CurrentUserId) -> Us
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Not found."},
         )
     return user
+
+
+@router.get("/home", response_model=Envelope[UserHome])
+async def get_my_home(current_user_id: CurrentUserId, db: DbSession) -> Envelope[UserHome]:
+    """개인 홈 — 내 여행(다음·예정·최근), 다녀온 장소, 여행 통계. 정의는 `services/user_home.py`."""
+    home = await build_user_home(db, user_id=uuid.UUID(current_user_id), today=kst_now().date())
+    return Envelope.of(home)
 
 
 def _storage_error(exc: Exception) -> HTTPException:

@@ -1,4 +1,5 @@
 import { PublicColophon, PublicMasthead } from '@/components/app/PublicChrome';
+import { LandingSessionActions } from '@/components/app/LandingSessionActions';
 import { ButtonLink } from '@/components/ui/Button';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Narrative Workflow · design-system: DESIGN.md · designed-as-app
@@ -128,18 +129,8 @@ function StageFigure({ kind }: { kind: Stage['figure'] }) {
 export default function HomePage() {
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-ink">
-      <PublicMasthead
-        actions={
-          <>
-            <ButtonLink href="/login" variant="ghost">
-              로그인
-            </ButtonLink>
-            <ButtonLink href="/signup" variant="secondary">
-              시작하기
-            </ButtonLink>
-          </>
-        }
-      />
+      {/* 로그인 사용자에게는 로그인·시작하기 대신 '내 홈'(/home)을 보인다. */}
+      <PublicMasthead actions={<LandingSessionActions />} />
 
       <main id="main" tabIndex={-1} className="flex-1">
         {/* Hero — H2 split diptych 7/5. 왼쪽 문장·CTA, 오른쪽은 이미지 대신 단계 색인(페이지 내 링크).

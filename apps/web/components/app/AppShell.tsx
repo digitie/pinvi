@@ -31,11 +31,13 @@ const NAV_ITEMS = [
   { href: '/files', label: '파일', icon: Paperclip },
   { href: '/settings/mcp-tokens', label: '설정', icon: Settings },
   { href: '/profile', label: '프로필', icon: UserCircle },
-  { href: '/', label: '홈', icon: LayoutDashboard },
+  // '홈' = 로그인 사용자의 개인 홈(/home, 셸 안). 마케팅 랜딩(`/`)은 로그인 사용자를 /home으로 보낸다.
+  { href: '/home', label: '홈', icon: LayoutDashboard },
 ] as const;
 
 // 모바일 하단 탭바 1순위 = **앱 셸 안에 머무는** 목적지 4개.
-// `/`·`/profile`은 셸 밖(마케팅 랜딩 / auth 레이아웃)이라 탭바가 사라지므로 더보기 시트로 내린다(T-314 리뷰 P2/P3).
+// `/profile`은 셸 밖(auth 레이아웃)이라 탭바가 사라지므로 더보기 시트로 내린다(T-314 리뷰 P2/P3).
+// 홈(/home)은 셸 안이지만 하단 탭 4칸은 작업 목적지에 쓰고, 홈은 워드마크(로고)와 더보기로 간다.
 const MOBILE_PRIMARY_HREFS = ['/trips', '/notice-plans', '/map', '/files'] as const;
 const MOBILE_PRIMARY = NAV_ITEMS.filter((item) =>
   (MOBILE_PRIMARY_HREFS as readonly string[]).includes(item.href),
@@ -44,12 +46,9 @@ const MOBILE_SECONDARY = NAV_ITEMS.filter(
   (item) => !(MOBILE_PRIMARY_HREFS as readonly string[]).includes(item.href),
 );
 // 셸 밖으로 나가는 목적지 — 접근성 이름에 이동 사실을 명시한다.
-const LEAVES_APP_SHELL: readonly string[] = ['/', '/profile'];
+const LEAVES_APP_SHELL: readonly string[] = ['/profile'];
 
 function isActivePath(pathname: string, href: string): boolean {
-  if (href === '/') {
-    return pathname === '/';
-  }
   if (href === '/trips') {
     return pathname === '/trips' || pathname === '/trips/trash';
   }
@@ -138,7 +137,8 @@ function AppShellView0({ viewModel }: { viewModel: AppShellView0Model }) {
       {!mobileTripDetail && (
         <header className="border-b border-hairline bg-canvas">
           <div className="flex w-full items-center justify-between gap-3 px-4 py-3 md:px-6">
-            <Wordmark />
+            {/* 로고 = 개인 홈. 로그인하지 않았으면 /home의 401이 로그인 화면으로 보낸다. */}
+            <Wordmark href="/home" />
             {/* 데스크톱: 가로 탭. 모바일에서는 하단 탭바가 대신하므로 숨긴다(가로 스크롤 nav 폐기). */}
             <nav
               className="app-shell-desktop-nav hidden gap-1 text-sm lg:flex"

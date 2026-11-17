@@ -81,6 +81,12 @@ Map 변경 없음(두 경로 모두 vendored user 스냅샷 d8253e85에 있음).
   `packages/vworld-map-web/src/vworld.ts`(고친 판 vendor 후 이 파일을 지운다).
 - live 카탈로그: NEAR-001/002/024/025/026/029/041 재작성(041은 blocked→scripted), NEAR-006·009 blocked,
   NEAR-036에 markers-near 검증. 배포 전이라 live는 배포 뒤 소유자 전체 실행에서 확인한다.
+## 2026-11-16 — 로고·홈 → 개인 홈(/home)
+
+- 원인: 앱 셸 워드마크와 '홈' 탭이 `/`(마케팅 랜딩, 로그인·시작하기 CTA)를 가리켰다. 로그인 사용자도 로그인 화면처럼 보이는 랜딩으로 갔다(prod `/` 200 + home-hero 확인).
+- 변경: `GET /users/me/home`(services/user_home.py, 정의는 docs/api/users.md §9a) + web `/home`(PersonalHome). 로고·홈 탭 → `/home`, 랜딩 masthead는 `GET /auth/me` 200이면 로그인·시작하기 대신 '내 홈'(react-doctor `nextjs-no-client-side-redirect` 때문에 클라이언트 redirect는 쓰지 않는다 — 세션 쿠키가 API host 전용이라 서버 redirect도 불가). 익명 `/home`은 401 → `/login?next=%2Fhome`.
+- 지역(시도)은 저장된 코드·주소·여행 지역 메모로만 판정한다(좌표 역지오코딩 없음 — 위치정보 경로와 호출 비용). 판정 못 한 장소는 지역에서 빠진다.
+- live e2e CORE-032~035는 배포 뒤 실행(pending deploy).
 
 ## 2026-11-13 — 규칙 예외 없는 같은 origin의401 문서 복귀
 

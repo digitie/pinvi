@@ -15,12 +15,12 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | poi | 40 | 32 | 6 | 2 |
 | notify | 32 | 23 | 4 | 5 |
 | admin | 44 | 37 | 5 | 2 |
-| core | 39 | 38 | 1 | 0 |
+| core | 43 | 42 | 1 | 0 |
 | recommend | 3 | 3 | 0 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **574** | **521** | **29** | **24** |
+| **all** | **578** | **525** | **29** | **24** |
 
-Spec files: 65.
+Spec files: 66.
 
 ## Cases
 
@@ -407,6 +407,10 @@ Spec files: 65.
 | CORE-045 | core | (모바일) 탐색 지도 장소를 누르면 상세 시트만 — 지도 팝업과 이중 표시 없음 | P1 | mobile | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-045` |
 | CORE-046 | core | 탐색 지도(/map) 내 위치 버튼 — 따라가기 모드, 지도를 끌면 해제, 다시 누르면 복귀 | P1 | desktop, mobile | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-046` |
 | CORE-047 | core | (모바일) 장소 정보 패널이 열리면 내 위치 버튼이 패널 위로 올라간다 — 가려지지 않는다 | P1 | mobile, mutating | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-047` |
+| CORE-032 | core | 로그인 사용자의 앱 셸 로고(Pinvi 홈)는 개인 홈 /home으로 간다(로그인 화면·랜딩 아님) | P1 | desktop, mobile, auth, home | scripted | `specs/core/core-home.live.spec.ts#CORE-032` |
+| CORE-033 | core | 로그인 사용자의 '홈' 메뉴(데스크톱 탭·모바일 더보기)와 랜딩(/)의 '내 홈'은 개인 홈으로 간다 | P1 | desktop, mobile, auth, home | scripted | `specs/core/core-home.live.spec.ts#CORE-033` |
+| CORE-034 | core | 익명 사용자 — /home은 /login?next=%2Fhome으로, 랜딩(/)은 그대로 | P1 | desktop, mobile, auth, home | scripted | `specs/core/core-home.live.spec.ts#CORE-034` |
+| CORE-035 | core | 지난 여행에 장소를 담으면 개인 홈 통계·최근 여행·다녀온 지역에 반영된다 | P2 | desktop, mutating, search, home | scripted | `specs/core/core-home.live.spec.ts#CORE-035` |
 | REC-001 | recommend | 추천 여행 카드 '주변 축제·큐레이션' 펼침 — 축제·큐레이션 두 구역이 항목/빈 문구/불가 안내 중 하나로 그려진다 | P1 | desktop, mobile | scripted | `specs/recommend/recommend-highlights.live.spec.ts#REC-001` |
 | REC-002 | recommend | 주변 큐레이션/축제 항목 '추가' → 새 [e2e] 여행의 1일차 끝에 장소가 들어간다 | P1 | desktop, mutating | scripted | `specs/recommend/recommend-highlights.live.spec.ts#REC-002` |
 | REC-003 | recommend | 모바일 — 펼친 주변 정보가 가로 스크롤 없이 카드 안에 들어가고 '더 보기'로 펼쳐진다 | P2 | mobile | scripted | `specs/recommend/recommend-highlights.live.spec.ts#REC-003` |

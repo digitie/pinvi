@@ -12,6 +12,7 @@ import {
   McpTokenIssueResponseSchema,
   McpTokenSchema,
   UserConsentSchema,
+  UserHomeSchema,
 } from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
@@ -27,6 +28,13 @@ export type ContentReportCreateBody = z.input<typeof ContentReportCreateRequestS
 export type ContentReportAppealBody = z.input<typeof ContentReportAppealRequestSchema>;
 
 export const userApi = (client: ApiClient) => ({
+  /** 개인 홈 — 내 여행·다녀온 장소·여행 통계(`docs/api/users.md` §개인 홈). */
+  getHome: () =>
+    client.request('/users/me/home', {
+      method: 'GET',
+      schema: UserHomeSchema,
+    }),
+
   deleteMe: () =>
     client.requestNoContent('/users/me', {
       method: 'DELETE',

@@ -42,6 +42,10 @@ PR claude/trip-list-layout: 장소 편집기 접힘 항목·예산 위치, 일�
 ## 2026-11-16 — 지도 레이어 패널·여행 장소 반경 교통 정보·PC 바탕지도 (feat/map-overlays-pc-tiles)
 
 공항·휴게소를 지도에서 빼고 주유소·교통 돌발을 경로·영역과 같은 체크박스 줄로 합쳤다. 여행 지도는 `/transport/markers-near`(여행 장소 주유소 10 km·교통 돌발 20 km)로 조회한다. Firefox·Safari 바탕지도 누락은 `lib/vworldTileProtocol.ts`로 고쳤다. 다음: 배포 뒤 live `--project desktop-firefox --area core`(CORE-016)와 NEAR 재작성 케이스 확인, maplibre-vworld-react `vworld.ts` 정본 수정 후 vendor 갱신.
+## 개인 홈 /home (2026-11-16)
+
+PR feat/personal-home: 로고·'홈' → 개인 홈, `GET /users/me/home` 통계.
+다음: 회전 배포 뒤 live CORE-032~035 실행. 소유자 결정 대기 — 동행(companion) 여행 포함 여부, 로그인 직후 기본 목적지를 /trips→/home으로 바꿀지.
 
 ## 2026-11-13 — 규칙 예외 없는 같은 origin의401 문서 복귀
 
