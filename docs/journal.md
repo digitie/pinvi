@@ -1,3 +1,15 @@
+## 2026-11-17 (claude) — 모바일 지도 마커 아이콘·현재 날씨 (브랜치 `feat/mobile-place-detail`, 후속 1/3)
+
+- 소유자 결정(11-17): 모바일 마커도 웹 #755처럼 원 안 마커 아이콘(아이콘 고르기·카테고리 maki)과 이름 옆 현재 날씨를 보인다.
+- 공용화: 웹 `lib/weatherNow`·`placeWeather`·`makiIcons`를 `@pinvi/domain`(`weatherNow.ts`·`placeWeather.ts`·`markerIcons.ts`)으로
+  옮기고, 그림은 **lucide 이름**(`MARKER_ICON_GLYPHS`·`weatherGlyphName`·`WEATHER_TONES`)으로 공유한다 — 웹은 lucide-react,
+  모바일은 lucide-react-native로 같은 이름을 그린다(빠지면 타입 오류). 장소별 날씨 공유 캐시(동시 2건, 10분 신선·1분 재시도,
+  구독자 없으면 큐에서 뺌)는 `@pinvi/hooks` `createPoiWeatherStore`로 올리고 웹 `usePoiWeather`는 그 인스턴스다(동작 불변).
+- 모바일: 목록 줄은 좌표를 아는 장소만 `GET /trips/{id}/pois/{poi}/weather`를 묻고(배지: 아이콘·기온·최고/최저), 마커는 요청 없이
+  공유 캐시 + 여행 응답의 일자 카드에서 읽는다. 날씨를 모르면 아이콘이 없다. 목록 밖 maki 이름은 unpkg maki SVG(`SvgUri`), 실패 시 기본 핀.
+- 새 의존성 `react-native-svg` 15.16.0(SDK58 번들)·`lucide-react-native` 1.72.0 — 네이티브 모듈이라 **EAS dev client 재빌드 필요**.
+  공통 정책 `versions`에 없어 검사기는 통과, 중앙 기록은 다음 common 릴리스 후보(소유자 지시: 지금 중앙 변경 금지).
+
 ## 2026-11-17 (claude) — 모바일 여행 지도 + 여행 장소 반경 교통 칩 (브랜치 `feat/mobile-trip-map`)
 
 - 소유자 승인(11-17 옵션 a). 모바일 여행 상세(`trips/[tripId]`)는 목록뿐이었다. 위에 지도(화면 높이 50%, 240~560dp)를

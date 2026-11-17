@@ -1,7 +1,7 @@
 'use client';
 
 import { weatherIconFor, WEATHER_TONE } from '@/lib/weatherIcons';
-import type { WeatherConditionKind } from '@/lib/weatherNow';
+import type { WeatherConditionKind } from '@pinvi/domain';
 import { createElement } from 'react';
 
 export interface WeatherIconProps {

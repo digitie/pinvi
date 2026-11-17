@@ -517,3 +517,62 @@ export function formatTemp(value: number | null | undefined): string {
   if (value == null) return '-';
   return `${Math.round(value)}°`;
 }
+
+/** 날씨 상태 → lucide 그림 이름(웹·모바일 공용). 해·구름이 섞인 상태만 밤 그림이 따로 있다. */
+const WEATHER_DAY_GLYPHS = {
+  clear: 'Sun',
+  partly: 'CloudSun',
+  cloudy: 'Cloud',
+  overcast: 'Cloudy',
+  rain: 'CloudRain',
+  shower: 'CloudDrizzle',
+  sleet: 'CloudHail',
+  snow: 'CloudSnow',
+  thunder: 'CloudLightning',
+  fog: 'CloudFog',
+  unknown: 'Thermometer',
+} as const satisfies Record<WeatherConditionKind, string>;
+
+const WEATHER_NIGHT_GLYPHS = {
+  clear: 'Moon',
+  partly: 'CloudMoon',
+} as const satisfies Partial<Record<WeatherConditionKind, string>>;
+
+/** 날씨 아이콘으로 쓰는 lucide 그림 이름. */
+export type WeatherGlyphName =
+  | (typeof WEATHER_DAY_GLYPHS)[WeatherConditionKind]
+  | (typeof WEATHER_NIGHT_GLYPHS)[keyof typeof WEATHER_NIGHT_GLYPHS];
+
+/** 날씨 아이콘에 쓰는 모든 lucide 그림 이름(각 앱의 그림 표가 빠짐없이 갖췄는지 시험이 본다). */
+export const WEATHER_GLYPH_NAMES: readonly WeatherGlyphName[] = [
+  ...new Set<WeatherGlyphName>([
+    ...Object.values(WEATHER_DAY_GLYPHS),
+    ...Object.values(WEATHER_NIGHT_GLYPHS),
+  ]),
+];
+
+export function weatherGlyphName(condition: WeatherConditionKind, night = false): WeatherGlyphName {
+  if (night && (condition === 'clear' || condition === 'partly'))
+    return WEATHER_NIGHT_GLYPHS[condition];
+  return WEATHER_DAY_GLYPHS[condition];
+}
+
+/**
+ * 상태별 색의 의미 — 맑음은 따뜻한 색(warning), 강수는 primary, 뇌우는 error, 그 밖은 muted.
+ * 웹은 토큰 class(`text-*`), 모바일은 같은 의미의 hex로 바꿔 쓴다.
+ */
+export type WeatherTone = 'warning' | 'primary' | 'error' | 'muted';
+
+export const WEATHER_TONES: Record<WeatherConditionKind, WeatherTone> = {
+  clear: 'warning',
+  partly: 'warning',
+  cloudy: 'muted',
+  overcast: 'muted',
+  rain: 'primary',
+  shower: 'primary',
+  sleet: 'primary',
+  snow: 'primary',
+  thunder: 'error',
+  fog: 'muted',
+  unknown: 'muted',
+};

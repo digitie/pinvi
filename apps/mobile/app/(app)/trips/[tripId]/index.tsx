@@ -18,6 +18,7 @@ import {
   featureResolutionNotice,
   friendlyErrorText,
   paletteHex,
+  placeWeatherCards,
   tripDaysToMapPoints,
   type TripMapPoint,
 } from '@pinvi/domain';
@@ -37,6 +38,7 @@ import {
 } from '../../../../components/ui';
 import { TripDayHeader } from '../../../../components/TripDayHeader';
 import { TripMapPanel, type TripMapFocus } from '../../../../components/TripMap';
+import { PoiWeatherBadge } from '../../../../components/PoiWeatherBadge';
 
 const SHARE_VISIBILITY_LABELS: Record<string, string> = {
   view_only: '읽기 전용',
@@ -91,6 +93,8 @@ export default function TripDetailScreen() {
   const days = tripQuery.data?.days;
   const points = useMemo(() => (days ? tripDaysToMapPoints(days) : []), [days]);
   const pointById = useMemo(() => new Map(points.map((p) => [p.poiId, p])), [points]);
+  // 마커 이름 옆 날씨의 일자 카드(여행 응답에 이미 있다 — 새 요청 없음).
+  const dayWeatherCards = useMemo(() => (days ? placeWeatherCards(days) : {}), [days]);
   const transport = useTripTransport({ active: true, points });
 
   /** 목록 → 지도: 그 장소를 고르고 지도 가운데로(접혀 있으면 펼치며 그 장소로 연다). */
@@ -182,6 +186,8 @@ export default function TripDetailScreen() {
         onToggleCollapsed={() => setMapCollapsed((prev) => !prev)}
         width={windowSize.width}
         height={tripMapHeight(windowSize.height)}
+        tripId={tripId}
+        dayWeatherCards={dayWeatherCards}
       />
       <ScrollView
         ref={scrollRef}
@@ -220,6 +226,7 @@ export default function TripDetailScreen() {
                     {day.pois.map((poi) => (
                       <TripPoiRow
                         key={poi.poi_id}
+                        tripId={tripId}
                         poi={poi}
                         point={pointById.get(poi.poi_id)}
                         selected={poi.poi_id === selectedPoiId}
@@ -296,12 +303,14 @@ export default function TripDetailScreen() {
  * 누르면 지도에서 그 장소로 간다(좌표가 없으면 줄만 고른다).
  */
 function TripPoiRow({
+  tripId,
   poi,
   point,
   selected,
   onPress,
   registerRow,
 }: {
+  tripId: string;
   poi: TripViewPoi;
   point: TripMapPoint | undefined;
   selected: boolean;
@@ -331,6 +340,10 @@ function TripPoiRow({
           {title}
           {resolutionNotice ? ` · (${resolutionNotice})` : ''}
         </Body>
+        {point ? (
+          // 좌표를 아는 장소만 현재 날씨를 묻는다(공유 캐시·동시 2건, 모르면 아무것도 그리지 않는다).
+          <PoiWeatherBadge tripId={tripId} poiId={poi.poi_id} />
+        ) : null}
         {poi.user_note ? <Muted>{poi.user_note}</Muted> : null}
         {point ? null : <Muted>좌표가 없어 지도에 표시하지 않습니다.</Muted>}
       </View>

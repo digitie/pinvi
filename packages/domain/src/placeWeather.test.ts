@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeCurrentWeather, placeWeatherCards } from '@/lib/placeWeather';
+import { placeCurrentWeather, placeWeatherCards } from './placeWeather';
 import type {
   FeatureWeatherCard,
   TripViewDay,

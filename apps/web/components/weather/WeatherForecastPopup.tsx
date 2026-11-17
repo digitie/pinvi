@@ -18,7 +18,7 @@ import {
   type DailyWeather,
   type HourlyWeather,
   type WeatherAlert,
-} from '@/lib/weatherNow';
+} from '@pinvi/domain';
 import type { FeatureWeatherCard } from '@pinvi/schemas';
 import { AlertTriangle, Droplet, Loader2, RefreshCw } from 'lucide-react';
 import { useMemo } from 'react';

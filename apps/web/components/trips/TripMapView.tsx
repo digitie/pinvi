@@ -46,7 +46,7 @@ import {
   fitPanelRect,
   pinBoxIntersects,
 } from '@/lib/mapFitPadding';
-import { makiIconName } from '@/lib/makiIcons';
+import { makiIconName } from '@pinvi/domain';
 import { markerZIndex } from '@/lib/markerStacking';
 import { usePlaceWeather } from '@/components/map/PlaceWeatherGlyph';
 import { viewportSearchBias } from '@/lib/searchBias';
