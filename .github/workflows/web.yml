@@ -73,7 +73,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.23.1'
+          node-version: '26.13.1'
           cache: npm
 
       # T-358 — lockfile을 node_modules가 있는 상태에서 재생성하면 npm이 디스크에서
@@ -115,7 +115,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.23.1'
+          node-version: '26.13.1'
           cache: npm
 
       # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.
@@ -236,7 +236,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.23.1'
+          node-version: '26.13.1'
           cache: npm
 
       # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.

@@ -189,7 +189,7 @@ npm ci --engine-strict
 
 ### Node/npm 선택 — root workspace anchor (T-358 후속)
 
-build/test 선택은 Node `22.23.1`·npm `12.0.1`이다. 저장소 root의 `.nvmrc`,
+build/test 선택은 Node `26.13.1`·npm `12.0.1`이다. 저장소 root의 `.nvmrc`,
 private `package.json`의 `packageManager`·`engines`와 `.npmrc`의
 `engine-strict=true`를 함께 사용한다. `apps/web`·`apps/mobile`·`packages/*`는
 이 workspace root anchor를 따른다. 공개 library manifest나 native 의존성 목록을
@@ -198,7 +198,7 @@ private `package.json`의 `packageManager`·`engines`와 `.npmrc`의
 ```bash
 nvm install
 nvm use
-node --version                           # v22.23.1
+node --version                           # v26.13.1
 npm install --global npm@12.0.1
 npm --version                            # 12.0.1
 npm ci --engine-strict
@@ -211,7 +211,7 @@ bare `npm` 명령의 버전을 고정하는 것으로 간주하지 않는다. �
 
 n150 Playwright runner(`scripts/n150-playwright-runner.sh`)의 공식 Playwright 이미지는
 digest를 유지하되 자체 Node(v1.65.0-noble = v26)를 쓰지 않는다. 컨테이너 안에서
-nodejs.org `node-v22.23.1` tarball을 runner에 고정한 SHA-256으로 검증해 PATH 앞에 두고
+nodejs.org `node-v26.13.1` tarball을 runner에 고정한 SHA-256으로 검증해 PATH 앞에 두고
 npm `12.0.1`을 설치한 뒤 `npm ci --engine-strict`와 테스트 명령을 실행한다. `.nvmrc`를
 올리면 runner의 Node 버전·SHA-256도 함께 올려야 한다(어긋나면 runner가 시작 전에 멈춘다).
 
