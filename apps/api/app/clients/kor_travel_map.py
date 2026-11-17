@@ -72,6 +72,11 @@ _RETRYABLE_TRANSPORT_ERRORS: tuple[type[httpx.TransportError], ...] = (
     httpx.ConnectTimeout,
 )
 _IDEMPOTENT_METHODS = frozenset({"GET", "HEAD"})
+#: Map이 "이 요청의 예산을 이미 다 썼다"고 답한 5xx problem ``code`` — 다시 보내지 않는다(T-READ-PIN-04).
+#: ``READ_TIMEOUT``은 공개 읽기 마감·문장 상한 초과, ``POOL_BUSY``는 DB pool 대기 초과다(Map T-READ-03).
+#: 같은 요청을 다시 보내면 멈춘 질의 하나가 무거운 질의 세 번이 된다. ``ReadTimeout``과 같은 취급이다 —
+#: 한 번만 보내고 회로에는 실패 한 번으로 센다. 그 밖의 5xx(``LOCK_TIMEOUT``·code 없음)는 종전대로 재시도한다.
+_NON_RETRYABLE_5XX_CODES = frozenset({"READ_TIMEOUT", "POOL_BUSY"})
 
 
 def _path_segment(value: str) -> str | None:
@@ -539,6 +544,7 @@ class KorTravelMapClient:
         log_failure: bool = True,
     ) -> httpx.Response:
         """연결 실패·5xx는 지수 백오프로 재시도하고, ``ReadTimeout``·``ReadError``는 다시 보내지 않는다(#702).
+        5xx라도 problem ``code``가 ``READ_TIMEOUT``·``POOL_BUSY``면 다시 보내지 않는다(T-READ-PIN-04).
 
         ``retry=False``면 한 번만 보내고 5xx 응답도 그대로 돌려준다 — 호출자가 problem ``code``를 읽어
         판단한다(transport 상태 표면: 503 ``NOT_LOADED``는 결정적이고, 지도 요청은 다음 이동이 곧
@@ -588,6 +594,14 @@ class KorTravelMapClient:
                     break
             else:
                 if resp.status_code >= 500 and retry:
+                    code = _error_code(resp)
+                    if code in _NON_RETRYABLE_5XX_CODES:
+                        last = KorTravelMapUnavailable(
+                            f"kor-travel-map {resp.status_code} {code} ({path})",
+                            code=code,
+                            error_class=f"HTTP{resp.status_code}",
+                        )
+                        break
                     last = KorTravelMapUnavailable(
                         f"kor-travel-map {resp.status_code} ({path})",
                         error_class=f"HTTP{resp.status_code}",

@@ -820,12 +820,15 @@ class Settings(BaseSettings):
     )  # /v1/features/batch cap
     # Map 표면별 worker 내 동시 호출 상한(#621). 꽉 차면 기다리지 않고 `BULKHEAD_FULL`(공개 503)이다.
     # 회로 범위(#702)와 같은 단위라 느린 viewport·transport·weather가 상세·검색·trip view의 자리를
-    # 가져가지 못한다. 축제 월별 조회는 별도 상수(4)를 그대로 쓴다. 기본 합계 10+4+2+2(+축제 4)=22로
-    # 예전 공용 16과 비슷하게 둔다 — worker당 Map 부하가 크게 늘지 않게.
+    # 가져가지 못한다. 축제 월별 조회는 별도 상수(4)를 그대로 쓴다. PostgreSQL을 읽는 표면(features·
+    # viewport·축제)의 합 10+4+4=18은 예전 공용 16과 비슷하게 둔다 — worker당 Map DB 부하가 크게 늘지 않게.
+    # transport·weather는 Map에서 Valkey 읽기라(명령당 µs) 자리를 오래 쥐지 않는다. 대신 한 요청의 내부
+    # 팬아웃(교통 레이어당 근처 조회 6 × 레이어 2 = 12, 날씨 해석 4 + 값 묶음 4 = 8)이 상한 2를 넘어 대기열
+    # 없는 상한에 바로 거부됐다(T-READ-PIN-01) — 팬아웃보다 큰 16을 기본으로 둔다. 회로는 그대로다.
     pinvi_kor_travel_map_features_max_concurrency: int = Field(default=10, ge=1, le=64)
     pinvi_kor_travel_map_viewport_max_concurrency: int = Field(default=4, ge=1, le=64)
-    pinvi_kor_travel_map_transport_max_concurrency: int = Field(default=2, ge=1, le=64)
-    pinvi_kor_travel_map_weather_max_concurrency: int = Field(default=2, ge=1, le=64)
+    pinvi_kor_travel_map_transport_max_concurrency: int = Field(default=16, ge=1, le=64)
+    pinvi_kor_travel_map_weather_max_concurrency: int = Field(default=16, ge=1, le=64)
     # ADR-076 — 지도 transport 레이어(주유소·휴게소·고속도로 돌발·공항)를 Map
     # `/v1/service/transport/*`(service token 필요)로 읽는다. off(기본)면 `/transport/status`가
     # `enabled=false`를 주고 Map을 부르지 않는다 — 클라이언트는 레이어 컨트롤을 숨긴다.

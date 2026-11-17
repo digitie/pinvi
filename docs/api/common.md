@@ -364,8 +364,10 @@ exact 검사는 별도 보안 경계이므로 그대로 유지한다.
 사용자 Map·geo·weather·Telegram client는 worker별 동시 호출 상한(bulkhead)을 가진다. Map은
 회로와 같은 표면 단위로 자리를 나눈다(#621): features(검색·상세·batch·공개 목록/상세)
 `PINVI_KOR_TRAVEL_MAP_FEATURES_MAX_CONCURRENCY` 기본10, viewport `..._VIEWPORT_...` 기본4,
-transport `..._TRANSPORT_...` 기본2, Map weather `..._WEATHER_...` 기본2, 축제 월별 4(상수) —
-worker당 합계 22로 예전 공용 16과 비슷하다.
+transport `..._TRANSPORT_...` 기본16, Map weather `..._WEATHER_...` 기본16, 축제 월별 4(상수).
+PostgreSQL을 읽는 features·viewport·축제의 합 18은 예전 공용 16과 비슷하다. transport·weather는 Map에서
+Valkey 읽기라 자리를 오래 쥐지 않고, 한 요청의 내부 팬아웃(교통 6×2=12, 날씨 4+4=8)보다 커야 대기열 없는
+상한에 바로 거부되지 않는다(T-READ-PIN-01, 예전 기본 2).
 느린 viewport·transport·weather가 상세·trip view의 자리를 가져가지 못한다. geo는
 `PINVI_KOR_TRAVEL_GEO_MAX_CONCURRENCY` 기본8, 직접 weather는
 `PINVI_KOR_TRAVEL_WEATHER_MAX_CONCURRENCY` 기본8이다(둘 다 예전 16에서 낮춤). Telegram은 요청
