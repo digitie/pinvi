@@ -167,6 +167,10 @@ Cookie: pinvi_access=...
   (`sido_code` → `sigungu_code`/`bjd_code` 앞 2자리) 1~2개면 그 시도(`region_scope=sido`),
   없거나 3개 이상이면 전국(`nationwide`). `ended`와 기간 밖 행사는 버리고 최대 10건.
   축제 자리(4) 공유 때문에 조회는 순차다.
+  POI 좌표가 있으면 그 bbox ±0.3°(약 30km)를 Map `min_lon`/`min_lat`/`max_lon`/`max_lat`로 함께
+  보내고(시도와 AND) `next_cursor`를 (월, 시도)마다 최대 3페이지(150건) 따라간다 — 바쁜 달에도 근처
+  축제가 첫 50건 밖으로 밀리지 않는다(2026-11-17, Map bbox 추가). bbox를 모르는 옛 Map은 query를
+  조용히 버리므로 응답 좌표로 한 번 더 걸러, 배포 순서와 무관하게 결과는 같은 범위다(좌표 없는 축제는 제외).
 - **주변 큐레이션** — Map `GET /v1/curations`(bbox). POI 좌표 bbox ±0.05°, page 60건에서
   plan에 이미 있는 Feature와 `included`가 아닌 membership을 빼고 최대 8건. 좌표 있는 POI가
   없으면 조회하지 않는다(빈 목록).

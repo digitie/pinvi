@@ -991,17 +991,29 @@ class KorTravelMapClient:
         month: int | None = None,
         sido_code: str | None = None,
         sigungu_code: str | None = None,
+        min_lon: float | None = None,
+        min_lat: float | None = None,
+        max_lon: float | None = None,
+        max_lat: float | None = None,
         page_size: int | None = None,
         cursor: str | None = None,
         include_months: bool = True,
     ) -> dict[str, Any]:
-        """공개 월별 축제 목록. data = {months, items} + threaded next_cursor/total."""
+        """공개 월별 축제 목록. data = {months, items} + threaded next_cursor/total.
+
+        bbox 4값(함께)은 Map이 목록·months를 그 범위로 좁힌다. bbox를 모르는 옛 Map은 query를
+        조용히 버리므로 호출부가 응답 좌표로 한 번 더 거른다(`services/notice_plan_highlights.py`).
+        """
         params: dict[str, Any] = {"include_months": include_months}
         for key, value in (
             ("year", year),
             ("month", month),
             ("sido_code", sido_code),
             ("sigungu_code", sigungu_code),
+            ("min_lon", min_lon),
+            ("min_lat", min_lat),
+            ("max_lon", max_lon),
+            ("max_lat", max_lat),
             ("page_size", page_size),
             ("cursor", cursor),
         ):

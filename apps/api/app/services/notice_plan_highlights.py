@@ -4,6 +4,9 @@
 
 - 축제: `GET /v1/public/festivals/monthly` — plan POI 주소의 시도 코드(최대 2개)로 거르고,
   기간 창과 겹치는 행사만 남긴다. 시도를 알 수 없거나 3개 이상이면 전국에서 고른다.
+  POI 좌표가 있으면 그 bbox(약 30km 여유)를 함께 보내 바쁜 달에도 근처 축제가 첫 페이지 밖으로
+  밀리지 않게 하고, `next_cursor`를 최대 3페이지까지 따라간다. bbox query를 모르는 옛 Map은
+  그 query를 조용히 버리므로 응답 좌표로 한 번 더 거른다(배포 순서와 무관하게 결과가 같은 범위다).
 - 큐레이션: `GET /v1/curations` — plan POI 좌표 bbox(약 5km 여유) 안의 공개 큐레이션
   Feature. plan에 이미 있는 Feature는 뺀다.
 
@@ -46,6 +49,10 @@ UPCOMING_WINDOW_DAYS = 30
 MAX_EVENT_MONTHS = 2
 MAX_EVENT_SIDO = 2
 FESTIVAL_PAGE_SIZE = 50
+# (월, 시도) 조회 하나가 따라가는 최대 페이지 수 — bbox로 좁힌 근처 축제는 보통 1페이지다.
+MAX_FESTIVAL_PAGES = 3
+# 축제 bbox 여유 — plan 장소에서 차로 갈 만한 거리(약 30km).
+EVENT_BBOX_PAD_DEGREES = 0.3
 EVENT_LIMIT = 10
 CURATED_PAGE_SIZE = 60
 CURATED_LIMIT = 8
@@ -282,15 +289,29 @@ def select_curated(
     return picks[:CURATED_LIMIT]
 
 
-def _bbox(anchors: Sequence[tuple[float, float]]) -> tuple[float, float, float, float]:
+Bbox = tuple[float, float, float, float]
+
+
+def _bbox(anchors: Sequence[tuple[float, float]], pad: float = BBOX_PAD_DEGREES) -> Bbox:
     lons = [lon for lon, _ in anchors]
     lats = [lat for _, lat in anchors]
     return (
-        max(-180.0, min(lons) - BBOX_PAD_DEGREES),
-        max(-90.0, min(lats) - BBOX_PAD_DEGREES),
-        min(180.0, max(lons) + BBOX_PAD_DEGREES),
-        min(90.0, max(lats) + BBOX_PAD_DEGREES),
+        max(-180.0, min(lons) - pad),
+        max(-90.0, min(lats) - pad),
+        min(180.0, max(lons) + pad),
+        min(90.0, max(lats) + pad),
     )
+
+
+def _inside(raw: object, bbox: Bbox) -> bool:
+    """Map 축제 item 좌표가 bbox 안인지 — 좌표 없는 item은 bbox 조회에서 빠진다(Map과 같다)."""
+    if not isinstance(raw, Mapping):
+        return False
+    lon, lat = raw.get("lon"), raw.get("lat")
+    if not isinstance(lon, int | float) or not isinstance(lat, int | float):
+        return False
+    min_lon, min_lat, max_lon, max_lat = bbox
+    return min_lon <= lon <= max_lon and min_lat <= lat <= max_lat
 
 
 def _plan_anchors(pois: Sequence[CuratedPlanPoi]) -> list[tuple[float, float]]:
@@ -318,21 +339,34 @@ async def _fetch_festival_items(
     *,
     months: Sequence[tuple[int, int]],
     sido_codes: Sequence[str | None],
+    bbox: Bbox | None,
 ) -> list[object]:
     # 축제 조회는 client의 축제 자리(4)를 다른 사용자와 나눠 쓴다 — 순차로 보내 자리를 하나만 쓴다.
     items: list[object] = []
+    min_lon, min_lat, max_lon, max_lat = bbox if bbox is not None else (None, None, None, None)
     for year, month in months:
         for sido_code in sido_codes:
-            page = await client.public_festivals_monthly(
-                year=year,
-                month=month,
-                sido_code=sido_code,
-                page_size=FESTIVAL_PAGE_SIZE,
-                include_months=False,
-            )
-            raw = page.get("items")
-            if isinstance(raw, list):
-                items.extend(raw)
+            cursor: str | None = None
+            for _ in range(MAX_FESTIVAL_PAGES):
+                page = await client.public_festivals_monthly(
+                    year=year,
+                    month=month,
+                    sido_code=sido_code,
+                    page_size=FESTIVAL_PAGE_SIZE,
+                    cursor=cursor,
+                    include_months=False,
+                    min_lon=min_lon,
+                    min_lat=min_lat,
+                    max_lon=max_lon,
+                    max_lat=max_lat,
+                )
+                raw = page.get("items")
+                if isinstance(raw, list):
+                    items.extend(item for item in raw if bbox is None or _inside(item, bbox))
+                next_cursor = page.get("next_cursor")
+                if not isinstance(next_cursor, str) or not next_cursor:
+                    break
+                cursor = next_cursor
     return items
 
 
@@ -405,6 +439,7 @@ async def build_plan_highlights(
                     client,
                     months=months,
                     sido_codes=list(sido_codes) if scoped else [None],
+                    bbox=_bbox(anchors, EVENT_BBOX_PAD_DEGREES) if anchors else None,
                 )
             return select_events(raw, window=window, today=current, anchors=anchors)
 

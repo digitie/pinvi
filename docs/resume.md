@@ -1,3 +1,12 @@
+## 2026-11-17 (claude) — 추천 여행 주변 축제 bbox·페이징 + Map 재vendor(f1788da9) (브랜치 `feat/recommend-festival-bbox`)
+
+소유자 승인 후속(#756 결정 2). Map #1503(`f1788da9`)이 `GET /v1/public/festivals/monthly`에 선택 bbox
+(`min_lon`/`min_lat`/`max_lon`/`max_lat`)를 더했다. `/notice-plans/{id}/highlights`는 plan 장소 bbox ±0.3°를 시도와 함께
+보내고 (월, 시도)마다 `next_cursor`를 최대 3페이지 따라간다 — 바쁜 달에도 근처 축제가 첫 50건 밖으로 밀리지 않는다.
+옛 Map은 bbox query를 조용히 버리므로 응답 좌표로 다시 거른다(배포 순서 무관, 함께 배포 예정).
+user·admin 스냅샷을 `f1788da9`로 재vendor(d8253e85 대비 변경은 이 bbox query뿐, service 불변), 핀 3곳·M05 pair 계약 재생성,
+계약 게이트 query 표·probe에 bbox 4값 추가. REC-001에 축제 최대 거리 annotation(게이트 아님).
+
 ## 모바일 시험 러너 (2026-11-17)
 
 PR claude feat/mobile-test-runner: `apps/mobile` vitest + jsdom + RTL(react-native → react-native-web), CI는 mobile-typecheck 단계.
