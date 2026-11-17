@@ -3,6 +3,7 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import type { TransportItem } from '@pinvi/schemas';
 import {
   TRANSPORT_LAYER_META,
+  pointsBounds,
   transportLayerStatusText,
   transportMarkerId,
   type TripMapPoint,
@@ -19,6 +20,8 @@ import type { PlatformMarkerItem } from './VWorldMap.types';
 const KOREA_VIEW: CameraTarget = { center: [127.5, 36.5], zoom: 6 };
 /** 목록에서 장소를 눌렀을 때 최소 줌. 이미 더 확대해 두었으면 그 줌을 유지한다. */
 const FOCUS_ZOOM = 14;
+/** 모두 담기의 최대 줌 — 장소가 한 곳이거나 몇 m 거리면 `fitBounds`가 최대로 확대하지 않게 한다. */
+const FIT_MAX_ZOOM = 16;
 const POI_MARKER_PREFIX = 'poi:';
 
 function tripPoiMarkerId(poiId: string): string {
@@ -31,6 +34,30 @@ function tripPoiMarkerId(poiId: string): string {
  */
 function fitPadding(chips: boolean): CameraPadding {
   return { top: chips ? 72 : 32, right: 56, bottom: 40, left: 56 };
+}
+
+/**
+ * 뜬 지도를 모든 장소에 다시 맞춘다 — `fitBounds({ paddingPx })`. 장소가 한 곳뿐이거나 범위가 좁아 최대 줌에
+ * 닿으면 계산한 중심·줌으로 옮긴다(`fitBounds`에는 최대 줌 옵션이 없다).
+ */
+function fitMapToPoints(
+  map: VWorldMapHandle | null,
+  points: TripMapPoint[],
+  size: { width: number; height: number },
+  padding: CameraPadding,
+): void {
+  const bounds = pointsBounds(points);
+  const target = fitCameraToPoints(points, size, padding, { maxZoom: FIT_MAX_ZOOM });
+  if (!map || !bounds || !target) return;
+  const single = bounds.west === bounds.east && bounds.south === bounds.north;
+  if (single || target.zoom >= FIT_MAX_ZOOM) {
+    map.flyTo(target);
+    return;
+  }
+  map.fitBounds(
+    { sw: [bounds.west, bounds.south], ne: [bounds.east, bounds.north] },
+    { paddingPx: padding },
+  );
 }
 
 export interface TripMapFocus {
@@ -61,10 +88,8 @@ export function TripMapPanel(props: TripMapPanelProps) {
   const { collapsed, onToggleCollapsed, transport, points, width, height } = props;
   const mapRef = useRef<VWorldMapHandle>(null);
   // 모든 장소를 다시 담는다(지도 아래 막대 — 지도 위에 두면 출처 표기와 겹친다).
-  const fitAll = () => {
-    const target = fitCameraToPoints(points, { width, height }, fitPadding(transport.visible));
-    if (target) mapRef.current?.flyTo(target);
-  };
+  const fitAll = () =>
+    fitMapToPoints(mapRef.current, points, { width, height }, fitPadding(transport.visible));
   return (
     <View className="border-b border-hairline bg-canvas" testID="trip-map-panel">
       {collapsed ? null : <TripMapCanvas {...props} mapRef={mapRef} />}
@@ -114,7 +139,7 @@ function TripMapCanvas({
   const [initial] = useState<CameraTarget>(() => {
     const focused = focus ? points.find((p) => p.poiId === focus.poiId) : undefined;
     if (focused) return { center: [focused.lon, focused.lat], zoom: FOCUS_ZOOM };
-    return fitCameraToPoints(points, size, padding) ?? KOREA_VIEW;
+    return fitCameraToPoints(points, size, padding, { maxZoom: FIT_MAX_ZOOM }) ?? KOREA_VIEW;
   });
 
   // 목록에서 장소를 고르면 그 장소를 가운데로. mount 때의 요청은 첫 시점이 이미 반영했다.
@@ -136,8 +161,7 @@ function TripMapCanvas({
   useEffect(() => {
     if (fittedKeyRef.current === pointsKey) return;
     fittedKeyRef.current = pointsKey;
-    const target = fitCameraToPoints(points, { width, height }, fitPadding(transport.visible));
-    if (target) mapRef.current?.flyTo(target);
+    fitMapToPoints(mapRef.current, points, { width, height }, fitPadding(transport.visible));
   }, [pointsKey, points, width, height, transport.visible, mapRef]);
 
   // 선택은 id로 들고 항목은 지금 결과에서 다시 찾는다 — 레이어를 끄거나 결과에서 빠지면 카드도 닫힌다.

@@ -14,6 +14,8 @@ vi.mock('vworld-map-rn', () => ({
   Marker: (props: {
     id: string;
     lngLat: [number, number];
+    anchor?: string;
+    offset?: [number, number];
     ariaLabel?: string;
     onPress?: () => void;
     children?: ReactNode;
@@ -22,6 +24,8 @@ vi.mock('vworld-map-rn', () => ({
       type="button"
       data-rn-marker={props.id}
       data-lnglat={props.lngLat.join(',')}
+      data-anchor={props.anchor ?? 'default'}
+      data-offset={props.offset?.join(',') ?? ''}
       aria-label={props.ariaLabel}
       onClick={props.onPress}
     >
@@ -59,9 +63,14 @@ describe('VWorldMap.native — vworld-map-rn 어댑터', () => {
     expect(poi.getAttribute('data-rn-marker')).toBe('poi:a');
     expect(poi.getAttribute('data-lnglat')).toBe('127.1,37.6');
     expect(poi.textContent).toContain('경포대');
+    // 이름 핀은 위 끝을 좌표에 두고 원 반지름(16/2)만큼 올린다 — 원 중심이 좌표(rn ≥ 1.0.2 Marker anchor/offset).
+    expect(poi.getAttribute('data-anchor')).toBe('top');
+    expect(poi.getAttribute('data-offset')).toBe('0,-8');
 
     fireEvent.click(poi);
     expect(onFeaturePress).toHaveBeenCalledWith(expect.objectContaining({ id: 'poi:a' }));
-    expect(document.querySelector('[data-rn-marker="transport:fuel_station:f"]')).not.toBeNull();
+    const compact = document.querySelector('[data-rn-marker="transport:fuel_station:f"]');
+    // 원만 있는 핀은 기본(가운데) 자리가 원 중심이다.
+    expect(compact?.getAttribute('data-anchor')).toBe('default');
   });
 });

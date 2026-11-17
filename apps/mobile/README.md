@@ -93,10 +93,10 @@ apps/mobile/
 │   ├── storage.ts           # AsyncStorage → zustand StateStorage
 │   ├── stores.ts            # createAuthStore(AsyncStorage 주입)
 │   ├── vworldToken.ts       # server-issued VWorld 키 query(탐색·여행 지도 공용)
-│   ├── tripMapCamera.ts     # 여행 지도 첫 시점(장소를 모두 담는 중심·줌, 여백 반영)
+│   ├── tripMapCamera.ts     # 여행 지도 첫 시점(장소를 모두 담는 중심·줌, 여백 반영 — 뜬 뒤는 fitBounds)
 │   └── useTripTransport.ts  # 여행 장소 반경 교통 레이어(markers-near, 웹 반경 모드와 같은 규칙)
 ├── components/VWorldMap.*    # .native RN / .web lazy web public adapter (공유 tarball은 ../web/vendor)
-├── components/MapPin.tsx    # 원 + 이름 라벨 / 작은 원 마커(두 어댑터 공용)
+├── components/MapPin.tsx    # 원 + 이름 라벨 / 작은 원 마커(두 어댑터 공용, 자리는 mapPinLayout.ts anchor/offset)
 ├── components/TripMap.tsx   # 여행 상세 지도 패널(장소 마커·교통 칩·상태 줄·접기)
 ├── tests/                   # vitest + jsdom + RTL(react-native → react-native-web)
 ├── app.json                 # Expo Dev Client / New Architecture / minSdk 24 / VWorld 설정

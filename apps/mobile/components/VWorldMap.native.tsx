@@ -1,5 +1,6 @@
 import { Marker, VWorldMapView as NativeVWorldMapView } from 'vworld-map-rn';
 import { MapPin } from './MapPin';
+import { mapPinPlacement } from './mapPinLayout';
 import {
   usesCustomPin,
   type PlatformMarkerItem,
@@ -21,6 +22,7 @@ export function VWorldMapView({ markers = [], onFeaturePress, ...props }: Platfo
           key={marker.id}
           id={marker.id}
           lngLat={marker.coordinate}
+          {...(mapPinPlacement(marker) ?? {})}
           zIndex={marker.zIndex}
           ariaLabel={marker.ariaLabel ?? marker.label}
           onPress={() => onFeaturePress?.(marker)}

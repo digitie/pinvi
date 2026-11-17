@@ -245,15 +245,20 @@ describe('모바일 여행 상세 지도', () => {
     expect(screen.getByRole('button', { name: '지도 접기' })).toBeTruthy();
   });
 
-  it('전체 보기는 모든 장소를 담는 시점으로 돌아간다', async () => {
+  it('전체 보기는 모든 장소를 여백을 두고 fitBounds로 다시 담는다', async () => {
     renderScreen();
     await screen.findByTestId('vworld-map');
     fireEvent.click(screen.getByRole('button', { name: '전체 보기' }));
-    expect(map.flyTo).toHaveBeenCalledTimes(1);
-    const target = map.flyTo.mock.calls[0]![0] as { center: [number, number]; zoom: number };
-    expect(target.zoom).toBeGreaterThan(10);
-    expect(target.center[0]).toBeGreaterThan(128.88);
-    expect(target.center[0]).toBeLessThan(128.95);
+    expect(map.flyTo).not.toHaveBeenCalled();
+    expect(map.fitBounds).toHaveBeenCalledTimes(1);
+    const [bounds, options] = map.fitBounds.mock.calls[0]! as [
+      { sw: [number, number]; ne: [number, number] },
+      { paddingPx: { top: number; right: number; bottom: number; left: number } },
+    ];
+    expect(bounds).toEqual({ sw: [128.88, 37.77], ne: [128.95, 37.8] });
+    // 이름 라벨이 원 아래·옆으로 퍼지므로 옆·아래 여백을 둔다(칩 줄이 덮으면 위도).
+    expect(options.paddingPx.left).toBeGreaterThan(0);
+    expect(options.paddingPx.bottom).toBeGreaterThan(0);
   });
 
   it('교통 칩(반경 모드)을 켜면 여행 장소 좌표로 조회하고 마커·반경 상태 줄을 보인다', async () => {

@@ -2,10 +2,11 @@
 
 - 소유자 승인(11-17 옵션 a). 모바일 여행 상세(`trips/[tripId]`)는 목록뿐이었다. 위에 지도(화면 높이 50%, 240~560dp)를
   스크롤 밖에 고정하고 아래 목록을 스크롤한다 — 지도 끌기와 목록 스크롤이 겹치지 않는다. '지도 접기'로 지도를 내린다(unmount).
-- 지도: 네이티브는 기존 `VWorldMapView`(`vworld-map-rn` 1.0.1 MapLibre Native, WebView 아님), Expo Web은 같은 계약의 웹 어댑터.
+- 지도: 네이티브는 기존 `VWorldMapView`(`vworld-map-rn` MapLibre Native, WebView 아님), Expo Web은 같은 계약의 웹 어댑터.
   여행 장소 = 일자·마커 색(서버 `display_marker_color`, 목록 점과 같은 값) 원 + 상자 없는 이름 라벨(`MapPin`), 교통 항목 = 작은 원.
-  첫 시점은 장소를 모두 담는 중심·줌을 화면이 계산한다(`tripMapCamera.ts`) — rn은 mount 때 `initialCenter`만 읽고 1.0.1 네이티브
-  `fitBounds`가 `paddingPx`를 버린다(maplibre-vworld-react #34 → rn 1.0.2에서 고침, 재vendor 뒤 `fitBounds`·Marker `anchor`로 바꿀 TODO).
+  첫 시점은 장소를 모두 담는 중심·줌을 화면이 계산한다(`tripMapCamera.ts`) — rn은 mount 때 `initialCenter`만 읽고 ready 콜백이 없다.
+  뜬 뒤의 맞춤('전체 보기'·장소 변경)은 rn 1.0.2(#763 vendor)의 `fitBounds({ paddingPx })`, 이름 핀은 Marker `anchor: 'top'` +
+  `offset [0, -반지름]`으로 원 중심을 좌표에 둔다(웹 어댑터도 같은 값, `mapPinLayout.ts`). 1.0.1 우회(대칭 빈칸·flyTo 맞춤)는 넣지 않았다.
 - 목록 ↔ 지도: 줄을 누르면 그 장소로 `flyTo`(같은 장소 다시 눌러도, 접혀 있으면 그 장소로 펼침), 마커를 누르면 줄 강조 + 스크롤.
   모바일에는 읽기 전용 장소 상세 화면이 없어(`poi/[poiId]`는 편집) 마커는 줄 강조로 연결했다.
 - 교통: `useTripTransport`가 웹 `useTransportLayers` 반경 모드 규칙(5자리 좌표 키, 칩 250 ms 디바운스, 60초 캐시, 최소 줌 없음,
@@ -13,7 +14,7 @@
   올리고 웹도 같은 함수를 쓰게 했다(`transportNearPointsKey`·`dedupeTransportNearPoints`·`withUnavailableTransportLayers`·
   `transportLayerStatusText`·`TRANSPORT_NEAR_MAX_POINTS`) — 웹 동작은 그대로(웹 vitest 651건 통과).
 - 날씨 아이콘·maki 아이콘은 이번에 넣지 않았다(모바일에 아이콘 렌더러가 없고 날씨 카드 조회를 늘린다).
-- 검증: 모바일 vitest 5파일 25건(hook 재조회·캐시·불러올 수 없음, 화면 마커·칩·목록 연동·접기), domain 150건, 웹 651건, lint·typecheck·
+- 검증: 모바일 vitest(hook 재조회·캐시·불러올 수 없음, 화면 마커·칩·목록 연동·접기·fitBounds 여백, rn 어댑터 anchor), domain 150건, 웹 651건, lint·typecheck·
   React Doctor(mobile·web)·check:dependencies·check:styling, Expo Web export + 로컬 Chromium 스크린샷(임시 미리보기 라우트, 커밋 안 함).
 
 ## 2026-11-17 (claude) — 추천 여행 주변 축제 bbox·페이징 + Map 재vendor(f1788da9) (브랜치 `feat/recommend-festival-bbox`)

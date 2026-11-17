@@ -5,6 +5,7 @@ import type { MarkerItem, VWorldMapType } from 'vworld-map-core';
 import { usesCustomPin, type PlatformVWorldMapProps } from './VWorldMap.types';
 import { toMapLibrePadding } from '../lib/mapPadding';
 import { MapPin } from './MapPin';
+import { mapPinPlacement } from './mapPinLayout';
 import { Muted } from './ui';
 
 const layers: Record<VWorldMapType, VWorldLayerType> = {
@@ -93,6 +94,7 @@ export function WebVWorldMap({
           <Marker
             key={marker.id}
             lngLat={marker.coordinate}
+            {...(mapPinPlacement(marker) ?? {})}
             zIndex={marker.zIndex}
             ariaLabel={marker.ariaLabel ?? marker.title ?? marker.label}
             interactionId={marker.id}

@@ -1,12 +1,10 @@
 /**
  * 여행 지도 시점 계산 — 장소들을 모두 담는 중심·줌.
  *
- * `vworld-map-rn`은 `initialCenter`/`initialZoom`을 mount 때 한 번만 읽고 map-ready 콜백이 없으며,
- * 네이티브 `fitBounds`는 여백(`paddingPx`)을 버린다(1.0.1). 그래서 지도 크기(dp)를 알고 있는 화면이
- * 직접 계산해 첫 시점과 `flyTo`에 쓴다. MapLibre(웹·네이티브) 줌 0의 세계 폭은 512 단위다.
- *
- * TODO(vworld-map-rn 1.0.2): maplibre-vworld-react #34가 네이티브 `fitBounds`에 `paddingPx`를 넘긴다.
- * 재vendor 뒤 "전체 보기"·장소 변경 맞춤은 `fitBounds({ ne, sw }, { paddingPx })`로 바꾸고 이 계산은 첫 시점에만 쓴다.
+ * `vworld-map-rn`은 `initialCenter`/`initialZoom`을 mount 때 한 번만 읽고 map-ready 콜백이 없다. 그래서 **첫 시점**은
+ * 지도 크기(dp)를 아는 화면이 직접 계산한다. 뜬 뒤의 맞춤은 `fitBounds({ paddingPx })`(rn 1.0.2부터 네이티브도
+ * 여백을 지킨다)를 쓰고, 이 계산은 최대 줌을 넘는 좁은 범위인지 판단할 때만 함께 쓴다. MapLibre(웹·네이티브)
+ * 줌 0의 세계 폭은 512 단위다.
  */
 
 const WORLD_SIZE_AT_ZOOM_0 = 512;
