@@ -1,5 +1,6 @@
 # CORE — auth/session · map interaction · mobile UX · resilience · a11y · perf · i18n
-# Target: PinVi prod (origin/main b1cef056 or newer). 45 cases, 44 scripted (CORE-005 manual).
+# Target: PinVi prod (origin/main b1cef056 or newer). 46 cases, 45 scripted (CORE-005 manual).
+# Target: PinVi prod (origin/main b1cef056 or newer). 44 cases, 43 scripted (CORE-005 manual).
 # Selectors verified against origin/main unless a case says `selector unverified against origin/main`.
 
 - id: CORE-001
@@ -756,3 +757,21 @@
   automation: scripted
   spec: specs/core/core-home.live.spec.ts#CORE-037
   notes: 범위 = 소유 + trip_companions.user_id가 나인 여행(접근 권한과 같은 기준), 중복은 한 번. pending deploy.
+- id: CORE-038
+  title: 지역 메모 없는 지난 여행에 지도 검색으로 담은 장소도 서버 역지오코딩으로 시도가 잡혀 홈 '다녀온 지역'에 들어간다
+  priority: P2
+  tags: [desktop, mutating, search, home]
+  preconditions:
+    - account: test@test.com
+    - data: "'경포해변' 검색 가능, kor-travel-geo /v2/reverse 동작"
+    - env: PinVi ≥ 장소 시도 역지오코딩 PR(feat/poi-region-geocode) deployed
+  data_sources: [map:place, geo]
+  steps:
+    - "'[e2e] CORE-038' 여행(D-2~D-1, 지역 메모 없음) → 1일차 '경포해변' 추가 → GET /users/me/home poll(≤30 s) → /home"
+  expected:
+    - 그 여행의 recent_trips.region_name '강원'(여행 지역 근거가 없어 장소 geo_region에서)
+    - home-regions에 '강원'
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-home-region.live.spec.ts#CORE-038
+  notes: 배경 조회 1회(3 s) — geo 장애면 비워 두고 백필(python -m app.commands.poi_region_backfill)이 채운다. pending deploy.

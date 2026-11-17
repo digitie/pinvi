@@ -108,7 +108,8 @@ _CODE_KEYS = (
     "code",
 )
 _TEXT_KEYS = ("sido", "sido_name", "label", "road", "jibun", "full", "name")
-_CONTAINER_KEYS = ("region", "address", "location")
+# `geo_region` = 장소 좌표 역지오코딩 결과(`services/poi_region`).
+_CONTAINER_KEYS = ("region", "geo_region", "address", "location")
 
 
 def sido_name(code: str) -> str:

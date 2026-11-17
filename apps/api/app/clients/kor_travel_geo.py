@@ -194,8 +194,13 @@ class KorTravelGeoClient:
         radius_m: int | None = None,
         include_region: bool = True,
         include_zipcode: bool = True,
+        max_attempts: int | None = None,
+        attempt_timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
-        """좌표 → 주소/행정구역. data = {status, candidates[]}."""
+        """좌표 → 주소/행정구역. data = {status, candidates[]}.
+
+        장소 시도 배경 조회(`services/poi_region`)는 `max_attempts=1`과 짧은 timeout을 넘긴다.
+        """
         return await self._post(
             "/v2/reverse",
             {
@@ -205,6 +210,8 @@ class KorTravelGeoClient:
                 "include_region": include_region,
                 "include_zipcode": include_zipcode,
             },
+            max_attempts=max_attempts,
+            attempt_timeout_seconds=attempt_timeout_seconds,
         )
 
     async def search(

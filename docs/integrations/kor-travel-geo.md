@@ -293,6 +293,7 @@ geocoding 실패가 지도/여행 핵심 흐름을 막지 않도록 **graceful d
 | 행정구역 단위 탐색(시군구 선택)           | `/geo/search?type=district`       | 대표점 = `ST_PointOnSurface`               |
 | 좌표 주변 행정구역 후보                   | `/regions/within-radius`      | kor-travel-geo `/v2/regions/within-radius` |
 | 공유 링크/딥링크 주소 → 지도 이동         | `/geo/geocode`                    |                                            |
+| 여행 장소(POI) 시도·시군구(개인 홈 지역 통계) | 서버 내부 `/v2/reverse` (`include_region`) | 장소 좌표라 위치 감사·동의 없음. 장소 추가·좌표 변경 뒤 배경 1회(재시도 없음, 3 s), 장애 시 비워 두고 백필 `python -m app.commands.poi_region_backfill`이 다시 묻는다. 결과는 `feature_snapshot.geo_region`(`services/poi_region.py`) |
 
 > feature(관광지/주유소/날씨 등) 검색은 geocoding이 아니다 — kor-travel-map
 > OpenAPI HTTP 계약. 주소·행정구역·장소명만 본 문서 경로.
