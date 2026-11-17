@@ -1,3 +1,8 @@
+## 모바일 공유 화면 지도 (2026-11-17)
+
+PR claude feat/mobile-shared-trip-map(후속 2/3): 공유 토큰 범위 지도 키 endpoint + 공유 화면 지도(교통 없음).
+다음: 후속 3/3 읽기 전용 장소 시트.
+
 ## 모바일 마커 아이콘·날씨 (2026-11-17)
 
 PR claude feat/mobile-place-detail(후속 1/3): 마커 maki/lucide 아이콘 + 현재 날씨, 목록 날씨 배지, weatherNow·markerIcons·날씨 캐시 공용화.

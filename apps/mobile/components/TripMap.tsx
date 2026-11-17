@@ -14,7 +14,7 @@ import {
 import { fitCameraToPoints, type CameraPadding, type CameraTarget } from '../lib/tripMapCamera';
 import type { TripTransportState } from '../lib/useTripTransport';
 import { usePoiWeatherPeekAll } from '../lib/poiWeather';
-import { useVWorldToken } from '../lib/vworldToken';
+import type { VWorldTokenQuery } from '../lib/vworldToken';
 import { TransportItemCard } from './TransportLayers';
 import { Button, Muted } from './ui';
 import { VWorldMapView, type VWorldMapHandle } from './VWorldMap';
@@ -75,7 +75,13 @@ export interface TripMapPanelProps {
   selectedPoiId: string | null;
   focus: TripMapFocus | null;
   onSelectPoi: (poiId: string) => void;
-  transport: TripTransportState;
+  /**
+   * 여행 장소 반경 교통 레이어. 없으면(비로그인 공유 화면 — `/transport/*`는 로그인 필요, NEAR-027) 칩·교통
+   * 마커·상태 줄이 없다.
+   */
+  transport?: TripTransportState | null;
+  /** 지도 키 — 로그인 화면은 `useVWorldToken`, 공유 화면은 공유 토큰 범위 `useSharedVWorldToken`. */
+  vworldToken: VWorldTokenQuery;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   width: number;
@@ -95,15 +101,16 @@ export interface TripMapPanelProps {
  * 접으면 지도를 내리고(unmount) 펼침 막대만 남긴다 — 목록을 넓게 쓸 수 있다.
  */
 export function TripMapPanel(props: TripMapPanelProps) {
-  const { collapsed, onToggleCollapsed, transport, points, width, height } = props;
+  const { collapsed, onToggleCollapsed, transport = null, points, width, height } = props;
+  const transportVisible = transport?.visible ?? false;
   const mapRef = useRef<VWorldMapHandle>(null);
   // 모든 장소를 다시 담는다(지도 아래 막대 — 지도 위에 두면 출처 표기와 겹친다).
   const fitAll = () =>
-    fitMapToPoints(mapRef.current, points, { width, height }, fitPadding(transport.visible));
+    fitMapToPoints(mapRef.current, points, { width, height }, fitPadding(transportVisible));
   return (
     <View className="border-b border-hairline bg-canvas" testID="trip-map-panel">
       {collapsed ? null : <TripMapCanvas {...props} mapRef={mapRef} />}
-      {collapsed ? null : <TripTransportStatus transport={transport} />}
+      {collapsed || !transport ? null : <TripTransportStatus transport={transport} />}
       <View className="flex-row items-center justify-end gap-1 px-4">
         {!collapsed && points.length > 1 ? (
           <Pressable
@@ -134,16 +141,17 @@ function TripMapCanvas({
   selectedPoiId,
   focus,
   onSelectPoi,
-  transport,
+  transport = null,
+  vworldToken: tokenQuery,
   width,
   height,
   mapRef,
   tripId = null,
   dayWeatherCards,
 }: TripMapPanelProps & { mapRef: RefObject<VWorldMapHandle | null> }) {
-  const tokenQuery = useVWorldToken();
+  const transportVisible = transport?.visible ?? false;
   const lastZoomRef = useRef<number | null>(null);
-  const padding = fitPadding(transport.visible);
+  const padding = fitPadding(transportVisible);
   const size = { width, height };
 
   // 첫 시점 — `initialCenter`/`initialZoom`은 mount 때 한 번만 읽힌다. 펼치며 장소를 골랐으면 그 장소,
@@ -173,13 +181,13 @@ function TripMapCanvas({
   useEffect(() => {
     if (fittedKeyRef.current === pointsKey) return;
     fittedKeyRef.current = pointsKey;
-    fitMapToPoints(mapRef.current, points, { width, height }, fitPadding(transport.visible));
-  }, [pointsKey, points, width, height, transport.visible, mapRef]);
+    fitMapToPoints(mapRef.current, points, { width, height }, fitPadding(transportVisible));
+  }, [pointsKey, points, width, height, transportVisible, mapRef]);
 
   // 선택은 id로 들고 항목은 지금 결과에서 다시 찾는다 — 레이어를 끄거나 결과에서 빠지면 카드도 닫힌다.
   const [selectedTransportId, setSelectedTransportId] = useState<string | null>(null);
   const selectedTransport: TransportItem | null =
-    selectedTransportId != null ? transport.itemForMarker(selectedTransportId) : null;
+    selectedTransportId != null && transport ? transport.itemForMarker(selectedTransportId) : null;
 
   // 마커 이름 옆 현재 날씨 — 새 요청 없이 이미 받은 카드에서(웹 `usePlaceWeather`와 같은 판정). 모르면 null.
   const peekWeather = usePoiWeatherPeekAll();
@@ -200,7 +208,7 @@ function TripMapCanvas({
 
   const markers = useMemo<PlatformMarkerItem[]>(
     () => [
-      ...transport.markers.map((m) => ({
+      ...(transport?.markers ?? []).map((m) => ({
         ...m,
         // 교통 항목은 여행 장소보다 작은 원(이름 없음) — 누르면 카드.
         compact: true,
@@ -225,7 +233,7 @@ function TripMapCanvas({
         };
       }),
     ],
-    [transport.markers, points, selectedPoiId, selectedTransport, weatherByPoi],
+    [transport?.markers, points, selectedPoiId, selectedTransport, weatherByPoi],
   );
 
   if (tokenQuery.isError || (tokenQuery.isSuccess && !tokenQuery.data.api_key)) {
@@ -258,7 +266,7 @@ function TripMapCanvas({
               onSelectPoi(id.slice(POI_MARKER_PREFIX.length));
               return;
             }
-            setSelectedTransportId(transport.itemForMarker(id) ? id : null);
+            setSelectedTransportId(transport?.itemForMarker(id) ? id : null);
           }}
           style={{ flex: 1 }}
         />
@@ -268,7 +276,7 @@ function TripMapCanvas({
         </View>
       )}
 
-      {transport.visible ? (
+      {transport && transportVisible ? (
         <View className="absolute left-3 right-3 top-3">
           <TripTransportChips transport={transport} />
         </View>
@@ -283,7 +291,7 @@ function TripMapCanvas({
             <Muted>지도에 표시할 장소가 없습니다.</Muted>
           </View>
         ) : null}
-        {selectedTransport ? (
+        {selectedTransport && transport ? (
           <TransportItemCard
             item={selectedTransport}
             state={transport}
