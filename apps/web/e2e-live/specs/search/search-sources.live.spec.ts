@@ -56,7 +56,7 @@ test.describe('SRCH sources by category family (/map)', () => {
 
   test('SRCH-019 숙박·호텔', async ({ page }, ti) => {
     desktopOnly();
-    test.fail(true, 'kor-travel-map#1438: feature category misclassified (숙박·카페·마트·캠핑장·주차장 → 관광/문화시설)');
+    // kor-travel-map#1438 고침(#1447) 뒤 '롯데호텔'은 숙박 라벨로 온다(2026-11-17 cat12·cat13 두 번 통과).
     await familyCase(page, ti, 'SRCH-019', '롯데호텔', /호텔|숙박|리조트/);
   });
 
