@@ -11,14 +11,14 @@ common PR49는 main e8ed3ae75000be5cd22a3a11492bd97660635d78로 병합됐다.
 | @kor-travel/ui | 0.2.0 | GPL-3.0-or-later | sha512-BsRRdnJUp6FQ2KWkXtINb7IkrxxwnWFlLP/oVlNN4UXBKren7uTlnYT4iJsdaO98iA4Tn2EMPX06eT2uB5jEDA== |
 | lightningcss | 1.33.0+nativecss.fix.4 | MPL-2.0 | sha512-zDQ03VJE37OlyBrLsRcsEdIVu0T4BXJKDH5y9//To6GlGN2UrKQGERFVAFblkPQ5ZEbhuOp5wpXxGARZNdbQLA== |
 | vworld-map-core | 1.0.1 | GPL-3.0-only | sha512-Djm14Arr7U0r7Sabj6P0V57CdzWIGaJmecklmY1hwrq1QUZJjMUFgkZfGRFalUo6AFzHEwwzOEzbJPMifGhINw== |
-| vworld-map-rn | 1.0.1 | GPL-3.0-only | sha512-lgDBasKIEG2ElQ9jnHDB9pA+x04Xge9yzBb1NPPw1auyvlkQvxsq4NfRPIrw1VWiutcGiIefySLiVaZDUkO69Q== |
+| vworld-map-rn | 1.0.2 | GPL-3.0-only | sha512-ZJ6WmcABs8Jia6VZUOKutSYBPaWp7Ws/9wEMEcHwrVlpUwiBysCYOmvaUDtBj2HaSN3CgUMjzRQW2KlJs4yElQ== |
 | vworld-map-web | 1.0.4 | GPL-3.0-only | sha512-yuie33P42nb6pHoR+rI3OTNzXmW/HdIbh6RCEWEooaVTg2lNax8NkakTiadZR/Osw34a6IO0jRxANaE16g6mKA== |
 | @radix-ui/react-focus-scope | 1.3.1+kortravel.fix.2 | MIT | sha512-v3XweXrUSZ/QfrMVvYmsAkVNDnvcN21QKbSrViXYf0OQf5Ue9xSgqQIukgGjsYMEBQ5qxQW8fnOC9t1Y0ENPXw== |
 
 ## 소스 정본
 
 - common: a35481349d6747b4f13b958ae64d9c0bbd0b5413
-- maplibre-vworld-react: 38efb4b5c4ddb9242cb2acf973918583805cef53 (web 1.0.4 — PR #33 vworld:// 스킴 수정. core 1.0.1 tgz는 이 commit의 Marker CI pack과 byte 동일, RN 소스는 9a7a348 이후 불변)
+- maplibre-vworld-react: 79b70997de8dd4a6bcc9630233f14f273cb27991 (web 1.0.4 — #33 vworld:// 스킴 수정, rn 1.0.2 — #34 web 대조 수정. 세 tgz 모두 이 commit의 main push Marker CI pack이며 core 1.0.1·web 1.0.4는 이전 pack과 byte 동일)
 - lightningcss: 748651cbd845971e65c411166ddee101745dab21
 - serde-content: 18e53fcf6f8ace093a292891b34fa3411192617d
 - radix-ui-primitives: 1752a539c8d5ae57961a0fa2702d2573d48fefe7

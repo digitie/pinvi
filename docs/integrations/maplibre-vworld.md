@@ -38,7 +38,7 @@ MapLibre GL JS 채택 결정은 유지하되, 기존 Web 의존성 `maplibre-vwo
 
 ### 1.1 vendored tarball 갱신 절차
 
-2026-11-11 통합 기준은 immutable GitHub source9a7a348b02d61969b394c681b024d5851eef836b의 core1.0.1/web1.0.3/RN1.0.1이다. 2026-11-17부터 web은 38efb4b5c4ddb9242cb2acf973918583805cef53의 1.0.4다(core·RN bytes 불변). 원본 담당이 Linux 격리 clone에서 build/type/lint/tests 후 pack한다. GPL LICENSE/NOTICE·실제src·tsconfig를 동봉하고 원장의 SHA512를 확인한다. 기존 golden core1.0.0 bytes는 덮어쓰거나 같은 정식 버전으로 재발행하지 않는다. 같은 버전 후보 재pack은 미릴리스 통합 단계에만 허용하며 최종 freeze 때 단일 파일로 정산한다.
+2026-11-11 통합 기준은 immutable GitHub source9a7a348b02d61969b394c681b024d5851eef836b의 core1.0.1/web1.0.3/RN1.0.1이다. 2026-11-17부터 source는 79b70997de8dd4a6bcc9630233f14f273cb27991이고 web 1.0.4·RN 1.0.2다(core 1.0.1 bytes 불변). 원본 담당이 Linux 격리 clone에서 build/type/lint/tests 후 pack한다. GPL LICENSE/NOTICE·실제src·tsconfig를 동봉하고 원장의 SHA512를 확인한다. 기존 golden core1.0.0 bytes는 덮어쓰거나 같은 정식 버전으로 재발행하지 않는다. 같은 버전 후보 재pack은 미릴리스 통합 단계에만 허용하며 최종 freeze 때 단일 파일로 정산한다.
 
 소비자는 전달받은 동일3종 tgz를 apps/web/vendor에 복사한다. 웹의 spec은 file:vendor/..., 모바일은 file:../web/vendor/...이다. root core direct spec과 $vworld-map-core override도 동일 물리 파일로 맞춰 미공개 core의 registry pull을 막는다. 각 원장은 실제 file 참조·버전·SHA512를 기록한다. 다른 공통 패키지 entry는 해당 tarball까지 함께 갱신할 때만 변경한다.
 
@@ -69,6 +69,9 @@ web tarball만 바뀌어도 위 명시 file 설치로 lock을 갱신한다. inte
   치환으로 고쳤다. tarball은 main push Marker CI artifact `marker-ci-38efb4b5…`의 pack(sha256 `aa6a24de…`, PR 실행과 byte
   동일)이고, 같은 실행의 core 1.0.1 pack은 vendored core와 byte 동일하다. Pinvi 임시 override
   `apps/web/lib/vworldTileProtocol.ts`(#749)는 지웠고 `tests/vworldTileScheme.test.ts`가 vendored 판의 스킴 처리를 지킨다.
+  같은 날 `vworld-map-rn` 1.0.1 → 1.0.2(upstream #34, main `79b70997`)도 vendor했다. web과 대조해 `fitBounds`의 `paddingPx`
+  전달(숫자 또는 면별), `Marker` `anchor`·`offset`, `PlaceMarker`·`Popup` bottom 앵커, 선택 `mapStyle`을 고쳤다. 모두 추가만이라
+  `VWorldMap.native.tsx`의 사용은 그대로다. 세 tgz는 `79b70997` main push Marker CI artifact의 pack이다.
 - 2026-11-02 — `vworld-map-web`만 upstream `main` `fb75475`로 갱신(core 불변). 포함:
   #29 첫 묶음 마커 누락 수정(`ClusterLayer`가 일회성 `load`를 다시 기다리다 첫 마커를 놓쳤다 —
   prod trip 지도에서 사용자가 지도를 한 번 움직이기 전까지 POI 핀이 0개였다), #28 VWorld 제공영역
