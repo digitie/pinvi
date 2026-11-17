@@ -1,3 +1,15 @@
+## 2026-11-17 (claude) — 모바일 공유 화면 지도 (브랜치 `feat/mobile-shared-trip-map`, 후속 2/3)
+
+- 소유자 결정(11-17): 로그인 없는 공유 화면에도 지도. 웹 공유 화면(`SharedTripView`)은 `TripMapView`에 빌드타임 공개 설정
+  `NEXT_PUBLIC_VWORLD_API_KEY`를 넘기고 교통 레이어는 켜지 않는다(NEAR-027). 모바일은 키를 번들하지 않으므로(ADR-043)
+  **공유 토큰 범위 endpoint** `GET /mobile/shared/{trip_id}/{token}/vworld/token`을 더했다 — 공유 본문과 같은 검증
+  (`get_trip_for_share_token`: 해제·만료·삭제 여행 404), 키 미설정 503, 감사 로그는 trip_id·ttl만. 교통 등 다른 endpoint 인증은 그대로.
+- 모바일 공유 화면: 여행 상세와 같은 지도 패널(장소 원 + 아이콘 + 이름, 일자 카드 날씨, 접기·전체 보기, 목록 ↔ 지도)에서 교통 칩·
+  장소별 날씨 요청만 뺐다. 연동 상태는 `useTripMapLinking`, 목록 줄은 `TripPoiRow`로 두 화면이 공유한다. `TripMapPanel`은
+  `transport`가 선택이고 지도 키 query를 받는다.
+- 검증: API 통합(유효 토큰 200·다른 여행/틀린 토큰/해제 404·미설정 503·교통은 여전히 401), 모바일 vitest(공유 화면 키 경로·요청 목록·
+  연동·키 실패 안내).
+
 ## 2026-11-17 (claude) — 모바일 지도 마커 아이콘·현재 날씨 (브랜치 `feat/mobile-place-detail`, 후속 1/3)
 
 - 소유자 결정(11-17): 모바일 마커도 웹 #755처럼 원 안 마커 아이콘(아이콘 고르기·카테고리 maki)과 이름 옆 현재 날씨를 보인다.
