@@ -2,8 +2,10 @@ import { useCallback, useImperativeHandle, useRef } from 'react';
 import { View, type ViewStyle } from 'react-native';
 import { Marker, VWorldMapView, type MapLibreMap, type VWorldLayerType } from 'vworld-map-web';
 import type { MarkerItem, VWorldMapType } from 'vworld-map-core';
-import type { PlatformVWorldMapProps } from './VWorldMap.types';
+import { usesCustomPin, type PlatformVWorldMapProps } from './VWorldMap.types';
 import { toMapLibrePadding } from '../lib/mapPadding';
+import { MapPin } from './MapPin';
+import { mapPinPlacement } from './mapPinLayout';
 import { Muted } from './ui';
 
 const layers: Record<VWorldMapType, VWorldLayerType> = {
@@ -92,12 +94,22 @@ export function WebVWorldMap({
           <Marker
             key={marker.id}
             lngLat={marker.coordinate}
+            {...(mapPinPlacement(marker) ?? {})}
             zIndex={marker.zIndex}
-            ariaLabel={marker.ariaLabel ?? marker.title}
+            ariaLabel={marker.ariaLabel ?? marker.title ?? marker.label}
             interactionId={marker.id}
             onClick={() => onFeaturePress?.(marker)}
           >
-            <View style={markerCircle(marker)} />
+            {usesCustomPin(marker) ? (
+              <MapPin
+                color={marker.color ?? '#717171'}
+                label={marker.label}
+                selected={marker.selected}
+                compact={marker.compact}
+              />
+            ) : (
+              <View style={markerCircle(marker)} />
+            )}
           </Marker>
         ))}
       </VWorldMapView>

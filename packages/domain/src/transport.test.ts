@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { HighwayIncidentItem, TransportLayer } from '@pinvi/schemas';
+import type { HighwayIncidentItem, TransportLayer, TransportLayerResult } from '@pinvi/schemas';
 import {
+  dedupeTransportNearPoints,
   formatFuelPrice,
   fuelProductLabel,
   parseTransportMarkerId,
@@ -9,8 +10,13 @@ import {
   transportFreshnessAgeSeconds,
   transportFreshnessLabel,
   transportMarkerId,
+  transportLayerStatusText,
+  transportNearPointsKey,
   transportRadiusLabel,
   TRANSPORT_LAYER_META,
+  TRANSPORT_STATUS_LOADING_TEXT,
+  withUnavailableTransportLayers,
+  type TransportLayerStatusInput,
 } from './transport';
 
 describe('requestableTransportLayers', () => {
@@ -108,5 +114,111 @@ describe('sortIncidentsByRecency', () => {
       incident('d', null),
     ]);
     expect(sorted.map((i) => i.feature_id)).toEqual(['c', 'b', 'a', 'd']);
+  });
+});
+
+describe('반경 조회 기준점', () => {
+  it('키는 5자리 반올림 값이라 미세한 차이·배열 identity와 무관하다', () => {
+    const a = [{ lon: 127.0000001, lat: 37.5 }];
+    const b = [{ lon: 127.0000004, lat: 37.5000002 }];
+    expect(transportNearPointsKey(a)).toBe('127.00000,37.50000');
+    expect(transportNearPointsKey(a)).toBe(transportNearPointsKey(b));
+    expect(transportNearPointsKey([])).toBe('');
+  });
+
+  it('같은 자리(5자리)는 처음 것만 남기고 순서를 지킨다', () => {
+    expect(
+      dedupeTransportNearPoints([
+        { lon: 127.1, lat: 37.1 },
+        { lon: 126.9, lat: 37.2 },
+        { lon: 127.100001, lat: 37.100001 },
+      ]),
+    ).toEqual([
+      { lon: 127.1, lat: 37.1 },
+      { lon: 126.9, lat: 37.2 },
+    ]);
+  });
+});
+
+describe('withUnavailableTransportLayers', () => {
+  const ok: TransportLayerResult = {
+    layer: 'fuel_station',
+    status: 'ok',
+    truncated: false,
+    items: [],
+  };
+
+  it('응답에 빠진 요청 레이어를 불러올 수 없음으로 채운다', () => {
+    const results = withUnavailableTransportLayers([ok], ['fuel_station', 'highway_incident']);
+    expect(results.map((r) => [r.layer, r.status])).toEqual([
+      ['fuel_station', 'ok'],
+      ['highway_incident', 'unavailable'],
+    ]);
+  });
+
+  it('요청 실패(빈 결과)는 요청한 레이어 모두 불러올 수 없음', () => {
+    expect(withUnavailableTransportLayers([], ['highway_incident'])).toEqual([
+      {
+        layer: 'highway_incident',
+        status: 'unavailable',
+        reason: 'UPSTREAM_UNAVAILABLE',
+        truncated: false,
+        items: [],
+      },
+    ]);
+  });
+});
+
+describe('transportLayerStatusText', () => {
+  const base: TransportLayerStatusInput = {
+    meta: { layer: 'fuel_station', minZoom: 11 },
+    layerStatus: { available: true },
+    result: undefined,
+    nearMode: true,
+    zoom: 7,
+    loading: true,
+    radiusM: { fuel_station: 10_000 },
+    receivedAt: 1_000_000,
+    nowMs: 1_000_000 + 120_000,
+  };
+  const result: TransportLayerResult = {
+    layer: 'fuel_station',
+    status: 'ok',
+    truncated: false,
+    items: [],
+    freshness: {
+      source_collected_at: null,
+      loaded_at: '2026-11-17T00:00:00Z',
+      age_seconds: 60,
+      max_age_seconds: 3600,
+      stale: false,
+    },
+  };
+
+  it('반경 모드는 줌 안내 없이 불러오는 중 → 개수·반경·신선도', () => {
+    expect(transportLayerStatusText(base)).toBe(TRANSPORT_STATUS_LOADING_TEXT);
+    expect(transportLayerStatusText({ ...base, result })).toBe(
+      '0곳 · 여행 장소 10km 이내 · 3분 전 갱신',
+    );
+    expect(transportLayerStatusText({ ...base, result: { ...result, truncated: true } })).toContain(
+      '가까운 곳만 표시',
+    );
+  });
+
+  it('화면 범위 모드는 최소 줌 아래에서 확대 안내, 반경 문구 없음', () => {
+    expect(transportLayerStatusText({ ...base, nearMode: false })).toBe('확대하면 보여요');
+    expect(transportLayerStatusText({ ...base, nearMode: false, zoom: 12, result })).toBe(
+      '0곳 · 3분 전 갱신',
+    );
+  });
+
+  it('상태가 불가이거나 결과가 ok가 아니면 불러올 수 없음, 조회 전이면 null', () => {
+    expect(transportLayerStatusText({ ...base, layerStatus: { available: false } })).toBe(
+      '일시적으로 불러올 수 없음',
+    );
+    expect(
+      transportLayerStatusText({ ...base, result: { ...result, status: 'unavailable' } }),
+    ).toBe('일시적으로 불러올 수 없음');
+    expect(transportLayerStatusText({ ...base, loading: false })).toBeNull();
   });
 });

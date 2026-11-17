@@ -4,14 +4,11 @@ import { useId, useState } from 'react';
 import type { HighwayIncidentItem, TransportLayer, TransportLayerResult } from '@pinvi/schemas';
 import {
   TRANSPORT_LAYER_META,
+  TRANSPORT_STATUS_LOADING_TEXT,
   sortIncidentsByRecency,
-  transportFreshnessAgeSeconds,
-  transportFreshnessLabel,
-  transportRadiusLabel,
+  transportLayerStatusText,
 } from '@pinvi/domain';
 import type { TransportDetailTarget, TransportLayersState } from '@/lib/useTransportLayers';
-
-const LOADING_TEXT = '불러오는 중';
 
 /** 돌발 목록 최대 표시 개수 — 패널이 지도를 덮지 않게. */
 const INCIDENT_LIST_MAX = 5;
@@ -24,28 +21,19 @@ function layerLine(
     'zoom' | 'results' | 'receivedAt' | 'nowMs' | 'status' | 'hasMap' | 'nearMode' | 'radiusM'
   >,
 ): string | null {
-  const status = state.status?.layers.find((s) => s.layer === layer);
-  if (status && !status.available) return '일시적으로 불러올 수 없음';
-  // 여행 장소 반경 모드는 줌과 무관하게 조회한다.
-  if (!state.nearMode && state.zoom != null && state.zoom < minZoom) return '확대하면 보여요';
-  const result = state.results.find((r) => r.layer === layer);
   // 결과 전에도 줄을 차지한다 — 결과가 와서 줄이 새로 생기면 패널 상시 부분이 자라 여행 지도가 다시
-  // 맞춰지고 같은 레이어를 다시 조회한다(#712).
-  if (!result) return state.hasMap ? LOADING_TEXT : null;
-  if (result.status !== 'ok') return '일시적으로 불러올 수 없음';
-  const parts: string[] = [`${result.items.length}곳`];
-  const radius = state.nearMode ? state.radiusM?.[layer] : undefined;
-  if (radius != null) parts.push(transportRadiusLabel(radius));
-  if (result.truncated) parts.push(state.nearMode ? '가까운 곳만 표시' : '일부만 표시 — 확대하세요');
-  if (result.freshness && state.receivedAt != null) {
-    parts.push(
-      transportFreshnessLabel(
-        transportFreshnessAgeSeconds(result.freshness, state.receivedAt, state.nowMs),
-      ),
-    );
-    if (result.freshness.stale) parts.push('오래된 정보');
-  }
-  return parts.join(' · ');
+  // 맞춰지고 같은 레이어를 다시 조회한다(#712). 문구 규칙은 모바일 여행 지도와 공용(`@pinvi/domain`).
+  return transportLayerStatusText({
+    meta: { layer, minZoom },
+    layerStatus: state.status?.layers.find((s) => s.layer === layer),
+    result: state.results.find((r) => r.layer === layer),
+    nearMode: state.nearMode,
+    zoom: state.zoom,
+    loading: state.hasMap,
+    radiusM: state.radiusM,
+    receivedAt: state.receivedAt,
+    nowMs: state.nowMs,
+  });
 }
 
 function incidentsOf(results: readonly TransportLayerResult[]): HighwayIncidentItem[] {
@@ -127,7 +115,7 @@ export function TransportLayerStatus({
           );
           const attrs = {
             'data-testid': `transport-layer-state-${meta.layer}`,
-            'data-status': result?.status ?? (line === LOADING_TEXT ? 'loading' : ''),
+            'data-status': result?.status ?? (line === TRANSPORT_STATUS_LOADING_TEXT ? 'loading' : ''),
             'data-reason': result?.reason ?? '',
           };
           if (collapseIncidents && meta.layer === 'highway_incident') {

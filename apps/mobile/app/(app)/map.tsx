@@ -3,8 +3,6 @@ import type { MapCamera } from '../../lib/cameraBbox';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
-import { z } from 'zod';
 import { VWorldMapView, type VWorldMapHandle } from '../../components/VWorldMap';
 import { useUserLocation } from '@pinvi/hooks';
 import {
@@ -17,9 +15,9 @@ import {
   shouldAutoLocate,
   transportMarkerId,
 } from '@pinvi/domain';
-import { apiClient } from '../../lib/api';
 import { useLocationConsent } from '../../lib/consents';
 import { expoLocationAdapter } from '../../lib/location';
+import { useVWorldToken } from '../../lib/vworldToken';
 import { Body, Button, Card, Heading, Muted, Screen, Subheading } from '../../components/ui';
 import {
   TransportChips,
@@ -47,12 +45,6 @@ const AUTO_CENTER_TIMEOUT_MS = 3_000;
  * 좌표를 SecureStore/AsyncStorage/서버 어디에도 남기지 않는다(§7). 앱을 다시 띄우면 초기화된다.
  */
 let autoCenterSession: { done: true; coord: { lon: number; lat: number } | null } | null = null;
-
-const VWorldTokenSchema = z.object({
-  api_key: z.string(),
-  key_source: z.literal('server-issued'),
-  ttl_seconds: z.number(),
-});
 
 export default function MapScreen() {
   const mapRef = useRef<VWorldMapHandle>(null);
@@ -151,13 +143,7 @@ export default function MapScreen() {
     );
   }, [consent, refresh]);
 
-  const tokenQuery = useQuery({
-    queryKey: ['mobile', 'vworld-token'],
-    queryFn: () =>
-      apiClient.request('/mobile/vworld/token', { method: 'GET', schema: VWorldTokenSchema }),
-    retry: false,
-    staleTime: 60_000,
-  });
+  const tokenQuery = useVWorldToken();
 
   // 키 미발급(미설정/오프라인) → 지도를 띄울 수 없으므로 안내 화면.
   if (tokenQuery.isError || (tokenQuery.isSuccess && !tokenQuery.data.api_key)) {

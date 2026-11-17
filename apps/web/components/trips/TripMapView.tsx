@@ -53,6 +53,7 @@ import { viewportSearchBias } from '@/lib/searchBias';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
 import { useTransportLayers } from '@/lib/useTransportLayers';
 import {
+  dedupeTransportNearPoints,
   featureResolutionNotice,
   pointsBounds,
   resolveMarkerStyle,
@@ -212,15 +213,7 @@ function useTripMapViewModel({
   const getMap = useCallback(() => mapRef.current, []);
   const myLocation = useMyLocationControl(getMap);
   // 여행 지도의 교통 레이어는 화면 범위가 아니라 여행 장소 반경(주유소 10 km·교통 돌발 20 km)이다.
-  const transportNearPoints = useMemo(() => {
-    const seen = new Set<string>();
-    return points.flatMap((p) => {
-      const key = `${p.lon.toFixed(5)},${p.lat.toFixed(5)}`;
-      if (seen.has(key)) return [];
-      seen.add(key);
-      return [{ lon: p.lon, lat: p.lat }];
-    });
-  }, [points]);
+  const transportNearPoints = useMemo(() => dedupeTransportNearPoints(points), [points]);
   const transport = useTransportLayers({ active: transportLayers, nearPoints: transportNearPoints });
   const transportVisible = transport.visible;
   // fitToPoints가 읽는 값들 — 맞춤 함수가 바뀌어(=다시 맞춤) 사용자의 시점을 빼앗지 않게 ref로 둔다.

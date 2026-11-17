@@ -1,3 +1,8 @@
+## 모바일 여행 지도 (2026-11-17)
+
+PR claude feat/mobile-trip-map: 여행 상세 위 지도(장소 원+이름, 목록 연동, 접기) + 여행 장소 반경 주유소·교통 돌발 칩.
+다음: 실기기(EAS dev client)에서 이름 핀 anchor·fitBounds 여백 확인, 마커 옆 날씨 아이콘(모바일 아이콘 렌더러)은 소유자 결정.
+
 ## 2026-11-17 (claude) — 추천 여행 주변 축제 bbox·페이징 + Map 재vendor(f1788da9) (브랜치 `feat/recommend-festival-bbox`)
 
 소유자 승인 후속(#756 결정 2). Map #1503(`f1788da9`)이 `GET /v1/public/festivals/monthly`에 선택 bbox
