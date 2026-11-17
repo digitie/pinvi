@@ -1,6 +1,6 @@
 ## 공통화 재조사 포인터 (2026-11-17)
 
-문서 전용(브랜치 `docs/commonization-plan-20261117`). Common 공통화 재조사 계획의 PinVi 소유 task는 `T-383`(→ Common `T-484a`, ETL 재시도 sensor 5→1) 하나다.
+문서 전용(브랜치 `docs/commonization-plan-20261117`). Common 공통화 재조사 계획의 PinVi 소유 task는 `T-383`이 추적한다(→ Common `T-484a` ETL 재시도 sensor 5→1, `T-424` ui 0.3.0 재vendor).
 다음 한 작업은 바뀌지 않는다.
 ## 모바일 읽기 전용 장소 시트 (2026-11-17)
 
