@@ -40,8 +40,9 @@ test.describe('CORE auth/session', () => {
     await page.getByTestId('login-password').fill(password);
     await shot(page, 'CORE-001', 'filled');
     await submit.click();
-    await expect(page).toHaveURL(/\/trips(?:[?#].*)?$/, { timeout: 20_000 });
-    await expect(page.getByRole('heading', { name: '여행', exact: true })).toBeVisible();
+    // 로그인 기본 목적지 = 개인 홈(/home). 명시한 next=가 있으면 그쪽(CORE-007).
+    await expect(page).toHaveURL(/\/home(?:[?#].*)?$/, { timeout: 20_000 });
+    await expect(page.getByRole('heading', { name: '내 여행', exact: true })).toBeVisible();
     await expect(page).not.toHaveURL(/\/login/);
     const hydrationNoise = rec.errors.filter((e) => /hydrat/i.test(e));
     rec.stop();

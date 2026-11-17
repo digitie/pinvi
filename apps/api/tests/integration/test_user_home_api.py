@@ -132,3 +132,47 @@ async def test_home_empty_user(client, verified_user, auth_cookies) -> None:  # 
     assert home["next_trip"] is None
     assert home["stats"]["trip_count"] == 0
     assert home["recent_places"] == [] and home["regions"] == []
+
+
+async def test_home_counts_trips_joined_as_companion(  # type: ignore[no-untyped-def]
+    client, verified_user, auth_cookies, session_factory
+) -> None:
+    owner_id, _ = verified_user
+    friend_email = f"home-friend-{uuid.uuid4().hex[:8]}@example.com"
+    friend_id = await _create_verified_user(session_factory, friend_email)
+    today = kst_now().date()
+    trip_id = await _trip(
+        client,
+        auth_cookies(owner_id),
+        "같이 간 여행",
+        today - timedelta(days=4),
+        today - timedelta(days=3),
+        region_hint="경주",
+    )
+    invited = await client.post(
+        f"/trips/{trip_id}/members",
+        json={"email": friend_email, "role": "viewer"},
+        cookies=auth_cookies(owner_id),
+    )
+    assert invited.status_code == 201, invited.text
+    await _add_poi(
+        client,
+        auth_cookies(owner_id),
+        trip_id,
+        sort_order="a0",
+        feature_id="home-joined-1",
+        feature_snapshot={"name": "불국사"},
+    )
+
+    friend = (await client.get("/users/me/home", cookies=auth_cookies(friend_id))).json()["data"]
+    assert friend["stats"]["trip_count"] == 1
+    assert friend["stats"]["completed_trip_count"] == 1
+    assert friend["stats"]["travel_day_count"] == 2
+    assert friend["stats"]["visited_place_count"] == 1
+    assert [(t["title"], t["joined"]) for t in friend["recent_trips"]] == [("같이 간 여행", True)]
+    assert [r["name"] for r in friend["regions"]] == ["경북"]
+
+    owner = (await client.get("/users/me/home", cookies=auth_cookies(owner_id))).json()["data"]
+    # 소유자에게는 같은 여행이 한 번, 동행 표시 없이 보인다.
+    assert owner["stats"]["trip_count"] == 1
+    assert [(t["title"], t["joined"]) for t in owner["recent_trips"]] == [("같이 간 여행", False)]

@@ -1,6 +1,7 @@
 """개인 홈 집계 — `GET /users/me/home` (`docs/api/users.md` §개인 홈).
 
-정의(오늘 = KST 날짜, 범위 = 내가 소유한 휴지통 밖 여행 — `/trips` 목록과 같은 범위):
+정의(오늘 = KST 날짜, 범위 = 휴지통 밖의 내가 소유한 여행 + 동행으로 참여한 여행(`trip_companions.user_id`가
+나 — 여행 접근 권한과 같은 기준). 둘 다인 여행은 한 번만 센다):
 
 - 여행 단계: 날짜 기준. 시작일 > 오늘 = 예정, 시작일 ≤ 오늘 ≤ 종료일 = 진행 중, 종료일 < 오늘 = 다녀온
   여행, 시작일 없음 = 날짜 미정. 사용자가 고르는 `status`(초안·완료 등)는 쓰지 않는다 — 다녀왔는지는
@@ -21,9 +22,10 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.companion import TripCompanion
 from app.models.poi import TripDayPoi
 from app.models.trip import Trip
 from app.models.trip_day import TripDay
@@ -58,6 +60,8 @@ class HomeTripRow:
     start_date: date | None
     end_date: date | None
     updated_at: datetime
+    # 동행으로 참여한 여행(소유자가 아님).
+    joined: bool = False
 
 
 @dataclass(frozen=True)
@@ -190,6 +194,7 @@ def summarize_home(
                 else None
             ),
             place_count=place_counts.get(trip.trip_id, 0),
+            joined=trip.joined,
         )
 
     def of_phase(phase: HomeTripPhase) -> list[HomeTripRow]:
@@ -246,6 +251,15 @@ def summarize_home(
     )
 
 
+def _in_scope(user_id: uuid.UUID) -> ColumnElement[bool]:
+    """내가 소유했거나 동행으로 참여한 휴지통 밖 여행 — IN 하위 질의라 두 경로가 겹쳐도 한 행이다."""
+    joined = select(TripCompanion.trip_id).where(TripCompanion.user_id == user_id)
+    return and_(
+        or_(Trip.owner_user_id == user_id, Trip.trip_id.in_(joined)),
+        Trip.deleted_at.is_(None),
+    )
+
+
 async def build_user_home(db: AsyncSession, *, user_id: uuid.UUID, today: date) -> UserHome:
     trip_rows = (
         await db.execute(
@@ -257,10 +271,23 @@ async def build_user_home(db: AsyncSession, *, user_id: uuid.UUID, today: date) 
                 Trip.start_date,
                 Trip.end_date,
                 Trip.updated_at,
-            ).where(Trip.owner_user_id == user_id, Trip.deleted_at.is_(None))
+                Trip.owner_user_id,
+            ).where(_in_scope(user_id))
         )
     ).all()
-    trips = [HomeTripRow(*row) for row in trip_rows]
+    trips = [
+        HomeTripRow(
+            trip_id=row.trip_id,
+            title=row.title,
+            region_hint=row.region_hint,
+            primary_region_code=row.primary_region_code,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            updated_at=row.updated_at,
+            joined=row.owner_user_id != user_id,
+        )
+        for row in trip_rows
+    ]
     if not trips:
         return summarize_home(today=today, trips=[], place_counts={}, visited=[])
 
@@ -269,8 +296,7 @@ async def build_user_home(db: AsyncSession, *, user_id: uuid.UUID, today: date) 
             select(TripDayPoi.trip_id, func.count())
             .join(Trip, Trip.trip_id == TripDayPoi.trip_id)
             .where(
-                Trip.owner_user_id == user_id,
-                Trip.deleted_at.is_(None),
+                _in_scope(user_id),
                 TripDayPoi.deleted_at.is_(None),
             )
             .group_by(TripDayPoi.trip_id)
@@ -303,8 +329,7 @@ async def build_user_home(db: AsyncSession, *, user_id: uuid.UUID, today: date) 
             )
             .join(Trip, Trip.trip_id == TripDayPoi.trip_id)
             .where(
-                Trip.owner_user_id == user_id,
-                Trip.deleted_at.is_(None),
+                _in_scope(user_id),
                 TripDayPoi.deleted_at.is_(None),
                 or_(Trip.start_date <= today, TripDay.date <= today),
                 effective_date <= today,

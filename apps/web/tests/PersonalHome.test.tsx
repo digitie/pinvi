@@ -27,6 +27,7 @@ const trip = {
   phase: 'upcoming' as const,
   days_until: 5,
   place_count: 3,
+  joined: false,
 };
 
 const home: UserHome = {
@@ -67,6 +68,7 @@ const home: UserHome = {
       phase: 'completed',
       days_until: null,
       place_count: 4,
+      joined: true,
     },
   ],
   recent_places: [
@@ -112,6 +114,13 @@ describe('개인 홈', () => {
     expect(screen.getByTestId('home-upcoming')).toHaveTextContent('날짜 미정');
     expect(screen.getByTestId('home-recent')).toHaveTextContent('지난 강릉');
     expect(screen.getByTestId('home-recent')).toHaveTextContent('장소 4곳');
+    // 동행 여행만 '동행' 표시가 붙는다.
+    expect(
+      within(screen.getByTestId('home-recent')).getByTestId('home-trip-joined'),
+    ).toHaveTextContent('동행');
+    expect(
+      within(screen.getByTestId('home-next-trip')).queryByTestId('home-trip-joined'),
+    ).toBeNull();
     expect(screen.getByTestId('home-places')).toHaveTextContent('경포해변');
     expect(screen.getByTestId('home-places')).toHaveTextContent('강원 · 지난 강릉');
   });

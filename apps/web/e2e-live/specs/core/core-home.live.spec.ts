@@ -3,7 +3,7 @@
  * Selectors: apps/web/components/home/PersonalHome.tsx, components/app/AppShell.tsx,
  * components/app/SignedInHomeRedirect.tsx, API GET /users/me/home (apps/api/app/services/user_home.py).
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
   apiBaseURL,
   createTrip,
@@ -11,6 +11,8 @@ import {
   e2ePrefix,
   isMobile,
   loginAsUser,
+  user2Context,
+  user2Email,
   searchAndAddPlace,
   shot,
   withRateLimitRetry,
@@ -65,7 +67,7 @@ test.describe('CORE personal home', () => {
     await loginAsUser(page);
     await page.goto('/map');
     if (isMobile(testInfo)) {
-      await page.getByTestId('app-nav-more-toggle').click();
+      // 모바일 하단 탭바의 첫 탭이 홈이다(2026-11-17).
       await page.getByTestId('app-nav--home-mobile').click();
     } else {
       await page.getByTestId('app-nav--home').click();
@@ -121,6 +123,74 @@ test.describe('CORE personal home', () => {
       );
       await shot(page, 'CORE-035', 'home-after');
     } finally {
+      await deleteTrip(page, id);
+    }
+  });
+
+  test('CORE-036 모바일 하단 탭바 — 홈이 첫 탭, 5칸이 320·390px에서 44px 이상', async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isMobile(testInfo), 'mobile project only');
+    await loginAsUser(page);
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/trips');
+      const tabbar = page.locator('nav[aria-label="주요 메뉴"]');
+      await expect(tabbar).toBeVisible();
+      const cells: Locator = tabbar.locator(':scope > ul > li');
+      await expect(cells).toHaveCount(5);
+      await expect(cells).toHaveText([/홈/, /여행/, /추천/, /지도/, /더보기/]);
+      for (let i = 0; i < 5; i += 1) {
+        const box = await cells.nth(i).locator('a, button').first().boundingBox();
+        expect(box, `cell ${i} @${width}`).not.toBeNull();
+        expect(box!.width, `cell ${i} width @${width}`).toBeGreaterThanOrEqual(44);
+        expect(box!.height, `cell ${i} height @${width}`).toBeGreaterThanOrEqual(44);
+      }
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `horizontal overflow @${width}`).toBeLessThanOrEqual(0);
+      await shot(page, 'CORE-036', `tabbar-${width}`);
+    }
+    // 파일은 더보기로 갔다.
+    await page.getByTestId('app-nav-more-toggle').click();
+    await page.getByTestId('app-nav--files-mobile').click();
+    await expect(page).toHaveURL(/\/files$/);
+  });
+
+  test('CORE-037 동행으로 참여한 여행이 개인 홈 통계와 목록에 동행 표시로 보인다', async ({
+    page,
+    browser,
+  }) => {
+    test.skip(test.info().project.name === 'mobile', 'desktop에서만(두 계정 데이터 변경)');
+    await loginAsUser(page);
+    const title = `${e2ePrefix} CORE-037 동행 ${Date.now()}`;
+    const { id } = await createTrip(page, { title, region: '경주', start: D(-3), end: D(-2) });
+    const friend = await user2Context(browser);
+    try {
+      const before = await homeStats(friend.page);
+      const api = await apiBaseURL(page);
+      const invited = await withRateLimitRetry(`POST /trips/${id}/members`, () =>
+        page.context().request.post(`${api}/trips/${id}/members`, {
+          data: { email: user2Email(), role: 'viewer' },
+        }),
+      );
+      expect(invited.status(), 'POST members').toBe(201);
+      const after = await homeStats(friend.page);
+      expect(after.trip_count).toBe(before.trip_count + 1);
+      expect(after.completed_trip_count).toBe(before.completed_trip_count + 1);
+
+      await friend.page.goto('/home');
+      await expectHomeRendered(friend.page);
+      const row = friend.page
+        .getByTestId('home-recent')
+        .getByRole('listitem')
+        .filter({ hasText: title });
+      await expect(row).toBeVisible();
+      await expect(row.getByTestId('home-trip-joined')).toHaveText('동행');
+      await shot(friend.page, 'CORE-037', 'friend-home');
+    } finally {
+      await friend.context.close();
       await deleteTrip(page, id);
     }
   });

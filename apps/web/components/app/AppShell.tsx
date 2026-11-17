@@ -23,6 +23,8 @@ import { useId, useState, type ReactNode } from 'react';
  * ground: bg-canvas(회색 ground 위 흰 카드 남발 폐기, T-314)
  */
 const NAV_ITEMS = [
+  // '홈' = 로그인 사용자의 개인 홈(/home, 셸 안) — 로그인 기본 목적지이자 첫 탭.
+  { href: '/home', label: '홈', icon: LayoutDashboard },
   { href: '/trips', label: '여행', icon: CalendarDays },
   { href: '/notice-plans', label: '추천', icon: Newspaper },
   // '지도' = 실제 탐색 지도(/map). `/trips/map-shell`은 VWorld 렌더 스모크용 데모 셸이라
@@ -31,14 +33,12 @@ const NAV_ITEMS = [
   { href: '/files', label: '파일', icon: Paperclip },
   { href: '/settings/mcp-tokens', label: '설정', icon: Settings },
   { href: '/profile', label: '프로필', icon: UserCircle },
-  // '홈' = 로그인 사용자의 개인 홈(/home, 셸 안). 마케팅 랜딩(`/`)은 로그인 사용자를 /home으로 보낸다.
-  { href: '/home', label: '홈', icon: LayoutDashboard },
 ] as const;
 
-// 모바일 하단 탭바 1순위 = **앱 셸 안에 머무는** 목적지 4개.
+// 모바일 하단 탭바 1순위 = **앱 셸 안에 머무는** 목적지 4개 + 더보기 = 5칸(320px에서 칸당 64px, 높이 56px).
+// 홈이 첫 탭이고, 파일은 더보기로 내렸다(2026-11-17 소유자 결정).
 // `/profile`은 셸 밖(auth 레이아웃)이라 탭바가 사라지므로 더보기 시트로 내린다(T-314 리뷰 P2/P3).
-// 홈(/home)은 셸 안이지만 하단 탭 4칸은 작업 목적지에 쓰고, 홈은 워드마크(로고)와 더보기로 간다.
-const MOBILE_PRIMARY_HREFS = ['/trips', '/notice-plans', '/map', '/files'] as const;
+const MOBILE_PRIMARY_HREFS = ['/home', '/trips', '/notice-plans', '/map'] as const;
 const MOBILE_PRIMARY = NAV_ITEMS.filter((item) =>
   (MOBILE_PRIMARY_HREFS as readonly string[]).includes(item.href),
 );

@@ -232,7 +232,10 @@ function NextTrip({ trip }: { trip: HomeTripCard }) {
             </span>
           ) : null}
         </p>
-        <p className="mt-2 text-xl font-bold tracking-tight text-ink">{trip.title}</p>
+        <p className="mt-2 flex items-center gap-2 text-xl font-bold tracking-tight text-ink">
+          <span className="min-w-0 truncate">{trip.title}</span>
+          {trip.joined ? <JoinedBadge /> : null}
+        </p>
         <p className="mt-1 text-sm text-body">{tripMeta(trip)}</p>
       </Link>
     </section>
@@ -258,6 +261,18 @@ function Stat({
         <span className="text-sm font-semibold text-muted">{unit}</span>
       </dd>
     </div>
+  );
+}
+
+/** 동행으로 참여한 여행 표시 — 소유자가 아닌 여행. */
+function JoinedBadge() {
+  return (
+    <span
+      className="shrink-0 rounded-full border border-hairline px-2 py-0.5 text-sm font-semibold text-muted"
+      data-testid="home-trip-joined"
+    >
+      동행
+    </span>
   );
 }
 
@@ -289,7 +304,10 @@ function TripList({
                 className="focus-ring flex min-h-14 items-center gap-3 rounded-sm py-2 hover:bg-surface-soft"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold text-ink">{trip.title}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="min-w-0 truncate font-semibold text-ink">{trip.title}</span>
+                    {trip.joined ? <JoinedBadge /> : null}
+                  </span>
                   <span className="block truncate text-sm text-muted">{tripMeta(trip)}</span>
                 </span>
                 {trip.phase === 'upcoming' && trip.days_until != null ? (

@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { OAuthStartRequestSchema } from '@pinvi/schemas';
-import { safeLoginReturnTo, sharedLoginHref } from '@/lib/loginReturnTo';
+import { DEFAULT_LOGIN_LANDING, safeLoginReturnTo, sharedLoginHref } from '@/lib/loginReturnTo';
 
 describe('로그인 복귀 경로', () => {
+  it('복귀 경로가 없으면 개인 홈(/home)으로 간다', () => {
+    expect(DEFAULT_LOGIN_LANDING).toBe('/home');
+    expect(safeLoginReturnTo(null)).toBe('/home');
+    // 명시한 next=는 기본 목적지보다 우선한다.
+    expect(safeLoginReturnTo('/trips')).toBe('/trips');
+  });
   it('일정 경로·쿼리·hash를 보존한다', () => {
     expect(safeLoginReturnTo('/trips/abc?day=2#comments')).toBe('/trips/abc?day=2#comments');
   });
@@ -17,7 +23,7 @@ describe('로그인 복귀 경로', () => {
   });
   it.each(['/storage/downloads/dl-secret', '/api/v1/storage/uploads/up-secret?x=1'])(
     '저장소 토큰 경로 %s 는 복귀 대상이 아니다', (path) => {
-      expect(safeLoginReturnTo(path)).toBe('/trips');
+      expect(safeLoginReturnTo(path)).toBe('/home');
     },
   );
   it('비밀 query 이름은 지우고 나머지는 그대로 둔다', () => {
@@ -41,12 +47,12 @@ describe('로그인 복귀 경로', () => {
     const result = safeLoginReturnTo(long);
     expect(result).toBe('/trips/abc');
     expect(OAuthStartRequestSchema.parse({ return_to: result }).return_to).toBe('/trips/abc');
-    expect(safeLoginReturnTo(`/${'a'.repeat(300)}`)).toBe('/trips');
+    expect(safeLoginReturnTo(`/${'a'.repeat(300)}`)).toBe('/home');
     expect(() => OAuthStartRequestSchema.parse({ return_to: `/${'a'.repeat(255)}` })).toThrow();
   });
   it.each([null, '', 'https://evil.example', '//evil.example', '/\\evil.example', '/\nevil.example', '/login', '/admin/features', '/register', '/a/..//attacker.example/landing', '/trips//x'])(
     '외부 또는 인증 반복 경로 %s를 차단한다', (path) => {
-      expect(safeLoginReturnTo(path)).toBe('/trips');
+      expect(safeLoginReturnTo(path)).toBe('/home');
     },
   );
 });
