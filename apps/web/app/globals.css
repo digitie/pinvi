@@ -212,6 +212,23 @@ body {
 [data-mobile-layout='on'] .app-shell-desktop-nav {
   display: none;
 }
+
+/* 전체 화면 탐색 지도(/map) — 본문 여백 없이 지도가 꽉 찬다. 모바일은 fixed 하단 탭바 높이만큼만 비워
+   지도(와 오른쪽 아래 내 위치 버튼)가 탭바 밑에 깔리지 않게 하고, 데스크톱은 0이다. 얇은 상단 바는 데스크톱만. */
+.app-shell-main-map {
+  padding-bottom: calc(var(--app-tabbar-h) + env(safe-area-inset-bottom));
+}
+@media (min-width: 1024px) {
+  .app-shell-main-map {
+    padding-bottom: 0;
+  }
+}
+[data-mobile-layout='on'] .app-shell-main-map {
+  padding-bottom: calc(var(--app-tabbar-h) + env(safe-area-inset-bottom));
+}
+[data-mobile-layout='on'] .app-shell-map-header {
+  display: none;
+}
 [data-mobile-layout='on'] .app-shell-tabbar {
   display: block;
 }

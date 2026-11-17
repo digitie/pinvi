@@ -648,6 +648,63 @@
   cleanup: [여행 삭제]
   automation: scripted
   spec: specs/core/core-map-markers.live.spec.ts#CORE-047
+
+- id: CORE-048
+  title: 탐색 지도(/map) 장소 마커는 여행 지도와 같은 원 + 상자 없는 이름 라벨(카테고리 색·아이콘, 날씨 아이콘 없음)
+  priority: P1
+  tags: [desktop, mobile]
+  preconditions:
+    - account: test@test.com
+    - env: PinVi ≥ 탐색 지도 전체 화면 PR(feat/explore-map-trip-markers-fullscreen) deployed
+  data_sources: [map:heritage]
+  steps:
+    - /map → 개별 feature 마커가 보일 때까지 확대(ensureFeatureMarkers) → 누를 수 있는 마커 하나 → 원·라벨 확인 → 원 누르기
+  expected:
+    - 마커 루트 .maplibregl-marker.explore-map-marker(role=button, aria-label=이름, data-interaction-id=feature:<id>)
+    - circle-place-marker-dot 22px 원 + 안에 [data-maki-icon], circle-place-marker-label에 이름(배경·테두리·그림자 없음, 원 오른쪽)
+    - place-weather-glyph 0개, legend data-marker-size=22·data-marker-label=true
+    - 데스크톱 feature-map-popup + legend data-marker-selected=true / 모바일 feature-detail-modal + .maplibregl-popup 0개
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-map-fullscreen.live.spec.ts#CORE-048
+  notes: 소유자 요청 2026-11-17 "탐색지도의 마커도 여행과 동일하게". pending deploy.
+
+- id: CORE-049
+  title: 탐색 지도(/map) 전체 화면 — 지도 canvas가 창을 덮고 오버레이끼리 겹치지 않는다(가로 스크롤 없음)
+  priority: P1
+  tags: [desktop, mobile]
+  preconditions:
+    - account: test@test.com
+    - env: PinVi ≥ 탐색 지도 전체 화면 PR(feat/explore-map-trip-markers-fullscreen) deployed
+  data_sources: [map:heritage]
+  steps:
+    - /map → canvas·상단 바·하단 탭바·오버레이 상자 측정
+  expected:
+    - canvas x=0, 폭 = 창 폭; 데스크톱 = 상단 바(≤ 56px) 바로 아래 ~ 창 아래 끝, 모바일 = 상단 바 숨김, 맨 위 ~ 하단 탭바 위 끝
+    - scrollWidth ≤ 창 폭, scrollHeight ≤ 창 높이
+    - feature-map-overlay-stack·확대/축소·map-my-location 서로 겹치지 않고 지도 안, 내 위치 버튼은 축척 막대·출처 표기와 겹치지 않음, 내 위치 버튼·주유소 체크박스가 맨 위 요소
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-map-fullscreen.live.spec.ts#CORE-049
+  notes: 소유자 요청 2026-11-17 "지도도 전체화면으로". pending deploy.
+
+- id: CORE-050
+  title: 탐색 지도 검색으로 고른 장소 popup이 레이어 체크박스를 덮지 않는다 — popup을 닫지 않고 바로 체크
+  priority: P1
+  tags: [desktop, mobile, search, nearby]
+  preconditions:
+    - account: test@test.com
+    - env: PinVi ≥ 탐색 지도 전체 화면 PR(feat/explore-map-trip-markers-fullscreen) deployed
+  data_sources: [map:place, transport]
+  steps:
+    - /map → '서울역' 검색 선택(zoom 15, searchAndFly) → popup·지도 idle → 주유소 체크박스 토글 → 되돌리기
+  expected:
+    - .maplibregl-popup과 map-layer-controls 상자가 겹치지 않는다(≤ 10 s, 지도가 비켜 선다)
+    - transport-layer-toggle-fuel_station 가운데의 맨 위 요소가 체크박스 자신, force 없이 토글되고 popup은 열린 채
+  cleanup: [주유소 체크 원상복구]
+  automation: scripted
+  spec: specs/core/core-map-fullscreen.live.spec.ts#CORE-050
+  notes: 2026-11-17 mobile NEAR-005('maplibregl-popup-content … intercepts pointer events')의 제품 쪽 수정(lib/popupClearance.ts). pending deploy.
 - id: CORE-032
   title: 로그인 사용자의 앱 셸 로고(Pinvi 홈)는 개인 홈 /home으로 간다(로그인 화면·랜딩 아님)
   priority: P1

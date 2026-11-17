@@ -15,12 +15,12 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | poi | 40 | 32 | 6 | 2 |
 | notify | 32 | 23 | 4 | 5 |
 | admin | 44 | 37 | 5 | 2 |
-| core | 46 | 45 | 1 | 0 |
+| core | 49 | 48 | 1 | 0 |
 | recommend | 3 | 3 | 0 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **581** | **528** | **29** | **24** |
+| **all** | **584** | **531** | **29** | **24** |
 
-Spec files: 67.
+Spec files: 68.
 
 ## Cases
 
@@ -407,6 +407,9 @@ Spec files: 67.
 | CORE-045 | core | (모바일) 탐색 지도 장소를 누르면 상세 시트만 — 지도 팝업과 이중 표시 없음 | P1 | mobile | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-045` |
 | CORE-046 | core | 탐색 지도(/map) 내 위치 버튼 — 따라가기 모드, 지도를 끌면 해제, 다시 누르면 복귀 | P1 | desktop, mobile | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-046` |
 | CORE-047 | core | (모바일) 장소 정보 패널이 열리면 내 위치 버튼이 패널 위로 올라간다 — 가려지지 않는다 | P1 | mobile, mutating | scripted | `specs/core/core-map-markers.live.spec.ts#CORE-047` |
+| CORE-048 | core | 탐색 지도(/map) 장소 마커는 여행 지도와 같은 원 + 상자 없는 이름 라벨(카테고리 색·아이콘, 날씨 아이콘 없음) | P1 | desktop, mobile | scripted | `specs/core/core-map-fullscreen.live.spec.ts#CORE-048` |
+| CORE-049 | core | 탐색 지도(/map) 전체 화면 — 지도 canvas가 창을 덮고 오버레이끼리 겹치지 않는다(가로 스크롤 없음) | P1 | desktop, mobile | scripted | `specs/core/core-map-fullscreen.live.spec.ts#CORE-049` |
+| CORE-050 | core | 탐색 지도 검색으로 고른 장소 popup이 레이어 체크박스를 덮지 않는다 — popup을 닫지 않고 바로 체크 | P1 | desktop, mobile, search, nearby | scripted | `specs/core/core-map-fullscreen.live.spec.ts#CORE-050` |
 | CORE-032 | core | 로그인 사용자의 앱 셸 로고(Pinvi 홈)는 개인 홈 /home으로 간다(로그인 화면·랜딩 아님) | P1 | desktop, mobile, auth, home | scripted | `specs/core/core-home.live.spec.ts#CORE-032` |
 | CORE-033 | core | 로그인 사용자의 '홈' 메뉴(데스크톱 탭·모바일 더보기)와 랜딩(/)의 '내 홈'은 개인 홈으로 간다 | P1 | desktop, mobile, auth, home | scripted | `specs/core/core-home.live.spec.ts#CORE-033` |
 | CORE-034 | core | 익명 사용자 — /home은 /login?next=%2Fhome으로, 랜딩(/)은 그대로 | P1 | desktop, mobile, auth, home | scripted | `specs/core/core-home.live.spec.ts#CORE-034` |

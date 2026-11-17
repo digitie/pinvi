@@ -84,6 +84,16 @@ export function tripPins(page: Page) {
   return page.locator('.maplibregl-marker.trip-map-marker');
 }
 
+/**
+ * Explore-map (`/map`) feature markers drawn with the same trip-style component
+ * (`ExploreFeatureMarker` → `CirclePlaceMarker className="explore-map-marker"` — circle + name label).
+ * The root contract `featureMarkerButtons` relies on (role=button, aria-label, data-interaction-id
+ * `feature:<id>`) is unchanged, so `ensureFeatureMarkers` / `clickableFeatureMarkers` still find them.
+ */
+export function exploreMarkers(page: Page) {
+  return page.locator('.maplibregl-marker.explore-map-marker[data-interaction-id^="feature:"]');
+}
+
 export async function waitForMapCanvas(page: Page): Promise<void> {
   await expect(page.locator('.maplibregl-canvas').first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('vworld-map-fallback')).toHaveCount(0);
