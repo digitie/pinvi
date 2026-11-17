@@ -1,3 +1,8 @@
+## 모바일 읽기 전용 장소 시트 (2026-11-17)
+
+PR claude feat/mobile-place-sheet(후속 3/3): 마커·'정보' 버튼 → 장소 시트(날씨·영업 정보+카카오 전화·메모·링크·지도 앱, 편집자에게 편집 연결).
+다음: EAS dev client 재빌드 뒤 실기기 확인(아이콘·시트·지도 앱 열기), react-native-svg·lucide-react-native는 다음 common 릴리스 중앙 기록 후보.
+
 ## 모바일 공유 화면 지도 (2026-11-17)
 
 PR claude feat/mobile-shared-trip-map(후속 2/3): 공유 토큰 범위 지도 키 endpoint + 공유 화면 지도(교통 없음).

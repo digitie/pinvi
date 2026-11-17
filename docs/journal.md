@@ -1,3 +1,14 @@
+## 2026-11-17 (claude) — 모바일 읽기 전용 장소 시트 (브랜치 `feat/mobile-place-sheet`, 후속 3/3)
+
+- 소유자 결정(11-17): 마커나 목록 줄의 '정보' 버튼으로 읽기 전용 장소 정보 아래 시트를 연다(웹 `PlaceInfoPanel` #754 대응).
+  요약(이름·현재 날씨 배지·오늘 영업시간·연결 안내·특보)만 늘 보이고, 영업 정보(저장된 정보 + 저장된 전화가 없을 때만
+  카카오 전화 #758, '다시 읽어오기')·메모·링크·지도 앱(네이버·카카오·구글)은 접힌 항목(한 번에 하나). 편집은 기존
+  `poi/[poiId]`로 — 소유자·편집자·공동 소유자에게만 '장소 편집' 연결(`canEditTrip`, 화면 표시용 판정).
+- 지도 앱: 앱 스킴을 먼저 `Linking.openURL`로 열고 거부되면 웹 주소(iOS `canOpenURL` 스킴 등록 불필요). 네이버 `appname`은 앱 번들 id.
+- 공용화: 링크 규약 `buildMapLinks(target, { appName })`, 영업 정보 문구(`todayHoursLine`·`hasAnyPlaceDetail`·`placeDetailsSourceLine`·
+  `telHref`·`placeDetailsRefreshErrorMessage`)를 `@pinvi/domain`으로 올리고 웹 `PlaceInfoPanel`·`lib/mapLinks`·`usePlaceDetails`도 쓴다.
+- 공유(비로그인) 화면은 시트를 열지 않는다 — 장소 정보·날씨·카카오 전화 API가 로그인을 요구한다(마커는 줄 강조만).
+
 ## 2026-11-17 (claude) — 모바일 공유 화면 지도 (브랜치 `feat/mobile-shared-trip-map`, 후속 2/3)
 
 - 소유자 결정(11-17): 로그인 없는 공유 화면에도 지도. 웹 공유 화면(`SharedTripView`)은 `TripMapView`에 빌드타임 공개 설정

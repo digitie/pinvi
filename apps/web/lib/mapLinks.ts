@@ -1,5 +1,5 @@
 /**
- * 장소를 네이버·카카오·구글 지도에서 여는 링크.
+ * 장소를 네이버·카카오·구글 지도에서 여는 링크(링크 규약은 `@pinvi/domain` `mapLinks`).
  *
  * 세 서비스 모두 공개 URL 규약만 쓴다 — 링크를 만드는 데 API 키가 필요 없다(서버·concierge 조회 불필요).
  * - 네이버 지도: 웹 `map.naver.com/p/search/{이름}?c={lon},{lat},…`, 앱 `nmap://place?lat=&lng=&name=&appname=`
@@ -14,25 +14,13 @@
  * 화면이 그대로 보이면(앱이 열리지 않으면) 잠시 뒤 웹 주소로 이동한다.
  */
 
-export type MapProvider = 'naver' | 'kakao' | 'google';
+import {
+  buildMapLinks as buildSharedMapLinks,
+  type MapLink,
+  type MapLinkTarget,
+} from '@pinvi/domain';
 
-export interface MapLinkTarget {
-  name: string;
-  lat: number;
-  lon: number;
-  /** 카카오 장소 id(카카오 검색으로 추가한 장소의 external_ref). */
-  kakaoPlaceId?: string | null;
-}
-
-export interface MapLink {
-  provider: MapProvider;
-  label: string;
-  web: string;
-  /** iOS 등에서 직접 여는 앱 스킴. 없으면 웹 주소만 쓴다. */
-  app: string | null;
-  /** Android 앱 패키지(intent fallback용). */
-  androidPackage: string | null;
-}
+export type { MapLink, MapLinkTarget, MapProvider } from '@pinvi/domain';
 
 const enc = encodeURIComponent;
 
@@ -40,35 +28,9 @@ function appName(): string {
   return typeof window !== 'undefined' ? window.location.hostname || 'pinvi' : 'pinvi';
 }
 
+/** 링크 규약은 `@pinvi/domain` `buildMapLinks`(모바일과 공용) — 웹은 네이버 `appname`에 호스트 이름을 쓴다. */
 export function buildMapLinks(target: MapLinkTarget): MapLink[] {
-  const { name, lat, lon } = target;
-  const kakaoId =
-    target.kakaoPlaceId && /^\d+$/.test(target.kakaoPlaceId) ? target.kakaoPlaceId : null;
-  return [
-    {
-      provider: 'naver',
-      label: '네이버 지도',
-      web: `https://map.naver.com/p/search/${enc(name)}?c=${lon},${lat},15,0,0,0,dh`,
-      app: `nmap://place?lat=${lat}&lng=${lon}&name=${enc(name)}&appname=${enc(appName())}`,
-      androidPackage: 'com.nhn.android.nmap',
-    },
-    {
-      provider: 'kakao',
-      label: '카카오맵',
-      web: kakaoId
-        ? `https://place.map.kakao.com/${kakaoId}`
-        : `https://map.kakao.com/link/map/${enc(name)},${lat},${lon}`,
-      app: kakaoId ? `kakaomap://place?id=${kakaoId}` : `kakaomap://look?p=${lat},${lon}`,
-      androidPackage: 'net.daum.android.map',
-    },
-    {
-      provider: 'google',
-      label: '구글 지도',
-      web: `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`,
-      app: null,
-      androidPackage: null,
-    },
-  ];
+  return buildSharedMapLinks(target, { appName: appName() });
 }
 
 export type DevicePlatform = 'android' | 'ios' | 'desktop';

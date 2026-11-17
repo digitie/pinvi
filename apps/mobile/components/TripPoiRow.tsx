@@ -1,4 +1,4 @@
-import { Pressable, View, type HostInstance } from 'react-native';
+import { Pressable, Text, View, type HostInstance } from 'react-native';
 import type { TripViewPoi } from '@pinvi/schemas';
 import { featureResolutionNotice, paletteHex, type TripMapPoint } from '@pinvi/domain';
 import { PoiWeatherBadge } from './PoiWeatherBadge';
@@ -19,6 +19,7 @@ export function TripPoiRow({
   registerRow,
   weatherTripId = null,
   showNote = true,
+  onInfo,
 }: {
   poi: Pick<
     TripViewPoi,
@@ -35,6 +36,8 @@ export function TripPoiRow({
   registerRow: (poiId: string, node: HostInstance | null) => void;
   weatherTripId?: string | null;
   showNote?: boolean;
+  /** 있으면 줄 끝에 '정보' 버튼 — 읽기 전용 장소 정보 시트를 연다. */
+  onInfo?: (poiId: string) => void;
 }) {
   const resolutionNotice = featureResolutionNotice(poi.feature_resolution_state);
   const title = poi.title ?? '제목 없는 장소';
@@ -66,6 +69,17 @@ export function TripPoiRow({
         {showNote && poi.user_note ? <Muted>{poi.user_note}</Muted> : null}
         {point ? null : <Muted>좌표가 없어 지도에 표시하지 않습니다.</Muted>}
       </View>
+      {onInfo ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${title} 장소 정보`}
+          onPress={() => onInfo(poi.poi_id)}
+          testID={`trip-poi-info-${poi.poi_id}`}
+          className="min-h-11 justify-center rounded-sm px-2"
+        >
+          <Text className="text-xs font-semibold text-primary">정보</Text>
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
