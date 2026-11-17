@@ -756,3 +756,24 @@
   automation: scripted
   spec: specs/nearby/trip-map.live.spec.ts#NEAR-043
   notes: '#704 후속 — mocked e2e의 핀 위치 검사는 CI(VWorld 키 없음)에서 돌지 않아 운영에서 낮은 창의 핀을 직접 확인한다. 지도 열이 맞춤 여백을 거의 다 쓰면 위·아래 여백이 기본값으로 돌아간다(mapFitPadding MIN_FIT_SPAN).'
+
+- id: NEAR-044
+  title: 서로 2 km 넘게 떨어진 네 장소의 여행 지도에서 주유소·교통 돌발 두 레이어가 모두 ok — 한 요청의 팬아웃이 자기 상한에 막히지 않는다
+  priority: P1
+  tags: [desktop, mobile, mutating, nearby]
+  preconditions:
+    - account: test@test.com (user)
+    - data: NEAR-022와 같은 여행(영월 고씨굴·소수서원·도산서원·안동하회마을)
+  data_sources: [transport:gas, transport:incident]
+  steps:
+    - 네 장소 좌표가 서로 2 km 넘게 떨어져 있는지 확인(레이어마다 Map 근처 조회 4번)
+    - /trips/{id} → '주유소' → '교통 돌발'(각각 markers-near 응답 대기)
+  expected:
+    - 각 markers-near 요청 points 4개
+    - 응답의 fuel_station·highway_incident 모두 status=ok(unavailable이면 reason과 함께 실패)
+    - 상태 줄 '여행 장소 10km 이내'·'여행 장소 20km 이내', unavailable 문구 없음
+  cleanup:
+    - afterAll 여행 삭제
+  automation: scripted
+  spec: specs/nearby/trip-map.live.spec.ts#NEAR-044
+  notes: 'T-READ-PIN-01(2026-11-18) — transport 동시 호출 상한 기본값이 2였을 때 레이어당 근처 조회 4개가 대기열 없는 상한에 막혀(BULKHEAD_FULL) 레이어 전체가 unavailable이 됐다. 기본값을 16으로 올린 뒤의 회귀 검사다. NEAR-041은 unavailable을 허용하지만 이 사례는 허용하지 않는다.'

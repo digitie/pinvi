@@ -1,3 +1,22 @@
+## 2026-11-18 (claude) — Map 예산 초과 503 재시도 중단 + 교통·날씨 동시 호출 상한 16 (브랜치 `perf/read-pin-04-01-map-client`)
+
+- 출처: Map [읽기 성능 계획](https://github.com/digitie/kor-travel-map/blob/main/docs/reports/2026-11-17-read-performance-plan.md)
+  `T-READ-PIN-04`·`T-READ-PIN-01` ②(가). 소유자 결정(2026-11-18): 코드만으로 이득이 분명한 것만 지금 한다.
+- `T-READ-PIN-04`: `_send_with_retries`의 5xx 재시도 분기가 problem `code`를 읽는다. `READ_TIMEOUT`·`POOL_BUSY`(Map이 "이 요청의
+  예산을 이미 썼다")면 한 번만 보내고 `KorTravelMapUnavailable(code=…)`로 끝낸다 — 회로에는 실패 한 번(`ReadTimeout`과 같은 취급).
+  `LOCK_TIMEOUT`·code 없는 5xx·JSON 아닌 5xx는 종전대로 세 번. `retry=False` 호출자(transport·weather)는 종전처럼 응답을 그대로 받는다.
+  Map에 아직 이 code가 없어도 해가 없다. **Map `T-READ-03`(공개 읽기 마감)은 이 변경이 운영 PinVi에 반영된 뒤에 낸다** — 그 전에는
+  멈춘 요청 하나가 무거운 질의 세 번이 된다.
+- `T-READ-PIN-01` ②(가): transport·weather 표면 상한 기본값 2 → 16. 한 요청의 내부 팬아웃(교통 근처 조회 레이어당 6 x 2 = 12,
+  날씨 해석 4 + 값 묶음 4 = 8)이 대기열 없는 상한 2를 넘어, 여행 지도 교통 레이어·여행 날씨 카드가 다른 사용자 없이도
+  `BULKHEAD_FULL`로 `unavailable`이 됐다(재현 시험이 수정 전 빨강). 두 표면은 Map에서 Valkey 읽기라 자리를 오래 쥐지 않는다.
+  DB를 읽는 features·viewport·축제 상한(합 18)은 그대로다. 운영 Manager compose에는 두 env가 없어 **코드 기본값이 그대로 운영값**이다
+  — `T-READ-MGR-07`은 필요 없다. 상한을 낮추려면 env로 덮는다.
+- 시험: `test_kor_travel_map_circuit_scope.py`(code별 전송 횟수·회로 계수·`retry=False` 응답), `test_dependency_bulkheads.py`
+  (기본값 ≥ 팬아웃, 진짜 client + 30 ms 지연 가짜 transport로 점 60개 x 레이어 2 = 120 호출이 두 레이어 모두 `ok`·거부 0,
+  날씨 팬아웃 8 동시 거부 0). 새 시험 7건은 수정 전 코드에서 빨강임을 확인했다. n150은 io-guard 75(디스크 압력)라 쓰지 않고
+  로컬 WSL에서 해당 파일만 돌렸다 — 전체 게이트는 CI.
+
 ## 2026-11-17 (claude) — 탐색 지도 전체 화면 + 여행 지도와 같은 장소 마커 (브랜치 `feat/explore-map-trip-markers-fullscreen`)
 
 - 소유자 요청: "탐색지도의 마커도 여행과 동일하게. 지도도 전체화면으로."

@@ -9,7 +9,7 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 |---|---:|---:|---:|---:|
 | trip | 60 | 56 | 2 | 2 |
 | search | 55 | 47 | 6 | 2 |
-| nearby | 43 | 36 | 2 | 5 |
+| nearby | 44 | 37 | 2 | 5 |
 | weather | 33 | 28 | 2 | 3 |
 | share | 35 | 31 | 1 | 3 |
 | poi | 40 | 32 | 6 | 2 |
@@ -18,7 +18,7 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | core | 49 | 48 | 1 | 0 |
 | recommend | 3 | 3 | 0 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **584** | **531** | **29** | **24** |
+| **all** | **585** | **532** | **29** | **24** |
 
 Spec files: 68.
 
@@ -184,6 +184,7 @@ Spec files: 68.
 | NEAR-041 | nearby | 여행 지도 반경 — 모든 항목이 여행 장소에서 주유소 10 km·교통 돌발 20 km 안, distance_m=가장 가까운 장소까지, 가까운 순, 상태 줄 반경 문구 | P2 | desktop, mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-041` |
 | NEAR-042 | nearby | desktop 여행 지도는 창 안에 있고 맞춤 뒤 모든 핀이 화면에 보인다(#704) | P1 | desktop, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-042` |
 | NEAR-043 | nearby | 낮은 desktop 창(1280x600)에서도 여행 지도 핀이 fold 위에 있고 문서가 스크롤되지 않는다(#704, NEAR-042b) | P1 | desktop, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-043` |
+| NEAR-044 | nearby | 서로 2 km 넘게 떨어진 네 장소의 여행 지도에서 주유소·교통 돌발 두 레이어가 모두 ok — 한 요청의 팬아웃이 자기 상한에 막히지 않는다 | P1 | desktop, mobile, mutating, nearby | scripted | `specs/nearby/trip-map.live.spec.ts#NEAR-044` |
 | WX-001 | weather | 오늘~모레 여행 1일차 '날짜 날씨'에 현재·예보(초단기/단기) 그룹 표시 | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-001` |
 | WX-002 | weather | 3~10일 뒤 여행 일자에 중기(mid) 예보 그룹 표시 | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-002` |
 | WX-003 | weather | 10일 넘게 남은 일자는 '예보는 N일 앞(M월 D일)까지만 제공됩니다.'(no_data + forecast_until), unavailable 아님 | P1 | desktop, mutating, weather | scripted | `specs/weather/weather-trip-days.live.spec.ts#WX-003` |

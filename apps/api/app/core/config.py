@@ -823,7 +823,7 @@ class Settings(BaseSettings):
     # 가져가지 못한다. 축제 월별 조회는 별도 상수(4)를 그대로 쓴다. PostgreSQL을 읽는 표면(features·
     # viewport·축제)의 합 10+4+4=18은 예전 공용 16과 비슷하게 둔다 — worker당 Map DB 부하가 크게 늘지 않게.
     # transport·weather는 Map에서 Valkey 읽기라(명령당 µs) 자리를 오래 쥐지 않는다. 대신 한 요청의 내부
-    # 팬아웃(교통 레이어당 근처 조회 6 × 레이어 2 = 12, 날씨 해석 4 + 값 묶음 4 = 8)이 상한 2를 넘어 대기열
+    # 팬아웃(교통 레이어당 근처 조회 6 x 레이어 2 = 12, 날씨 해석 4 + 값 묶음 4 = 8)이 상한 2를 넘어 대기열
     # 없는 상한에 바로 거부됐다(T-READ-PIN-01) — 팬아웃보다 큰 16을 기본으로 둔다. 회로는 그대로다.
     pinvi_kor_travel_map_features_max_concurrency: int = Field(default=10, ge=1, le=64)
     pinvi_kor_travel_map_viewport_max_concurrency: int = Field(default=4, ge=1, le=64)

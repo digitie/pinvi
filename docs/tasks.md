@@ -69,7 +69,7 @@ run-m05-isolated-e2e-once → activation attestation`이 재실행된 기록이 
   충돌 회피 범위 `apps/api/app/{clients/kor_travel_map_transport.py,services/transport_layers.py,api/v1/transport.py}`·
   `apps/web/components/map/Transport*`·`apps/web/lib/useTransportLayers.ts`·`apps/mobile/components/TransportLayers.tsx`. PR·머지 남음,
   운영 활성화는 Manager pinvi-api 블록에 Map service token·플래그 배선 뒤.
-- [ ] T-READ-PLAN-20261117 — Map 저장소의 [읽기 성능 계획](https://github.com/digitie/kor-travel-map/blob/main/docs/reports/2026-11-17-read-performance-plan.md) §8(단계 순)이 PinVi 쪽 작업 `T-READ-PIN-01`~`07`의
+- [/] T-READ-PLAN-20261117 — Map 저장소의 [읽기 성능 계획](https://github.com/digitie/kor-travel-map/blob/main/docs/reports/2026-11-17-read-performance-plan.md) §8(단계 순)이 PinVi 쪽 작업 `T-READ-PIN-01`~`07`의
   정본이다. 0단계(지금 시작): `06` 이미 쌓인 `app.api_call_log` 읽기 전용 집계(집계만 출력), `05` 요청마다 하는
   rate-limit COMMIT·사용자 조회·위치 감사 쓰기의 시간 재기(위치 감사 outbox의 COMMIT은 느슨하게 하지 않는다), `04` Map의
   시간 초과 503(`READ_TIMEOUT`·`POOL_BUSY`)을 다시 보내지 않기(**Map `T-READ-03`보다 먼저 운영에**), `01` 교통·날씨
@@ -77,6 +77,11 @@ run-m05-isolated-e2e-once → activation attestation`이 재실행된 기록이 
   함께 한 PR로 내고 **한 pair 회전**으로 배포한다, `02` in-bounds 집계 캐시, `03` 여행 보기 단계별 시간, `07` 통합 검색의
   Kakao·Naver 함께 기다리기. 착수할 때 항목마다 `T-NNN`을 받아 옮긴다.
   Map PR이 머지되기 전에는 Map 브랜치 `docs/read-performance-plan-20261117`에서 읽는다.
+  - 소유자 결정(2026-11-18): 코드만으로 이득이 분명한 것만 지금 한다. 새 측정에 기대는 것은 조용한 측정 창 뒤로 미룬다.
+  - [x] `04` — 503 `READ_TIMEOUT`·`POOL_BUSY`는 한 번만 보내고 회로에 실패 한 번(브랜치 `perf/read-pin-04-01-map-client`).
+    운영 반영(PinVi 회전) 뒤에야 Map `T-READ-03`을 낸다.
+  - [x] `01` ②(가) — transport·weather 상한 기본값 2 → 16을 **코드 기본값**으로 바꿨다(같은 브랜치). 운영 Manager compose에는
+    이 두 env가 없어 코드 기본값이 그대로 쓰인다 — `T-READ-MGR-07`(Manager env 배선)은 필요 없다. `01` ③은 Map `T-READ-04` 뒤.
 - [/] T-372 — `kor-travel-weather` 보존 16일 → 7일(소유자 결정 2026-10-13)에 맞춰 PinVi 요구·게이트 G-3을 15일 → 7일, T-367 가드 임계를 15일 → 6일(하루 여유)로 낮춘다(ADR-073). 브랜치 `chore/weather-retention-7-days`에 코드·문서·테스트 완료, PR·머지·배포 남음.
 - [/] T-373 — (브랜치 `feat/track2-weather-odroid`, T-374·T-375와 한 PR) (Track 2 설계 T-PNV-01 잔여) `kor-travel-weather` odroid(192.168.1.13) 전환의 Pinvi 쪽 설정 정리: [2026-10-15 대체: 포트는 `12201`이고 connect 키 줄은 같은 PR의 T-374가 넣었다 — 아래 원문의 "포트 14101 불변"·"새 키 줄도 여기서 넣지 않는다"는 이 현황으로 읽는다] `.env.example:201-203` 주석을 "포트 14101 불변·호스트는 Manager registry, 값은 Manager compose가 ETL **과 pinvi-api** 두 블록에 주입, 코드 기본 `localhost:14101`은 개발용; 피호출자 다운은 RST가 아니라 timeout — connect 분리 키는 T-374가 추가"로 고친다(ADR-074 결정 1; 코드 기본값·`:204` 값 줄은 바꾸지 않고 새 키 줄도 여기서 넣지 않는다). 같은 PR에서 `docs/runbooks/etl.md:328`의 ETL env 표 `PINVI_KOR_TRAVEL_WEATHER_BASE_URL` 행을 "값은 Manager compose 파생 기본값(registry), `localhost:14101`은 개발 예시"로 고친다(플립 뒤 loopback 서술이 남지 않게). 의존: ADR-074 문서 PR 머지.
 - [/] T-374 — (브랜치 `feat/track2-weather-odroid`, 충돌 회피 범위 `apps/api/app/clients/kor_travel_weather.py`·`services/trip_weather_batch.py`·`services/weather_card.py`) (Track 2 설계 T-PNV-02; ADR-074 결정 4) pinvi-api weather client connect 분리 + resolver 예외 투영 + 회로차단. **사양 정본 = `docs/integrations/kor-travel-weather.md` §8.3 "대응"**(수치·키 이름·전제·테스트 자리 모두 거기). 수용: §8.3 "대응"의 수용 기준 (A)(B) 그대로(trip view 200·해당 POI `unavailable`·단건 빈 카드, 500 없음). 수정 파일: `apps/api/app/core/config.py:903-905`, `apps/api/app/clients/kor_travel_weather.py`, `apps/api/app/services/trip_weather_batch.py`, `apps/api/app/services/weather_card.py`, `.env.example`(새 키 줄), 테스트 `apps/api/tests/unit/test_kor_travel_weather_client.py`·`apps/api/tests/integration/test_trip_view_weather_cutover.py`·`test_features_weather_cutover.py`. 의존: **없음**(수용은 mock) — weather 플립 **전에** 머지·배포한다(설계 §13 "(PNV) → OPS", §8.2-1); live drill만 플립 뒤. geo client·ETL resource 포함 여부는 ADR-074 열린 결정 2. 규모 S.

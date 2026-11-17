@@ -232,6 +232,32 @@ test.describe('NEAR trip map — four-place trip', () => {
     await shot(page, 'NEAR-041', 'trip-radius-distances');
   });
 
+  test('NEAR-044 both radius layers over four far-apart places are ok — a single request fan-out is not rejected by its own cap (T-READ-PIN-01)', async ({ page }) => {
+    // 전제: 네 장소가 서로 2 km(서버 묶음 거리) 넘게 떨어져 있어 레이어마다 Map 근처 조회가 4번 동시에 나간다.
+    // 예전 상한(transport 2)에서는 이 팬아웃이 자기 자리에 막혀(BULKHEAD_FULL) 레이어 전체가 unavailable이었다.
+    expect(expectedCoords).toHaveLength(PLACES.length);
+    for (let i = 0; i < expectedCoords.length; i += 1) {
+      for (let j = i + 1; j < expectedCoords.length; j += 1) {
+        expect(haversineM(expectedCoords[i]!, expectedCoords[j]!), 'trip places are separate query centers').toBeGreaterThan(2_000);
+      }
+    }
+    await openTrip(page, tripId);
+    const seen = new Map<string, { status: string; reason?: string | null }>();
+    for (const layer of LAYERS) {
+      const res = await toggleExpectingNear(page, layer);
+      expect(nearQuery(res).points).toHaveLength(PLACES.length);
+      for (const result of (await nearBody(res)).layers) seen.set(result.layer, result);
+    }
+    for (const layer of LAYERS) {
+      const result = seen.get(layer);
+      expect(result, `${layer} answered`).toBeDefined();
+      expect(result!.status, `${layer} is ok (reason=${result!.reason ?? '-'})`).toBe('ok');
+      await expect(stateLine(page, layer)).toContainText(`여행 장소 ${NEAR_RADIUS_M[layer] / 1000}km 이내`, { timeout: 30_000 });
+      await expect(stateLine(page, layer)).not.toContainText(UNAVAILABLE_TEXT);
+    }
+    await shot(page, 'NEAR-044', 'trip-radius-both-layers-ok');
+  });
+
   test('NEAR-025 selecting a POI pin flies the map but does not re-query (radius follows the places, not the camera)', async ({ page }) => {
     const rec = new TransportRecorder(page);
     await openTrip(page, tripId);
