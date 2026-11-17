@@ -1,3 +1,8 @@
+## 공통화 재조사 포인터 (2026-11-17)
+
+문서 전용(브랜치 `docs/commonization-plan-20261117`). Common 공통화 재조사 계획의 PinVi 소유 task는 `T-383`(→ Common `T-484a`, ETL 재시도 sensor 5→1) 하나다.
+다음 한 작업은 바뀌지 않는다.
+
 ## 모바일 마커 아이콘·날씨 (2026-11-17)
 
 PR claude feat/mobile-place-detail(후속 1/3): 마커 maki/lucide 아이콘 + 현재 날씨, 목록 날씨 배지, weatherNow·markerIcons·날씨 캐시 공용화.

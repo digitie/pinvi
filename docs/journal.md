@@ -1,3 +1,12 @@
+## 2026-11-17 (claude) — 공통화 재조사 계획의 PinVi 포인터 (브랜치 `docs/commonization-plan-20261117`, 문서 전용)
+
+- 소유자 요청으로 kor-travel-common이 다섯 저장소(pinvi·map·weather·transport·docker-manager)를 다시 조사해 계획 초안을 냈다(Common `docs/plan/commonization-plan-2026-11-17.md`). PinVi 조사 기준은 `b1605949`.
+- PinVi가 실행할 것은 하나다: Common `T-484a` — `apps/etl/pinvi/etl/definitions.py`의 job별 `infrastructure_retry_sensor` 5개를
+  `infrastructure_retry_sensor_for_jobs` 1개로 바꾼다. `docs/tasks.md`에 `T-383`으로 포인터만 뒀다. 수용 기준은 Common 상세 task가 소유한다.
+- 계획이 PinVi에 대해 "공유하지 않음"으로 둔 것: 오류 envelope, rate limit, JWT·세션, geo client, redaction, 사용자·모바일 UI,
+  관리자 재도색 이식본. 저장소 안 중복(haversine 5벌, KST 상수, client 재시도 루프)은 PinVi 자체 정리 대상으로만 적혀 있다.
+- 코드 변경 없음. Common 계획은 독립 리뷰 전 초안이라 범위가 바뀔 수 있다.
+
 ## 2026-11-17 (claude) — 모바일 지도 마커 아이콘·현재 날씨 (브랜치 `feat/mobile-place-detail`, 후속 1/3)
 
 - 소유자 결정(11-17): 모바일 마커도 웹 #755처럼 원 안 마커 아이콘(아이콘 고르기·카테고리 maki)과 이름 옆 현재 날씨를 보인다.
