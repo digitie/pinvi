@@ -169,14 +169,14 @@ function subtitleOf(item: TransportItem): string | null {
   }
 }
 
-/** 마커를 누르면 하단에 뜨는 카드 — 현재가·신선도만(가격 추이는 웹에서). */
+/** 마커를 누르면 하단에 뜨는 카드 — 현재가·신선도만(가격 추이는 웹에서). 탐색 지도·여행 지도 공용. */
 export function TransportItemCard({
   item,
   state,
   onClose,
 }: {
   item: TransportItem;
-  state: MobileTransportState;
+  state: { results: readonly TransportLayerResult[]; receivedAt: number | null };
   onClose: () => void;
 }) {
   const result = state.results.find((r) => r.layer === item.layer);

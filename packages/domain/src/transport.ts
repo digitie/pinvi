@@ -13,6 +13,8 @@ import type {
   TransportFreshness,
   TransportItem,
   TransportLayer,
+  TransportLayerResult,
+  TransportLayerStatus,
 } from '@pinvi/schemas';
 
 export interface TransportLayerMeta {
@@ -37,6 +39,91 @@ export const TRANSPORT_LAYER_META: readonly TransportLayerMeta[] = [
 export function transportRadiusLabel(radiusM: number): string {
   const km = radiusM / 1000;
   return `여행 장소 ${Number.isInteger(km) ? km : km.toFixed(1)}km 이내`;
+}
+
+/** 반경 조회 기준 장소 상한 — 서버 `NEAR_MAX_POINTS`와 같다(넘으면 400). */
+export const TRANSPORT_NEAR_MAX_POINTS = 60;
+
+/** 반경 조회 좌표 키 — 5자리(≈1 m, `markersNear` 쿼리와 같은 정밀도). 배열 identity가 아니라 값으로 비교한다. */
+export function transportNearPointsKey(points: ReadonlyArray<{ lon: number; lat: number }>): string {
+  return points.map((p) => `${p.lon.toFixed(5)},${p.lat.toFixed(5)}`).join(';');
+}
+
+/** 여행 장소 좌표 → 반경 조회 기준점. 5자리로 같은 곳은 처음 것만 남긴다(순서 유지). */
+export function dedupeTransportNearPoints(
+  points: ReadonlyArray<{ lon: number; lat: number }>,
+): { lon: number; lat: number }[] {
+  const seen = new Set<string>();
+  return points.flatMap((p) => {
+    const key = transportNearPointsKey([p]);
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ lon: p.lon, lat: p.lat }];
+  });
+}
+
+/** 요청한 레이어 하나의 "불러올 수 없음" 결과(응답에 빠졌거나 요청 자체가 실패). */
+export function unavailableTransportLayerResult(layer: TransportLayer): TransportLayerResult {
+  return { layer, status: 'unavailable', reason: 'UPSTREAM_UNAVAILABLE', truncated: false, items: [] };
+}
+
+/**
+ * 응답 결과 + 요청했는데 응답에 없는 레이어를 "불러올 수 없음"으로 채운다 — 화면이 "불러오는 중"에 머물지 않게.
+ * 요청 자체가 실패했으면 `results`를 빈 배열로 넘긴다.
+ */
+export function withUnavailableTransportLayers(
+  results: readonly TransportLayerResult[],
+  requested: readonly TransportLayer[],
+): TransportLayerResult[] {
+  const returned = new Set(results.map((result) => result.layer));
+  return [
+    ...results,
+    ...requested.filter((layer) => !returned.has(layer)).map(unavailableTransportLayerResult),
+  ];
+}
+
+/** 켠 레이어의 상태 줄 입력(웹 레이어 패널·모바일 여행 지도 공용). */
+export interface TransportLayerStatusInput {
+  meta: Pick<TransportLayerMeta, 'layer' | 'minZoom'>;
+  /** `/transport/status`의 이 레이어 항목(없으면 모름). */
+  layerStatus: Pick<TransportLayerStatus, 'available'> | null | undefined;
+  /** 이 레이어의 지금 결과(아직 없으면 undefined). */
+  result: TransportLayerResult | undefined;
+  /** 여행 장소 반경 모드 — 줌 안내 없음, 반경 문구. */
+  nearMode: boolean;
+  zoom: number | null;
+  /** 결과가 오기 전 "불러오는 중"을 보일지(조회가 실제로 나갈 수 있는 상태인지). */
+  loading: boolean;
+  /** 반경 모드에서 서버가 알려 준 레이어별 반경(m). */
+  radiusM: Partial<Record<TransportLayer, number>> | null;
+  receivedAt: number | null;
+  nowMs: number;
+}
+
+/** 켠 레이어의 결과가 아직 없을 때의 상태 줄. */
+export const TRANSPORT_STATUS_LOADING_TEXT = '불러오는 중';
+
+/** "N곳 · 여행 장소 10km 이내 · 5분 전 갱신" 같은 상태 줄. 보일 것이 없으면 null. */
+export function transportLayerStatusText(input: TransportLayerStatusInput): string | null {
+  const { meta, layerStatus, result } = input;
+  if (layerStatus && !layerStatus.available) return '일시적으로 불러올 수 없음';
+  // 여행 장소 반경 모드는 줌과 무관하게 조회한다.
+  if (!input.nearMode && input.zoom != null && input.zoom < meta.minZoom) return '확대하면 보여요';
+  if (!result) return input.loading ? TRANSPORT_STATUS_LOADING_TEXT : null;
+  if (result.status !== 'ok') return '일시적으로 불러올 수 없음';
+  const parts: string[] = [`${result.items.length}곳`];
+  const radius = input.nearMode ? input.radiusM?.[meta.layer] : undefined;
+  if (radius != null) parts.push(transportRadiusLabel(radius));
+  if (result.truncated) parts.push(input.nearMode ? '가까운 곳만 표시' : '일부만 표시 — 확대하세요');
+  if (result.freshness && input.receivedAt != null) {
+    parts.push(
+      transportFreshnessLabel(
+        transportFreshnessAgeSeconds(result.freshness, input.receivedAt, input.nowMs),
+      ),
+    );
+    if (result.freshness.stale) parts.push('오래된 정보');
+  }
+  return parts.join(' · ');
 }
 
 const META_BY_LAYER = new Map(TRANSPORT_LAYER_META.map((meta) => [meta.layer, meta]));

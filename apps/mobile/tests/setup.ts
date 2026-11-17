@@ -2,6 +2,10 @@ import type { ReactNode } from 'react';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
+// 화면 크기 — react-native-web `Dimensions`는 documentElement 크기를 읽는데 jsdom은 0이다. 폰 크기로 둔다.
+Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 390 });
+Object.defineProperty(document.documentElement, 'clientHeight', { configurable: true, value: 844 });
+
 // globals를 켜지 않으므로 RTL 자동 cleanup이 걸리지 않는다 — 테스트마다 직접 비운다.
 afterEach(() => {
   cleanup();

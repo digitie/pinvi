@@ -11,9 +11,12 @@ import type {
 import {
   requestableTransportLayers,
   TRANSPORT_LAYER_META,
+  TRANSPORT_NEAR_MAX_POINTS,
   resolveMarkerStyle,
   transportItemTitle,
   transportMarkerId,
+  transportNearPointsKey,
+  withUnavailableTransportLayers,
 } from '@pinvi/domain';
 import type { MapLibreMap } from '@/components/map/vworldPrimitives';
 import { apiClient } from '@/lib/api';
@@ -24,8 +27,6 @@ const DEBOUNCE_MS = 250;
 const CACHE_MAX = 32;
 const CACHE_TTL_MS = 60_000;
 const LIMIT = 200;
-/** 반경 조회 기준 장소 상한 — 서버 `NEAR_MAX_POINTS`와 같다(넘으면 400). */
-const NEAR_MAX_POINTS = 60;
 /** 신선도 문구("n분 전")를 다시 그리는 주기. */
 const NOW_TICK_MS = 30_000;
 
@@ -100,9 +101,7 @@ export function useTransportLayers({
 }) {
   const nearMode = nearPoints != null;
   // 좌표 배열의 identity가 아니라 값으로 다시 조회한다 — 부모가 렌더마다 새 배열을 만들어도 조회는 한 번.
-  const nearKey = nearPoints
-    ? nearPoints.map((p) => `${p.lon.toFixed(5)},${p.lat.toFixed(5)}`).join(';')
-    : null;
+  const nearKey = nearPoints ? transportNearPointsKey(nearPoints) : null;
   const nearPointsRef = useRef(nearPoints);
   useEffect(() => {
     nearPointsRef.current = nearPoints;
@@ -168,8 +167,8 @@ export function useTransportLayers({
         layers = TRANSPORT_LAYER_META.filter((meta) => layersOn.has(meta.layer)).map(
           (meta) => meta.layer,
         );
-        const points = near.slice(0, NEAR_MAX_POINTS);
-        key = `near:${points.map((p) => `${p.lon.toFixed(5)},${p.lat.toFixed(5)}`).join(';')}:${layers.join(',')}`;
+        const points = near.slice(0, TRANSPORT_NEAR_MAX_POINTS);
+        key = `near:${transportNearPointsKey(points)}:${layers.join(',')}`;
         request = (signal) =>
           transportApi(apiClient).markersNear({ points, layers, limit: LIMIT }, { signal });
       } else {
@@ -204,19 +203,7 @@ export function useTransportLayers({
         if (radius) setRadiusM(radius);
         const receivedAt = Date.now();
         // 요청한 레이어가 응답에 없으면 "불러오는 중"에 머물지 않게 불러올 수 없음으로 채운다.
-        const returned = new Set(data.layers.map((result) => result.layer));
-        const results: TransportLayerResult[] = [
-          ...data.layers,
-          ...layers
-            .filter((layer) => !returned.has(layer))
-            .map((layer) => ({
-              layer,
-              status: 'unavailable' as const,
-              reason: 'UPSTREAM_UNAVAILABLE' as const,
-              truncated: false,
-              items: [],
-            })),
-        ];
+        const results = withUnavailableTransportLayers(data.layers, layers);
         const cache = cacheRef.current;
         cache.delete(key);
         cache.set(key, { results, receivedAt, cachedAt: receivedAt, radiusM: radius });
@@ -231,16 +218,7 @@ export function useTransportLayers({
         if (isAbortError(err) || requestId !== latestRef.current) return;
         // 요청 자체가 실패했다(응답 해석 실패 포함) — 요청한 레이어를 "불러올 수 없음"으로 보인다.
         // 다음 지도 이동이 곧 재시도다.
-        setFetched({
-          results: layers.map((layer) => ({
-            layer,
-            status: 'unavailable' as const,
-            reason: 'UPSTREAM_UNAVAILABLE' as const,
-            truncated: false,
-            items: [],
-          })),
-          receivedAt: Date.now(),
-        });
+        setFetched({ results: withUnavailableTransportLayers([], layers), receivedAt: Date.now() });
       }
     },
     [],
