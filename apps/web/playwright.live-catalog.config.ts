@@ -92,6 +92,12 @@ export default defineConfig({
       use: {
         ...devices['Desktop Firefox'],
         viewport: { width: 1440, height: 900 },
+        // Linux headless Firefox는 GPU가 없으면 WebGL 컨텍스트를 아예 만들지 못한다
+        // (`FEATURE_FAILURE_WEBGL_EXHAUSTED_DRIVERS`, `webgl.force-enabled`로도 안 풀린다) — 지도 엔진이
+        // 초기화되지 않아 fallback만 보인다(2026-11-17 n150 CORE-016). 같은 이미지에서 headed Firefox는
+        // Xvfb + Mesa llvmpipe로 WebGL을 얻으므로 Linux에서는 headed로 띄우고, n150 runner가
+        // `xvfb-run`으로 X 서버를 준다. Windows/macOS headless Firefox는 WebGL이 있어 그대로 둔다.
+        headless: process.platform !== 'linux',
       },
     },
     ...(includeSession

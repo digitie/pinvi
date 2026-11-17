@@ -224,8 +224,10 @@ echo "live catalog: projects=${projects[*]} areas=${areas[*]:-all} grep=${grep_e
 echo "live catalog: results → $run_dir"
 
 status=0
+# desktop-firefox는 Linux에서 headed로 돈다(headless Firefox는 WebGL이 없다 — playwright.live-catalog.config.ts).
+# 공식 Playwright 이미지의 xvfb-run이 가상 X 서버를 준다. Chromium project는 headless 그대로라 영향이 없다.
 scripts/n150-playwright-runner.sh -- \
-  npm -w @pinvi/web run test:e2e:live-catalog -- "${pw_args[@]}" || status=$?
+  xvfb-run -a npm -w @pinvi/web run test:e2e:live-catalog -- "${pw_args[@]}" || status=$?
 
 if [[ -f "$run_dir/results.json" ]]; then
   node scripts/live-catalog-summary.mjs "$run_dir/results.json" || true
