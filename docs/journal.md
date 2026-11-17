@@ -1,12 +1,15 @@
 ## 2026-11-17 (claude) — 읽기 성능 계획 포인터 (브랜치 `docs/read-performance-plan-20261117`)
 
 - Map 저장소가 Map·weather·transport의 읽기 경로 검토와 작업 목록을 한 문서로 정리했다([계획](https://github.com/digitie/kor-travel-map/blob/main/docs/reports/2026-11-17-read-performance-plan.md)). PinVi 쪽 작업
-  다섯(`T-READ-PIN-01`~`05`)을 `docs/tasks.md`의 `T-READ-PLAN-20261117`로 가리킨다. 문서만 바꿨다.
+  일곱(`T-READ-PIN-01`~`07`)을 `docs/tasks.md`의 `T-READ-PLAN-20261117`로 가리킨다. 문서만 바꿨다.
 - 코드는 main `b1605949`를 읽기만 했다. 운영 `/metrics`를 한 번 읽었다(2026-11-17 03:44Z, 배포·e2e 중이라 표본이 적다):
   `/features/in-bounds` 38건 중 503이 15건, `/trips/{trip_id}` 200 평균 8.98초, handler 본문이 설정만 읽는
   `/auth/oauth/providers`가 평균 1.63초(이 route도 rate-limit upsert와 COMMIT을 한다).
 - 순서 주의: Map이 공개 읽기에 요청 마감을 넣기(`T-READ-03`) 전에 `T-READ-PIN-04`가 운영에 있어야 한다 — 지금 client는
-  5xx를 세 번까지 다시 보낸다(`apps/api/app/clients/kor_travel_map.py:590-599`).
+  5xx를 세 번까지 다시 보낸다(`apps/api/app/clients/kor_travel_map.py:590-599`). Map의 spec이 바뀌는 `T-READ-04`는
+  이 저장소의 재vendor PR이 머지된 뒤 한 pair 회전으로만 나간다(pair gate가 OpenAPI hash 차이를 거부한다).
+- 운영에서 `/weather/markers-in-bounds`는 상류를 부르지 않는데(마커 flag 미설정) 200 응답 6건이 평균 6.53초였다 —
+  요청마다 붙는 비용(rate-limit COMMIT·사용자 조회·위치 감사 쓰기)을 먼저 재야 한다(`T-READ-PIN-05`).
 
 ## 2026-11-17 (claude) — 모바일 여행 지도 + 여행 장소 반경 교통 칩 (브랜치 `feat/mobile-trip-map`)
 
