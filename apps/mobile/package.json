@@ -37,7 +37,7 @@
     "export:ios": "expo export --platform ios --output-dir dist/ios"
   },
   "dependencies": {
-    "@kor-travel/tokens": "file:../web/vendor/kor-travel-tokens-0.1.1.tgz",
+    "@kor-travel/tokens": "file:../web/vendor/kor-travel-tokens-0.1.2.tgz",
     "@maplibre/maplibre-react-native": "11.5.1",
     "@pinvi/api-client": "*",
     "@pinvi/design-tokens": "*",
@@ -72,8 +72,8 @@
     "react-native-web": "0.21.4",
     "react-native-worklets": "0.13.1",
     "vworld-map-core": "file:../web/vendor/vworld-map-core-1.0.1.tgz",
-    "vworld-map-rn": "file:../web/vendor/vworld-map-rn-1.0.1.tgz",
-    "vworld-map-web": "file:../web/vendor/vworld-map-web-1.0.3.tgz",
+    "vworld-map-rn": "file:../web/vendor/vworld-map-rn-1.0.2.tgz",
+    "vworld-map-web": "file:../web/vendor/vworld-map-web-1.0.4.tgz",
     "zod": "4.6.7",
     "zustand": "5.1.0"
   },

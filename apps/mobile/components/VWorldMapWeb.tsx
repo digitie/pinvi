@@ -3,6 +3,7 @@ import { View, type ViewStyle } from 'react-native';
 import { Marker, VWorldMapView, type MapLibreMap, type VWorldLayerType } from 'vworld-map-web';
 import type { MarkerItem, VWorldMapType } from 'vworld-map-core';
 import type { PlatformVWorldMapProps } from './VWorldMap.types';
+import { toMapLibrePadding } from '../lib/mapPadding';
 import { Muted } from './ui';
 
 const layers: Record<VWorldMapType, VWorldLayerType> = {
@@ -45,7 +46,8 @@ export function WebVWorldMap({
       },
       fitBounds: ({ sw, ne }, options) => {
         mapRef.current?.fitBounds([sw, ne], {
-          padding: options?.paddingPx,
+          // rn 1.0.2부터 paddingPx는 면별 객체도 받는다 — MapLibre GL은 네 면을 모두 요구한다.
+          padding: toMapLibrePadding(options?.paddingPx),
           duration: options?.durationMs,
         });
       },

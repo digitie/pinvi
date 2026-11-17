@@ -1,3 +1,10 @@
+## 2026-11-17 — vworld-map-web 1.0.4 vendor(PC 바탕지도 수정의 정본화)
+
+maplibre-vworld-react #33(main `38efb4b5`)이 `vworld://` 타일 스킴을 문자열로 https로 바꾼다(수정 전 산출물에서 실패하는
+node 시험 포함, CI에서 3건 통과). main push Marker CI artifact의 web 1.0.4 tarball을 `apps/web/vendor`에 넣고 세 원장·
+PROVENANCE·manifest·lock을 맞췄다(core tgz는 같은 실행의 pack과 byte 동일, RN 소스 불변). #749의 임시 override
+`lib/vworldTileProtocol.ts`와 그 시험을 지우고 `tests/vworldTileScheme.test.ts`가 vendored 판을 지킨다. CORE-016 `@firefox`는
+그대로 `vworld://` 콘솔 오류 0건을 단언한다(배포 뒤 `--project desktop-firefox --area core`).
 ## 2026-11-17 (claude) — 모바일 단위·컴포넌트 시험 러너 (브랜치 `feat/mobile-test-runner`)
 
 - 소유자 승인(11-17, 모바일 여행 지도 작업의 선행). `apps/mobile`에 시험 러너가 없었다(웹 vitest가 모바일 컴포넌트 몇 개를
