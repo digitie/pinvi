@@ -770,7 +770,7 @@
     - /trips/{id} → '주유소' → '교통 돌발'(각각 markers-near 응답 대기)
   expected:
     - 각 markers-near 요청 points 4개
-    - 응답의 fuel_station·highway_incident 모두 status=ok(unavailable이면 reason과 함께 실패)
+    - 응답의 fuel_station·highway_incident 모두 status=ok(unavailable이면 reason과 함께 실패, disabled면 skip)
     - 상태 줄 '여행 장소 10km 이내'·'여행 장소 20km 이내', unavailable 문구 없음
   cleanup:
     - afterAll 여행 삭제

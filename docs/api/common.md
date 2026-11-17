@@ -366,8 +366,9 @@ exact 검사는 별도 보안 경계이므로 그대로 유지한다.
 `PINVI_KOR_TRAVEL_MAP_FEATURES_MAX_CONCURRENCY` 기본10, viewport `..._VIEWPORT_...` 기본4,
 transport `..._TRANSPORT_...` 기본16, Map weather `..._WEATHER_...` 기본16, 축제 월별 4(상수).
 PostgreSQL을 읽는 features·viewport·축제의 합 18은 예전 공용 16과 비슷하다. transport·weather는 Map에서
-Valkey 읽기라 자리를 오래 쥐지 않고, 한 요청의 내부 팬아웃(교통 6×2=12, 날씨 4+4=8)보다 커야 대기열 없는
-상한에 바로 거부되지 않는다(T-READ-PIN-01, 예전 기본 2).
+Valkey 읽기라 자리를 오래 쥐지 않고, 한 요청의 내부 팬아웃(교통 최대 6×2=12, 날씨 4+4=8)보다 커야 대기열 없는
+상한에 바로 거부되지 않는다(T-READ-PIN-01, 예전 기본 2). 16은 worker당 무거운 교통 요청 하나 분량이라
+같은 worker에서 둘이 겹치면 여전히 거부될 수 있다 — 근본 수정은 `near-batch`(T-READ-PIN-01 ③)다.
 느린 viewport·transport·weather가 상세·trip view의 자리를 가져가지 못한다. geo는
 `PINVI_KOR_TRAVEL_GEO_MAX_CONCURRENCY` 기본8, 직접 weather는
 `PINVI_KOR_TRAVEL_WEATHER_MAX_CONCURRENCY` 기본8이다(둘 다 예전 16에서 낮춤). Telegram은 요청

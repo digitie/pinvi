@@ -415,12 +415,23 @@ async def test_map_budget_exhausted_503_is_sent_once(code: str) -> None:
     await client.aclose()
 
 
-async def test_map_budget_exhausted_503_on_feature_batch_is_sent_once() -> None:
+async def test_map_budget_exhausted_503_on_single_feature_get_is_sent_once() -> None:
     handler, counter = _counting_503("READ_TIMEOUT")
     client = _client(handler)
     with pytest.raises(KorTravelMapUnavailable):
         await client.get_feature("f_x")
     assert counter["sent"] == 1
+    await client.aclose()
+
+
+async def test_map_budget_exhausted_503_on_trip_card_batch_is_sent_once_per_chunk() -> None:
+    # 여행 보기의 batch(POST, chunk 단위)도 같은 분기를 탄다 — chunk 하나가 한 번만 나간다.
+    handler, counter = _counting_503("POOL_BUSY")
+    client = _client(handler)
+    with pytest.raises(KorTravelMapUnavailable) as info:
+        await client.get_features(["f_a", "f_b"])
+    assert counter["sent"] == 1
+    assert info.value.code == "POOL_BUSY"
     await client.aclose()
 
 

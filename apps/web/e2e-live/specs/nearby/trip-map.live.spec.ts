@@ -248,6 +248,9 @@ test.describe('NEAR trip map — four-place trip', () => {
       expect(nearQuery(res).points).toHaveLength(PLACES.length);
       for (const result of (await nearBody(res)).layers) seen.set(result.layer, result);
     }
+    // 레이어가 운영에서 꺼져 있으면(disabled) 이 사례의 전제가 없다 — 실패가 아니라 건너뛴다.
+    const disabled = LAYERS.filter((layer) => seen.get(layer)?.status === 'disabled');
+    test.skip(disabled.length > 0, `transport layer disabled in this environment: ${disabled.join(',')}`);
     for (const layer of LAYERS) {
       const result = seen.get(layer);
       expect(result, `${layer} answered`).toBeDefined();

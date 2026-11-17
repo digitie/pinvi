@@ -825,6 +825,8 @@ class Settings(BaseSettings):
     # transport·weather는 Map에서 Valkey 읽기라(명령당 µs) 자리를 오래 쥐지 않는다. 대신 한 요청의 내부
     # 팬아웃(교통 레이어당 근처 조회 6 x 레이어 2 = 12, 날씨 해석 4 + 값 묶음 4 = 8)이 상한 2를 넘어 대기열
     # 없는 상한에 바로 거부됐다(T-READ-PIN-01) — 팬아웃보다 큰 16을 기본으로 둔다. 회로는 그대로다.
+    # 16은 worker 하나에 무거운 교통 요청 하나 분량이다 — 같은 worker에서 둘이 겹치면 여전히 거부될 수
+    # 있다. 근본 수정은 레이어당 Map 호출 한 번(`near-batch`, T-READ-PIN-01 ③) 또는 상한 대기(②의 다)다.
     pinvi_kor_travel_map_features_max_concurrency: int = Field(default=10, ge=1, le=64)
     pinvi_kor_travel_map_viewport_max_concurrency: int = Field(default=4, ge=1, le=64)
     pinvi_kor_travel_map_transport_max_concurrency: int = Field(default=16, ge=1, le=64)

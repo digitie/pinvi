@@ -12,6 +12,9 @@
   `BULKHEAD_FULL`로 `unavailable`이 됐다(재현 시험이 수정 전 빨강). 두 표면은 Map에서 Valkey 읽기라 자리를 오래 쥐지 않는다.
   DB를 읽는 features·viewport·축제 상한(합 18)은 그대로다. 운영 Manager compose에는 두 env가 없어 **코드 기본값이 그대로 운영값**이다
   — `T-READ-MGR-07`은 필요 없다. 상한을 낮추려면 env로 덮는다.
+  - 남은 한계(적대 리뷰): 16은 worker당 무거운 교통 요청 **하나** 분량이다(장소 6곳 이상·두 레이어면 12). 같은 worker에서 둘이
+    겹치면 여전히 거부될 수 있다 — 근본 수정은 `near-batch`(①③, Map `T-READ-04` 뒤)다. 또 `retry=False` 교통 호출의 5xx 응답은
+    예외가 아니라 응답으로 돌아와 회로에 성공으로 세어진다(이 변경 전부터) — 상한이 커진 만큼 Map 장애 때 동시 호출이 늘 수 있다.
 - 시험: `test_kor_travel_map_circuit_scope.py`(code별 전송 횟수·회로 계수·`retry=False` 응답), `test_dependency_bulkheads.py`
   (기본값 ≥ 팬아웃, 진짜 client + 30 ms 지연 가짜 transport로 점 60개 x 레이어 2 = 120 호출이 두 레이어 모두 `ok`·거부 0,
   날씨 팬아웃 8 동시 거부 0). 새 시험 7건은 수정 전 코드에서 빨강임을 확인했다. n150은 io-guard 75(디스크 압력)라 쓰지 않고
