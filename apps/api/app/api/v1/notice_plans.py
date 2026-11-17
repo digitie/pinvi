@@ -9,11 +9,13 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 
+from app.clients.kor_travel_map import OptionalKorTravelMapHttpClientDep
 from app.core.deps import CurrentUserId, DbSession
 from app.schemas.envelope import Envelope
 from app.schemas.notice import (
     NoticePlanCopyRequest,
     NoticePlanCopyResponse,
+    NoticePlanHighlightsResponse,
     NoticePlanResponse,
     NoticePoiResponse,
 )
@@ -25,6 +27,7 @@ from app.services.notice_plan import (
     list_plan_pois,
     list_published_plans,
 )
+from app.services.notice_plan_highlights import build_plan_highlights
 
 router = APIRouter(prefix="/notice-plans", tags=["notice-plans"])
 
@@ -90,6 +93,31 @@ async def get_plan(notice_plan_id: uuid.UUID, db: DbSession) -> Envelope[NoticeP
         ) from exc
     pois = await list_plan_pois(db, notice_plan_id=notice_plan_id)
     return Envelope.of(_plan_to_response(plan, pois))
+
+
+@router.get(
+    "/{notice_plan_id}/highlights",
+    response_model=Envelope[NoticePlanHighlightsResponse],
+)
+async def get_plan_highlights(
+    notice_plan_id: uuid.UUID,
+    db: DbSession,
+    kor_travel_map: OptionalKorTravelMapHttpClientDep,
+) -> Envelope[NoticePlanHighlightsResponse]:
+    """추천 여행 주변 정보 — 기간 중 축제·행사 + 주변 큐레이션 장소(kor-travel-map 공개 표면).
+
+    Map이 없거나 실패하면 그 구역만 `unavailable`에 넣고 200으로 돌려준다.
+    """
+    try:
+        highlights = await build_plan_highlights(
+            db, notice_plan_id=notice_plan_id, client=kor_travel_map
+        )
+    except NoticePlanNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    return Envelope.of(highlights)
 
 
 @router.post(

@@ -156,6 +156,50 @@ Cookie: pinvi_access=...
 - `422 VALIDATION_ERROR` — poi_ids에 존재하지 않는 ID
 - `409 VERSION_CONFLICT` — target_trip 동시 편집 충돌
 
+### 1.4 `GET /notice-plans/{plan_id}/highlights` — 주변 축제·큐레이션 (2026-11-16)
+
+추천 여행 카드에서 펼치는 보조 정보. PinVi DB에 복사하지 않고 kor-travel-map 공개 표면을
+요청마다 읽는다(`services/notice_plan_highlights.py`).
+
+- **축제·행사** — Map `GET /v1/public/festivals/monthly`. 기간 창은 plan 기간이 아직 끝나지
+  않았으면 plan 기간(`window_basis=plan`), 아니면 오늘(Asia/Seoul)부터 30일(`upcoming`).
+  이미 지난 날은 빼고 최대 2개월을 조회한다. 지역은 POI snapshot 주소의 시도 코드
+  (`sido_code` → `sigungu_code`/`bjd_code` 앞 2자리) 1~2개면 그 시도(`region_scope=sido`),
+  없거나 3개 이상이면 전국(`nationwide`). `ended`와 기간 밖 행사는 버리고 최대 10건.
+  축제 자리(4) 공유 때문에 조회는 순차다.
+- **주변 큐레이션** — Map `GET /v1/curations`(bbox). POI 좌표 bbox ±0.05°, page 60건에서
+  plan에 이미 있는 Feature와 `included`가 아닌 membership을 빼고 최대 8건. 좌표 있는 POI가
+  없으면 조회하지 않는다(빈 목록).
+- 두 구역 모두 POI 좌표가 있으면 가장 가까운 plan 장소까지 거리(`distance_m`) 순.
+- Map 미구성·장애·예산(8초) 초과는 **그 구역만** `unavailable`에 넣고 200으로 돌려준다.
+
+응답 200:
+
+```jsonc
+{
+  "data": {
+    "notice_plan_id": "uuid",
+    "window_start": "2026-12-01", "window_end": "2026-12-03",
+    "window_basis": "plan",            // plan | upcoming
+    "region_scope": "sido",            // sido | nationwide
+    "events": [{ "feature_id": "…", "name": "…", "start_date": "2026-12-01", "end_date": "2026-12-03",
+                 "status": "scheduled", "venue_name": "…", "address": "…", "summary": "…(≤160자)",
+                 "homepage_url": "…", "lon": 128.9, "lat": 37.8, "marker_color": "P-11",
+                 "marker_icon": "star", "distance_m": 1234.5 }],
+    "curated": [{ "feature_id": "…", "name": "…", "kind": "place", "category": "01020100",
+                  "lon": 128.88, "lat": 37.78, "address": "…", "distance_m": 420.0,
+                  "themes": [{ "theme_name": "…", "collection_title": "…", "edition_key": "2025-2026",
+                               "summary": null, "source_url": null }] }],
+    "unavailable": []                  // "curated" | "events"
+  }
+}
+```
+
+에러: `404 RESOURCE_NOT_FOUND` — plan 없음/비공개. 인증은 목록과 같다(공개 published plan).
+
+웹: `/notice-plans` 카드의 '주변 축제·큐레이션' 토글(펼칠 때만 조회, 구역별 3건 + '더 보기').
+좌표 있는 항목은 '추가' → 여행·일자 선택 → `POST /trips/{id}/pois`(일자 끝 append, `source=feature`).
+
 ## 2. Admin API
 
 ### 2.1 `GET /admin/notice-plans`
@@ -268,6 +312,7 @@ alias `notice_plan_id` / `notice_poi_id`를 함께 제공한다. 두 필드는 �
 | `GET /notice-plans` (published)      | ✓           | ✓     | ✓        | ✓   |
 | `GET /notice-plans/{id}` (published) | ✓           | ✓     | ✓        | ✓   |
 | `POST /notice-plans/{id}/copy`       | ✓           | ✓     | ✓        | ✓   |
+| `GET /notice-plans/{id}/highlights`  | ✓           | ✓     | ✓        | ✓   |
 | `GET /admin/notice-plans` (all)      | ✗           | ✓     | ✓        | ✓   |
 | `POST /admin/notice-plans`           | ✗           | ✓     | ✓        | ✗   |
 | `PATCH /admin/notice-plans/{id}`     | ✗           | ✓     | ✓        | ✗   |

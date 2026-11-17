@@ -1,11 +1,16 @@
 'use client';
 
+import {
+  AddPlaceToTripDialog,
+  type AddablePlace,
+} from '@/components/notice-plans/AddPlaceToTripDialog';
 import { NoticePlanCopyDialog } from '@/components/notice-plans/NoticePlanCopyDialog';
+import { NoticePlanHighlights } from '@/components/notice-plans/NoticePlanHighlights';
 import { buttonClassName } from '@/components/ui/button-styles';
 import { apiClient } from '@/lib/api';
 import { ApiError, noticePlanApi } from '@pinvi/api-client';
 import type { NoticePlan } from '@pinvi/schemas';
-import { CopyPlus, Loader2, MapPin, RefreshCw } from 'lucide-react';
+import { ChevronDown, CopyPlus, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const displayFormatter1 = new Intl.DateTimeFormat('ko-KR', {
@@ -46,6 +51,17 @@ function useNoticePlanShelfModel() {
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [loading, setLoading] = useState(true);
   const [copyPlan, setCopyPlan] = useState<NoticePlan | null>(null);
+  // 카드별 '축제·큐레이션' 펼침 — 펼칠 때만 Map을 조회한다(목록은 가볍게 유지).
+  const [expandedPlanIds, setExpandedPlanIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [addPlace, setAddPlace] = useState<AddablePlace | null>(null);
+  const toggleHighlights = useCallback((planId: string) => {
+    setExpandedPlanIds((current) => {
+      const next = new Set(current);
+      if (next.has(planId)) next.delete(planId);
+      else next.add(planId);
+      return next;
+    });
+  }, []);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 필터가 바뀐 순간을 렌더 중에 잡아 loading/error를 그 자리에서 리셋한다
@@ -92,17 +108,21 @@ function useNoticePlanShelfModel() {
 
   return {
     renderBranch: 'render0' as const,
+    addPlace,
     category,
     copyPlan,
+    expandedPlanIds,
     error,
     loadPlans,
     loading,
     message,
+    setAddPlace,
     setCategory,
     setCopyPlan,
     setError,
     setLoading,
     setMessage,
+    toggleHighlights,
     visiblePlans,
   };
 }
@@ -113,12 +133,14 @@ type NoticePlanShelfView0Model = Extract<
 >;
 function NoticePlanShelfView0({ viewModel }: { viewModel: NoticePlanShelfView0Model }) {
   const {
+    addPlace,
     category,
     copyPlan,
     error,
     loadPlans,
     loading,
     message,
+    setAddPlace,
     setCategory,
     setCopyPlan,
     setError,
@@ -232,6 +254,7 @@ function NoticePlanShelfView0({ viewModel }: { viewModel: NoticePlanShelfView0Mo
           }}
         />
       )}
+      {addPlace && <AddPlaceToTripDialog place={addPlace} onClose={() => setAddPlace(null)} />}
     </div>
   );
 }
@@ -264,7 +287,7 @@ function NoticePlanShelfView0Part0({ viewModel }: { viewModel: NoticePlanShelfVi
 }
 
 function NoticePlanShelfView0Part1({ viewModel }: { viewModel: NoticePlanShelfView0Model }) {
-  const { visiblePlans, setCopyPlan } = viewModel;
+  const { expandedPlanIds, setAddPlace, setCopyPlan, toggleHighlights, visiblePlans } = viewModel;
   return (
     <div
       className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
@@ -302,6 +325,29 @@ function NoticePlanShelfView0Part1({ viewModel }: { viewModel: NoticePlanShelfVi
           >
             <CopyPlus className="h-4 w-4" aria-hidden="true" />내 여행으로 가져오기
           </button>
+          <button
+            type="button"
+            onClick={() => toggleHighlights(plan.notice_plan_id)}
+            aria-expanded={expandedPlanIds.has(plan.notice_plan_id)}
+            aria-controls={`notice-plan-highlights-panel-${plan.notice_plan_id}`}
+            className="focus-ring mt-2 inline-flex min-h-11 w-full items-center justify-between gap-2 rounded-sm border border-hairline bg-canvas px-3 text-sm font-semibold text-ink hover:bg-surface-soft"
+            data-testid={`notice-plan-highlights-toggle-${plan.notice_plan_id}`}
+          >
+            주변 축제·큐레이션
+            <ChevronDown
+              className={
+                expandedPlanIds.has(plan.notice_plan_id)
+                  ? 'h-4 w-4 rotate-180 transition-transform'
+                  : 'h-4 w-4 transition-transform'
+              }
+              aria-hidden="true"
+            />
+          </button>
+          {expandedPlanIds.has(plan.notice_plan_id) ? (
+            <div id={`notice-plan-highlights-panel-${plan.notice_plan_id}`}>
+              <NoticePlanHighlights planId={plan.notice_plan_id} onAddPlace={setAddPlace} />
+            </div>
+          ) : null}
         </article>
       ))}
     </div>

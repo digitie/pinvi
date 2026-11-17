@@ -181,3 +181,59 @@ class KorTravelMapCurationCutoverBackfillResponse(BaseModel):
     legacy_curated_feature_id: uuid.UUID
     import_result: KorTravelMapCurationCollectionImportResponse
     replayed: StrictBool
+
+
+# --- 추천 여행 주변 정보(축제·큐레이션) — `docs/api/notice-plans.md` §highlights ---
+
+
+class NoticePlanHighlightTheme(BaseModel):
+    """큐레이션 장소가 속한 공개 묶음 1건(한국관광 100선 2025-2026 같은)."""
+
+    theme_name: str
+    collection_title: str
+    edition_key: str
+    summary: str | None = None
+    source_url: str | None = None
+
+
+class NoticePlanCuratedPick(BaseModel):
+    feature_id: str
+    name: str
+    kind: str
+    category: str
+    lon: float | None = None
+    lat: float | None = None
+    address: str | None = None
+    distance_m: float | None = None
+    themes: list[NoticePlanHighlightTheme] = Field(default_factory=list)
+
+
+class NoticePlanEventPick(BaseModel):
+    feature_id: str
+    name: str
+    start_date: date | None = None
+    end_date: date | None = None
+    status: Literal["scheduled", "ongoing", "ended", "unknown"]
+    venue_name: str | None = None
+    address: str | None = None
+    summary: str | None = None
+    homepage_url: str | None = None
+    lon: float | None = None
+    lat: float | None = None
+    marker_color: str | None = None
+    marker_icon: str | None = None
+    distance_m: float | None = None
+
+
+class NoticePlanHighlightsResponse(BaseModel):
+    notice_plan_id: uuid.UUID
+    # 축제를 고른 기간 — plan 기간이 아직 끝나지 않았으면 plan 기간, 아니면 오늘부터 30일.
+    window_start: date
+    window_end: date
+    window_basis: Literal["plan", "upcoming"]
+    # 축제를 고른 지역 범위 — POI 주소의 시도 코드(최대 2개)에서 파생, 없거나 많으면 전국.
+    region_scope: Literal["sido", "nationwide"]
+    curated: list[NoticePlanCuratedPick]
+    events: list[NoticePlanEventPick]
+    # Map 장애 등으로 못 채운 구역. 빈 목록과 "불러오지 못함"을 구분한다.
+    unavailable: list[Literal["curated", "events"]]
