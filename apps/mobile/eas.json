@@ -6,16 +6,19 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "node": "26.13.1"
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "node": "26.13.1"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "node": "26.13.1"
     }
   }
 }

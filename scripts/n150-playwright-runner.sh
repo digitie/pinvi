@@ -276,10 +276,10 @@ fi
 # 그대로 두고, 컨테이너 안에서 nodejs.org 공식 tarball을 아래 SHA-256(SHASUMS256.txt 값)으로
 # 검증해 PATH 앞에 둔 뒤 npm ci와 테스트 명령을 그 Node로 돌린다. 버전은 .nvmrc·engines와
 # 같아야 한다(어긋나면 여기서 멈춘다).
-runner_node_version="22.23.1"
+runner_node_version="26.13.1"
 runner_npm_version="12.0.1"
-runner_node_sha256_x64="7a8cb04b4a1df4eaf432125324b81b29a088e73570a23259a8de1c65d07fc129"
-runner_node_sha256_arm64="543fa39e57d4c07855939459a323f4deb9a79dd1bb45e6e99458b0f2de10db8d"
+runner_node_sha256_x64="518674de2b621728a5e4486f5fb3b7d2900bb3cc4aa97969edaa463db99f9778"
+runner_node_sha256_arm64="80a330b35415382878df18d41afbd106ea89bfb3be0087d6608e289a14c5cc7d"
 if [[ -f "$repo_root/.nvmrc" ]] && [[ "$(tr -d '[:space:]' < "$repo_root/.nvmrc")" != "$runner_node_version" ]]; then
   echo "error: runner Node $runner_node_version does not match .nvmrc — update the pinned tarball and SHA-256" >&2
   exit 1

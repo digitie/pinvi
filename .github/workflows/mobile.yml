@@ -50,7 +50,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.23.1'
+          node-version: '26.13.1'
           cache: npm
 
       - name: Check lockfile integrity coverage
@@ -90,7 +90,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.23.1'
+          node-version: '26.13.1'
           cache: npm
       - name: Pin npm 12.0.1
         run: npm install -g npm@12.0.1
@@ -127,7 +127,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.23.1'
+          node-version: '26.13.1'
           cache: npm
       - name: Pin npm 12.0.1
         run: npm install -g npm@12.0.1
@@ -151,7 +151,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.23.1'
+          node-version: '26.13.1'
           cache: npm
 
       # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.
@@ -177,7 +177,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.23.1'
+          node-version: '26.13.1'
           cache: npm
 
       # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.

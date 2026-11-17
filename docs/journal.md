@@ -1,3 +1,16 @@
+## 2026-11-18 (claude) — Node 26.13.1 전환 (브랜치 `chore/node-26.13.1`)
+
+- 출처: 소유자 결정(2026-11-17) — 모든 저장소 Node 26.13.1(최신 LTS), npm은 12.0.1 유지. common T-029 채택 커밋
+  `0dec9543`(kor-travel-common PR #65)을 guard `uses`·`common-ref` 둘 다로 올렸다.
+- 바꾼 것: `.nvmrc`, root `package.json` `engines.node`(lock root 메타데이터만 같이 바뀜), web·mobile workflow의 `setup-node` 8곳,
+  `apps/web/Dockerfile` 세 stage(`node:26.13.1-bookworm-slim` 공식 multi-arch digest, 각 stage의 npm 12.0.1 선택은 그대로),
+  n150 Playwright runner의 Node 버전과 nodejs.org SHASUMS256 값(x64·arm64), `apps/mobile/eas.json` 세 profile에 `node: 26.13.1`
+  (root `engine-strict`라 EAS 기본 Node로는 설치가 거부된다), `docs/dev-environment.md`·`apps/mobile/README.md`의 현재 toolchain 서술.
+- lock은 `npx -p npm@12.0.1 -p node@26.13.1 -- npm install --package-lock-only --ignore-scripts`로 재생성 — root engines 한 줄 외 변화 없음.
+  lock 안의 engines 범위 중 Node 26을 배제하는 것은 optional `@img/sharp-win32-ia32`(Linux에서 설치 안 됨) 하나뿐이다.
+- Expo SDK 58(root·mobile 모두 `expo` 58.0.26)과 `check-mobile-styling.mjs`의 고정값은 그대로다. 검증은 CI(web·mobile·expo-doctor·common guard).
+- 과거 기록(journal·reports·reviews·resume 이력 줄)의 22.x 표기는 그대로 둔다.
+
 ## 2026-11-18 (claude) — rate-limit COMMIT 비동기 + 통합 검색 Kakao·Naver 동시 대기 (브랜치 `perf/read-pin-05-07-request-cost`)
 
 - 출처: Map 읽기 성능 계획 `T-READ-PIN-05`(분명히 낭비인 부분만)·`T-READ-PIN-07`. 소유자 결정(2026-11-18): 측정에 기대는 것은 미룬다.
