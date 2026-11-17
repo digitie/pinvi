@@ -51,7 +51,7 @@ import {
   summaryPattern,
 } from '../../helpers/trip';
 import { expectSharedReadOnly } from '../../helpers/share';
-import { STATUS_TEXT, daySection, openDay, weatherKind } from '../../helpers/weather';
+import { BEYOND_FORECAST_RE, STATUS_TEXT, daySection, openDay, weatherKind } from '../../helpers/weather';
 import { loadTripScenarios, scenarioDates, type ScenarioCheck, type ScenarioPlace, type TripScenario } from '../../helpers/tripScenarios';
 
 const SCENARIOS = loadTripScenarios();
@@ -265,12 +265,25 @@ async function checkWeather(page: Page, s: TripScenario, day: number): Promise<v
   const section = daySection(article);
   const kind = await weatherKind(section);
   const text = (await section.innerText()).replace(/\s+/g, ' ').slice(0, 160);
+  let state: string = kind;
   if (kind === 'status') {
-    const known = Object.values(STATUS_TEXT).some((t) => text.includes(t));
-    expect(known, `${s.id} day ${day}: weather status text is one of the known states`).toBe(true);
-    if (text.includes(STATUS_TEXT.unavailable!)) note('warning', `weather day ${day}: unavailable`);
+    // 예보 범위 밖 날짜는 전용 안내다(#761 결정 3) — `expectWeatherConsistent`와 같은 표식으로 본다:
+    // `data-weather-reason` + 문구, 그리고 다시 물어도 값이 없으므로 새로고침 버튼이 없다.
+    const reason = await section.getAttribute('data-weather-reason');
+    if (reason === 'beyond_forecast') {
+      await expect(section.locator('p').first(), `${s.id} day ${day}: beyond-forecast notice text`).toHaveText(
+        BEYOND_FORECAST_RE,
+      );
+      await expect(section.getByRole('button', { name: '날씨 새로고침' })).toHaveCount(0);
+      state = 'status(beyond_forecast)';
+    } else {
+      expect(reason, `${s.id} day ${day}: data-weather-reason is a known reason`).toBeNull();
+      const known = Object.values(STATUS_TEXT).some((t) => text.includes(t));
+      expect(known, `${s.id} day ${day}: weather status text is one of the known states`).toBe(true);
+      if (text.includes(STATUS_TEXT.unavailable!)) note('warning', `weather day ${day}: unavailable`);
+    }
   }
-  note('weather', `day ${day}: ${kind} — ${text}`);
+  note('weather', `day ${day}: ${state} — ${text}`);
 }
 
 async function checkShare(page: Page, s: TripScenario, title: string, tripId: string): Promise<void> {

@@ -1,3 +1,27 @@
+## 2026-11-17 (claude) — 운영 live e2e 최종 실행의 실패 정리 (브랜치 `fix/live-e2e-1117`, 검사 코드만)
+
+- 대상: prod `b1605949` 최종 실행(desktop 283/5, mobile 143/6, firefox core 1, TRS 4묶음). 제품 코드는 바꾸지 않았다.
+- TRS `weather status text is one of the known states`(약 75건): `checkWeather`가 #761의 예보 범위 밖 상태를 몰랐다.
+  `data-weather-reason="beyond_forecast"` + `BEYOND_FORECAST_RE` + 새로고침 버튼 없음으로 받는다(`expectWeatherConsistent`와 같은 표식).
+- CORE-044·046: 실패 시점 화면에 '위치정보 이용 동의' 다이얼로그가 열려 있었다(error-context). prod `user_consents`는 0행 —
+  테스트 계정에 위치 동의가 없어 매번 다이얼로그가 뜨는데, `isVisible({ timeout })`은 기다리지 않아(Playwright가 timeout을 무시)
+  서버 동의 조회 뒤에 열리는 다이얼로그를 놓쳤다. 다이얼로그·측위 시작·위치 오류 중 하나가 될 때까지 기다린다.
+  같은 패턴의 WX-041/042(`weather-poi-badge`)도 `waitFor`로 바꿨다.
+- NEAR-010: 응답이 막 도착했을 때(상태 줄 "주유소 불러오는 중") 마커 수를 세어 0이었다. 같은 bbox의 직전 요청(NEAR-003)과
+  30초 뒤 상세(NEAR-004)는 주유소를 받았다 — 경주다. 결과 문구와 마커를 기다리고, 레이어가 `ok`가 아니면 skip한다.
+- NEAR-005(mobile): '서울역' 검색 선택 popup이 날씨 줄만큼 자라 폭 390 화면의 '주유소' 체크박스를 덮었다. 같은 순서의
+  NEAR-004는 통과 — 시점 차이. 검색 뒤 popup을 닫는다(`openTransportNear`와 같은 처리).
+- REC-001~003: prod `curated_trip_plans`가 **0행**이라 `/notice-plans`가 빈 상태 문구를 그린다. 목록을 먼저 단언해 데이터 전제
+  skip에 닿지 못했다 — 빈 상태면 skip한다(오류 안내는 실패). **추천 여행 주변 축제·큐레이션은 prod에서 검증되지 않았다.**
+- Firefox CORE-016 `NS_BINDING_ABORTED`: 로그인 → `/home` 소프트 내비게이션의 RSC 요청이 진행 중일 때 `page.goto('/trips')`를
+  불렀다. Firefox는 떠나는 문서의 fetch를 바로 실패시키고 Next는 RSC fetch 실패를 브라우저 내비게이션으로 대체해 그 이동이
+  goto를 끊는다(로컬 Firefox에서 같은 구조로 재현, Chromium은 통과). `watchRouterRequests`로 RSC 요청이 끝난 뒤 이동한다.
+- TRS-CG-001 '북촌한옥마을'·TRS-CJ-001 '공주 공산성': Map 데이터·순위 문제가 아니다. 지금 Map 검색은 두 곳 모두 1순위로 준다.
+  그 순간 API 로그에 `kor_travel_map.unavailable path=/v1/features/search error=ReadTimeout`이 있고 `/search`는 200(features
+  degraded)이었다 — 화면은 그때도 '검색 결과가 없습니다.'다. 검사에는 재시도를 넣지 않고, `searchAndAddPlace` 오류에 비운
+  소스(`degraded_sources`)를 적게 했다. 웹 검색창이 `degraded_sources`를 쓰지 않는 것은 제품 쪽 후속 후보다.
+- 검증: e2e-live `tsc --noEmit`(85파일), 카탈로그 INDEX `--check`, `watchRouterRequests`는 로컬 Firefox·Chromium 재현 검사.
+
 ## 2026-11-17 (claude) — 공통화 재조사 계획의 PinVi 포인터 (브랜치 `docs/commonization-plan-20261117`, 문서 전용)
 
 - 소유자 요청으로 kor-travel-common이 다섯 저장소(pinvi·map·weather·transport·docker-manager)를 다시 조사해 계획을 냈다(Common `docs/plan/commonization-plan-2026-11-17.md`, 적대 리뷰 2회 반영). PinVi 조사 기준은 `b1605949`.

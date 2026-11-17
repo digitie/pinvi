@@ -8,7 +8,7 @@
  *  - CORE-044 내 위치 버튼 → 따라가기, 손으로 끌면 따라가기 해제, 다시 누르면 복귀
  *  - CORE-045 모바일 탐색 지도 feature 탭 → 상세 시트만(팝업과 이중 표시 없음)
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
   clickableFeatureMarkers,
   closePanel,
@@ -24,6 +24,31 @@ import {
   waitForMapIdle,
 } from '../../helpers/live';
 import { isMobileViewport, PLACES, tripPins, waitForMapCanvas, type Box } from '../../helpers/core';
+
+/**
+ * '내 위치' 버튼을 눌러 따라가기를 켠다. 계정에 위치 동의가 없으면 동의 다이얼로그에서 동의한다(테스트 계정에
+ * LBS 동의 기록이 남는다).
+ *
+ * 다이얼로그는 버튼을 누른 뒤 서버 동의 조회(`getLocationConsentState({ force: true })`)가 끝나야 열린다.
+ * 예전 `consent.isVisible({ timeout })`은 기다리지 않아(Playwright는 그 timeout을 무시한다) 아직 열리지 않은
+ * 다이얼로그를 "없음"으로 읽었고, 동의하지 않은 채 follow를 기다리다 실패했다(2026-11-17 prod: 동의 기록 0건).
+ * 그래서 "다이얼로그가 떴다 / 측위를 시작했다 / 위치 오류 안내가 떴다" 중 하나가 될 때까지 기다린다.
+ */
+async function startFollowing(page: Page, button: Locator): Promise<void> {
+  await button.click();
+  const consent = page.getByTestId('location-consent-agree');
+  const started = page.locator('[data-testid="map-my-location"]:not([data-follow-mode="off"])');
+  const failed = page.getByTestId('my-location-error');
+  await expect(consent.or(started).or(failed).first()).toBeVisible({ timeout: 20_000 });
+  await expect(failed, '위치 오류 안내 없이 측위를 시작한다').toHaveCount(0);
+  if (await consent.isVisible()) {
+    await consent.click();
+    // 저장(PUT /users/me/consents)에 실패하면 다이얼로그가 오류 문구와 함께 열린 채 남는다.
+    await expect(consent, '위치 동의를 저장하면 다이얼로그가 닫힌다').toBeHidden({ timeout: 20_000 });
+  }
+  await expect(button).toHaveAttribute('data-follow-mode', 'follow', { timeout: 20_000 });
+  await expect(button).toHaveAttribute('data-follow-ready', 'true', { timeout: 20_000 });
+}
 
 const centreOffset = async (page: Page, poiTitle: string) => {
   const map = (await page.getByTestId('trip-detail-map').boundingBox()) as Box;
@@ -164,12 +189,7 @@ test.describe('CORE map markers', () => {
     await expect(button).toHaveAttribute('data-follow-mode', 'off');
     const size = (await button.boundingBox()) as Box;
     expect(size.width).toBeGreaterThanOrEqual(40);
-    await button.click();
-    // 테스트 계정에 위치 동의가 없으면 동의 다이얼로그 → 동의(테스트 계정의 LBS 동의 기록이 남는다).
-    const consent = page.getByTestId('location-consent-agree');
-    if (await consent.isVisible({ timeout: 3_000 }).catch(() => false)) await consent.click();
-    await expect(button).toHaveAttribute('data-follow-mode', 'follow', { timeout: 20_000 });
-    await expect(button).toHaveAttribute('data-follow-ready', 'true', { timeout: 20_000 });
+    await startFollowing(page, button);
     await waitForMapIdle(page);
     const map = (await page.getByTestId('trip-detail-map').boundingBox()) as Box;
     await page.mouse.move(map.x + map.width / 2, map.y + map.height * 0.6);
@@ -204,11 +224,7 @@ test.describe('CORE map markers', () => {
     await waitForMapCanvas(page);
     const button = page.getByTestId('map-my-location');
     await expect(button).toHaveAttribute('data-follow-mode', 'off');
-    await button.click();
-    const consent = page.getByTestId('location-consent-agree');
-    if (await consent.isVisible({ timeout: 3_000 }).catch(() => false)) await consent.click();
-    await expect(button).toHaveAttribute('data-follow-mode', 'follow', { timeout: 20_000 });
-    await expect(button).toHaveAttribute('data-follow-ready', 'true', { timeout: 20_000 });
+    await startFollowing(page, button);
     await waitForMapIdle(page);
     const canvas = (await page.locator('.maplibregl-canvas').first().boundingBox()) as Box;
     await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height * 0.6);
