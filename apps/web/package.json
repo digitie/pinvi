@@ -25,7 +25,7 @@
     "doctor": "react-doctor . --yes --scope full --blocking warning --no-score --no-supply-chain --no-parallel --no-cache",
     "predoctor": "node ./scripts/copy-maplibre-worker.mjs",
     "check:maplibre-worker": "node ./scripts/copy-maplibre-worker.mjs --check",
-    "test:e2e:map-canvas": "PINVI_E2E_EXPECT_VWORLD_CANVAS=1 playwright test map-shell.e2e.ts trip-detail.e2e.ts map-location-follow.e2e.ts --grep '지도 shell|여행 지도는 feature|교통 결과가 와도|여행 장소 마커는 원형|패널은 아래 시트|탐색 지도 내 위치 버튼'",
+    "test:e2e:map-canvas": "PINVI_E2E_EXPECT_VWORLD_CANVAS=1 playwright test map-shell.e2e.ts trip-detail.e2e.ts map-location-follow.e2e.ts map-explore.e2e.ts --grep '지도 shell|여행 지도는 feature|교통 결과가 와도|여행 장소 마커는 원형|패널은 아래 시트|탐색 지도 내 위치 버튼|탐색 지도 장소 마커는 여행 지도와 같은|탐색 지도 선택 popup은'",
     "test:e2e:restore": "NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=1 playwright test admin-backup.e2e.ts --grep 'restore dialog'"
   },
   "dependencies": {

@@ -1,3 +1,25 @@
+## 2026-11-17 (claude) — 탐색 지도 전체 화면 + 여행 지도와 같은 장소 마커 (브랜치 `feat/explore-map-trip-markers-fullscreen`)
+
+- 소유자 요청: "탐색지도의 마커도 여행과 동일하게. 지도도 전체화면으로."
+- 마커: 탐색 지도는 #755부터 이미 `CirclePlaceMarker`(22px 원)를 썼지만 이름 라벨을 붙이지 않았다. `ExploreFeatureMarker`가 같은 컴포넌트를
+  여행 지도와 같은 크기(22/13)·같은 라벨로 감싼다(복사본 아님). 원 색·아이콘은 여행 지도 feature 마커와 같은 `resolveMarkerStyle`
+  (Map marker_color/marker_icon → `CATEGORY_MARKER` → `KIND_MARKER` → 회색) — 새 매핑을 만들지 않았다. 탐색 지도는 장소별 날씨를 받지
+  않으므로 날씨 아이콘은 없다(마커마다 날씨를 부르지 않는다). 변환은 `lib/exploreMapPoints.ts`로 빼 단위 검사한다.
+  마커 루트(role=button·aria-label·`data-interaction-id="feature:<id>"`)는 그대로라 live helper(`featureMarkerButtons` 등)는 바꾸지 않았고,
+  `exploreMarkers`(class `explore-map-marker`)만 더했다. hover 상자(title)는 여행 지도처럼 뺐다.
+- 전체 화면: `AppShell`의 `/map` 분기 — 셸 `h-dvh overflow-hidden`, 본문 여백 없음(`.app-shell-main-map`은 모바일 탭바 높이만 비운다),
+  상단 바는 데스크톱만 `py-1`(≈53px), 모바일은 숨긴다(CSS 1차라 SSR 첫 페인트도 같다). 페이지 제목·설명은 `sr-only`(h1 1개 유지).
+  지도 상자의 테두리·둥근 모서리·`min-h-[360px]`를 없앴다. 왼쪽 위 오버레이 스택(검색·상태·레이어)은 폭 `w-80 max-w-[calc(100%-3.75rem)]`
+  (390px에서 오른쪽 위 확대/축소 버튼과 겹치지 않는다), 레이어 패널은 접을 수 있고(`collapsible`, 기본 펼침) 높이 50dvh에서 안쪽 스크롤.
+  내 위치 버튼은 여행 지도와 같은 자리(`bottom-24`, 축척 막대·출처 표기 위 — 전체 화면에서 bottom-4면 축척 막대와 겹쳤다).
+- popup이 레이어 체크박스를 덮던 문제(2026-11-17 mobile NEAR-005): popup(z20)이 패널(z10)보다 위인 것은 #700의 의도라 쌓임을 뒤집지 않고,
+  `lib/popupClearance.ts`가 popup이 `[data-map-overlay]`(스택·내 위치·확대/축소)와 겹치면 지도를 가장 짧게 밀어 비킨다(구글 InfoWindow autoPan).
+  열릴 때·크기가 바뀔 때(날씨 줄)·프로그램 카메라 이동이 끝났을 때만 보고, 움직이는 중에는 기다리며, 사용자가 끌면 그 popup에는 다시 하지 않는다.
+- 동작 변화: 데스크톱에서 패널 근처 장소를 누르면 지도가 200ms 비켜 선다. 모바일 탭 = 상세 시트만(CORE-045), 묶음·한도, 내 위치·따라가기는 그대로.
+- 검사: 단위 `popupClearance`·`exploreMapPoints`·`ExploreFeatureMarker`·`AppShellExploreMap`·`MapLayerControlsCollapse`; CI e2e
+  `map-explore.e2e.ts` 4건(데스크톱·390 전체 화면, canvas 모드 마커 모양·popup 비킴 — `test:e2e:map-canvas` grep에 추가);
+  live CORE-048~050(`core-map-fullscreen.live.spec.ts`, 배포 뒤 실행). n150은 다른 live 실행 중이라 쓰지 않았다(로컬 WSL에서 빌드·실행).
+
 ## 2026-11-17 (claude) — 운영 live e2e 최종 실행의 실패 정리 (브랜치 `fix/live-e2e-1117`, 검사 코드만)
 
 - 대상: prod `b1605949` 최종 실행(desktop 283/5, mobile 143/6, firefox core 1, TRS 4묶음). 제품 코드는 바꾸지 않았다.

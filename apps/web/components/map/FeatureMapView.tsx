@@ -18,9 +18,11 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 
 import { FeatureDetailModalController } from '@/components/map/FeatureDetailModalController';
 import { FeatureRequestDialog } from '@/components/map/FeatureRequestDialog';
-import { CirclePlaceMarker } from '@/components/map/CirclePlaceMarker';
+import {
+  EXPLORE_MARKER_SIZE,
+  ExploreFeatureMarker,
+} from '@/components/map/ExploreFeatureMarker';
 import { MyLocationControl, useMyLocationControl } from '@/components/map/MyLocationControl';
-import { MakiIcon } from '@/components/map/MakiIcon';
 import { MapSearchBox } from '@/components/map/MapSearchBox';
 import { TransportDetailDialog } from '@/components/map/TransportDetailDialog';
 import { MapLayerControls } from '@/components/map/MapLayerControls';
@@ -35,17 +37,22 @@ import {
   UserLocationMarker,
   VWorldMap,
   WeatherMarker,
-  type ClusterPoint,
   type MapLibreEvent,
   type MapLibreMap,
   type MapMouseEvent,
 } from '@/components/map/vworldPrimitives';
 import { isAbortError } from '@/lib/abort';
+import {
+  explorePointFromSearch,
+  toExplorePoints,
+  type ExploreMapPoint,
+} from '@/lib/exploreMapPoints';
 import { boundsToBbox, clampZoom } from '@/lib/featureBounds';
 import { webLocationAdapter } from '@/lib/locationAdapter';
 import { getLocationConsentState } from '@/lib/locationConsent';
 import { markerZIndex } from '@/lib/markerStacking';
 import { viewportSearchBias } from '@/lib/searchBias';
+import { usePopupClearOfOverlays } from '@/lib/popupClearance';
 import { useAbortableLoad } from '@/lib/useAbortableLoad';
 import { useFeatureDetailCard } from '@/lib/useFeatureDetailCard';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
@@ -57,7 +64,6 @@ import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   resolveMapCenter,
-  resolveMarkerStyle,
   shouldAutoLocate,
   type AutoCenterSkipReason,
   type LocationConsentState,
@@ -74,12 +80,7 @@ const AUTO_CENTER_TIMEOUT_MS = 2_000;
  * 좌표를 localStorage/sessionStorage/쿠키/서버 어디에도 남기지 않는다(§7). 탭을 새로 열면 초기화된다.
  */
 let autoCenterSession: { done: true; coord: { lon: number; lat: number } | null } | null = null;
-const CLUSTER_COLOR = '#37404a';
-const CLUSTER_MARKER_COLOR = 'cluster';
 const DEBOUNCE_MS = 250;
-// 탐색 지도 장소 마커 — 여행 지도 장소 마커와 같은 원 크기.
-const EXPLORE_MARKER_SIZE = 22;
-const EXPLORE_ICON_SIZE = 13;
 const VIEWPORT_CACHE_MAX = 32;
 const VIEWPORT_CACHE_TTL_MS = 60_000;
 /**
@@ -89,19 +90,7 @@ const VIEWPORT_CACHE_TTL_MS = 60_000;
  */
 const MIN_WEATHER_MARKER_ZOOM = 8;
 
-type MapPoint = ClusterPoint & {
-  kind: 'feature' | 'cluster';
-  color: string;
-  markerColor: string;
-  markerSource: string;
-  icon: string;
-  title: string;
-  lon: number;
-  lat: number;
-  category?: string | null;
-  featureId?: string;
-  count?: number;
-};
+type MapPoint = ExploreMapPoint;
 
 /** T-368 — feature가 아니라 `kor-travel-weather`의 location을 직접 노출한다. */
 /** 지도 재생성/언마운트 시 동일 이벤트 핸들러를 해제한다. */
@@ -127,49 +116,6 @@ type ViewportCacheEntry<T> = {
   data: T;
   cachedAt: number;
 };
-
-function toPoints(data: FeaturesInBoundsResponse): MapPoint[] {
-  // kor_travel_map 평면 lon/lat 은 nullable — point geometry 없는 feature 는 마커에서 제외.
-  const features: MapPoint[] = data.items.flatMap((f) => {
-    if (!f.coord) return [];
-    const style = resolveMarkerStyle({
-      upstreamColor: f.marker_color,
-      upstreamIcon: f.marker_icon,
-      upstreamCategory: f.category,
-      upstreamKind: f.kind,
-    });
-    return [
-      {
-        id: f.feature_id,
-        lngLat: [f.coord.lon, f.coord.lat] as [number, number],
-        kind: 'feature' as const,
-        color: style.hex,
-        markerColor: style.color,
-        markerSource: style.source,
-        icon: style.icon,
-        title: f.name,
-        lon: f.coord.lon,
-        lat: f.coord.lat,
-        category: style.category,
-        featureId: f.feature_id,
-      },
-    ];
-  });
-  const clusters: MapPoint[] = data.clusters.map((c) => ({
-    id: c.cluster_key,
-    lngLat: [c.coord.lon, c.coord.lat],
-    kind: 'cluster',
-    color: CLUSTER_COLOR,
-    markerColor: CLUSTER_MARKER_COLOR,
-    markerSource: 'cluster',
-    icon: 'circle',
-    title: `${c.feature_count}곳`,
-    lon: c.coord.lon,
-    lat: c.coord.lat,
-    count: c.feature_count,
-  }));
-  return [...features, ...clusters];
-}
 
 function rememberViewport<T>(cache: Map<string, ViewportCacheEntry<T>>, key: string, data: T) {
   if (cache.has(key)) cache.delete(key);
@@ -321,7 +267,7 @@ function useFeatureMapViewModel({
 
     const cached = cachedViewport(viewportCache.current, cacheKey);
     if (cached) {
-      setPoints(toPoints(cached));
+      setPoints(toExplorePoints(cached));
       setError(null);
       setLoading(false);
       setLoaded(true);
@@ -338,7 +284,7 @@ function useFeatureMapViewModel({
       );
       if (requestId !== latestRequest.current) return;
       rememberViewport(viewportCache.current, cacheKey, data);
-      setPoints(toPoints(data));
+      setPoints(toExplorePoints(data));
       setError(null);
       setLoaded(true);
     } catch (err) {
@@ -552,26 +498,9 @@ function useFeatureMapViewModel({
         }
         return;
       }
-      if (result.feature_id != null) {
-        const style = resolveMarkerStyle({
-          upstreamColor: result.marker_color,
-          upstreamIcon: result.marker_icon,
-          upstreamCategory: result.category,
-        });
-        setSelected({
-          id: result.feature_id,
-          lngLat: [coord.lon, coord.lat],
-          kind: 'feature',
-          color: style.hex,
-          markerColor: style.color,
-          markerSource: style.source,
-          icon: style.icon,
-          title: result.name,
-          lon: coord.lon,
-          lat: coord.lat,
-          category: style.category,
-          featureId: result.feature_id,
-        });
+      const searchPoint = explorePointFromSearch(result);
+      if (searchPoint) {
+        setSelected(searchPoint);
       } else {
         // 외부/주소 결과는 feature 상세가 없으므로 선택 해제하고 이동만 한다.
         setSelected(null);
@@ -735,6 +664,7 @@ function useFeatureMapViewModel({
     fetchInBounds,
     flyTo,
     geometry,
+    getMap,
     getSearchBias,
     handleContextMenu,
     handleMapLoad,
@@ -805,12 +735,19 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
   const shownLocation = myLocation.position ?? userLocation;
   // 모바일 상세 시트가 열려 있으면 지도 위 팝업은 같은 장소의 중복 표시다.
   const sheetOpen = mobileLayout && detailFeatureId != null;
+  // 지도 화면 상자 — 선택 popup이 피할 오버레이(`[data-map-overlay]`)를 이 안에서 찾는다.
+  const [frameEl, setFrameEl] = useState<HTMLDivElement | null>(null);
   return (
     // 높이는 셸이 흘려보낸다 — 바깥 래퍼까지 flex 사슬을 이어야 `h-full`이 실제로 해소된다
     // (사슬이 끊기면 content 높이로 붕괴한다, T-316 리뷰 P1).
+    // 전체 화면 지도(소유자 요청 2026-11-17 "지도도 전체화면으로"): 테두리·둥근 모서리·최소 높이 상자 없이
+    // 셸이 내준 자리를 지도가 다 쓰고, 검색·레이어·내 위치는 지도 위 오버레이다.
     <div className={`flex min-h-0 flex-col ${className ?? ''}`} data-testid="feature-map">
-      <div className="flex min-h-[360px] flex-1 flex-col overflow-hidden rounded-sm border border-hairline bg-canvas">
-        <div className="relative min-h-0 flex-1">
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden bg-canvas"
+        data-testid="feature-map-frame"
+      >
+        <div ref={setFrameEl} className="relative min-h-0 flex-1">
           <FeatureMapViewView0Part0 viewModel={viewModel} />
 
           {/* 지도는 상자를 **절대 위치로** 채운다 — 부모 높이가 min-height로만 정해지면 `h-full`이 풀리지
@@ -856,21 +793,14 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
                   const isSelected =
                     mapPoint.featureId != null && mapPoint.featureId === selected?.featureId;
                   if (mapPoint.kind === 'feature') {
-                    // 구글 지도식 원형 마커(여행 지도와 같은 모양). 탐색 지도는 장소가 많아 이름 라벨은
-                    // 붙이지 않고 hover 이름만 둔다.
+                    // 여행 지도 장소 마커와 같은 컴포넌트·모양(원 + 상자 없는 이름 라벨) — 소유자 요청
+                    // 2026-11-17 "탐색지도의 마커도 여행과 동일하게". 묶음 거품은 그대로다.
                     return (
-                      <CirclePlaceMarker
+                      <ExploreFeatureMarker
                         key={mapPoint.id}
-                        lngLat={mapPoint.lngLat}
-                        icon={<MakiIcon icon={mapPoint.icon} size={EXPLORE_ICON_SIZE} />}
-                        color={mapPoint.color}
-                        size={EXPLORE_MARKER_SIZE}
-                        title={mapPoint.title}
+                        point={mapPoint}
                         selected={isSelected}
-                        zIndex={markerZIndex(isSelected)}
-                        ariaLabel={mapPoint.title}
-                        interactionId={'feature:' + mapPoint.featureId}
-                        onClick={() => handlePointClick(mapPoint)}
+                        onSelect={handlePointClick}
                       />
                     );
                   }
@@ -924,10 +854,14 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
                 onSelect={openTransportDetail}
               />
               {shownLocation && <UserLocationMarker lngLat={shownLocation} />}
-              {selected && !sheetOpen && <FeatureMapViewView0Part1 viewModel={viewModel} />}
+              {selected && !sheetOpen && (
+                <FeatureMapViewView0Part1 viewModel={viewModel} overlayRoot={frameEl} />
+              )}
               {/* T-368 — weather marker는 feature가 아니므로 상세보기가 없다. 값은 marker 자체
                   (`selectedWeatherMarker`)에 이미 있어 선택 시 별도 fetch가 필요 없다. */}
-              {selectedWeatherMarker && <FeatureMapViewView0Part2 viewModel={viewModel} />}
+              {selectedWeatherMarker && (
+                <FeatureMapViewView0Part2 viewModel={viewModel} overlayRoot={frameEl} />
+              )}
             </VWorldMap>
           </div>
           <FeatureMapViewView0Part3 viewModel={viewModel} />
@@ -1015,13 +949,22 @@ function FeatureMapViewView0Part0({ viewModel }: { viewModel: FeatureMapViewView
   } = viewModel;
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
-      <div className="pointer-events-auto absolute left-3 top-3 w-72 max-w-[80vw]">
-        <MapSearchBox onSelect={handleSearchSelect} allowFeatureDetail getBias={getSearchBias} />
+      {/* 왼쪽 위 오버레이 스택(검색·상태·레이어). 폭은 오른쪽 위 확대/축소 버튼(≈40px) 자리를 남긴다 —
+          390px에서도 버튼과 겹치지 않는다. 스택 자체는 클릭을 통과시키고 카드만 받는다(빈 틈으로 지도를
+          끌 수 있게). `data-map-overlay`: 선택 popup이 이 스택을 덮지 않게 지도를 민다(popupClearance). */}
+      <div
+        className="pointer-events-none absolute left-2 top-2 flex w-80 max-w-[calc(100%-3.75rem)] flex-col sm:left-3 sm:top-3"
+        data-map-overlay=""
+        data-testid="feature-map-overlay-stack"
+      >
+        <div className="pointer-events-auto">
+          <MapSearchBox onSelect={handleSearchSelect} allowFeatureDetail getBias={getSearchBias} />
+        </div>
         {/* 상태는 상시 표가 아니라 **일이 생겼을 때만** 뜬다(DESIGN.md 상태 UI). */}
         {error ? (
           <p
             role="alert"
-            className="mt-1 flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-2 py-1.5 text-xs text-error-text shadow-card"
+            className="pointer-events-auto mt-1 flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-2 py-1.5 text-xs text-error-text shadow-card"
             data-testid="feature-map-error"
           >
             <span className="min-w-0">{error}</span>
@@ -1038,7 +981,7 @@ function FeatureMapViewView0Part0({ viewModel }: { viewModel: FeatureMapViewView
           </p>
         ) : loading ? (
           <p
-            className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
+            className="pointer-events-auto mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
             role="status"
             aria-busy="true"
             data-testid="feature-map-loading"
@@ -1047,7 +990,7 @@ function FeatureMapViewView0Part0({ viewModel }: { viewModel: FeatureMapViewView
           </p>
         ) : loaded && points.length === 0 ? (
           <p
-            className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
+            className="pointer-events-auto mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card"
             role="status"
             data-testid="feature-map-empty"
           >
@@ -1055,18 +998,22 @@ function FeatureMapViewView0Part0({ viewModel }: { viewModel: FeatureMapViewView
           </p>
         ) : null}
         {notice && (
-          <p className="mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card">
+          <p className="pointer-events-auto mt-1 rounded-sm bg-surface-soft px-2 py-1 text-xs text-body shadow-card">
             {notice}
           </p>
         )}
+        {/* 접을 수 있는 레이어 패널. 교통 돌발 목록이 길어도 지도 높이의 절반을 넘지 않고 안에서 스크롤한다. */}
         <MapLayerControls
           geometry={geometry}
           transport={transport}
           onOpenTransportDetail={openTransportDetail}
-          className="mt-1"
+          collapsible
+          className="pointer-events-auto mt-1 max-h-[50dvh] overflow-y-auto"
         />
       </div>
-      <MyLocationControl state={myLocation} className="absolute bottom-4 right-3" />
+      {/* 오른쪽 아래, 축척 막대·출처 표기(아래 ~80px) 위 — 여행 지도와 같은 자리(구글·네이버 지도의 내 위치 버튼).
+          전체 화면에서 bottom-4/10이면 축척 막대와 겹쳤다. */}
+      <MyLocationControl state={myLocation} className="absolute bottom-24 right-3" />
       {/* 자동 센터링 결정의 관측 창구. CI e2e에는 VWorld 키가 없어 실제 카메라를 볼 수 없으므로
                 결정 자체를 노출해야 검증된다. 좌표는 4자리로 절사해 원좌표를 DOM에 싣지 않는다. */}
       <div
@@ -1086,7 +1033,13 @@ function FeatureMapViewView0Part0({ viewModel }: { viewModel: FeatureMapViewView
   );
 }
 
-function FeatureMapViewView0Part1({ viewModel }: { viewModel: FeatureMapViewView0Model }) {
+interface PopupPartProps {
+  viewModel: FeatureMapViewView0Model;
+  /** 선택 popup이 피할 오버레이를 찾는 지도 화면 상자. */
+  overlayRoot: HTMLElement | null;
+}
+
+function FeatureMapViewView0Part1({ viewModel, overlayRoot }: PopupPartProps) {
   const {
     selected,
     setSelected,
@@ -1097,7 +1050,11 @@ function FeatureMapViewView0Part1({ viewModel }: { viewModel: FeatureMapViewView
     detailLoading,
     detailError,
     setDetailFeatureId,
+    getMap,
   } = viewModel;
+  // popup이 날씨·상세가 붙으며 자라 왼쪽 위 검색·레이어 패널을 덮으면 지도를 밀어 비킨다(NEAR-005 mobile).
+  const [content, setContent] = useState<HTMLDivElement | null>(null);
+  usePopupClearOfOverlays(getMap, content, overlayRoot);
   if (selected == null) return null;
   return (
     <Popup
@@ -1108,6 +1065,7 @@ function FeatureMapViewView0Part1({ viewModel }: { viewModel: FeatureMapViewView
       onClose={() => setSelected((current) => (current?.id === selected.id ? null : current))}
     >
       <div
+        ref={setContent}
         className="space-y-2"
         data-testid="feature-map-popup"
         data-feature-id={selected.featureId}
@@ -1164,8 +1122,10 @@ function FeatureMapViewView0Part1({ viewModel }: { viewModel: FeatureMapViewView
   );
 }
 
-function FeatureMapViewView0Part2({ viewModel }: { viewModel: FeatureMapViewView0Model }) {
-  const { selectedWeatherMarker, setSelectedWeatherMarker } = viewModel;
+function FeatureMapViewView0Part2({ viewModel, overlayRoot }: PopupPartProps) {
+  const { selectedWeatherMarker, setSelectedWeatherMarker, getMap } = viewModel;
+  const [content, setContent] = useState<HTMLDivElement | null>(null);
+  usePopupClearOfOverlays(getMap, content, overlayRoot);
   if (selectedWeatherMarker == null) return null;
   return (
     <Popup
@@ -1179,7 +1139,7 @@ function FeatureMapViewView0Part2({ viewModel }: { viewModel: FeatureMapViewView
         )
       }
     >
-      <div className="space-y-1">
+      <div ref={setContent} className="space-y-1">
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm font-semibold text-ink">{selectedWeatherMarker.title}</p>
           <button
@@ -1218,6 +1178,8 @@ function FeatureMapViewView0Part3({ viewModel }: { viewModel: FeatureMapViewView
           data-marker-hex={point.color}
           data-marker-icon={point.icon}
           data-marker-source={point.markerSource}
+          data-marker-size={point.kind === 'feature' ? EXPLORE_MARKER_SIZE : ''}
+          data-marker-label={point.kind === 'feature' ? 'true' : 'false'}
           data-marker-selected={
             point.kind === 'feature' && point.featureId === selected?.featureId ? 'true' : 'false'
           }

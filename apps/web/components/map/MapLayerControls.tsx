@@ -2,6 +2,8 @@
 
 import type { FeatureGeometryState } from '@/lib/useFeatureGeometry';
 import type { TransportDetailTarget, TransportLayersState } from '@/lib/useTransportLayers';
+import { ChevronUp, Layers } from 'lucide-react';
+import { useId, useState } from 'react';
 import { GeometryLayerStatus, GeometryLayerToggles } from './FeatureGeometryLayer';
 import { TransportLayerStatus, TransportLayerToggles } from './TransportLayerControls';
 
@@ -13,6 +15,11 @@ export interface MapLayerControlsProps {
   onOpenTransportDetail: (target: TransportDetailTarget) => void;
   /** 교통 돌발 목록을 접어 둔다(여행 지도, #729). */
   collapseIncidents?: boolean;
+  /**
+   * 패널 전체를 접을 수 있게 한다(전체 화면 탐색 지도). 처음에는 펼쳐 둔다 — 접으면 '레이어' 버튼 하나만 남고
+   * 켠 레이어는 그대로 지도에 그려진다.
+   */
+  collapsible?: boolean;
   className?: string;
 }
 
@@ -28,21 +35,68 @@ export function MapLayerControls({
   transport,
   onOpenTransportDetail,
   collapseIncidents = false,
+  collapsible = false,
   className = '',
 }: MapLayerControlsProps) {
+  const [collapsed, setCollapsed] = useState(false);
+  const bodyId = useId();
   const showTransport = transport?.visible === true;
   if (!geometry && !showTransport) return null;
+  if (collapsible && collapsed) {
+    return (
+      <section
+        aria-label="지도 레이어"
+        data-map-overlay=""
+        data-testid="map-layer-controls"
+        data-collapsed="true"
+        className={`w-fit ${className}`}
+      >
+        <button
+          type="button"
+          aria-expanded={false}
+          onClick={() => setCollapsed(false)}
+          data-testid="map-layer-controls-toggle"
+          className="focus-ring flex min-h-11 items-center gap-1.5 rounded-sm border border-hairline bg-canvas px-3 text-xs font-semibold text-ink shadow-card hover:bg-surface-soft"
+        >
+          <Layers className="size-4" aria-hidden="true" />
+          레이어
+        </button>
+      </section>
+    );
+  }
   return (
     <section
       aria-label="지도 레이어"
       data-map-overlay=""
       data-map-fit-panel=""
       data-testid="map-layer-controls"
+      data-collapsed={collapsible ? 'false' : undefined}
       className={`rounded-sm border border-hairline bg-canvas p-2 text-xs text-ink shadow-card ${className}`}
     >
-      <div className="flex flex-wrap gap-x-3" role="group" aria-label="지도 레이어 표시">
-        {geometry && <GeometryLayerToggles state={geometry} />}
-        {transport && showTransport && <TransportLayerToggles state={transport} />}
+      <div className="flex items-start gap-1">
+        <div
+          id={bodyId}
+          className="flex min-w-0 flex-1 flex-wrap gap-x-3"
+          role="group"
+          aria-label="지도 레이어 표시"
+        >
+          {geometry && <GeometryLayerToggles state={geometry} />}
+          {transport && showTransport && <TransportLayerToggles state={transport} />}
+        </div>
+        {collapsible && (
+          <button
+            type="button"
+            aria-expanded={true}
+            aria-controls={bodyId}
+            aria-label="지도 레이어 접기"
+            title="지도 레이어 접기"
+            onClick={() => setCollapsed(true)}
+            data-testid="map-layer-controls-toggle"
+            className="focus-ring -my-1 -mr-1 flex size-11 shrink-0 items-center justify-center rounded-sm text-muted hover:bg-surface-soft hover:text-ink"
+          >
+            <ChevronUp className="size-4" aria-hidden="true" />
+          </button>
+        )}
       </div>
       {geometry && <GeometryLayerStatus state={geometry} />}
       {transport && showTransport && (

@@ -59,6 +59,11 @@ function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/** 전체 화면 지도 셸을 쓰는 경로 — 탐색 지도 `/map` 하나(하위 경로 없음). */
+function isExploreMapPath(pathname: string): boolean {
+  return pathname === '/map' || pathname === '/map/';
+}
+
 function navTestId(href: string): string {
   return `app-nav-${href.replace(/[^a-z0-9]+/gi, '-')}`;
 }
@@ -86,6 +91,10 @@ function useAppShellModel({ children }: { children: ReactNode }) {
   // lg: 접두는 SSR 첫 페인트(mobileWebLayout=false)에서 좁은 화면의 페이지 스크롤을 막지 않게 한다.
   // 바닥(min-h)보다 낮은 창에서는 잘라내지 않고 문서가 스크롤된다.
   const desktopTripDetail = !mobileWebLayout && tripDetailRoute;
+  // 탐색 지도(/map)는 전체 화면 지도다(소유자 요청 2026-11-17 "지도도 전체화면으로") — 셸을 창 높이에 고정하고
+  // 본문 여백을 없애 지도가 남은 자리를 다 쓴다. 상단 바는 데스크톱에서만 얇게 두고, 모바일에서는 숨겨
+  // (이동은 하단 탭바가 맡는다) 지도 몫을 최대로 한다. 모바일/데스크톱 전환은 CSS가 1차라 SSR 첫 페인트도 같다.
+  const exploreMapRoute = isExploreMapPath(pathname);
   const secondaryActive = MOBILE_SECONDARY.some((item) => isActivePath(pathname, item.href));
 
   // 라우트가 바뀌면 시트를 닫는다 — 네이티브 <details>는 클라이언트 네비게이션 후에도 열린 채 남았다.
@@ -100,6 +109,7 @@ function useAppShellModel({ children }: { children: ReactNode }) {
     renderBranch: 'render0' as const,
     children,
     desktopTripDetail,
+    exploreMapRoute,
     mobileTripDetail,
     mobileWebLayout,
     moreOpen,
@@ -115,6 +125,7 @@ function AppShellView0({ viewModel }: { viewModel: AppShellView0Model }) {
   const {
     children,
     desktopTripDetail,
+    exploreMapRoute,
     mobileTripDetail,
     mobileWebLayout,
     moreOpen,
@@ -126,17 +137,30 @@ function AppShellView0({ viewModel }: { viewModel: AppShellView0Model }) {
   return (
     <div
       className={
-        desktopTripDetail
-          ? 'flex min-h-dvh flex-col bg-canvas lg:h-dvh lg:min-h-[560px]'
-          : 'flex min-h-dvh flex-col bg-canvas'
+        exploreMapRoute
+          ? 'flex h-dvh flex-col overflow-hidden bg-canvas'
+          : desktopTripDetail
+            ? 'flex min-h-dvh flex-col bg-canvas lg:h-dvh lg:min-h-[560px]'
+            : 'flex min-h-dvh flex-col bg-canvas'
       }
+      data-explore-map={exploreMapRoute ? 'on' : undefined}
       // 셸의 모바일/데스크톱 전환은 CSS(lg)가 1차, 이 속성이 넓은 layout viewport를 쓰는 폰을 보정한다.
       data-mobile-layout={mobileWebLayout ? 'on' : 'off'}
     >
       <SkipToContentLink />
       {!mobileTripDetail && (
-        <header className="border-b border-hairline bg-canvas">
-          <div className="flex w-full items-center justify-between gap-3 px-4 py-3 md:px-6">
+        <header
+          className={
+            exploreMapRoute
+              ? 'app-shell-map-header hidden shrink-0 border-b border-hairline bg-canvas lg:block'
+              : 'border-b border-hairline bg-canvas'
+          }
+        >
+          <div
+            className={`flex w-full items-center justify-between gap-3 px-4 md:px-6 ${
+              exploreMapRoute ? 'py-1' : 'py-3'
+            }`}
+          >
             {/* 로고 = 개인 홈. 로그인하지 않았으면 /home의 401이 로그인 화면으로 보낸다. */}
             <Wordmark href="/home" />
             {/* 데스크톱: 가로 탭. 모바일에서는 하단 탭바가 대신하므로 숨긴다(가로 스크롤 nav 폐기). */}
@@ -176,9 +200,12 @@ function AppShellView0({ viewModel }: { viewModel: AppShellView0Model }) {
         className={
           mobileTripDetail
             ? 'flex min-h-0 w-full flex-1 flex-col'
-            : // 하단 패딩은 `.app-shell-main`이 소유한다 — `py-*` 유틸과 겹치면 md 변형이 이를 덮어
-              // 768~1023px에서 고정 탭바가 콘텐츠를 가린다(T-314 리뷰 P1).
-              'app-shell-main flex min-h-0 w-full flex-1 flex-col px-4 pt-6 md:px-6 md:pt-8'
+            : exploreMapRoute
+              ? // 여백 없이 지도가 꽉 찬다. 하단 패딩(모바일 탭바 자리)은 `.app-shell-main-map`이 소유한다.
+                'app-shell-main-map flex min-h-0 w-full flex-1 flex-col'
+              : // 하단 패딩은 `.app-shell-main`이 소유한다 — `py-*` 유틸과 겹치면 md 변형이 이를 덮어
+                // 768~1023px에서 고정 탭바가 콘텐츠를 가린다(T-314 리뷰 P1).
+                'app-shell-main flex min-h-0 w-full flex-1 flex-col px-4 pt-6 md:px-6 md:pt-8'
         }
       >
         {children}

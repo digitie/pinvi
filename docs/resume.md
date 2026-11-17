@@ -1,3 +1,9 @@
+## 탐색 지도 전체 화면 + 여행 지도 마커 (2026-11-17)
+
+PR claude feat/explore-map-trip-markers-fullscreen: `/map` 전체 화면(셸 분기, 오버레이·접는 레이어 패널) + 장소 마커 = 여행 지도 마커(원+이름 라벨),
+popup이 오버레이를 덮으면 지도를 비킨다(NEAR-005 원인 수정).
+다음: 배포 뒤 live CORE-048~050 실행, NEAR-005의 popup 닫기 우회는 CORE-050 통과 확인 후 걷어낼지 결정.
+
 ## 공통화 재조사 포인터 (2026-11-17)
 
 문서 전용(브랜치 `docs/commonization-plan-20261117`). Common 공통화 재조사 계획의 PinVi 소유 task는 `T-383`이 추적한다(→ Common `T-424` guard 호출 SHA 갱신, `T-484a` ETL 재시도 sensor 5→1).
