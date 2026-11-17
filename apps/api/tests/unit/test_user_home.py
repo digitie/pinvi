@@ -23,6 +23,7 @@ def _trip(title: str, start: date | None, end: date | None, **kw: object) -> Hom
         start_date=start,
         end_date=end,
         updated_at=kw.get("updated_at", STAMP),  # type: ignore[arg-type]
+        joined=bool(kw.get("joined", False)),
     )
 
 
@@ -162,3 +163,21 @@ def test_summarize_home_empty_user() -> None:
     assert home.next_trip is None
     assert home.stats.trip_count == 0 and home.stats.travel_day_count == 0
     assert home.upcoming_trips == [] and home.recent_trips == [] and home.regions == []
+
+
+def test_summarize_home_marks_joined_trips() -> None:
+    mine = _trip("내 여행", date(2026, 11, 20), date(2026, 11, 21))
+    joined = _trip("친구 여행", date(2026, 10, 1), date(2026, 10, 2), joined=True)
+    home = summarize_home(
+        today=TODAY,
+        trips=[mine, joined],
+        place_counts={},
+        visited=[_poi(joined, date(2026, 10, 1), "동행 장소", feature_id="f-9")],
+    )
+    # 동행 여행도 다녀온 여행·여행한 날·다녀온 장소에 들어간다.
+    assert home.stats.trip_count == 2
+    assert home.stats.completed_trip_count == 1
+    assert home.stats.travel_day_count == 2
+    assert home.stats.visited_place_count == 1
+    assert home.next_trip is not None and home.next_trip.joined is False
+    assert [(t.title, t.joined) for t in home.recent_trips] == [("친구 여행", True)]

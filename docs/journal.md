@@ -16,6 +16,12 @@ PROVENANCE·manifest·lock을 맞췄다(core tgz는 같은 실행의 pack과 byt
 - `typecheck`가 `tests/tsconfig.json`(DOM lib)도 본다. CI는 `mobile-typecheck` job(Aggregate 필수)에 `test` 단계를 더했다 —
   새 job을 만들면 aggregate-ci.yml을 고쳐야 하고 그러면 API·ETL 전 suite가 함께 돈다.
 - 첫 시험: `cameraBbox`(순수), 탐색 지도 교통 칩(상태 조회 → 칩 → 켠 레이어만 markers-in-bounds).
+## 2026-11-17 — 개인 홈 후속(소유자 결정 1~3)
+
+- 동행 여행: 홈 범위 = 소유 + `trip_companions.user_id`가 나인 여행(여행 접근 권한과 같은 기준), IN 하위 질의라 중복 없음. 카드 `joined` → '동행' 표시.
+- 로그인 기본 목적지 `/trips` → `/home`(`DEFAULT_LOGIN_LANDING`). 명시한 `next=`가 이긴다. profile-complete도 `/home`.
+- 모바일 하단 탭: 홈·여행·추천·지도·더보기 5칸(320px에서 칸당 64px·높이 56px), 파일은 더보기.
+- live 헬퍼 `loginWithUserForm`은 /home·/trips 둘 다 받고 /trips로 옮겨 이후 케이스의 출발점을 유지한다. CORE-001 기대값은 /home. CORE-036(탭바)·CORE-037(동행) 추가, 배포 뒤 실행.
 
 ## 2026-11-16 (claude) — 추천 여행에 주변 축제·큐레이션 표시 (브랜치 `feat/recommend-curated-events`)
 

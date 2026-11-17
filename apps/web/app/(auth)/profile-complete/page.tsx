@@ -3,6 +3,7 @@
 import { FormField } from '@/components/forms/FormField';
 import { buttonClassName } from '@/components/ui/button-styles';
 import { CONSENT_LEGAL_SLUG } from '@/lib/legalDocs';
+import { DEFAULT_LOGIN_LANDING } from '@/lib/loginReturnTo';
 import { ApiClient, ApiError } from '@pinvi/api-client';
 import { validateForm, type FieldErrors } from '@pinvi/domain';
 import type { ConsentType } from '@pinvi/schemas';
@@ -90,7 +91,7 @@ export default function ProfileCompletePage() {
         body: JSON.stringify(result.data),
         schema: z.array(z.unknown()),
       });
-      router.push('/trips');
+      router.push(DEFAULT_LOGIN_LANDING);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '오류가 발생했습니다.');
     } finally {

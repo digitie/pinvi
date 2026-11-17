@@ -275,7 +275,8 @@ async function login(page: Page) {
     ]);
   }
   expect(loginResponse.ok(), `login HTTP ${loginResponse.status()}`).toBe(true);
-  await expect(page).toHaveURL(/\/trips(?:[?#].*)?$/);
+  // 로그인 기본 목적지 = 개인 홈(/home).
+  await expect(page).toHaveURL(/\/home(?:[?#].*)?$/);
 }
 
 async function createTrip(page: Page, title: string) {

@@ -29,7 +29,8 @@ async function login(page: Page) {
   await page.getByTestId('login-email').fill(liveEmail!);
   await page.getByTestId('login-password').fill(livePassword!);
   await page.getByTestId('login-submit').click();
-  await expect(page).toHaveURL(/\/trips(?:[?#].*)?$/);
+  // 로그인 기본 목적지 = 개인 홈(/home).
+  await expect(page).toHaveURL(/\/home(?:[?#].*)?$/);
 }
 
 async function createTrip(page: Page, title: string) {

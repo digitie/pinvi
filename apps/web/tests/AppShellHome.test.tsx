@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AnchorHTMLAttributes } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppShell } from '@/components/app/AppShell';
 
@@ -32,13 +32,24 @@ describe('앱 셸 — 로고·홈은 개인 홈으로', () => {
     expect(screen.getByTestId('app-nav--trips')).not.toHaveAttribute('aria-current');
   });
 
-  it('모바일 더보기의 홈은 셸 안 목적지라 이동 안내를 붙이지 않는다', async () => {
+  it('모바일 하단 탭바는 홈이 첫 탭이고 파일은 더보기로 간다', async () => {
     state.mobile = true;
     render(<AppShell>본문</AppShell>);
+    const tabbar = screen.getByRole('navigation', { name: '주요 메뉴' });
+    const tabs = within(tabbar).getAllByRole('listitem');
+    // 4개 목적지 + 더보기 = 5칸.
+    expect(tabs).toHaveLength(5);
+    expect(within(tabs[0]!).getByRole('link')).toHaveAttribute('href', '/home');
+    expect(tabs.map((tab) => tab.textContent?.trim())).toEqual([
+      '홈',
+      '여행',
+      '추천',
+      '지도',
+      '더보기',
+    ]);
     await userEvent.setup().click(screen.getByTestId('app-nav-more-toggle'));
-    const homeLink = screen.getByTestId('app-nav--home-mobile');
-    expect(homeLink).toHaveAttribute('href', '/home');
-    expect(homeLink).not.toHaveTextContent('앱 메뉴 밖으로 이동');
+    expect(screen.getByTestId('app-nav--files-mobile')).toHaveAttribute('href', '/files');
+    expect(screen.queryAllByTestId('app-nav--home-mobile')).toHaveLength(1);
     expect(screen.getByTestId('app-nav--profile-mobile')).toHaveTextContent('앱 메뉴 밖으로 이동');
   });
 });

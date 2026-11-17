@@ -42,7 +42,9 @@ async function login(page: Page) {
   await page.getByTestId('login-email').fill(liveEmail!);
   await page.getByTestId('login-password').fill(livePassword!);
   await page.getByTestId('login-submit').click();
-  await expect(page).toHaveURL(/\/trips(?:[?#].*)?$/);
+  // 로그인 기본 목적지 = 개인 홈(/home). 이 시나리오는 여행 목록에서 시작한다.
+  await expect(page).toHaveURL(/\/home(?:[?#].*)?$/);
+  await page.goto('/trips');
 }
 
 async function createTrip(page: Page, title: string) {

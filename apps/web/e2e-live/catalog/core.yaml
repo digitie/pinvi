@@ -1,5 +1,5 @@
 # CORE — auth/session · map interaction · mobile UX · resilience · a11y · perf · i18n
-# Target: PinVi prod (origin/main b1cef056 or newer). 43 cases, 42 scripted (CORE-005 manual).
+# Target: PinVi prod (origin/main b1cef056 or newer). 45 cases, 44 scripted (CORE-005 manual).
 # Selectors verified against origin/main unless a case says `selector unverified against origin/main`.
 
 - id: CORE-001
@@ -13,7 +13,7 @@
     - /login 진입 → 제출 버튼이 활성화될 때까지 대기(서버 HTML은 disabled, hydration 후 enabled)
     - 이메일·비밀번호 입력 → '로그인' 클릭
   expected:
-    - URL /trips, h1 '여행' 표시
+    - URL /home(개인 홈, 2026-11-17 로그인 기본 목적지 변경), h1 '내 여행' 표시 — 명시한 next=는 CORE-007
     - 콘솔에 hydration mismatch 오류 없음
     - 네이티브 폼 제출(입력 초기화·/login 재로드) 없음
   cleanup: [없음(세션만)]
@@ -675,7 +675,7 @@
     - env: PinVi ≥ #748 deployed
   data_sources: []
   steps:
-    - 로그인 → /map → 데스크톱 app-nav--home / 모바일 더보기 → app-nav--home-mobile
+    - 로그인 → /map → 데스크톱 app-nav--home / 모바일 하단 첫 탭 app-nav--home-mobile
     - '/' 진입 → masthead '내 홈'(landing-my-home) 클릭
   expected:
     - 두 경로 모두 URL /home + 통계 렌더, 데스크톱 홈 탭 aria-current=page
@@ -720,3 +720,39 @@
   automation: scripted
   spec: specs/core/core-home.live.spec.ts#CORE-035
   notes: 정의는 apps/api/app/services/user_home.py — 다녀온 = 날짜 기준(종료일 < 오늘 KST), 장소 = 실제 날짜 ≤ 오늘인 일자의 장소. pending deploy.
+
+- id: CORE-036
+  title: 모바일 하단 탭바 — 홈이 첫 탭, 홈·여행·추천·지도·더보기 5칸이 320·390px에서 44px 이상, 파일은 더보기
+  priority: P2
+  tags: [mobile, home, a11y]
+  preconditions:
+    - account: test@test.com
+    - env: PinVi ≥ 개인 홈 후속 PR(feat/home-followups) deployed
+  data_sources: []
+  steps:
+    - 로그인 → 390·320px에서 /trips → nav '주요 메뉴' 칸 측정 → 더보기 → 파일
+  expected:
+    - 5칸 순서 홈·여행·추천·지도·더보기, 각 링크·버튼 44×44 이상, 가로 넘침 0
+    - 더보기의 app-nav--files-mobile → /files
+  cleanup: [없음]
+  automation: scripted
+  spec: specs/core/core-home.live.spec.ts#CORE-036
+  notes: pending deploy.
+
+- id: CORE-037
+  title: 동행으로 참여한 여행이 개인 홈 통계·최근 여행에 '동행' 표시로 보인다
+  priority: P2
+  tags: [desktop, mutating, home, share]
+  preconditions:
+    - account: test@test.com(소유자) + test2(PINVI_E2E_USER2_*, 동행)
+    - env: PinVi ≥ 개인 홈 후속 PR(feat/home-followups) deployed
+  data_sources: []
+  steps:
+    - test2 GET /users/me/home(전) → test가 '[e2e] CORE-037' 지난 여행 생성 → POST members(test2, viewer) → test2 GET(후) → test2 /home
+  expected:
+    - test2의 trip_count·completed_trip_count +1
+    - home-recent의 그 여행 행에 home-trip-joined '동행'
+  cleanup: [여행 삭제]
+  automation: scripted
+  spec: specs/core/core-home.live.spec.ts#CORE-037
+  notes: 범위 = 소유 + trip_companions.user_id가 나인 여행(접근 권한과 같은 기준), 중복은 한 번. pending deploy.

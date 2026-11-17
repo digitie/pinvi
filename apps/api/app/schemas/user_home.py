@@ -23,6 +23,8 @@ class HomeTripCard(BaseModel):
     # 시작까지 남은 날(예정 여행만, 오늘 기준 KST).
     days_until: int | None
     place_count: int
+    # 동행으로 참여한 여행(소유자가 아님) — 목록의 '동행' 표시.
+    joined: bool = False
 
 
 class HomeVisitedPlace(BaseModel):

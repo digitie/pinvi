@@ -324,7 +324,7 @@ Cookie: pinvi_access=...
 ```
 
 로그인 사용자의 홈 화면(`/home` — 로고·'홈' 메뉴의 목적지) 한 번에 필요한 집계. 미로그인은 401.
-범위는 `/trips` 목록과 같다(내가 소유한 휴지통 밖 여행). 오늘 = KST 날짜. 구현 `app/services/user_home.py`.
+범위는 휴지통 밖의 내가 소유한 여행 + 동행으로 참여한 여행(`trip_companions.user_id`가 나 — 여행 접근 권한과 같은 기준)이고, 둘 다인 여행은 한 번만 센다. 여행 카드의 `joined`가 true면 동행 여행이다(화면의 '동행' 표시). 오늘 = KST 날짜. 구현 `app/services/user_home.py`.
 
 | 필드 | 정의 |
 |---|---|

@@ -264,8 +264,14 @@ async function loginWithUserForm(page: Page, email: string, password: string, op
   if (res && res.status() >= 400) {
     throw new Error(`로그인 실패: POST /auth/login → HTTP ${res.status()} (계정/비밀번호/이메일 인증 상태 확인)`);
   }
-  await expect(page).toHaveURL(/\/trips(?:[?#].*)?$/, { timeout: 30_000 });
+  // 로그인 기본 목적지는 개인 홈(/home, #748 후속). 배포 전 prod는 /trips라 둘 다 받는다.
+  await expect(page).toHaveURL(/\/(?:home|trips)(?:[?#].*)?$/, { timeout: 30_000 });
   await rememberSession(page, email);
+  // 이후 케이스는 로그인 직후 여행 목록에 있다고 가정한다(세션 재사용 경로와 같은 출발점).
+  if (!/\/trips(?:[?#].*)?$/.test(page.url())) {
+    await page.goto('/trips');
+    await expect(page.getByRole('heading', { name: '여행', exact: true })).toBeVisible({ timeout: 20_000 });
+  }
 }
 
 /** Generic user login (second identity, ad-hoc contexts). Credentials are passed in, never logged. */

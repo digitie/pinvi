@@ -14,6 +14,8 @@ export const HomeTripCardSchema = z.object({
   phase: HomeTripPhaseSchema,
   days_until: z.number().int().nullable(),
   place_count: z.number().int().nonnegative(),
+  // 동행으로 참여한 여행(소유자가 아님). 이전 API 응답에는 없어 기본 false.
+  joined: z.boolean().default(false),
 });
 export type HomeTripCard = z.infer<typeof HomeTripCardSchema>;
 

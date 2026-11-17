@@ -160,3 +160,25 @@ test('목록 로드 실패는 라이브 리전으로 알리고 회복 행동을 
   await expect(panel.getByRole('button', { name: '다시 시도' })).toBeVisible();
   await expect(page.getByTestId('trips-error')).toHaveCount(0);
 });
+
+test.describe('320px 하단 탭바', () => {
+  test.use({ viewport: { width: 320, height: 700 } });
+
+  test('홈이 첫 탭이고 5칸 모두 44px 이상, 가로 넘침 없음', async ({ page }) => {
+    await mockTripList(page, 1);
+    await page.goto('/trips');
+    const cells = page.locator('nav[aria-label="주요 메뉴"] > ul > li');
+    await expect(cells).toHaveCount(5);
+    await expect(cells).toHaveText([/홈/, /여행/, /추천/, /지도/, /더보기/]);
+    for (let i = 0; i < 5; i += 1) {
+      const box = await cells.nth(i).locator('a, button').first().boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+});

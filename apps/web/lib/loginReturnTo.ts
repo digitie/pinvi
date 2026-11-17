@@ -1,3 +1,9 @@
+/**
+ * 로그인 뒤 기본 목적지 — 개인 홈. 명시한 `next=` 복귀 경로가 있으면 그쪽이 이긴다.
+ * 복귀 경로가 안전하지 않거나 없을 때도 여기로 간다.
+ */
+export const DEFAULT_LOGIN_LANDING = '/home';
+
 /** OAuth 로그인 상태가 복귀 경로를 저장하는 컬럼 길이(`return_to_path` varchar(255)). */
 export const LOGIN_RETURN_TO_MAX_LENGTH = 255;
 
@@ -45,21 +51,21 @@ export function sharedLoginHref(tripId: string): string {
 
 /** 로그인 복귀는 같은 출처의 앱 경로만 허용하고, 공유·저장소 토큰과 비밀 query는 지운다. */
 export function safeLoginReturnTo(value: string | null): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//') || /[\\\u0000- ]/.test(value)) return '/trips';
+  if (!value || !value.startsWith('/') || value.startsWith('//') || /[\\\u0000- ]/.test(value)) return DEFAULT_LOGIN_LANDING;
   try {
     const base = 'https://pinvi.example.com';
     const url = new URL(value, base);
-    if (url.origin !== base || url.pathname.includes('//') || /^\/(?:admin|login|register)(?:\/|$)/.test(url.pathname)) return '/trips';
-    if (STORAGE_PATH_RE.test(url.pathname)) return '/trips';
+    if (url.origin !== base || url.pathname.includes('//') || /^\/(?:admin|login|register)(?:\/|$)/.test(url.pathname)) return DEFAULT_LOGIN_LANDING;
+    if (STORAGE_PATH_RE.test(url.pathname)) return DEFAULT_LOGIN_LANDING;
     const shared = SHARED_PATH_RE.exec(url.pathname);
     // 공유 화면은 tripId까지만 — 토큰 segment·query·hash는 버린다.
-    if (shared) return `/shared/${shared[1]}`.length <= LOGIN_RETURN_TO_MAX_LENGTH ? `/shared/${shared[1]}` : '/trips';
+    if (shared) return `/shared/${shared[1]}`.length <= LOGIN_RETURN_TO_MAX_LENGTH ? `/shared/${shared[1]}` : DEFAULT_LOGIN_LANDING;
     // 비밀 query가 있을 때만 다시 쓴다(다시 쓰면 나머지 query의 인코딩이 바뀐다).
     const secretNames = [...url.searchParams.keys()].filter((name) => SECRET_QUERY_KEYS.has(name.toLowerCase()));
     for (const name of secretNames) url.searchParams.delete(name);
     const full = url.pathname + url.search + url.hash;
     if (full.length <= LOGIN_RETURN_TO_MAX_LENGTH) return full;
     // 긴 검색어·hash는 버리고 화면 경로만 살린다 — 서버 계약(255자)을 넘기면 OAuth 시작이 거부된다.
-    return url.pathname.length <= LOGIN_RETURN_TO_MAX_LENGTH ? url.pathname : '/trips';
-  } catch { return '/trips'; }
+    return url.pathname.length <= LOGIN_RETURN_TO_MAX_LENGTH ? url.pathname : DEFAULT_LOGIN_LANDING;
+  } catch { return DEFAULT_LOGIN_LANDING; }
 }
