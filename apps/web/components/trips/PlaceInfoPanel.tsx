@@ -10,7 +10,14 @@ import {
   type PlaceDetailsState,
 } from '@/lib/usePlaceDetails';
 import { useMinuteNow, usePoiWeather } from '@/lib/usePoiWeather';
-import { activeAlerts, kstDateKey, type WeatherAlert } from '@pinvi/domain';
+import {
+  activeAlerts,
+  hasAnyPlaceDetail,
+  placeDetailsSourceLine,
+  telHref,
+  todayHoursLine,
+  type WeatherAlert,
+} from '@pinvi/domain';
 import { featureResolutionNotice } from '@pinvi/domain';
 import type { PoiPlaceDetails, TripViewPoi } from '@pinvi/schemas';
 import {
@@ -30,10 +37,6 @@ import {
 } from 'lucide-react';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 
-const SOURCE_LABELS: Record<string, string> = {
-  kor_travel_map: '공공데이터(한국 여행 지도)',
-};
-const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 const LINK_CLASS = 'break-all text-primary underline-offset-2 hover:underline';
 
 type SectionKey = 'weather' | 'hours' | 'memo' | 'links' | 'maps';
@@ -44,36 +47,6 @@ interface SectionDef {
   icon: ReactNode;
   badge?: ReactNode;
   content: ReactNode;
-}
-
-function todayHoursLine(hours: string[], now: number): string | null {
-  if (hours.length === 0) return null;
-  if (hours.length === 1) return hours[0]!;
-  const weekday = WEEKDAYS[new Date(Date.parse(`${kstDateKey(now)}T00:00:00Z`)).getUTCDay()]!;
-  return hours.find((line) => line.startsWith(weekday)) ?? null;
-}
-
-function hasAnyDetail(details: PoiPlaceDetails | null): details is PoiPlaceDetails {
-  return (
-    details != null &&
-    (details.opening_hours.length > 0 ||
-      details.closed_days != null ||
-      details.phone != null ||
-      details.website != null)
-  );
-}
-
-function sourceLine(details: PoiPlaceDetails | null): string {
-  if (!details) return '';
-  const sources = Array.from(
-    new Set(Object.values(details.sources).map((key) => SOURCE_LABELS[key] ?? key)),
-  );
-  return [
-    sources.length > 0 ? `출처: ${sources.join(', ')}` : null,
-    details.fetched_at ? `${kstDateKey(Date.parse(details.fetched_at))} 확인` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
 }
 
 function DetailRow({ label, children }: { label: string; children: ReactNode }) {
@@ -105,7 +78,7 @@ function DetailsList({ details }: { details: PoiPlaceDetails }) {
       {details.phone && (
         <DetailRow label="전화">
           <a
-            href={`tel:${details.phone.replace(/[^0-9+]/g, '')}`}
+            href={telHref(details.phone)}
             className={`inline-flex items-center gap-1 ${LINK_CLASS}`}
             data-testid="place-info-phone"
           >
@@ -170,7 +143,7 @@ function KakaoPhone({ tripId, poiId }: { tripId: string; poiId: string }) {
       <p className="text-xs font-semibold text-muted">전화 (카카오)</p>
       <p className="flex flex-wrap items-center gap-x-2 text-body">
         <a
-          href={`tel:${match.phone.replace(/[^0-9+]/g, '')}`}
+          href={telHref(match.phone)}
           className={`inline-flex items-center gap-1 ${LINK_CLASS}`}
           data-testid="place-info-kakao-phone-number"
         >
@@ -217,7 +190,7 @@ function HoursContent({
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> 불러오는 중
       </p>
     );
-  } else if (hasAnyDetail(details)) {
+  } else if (hasAnyPlaceDetail(details)) {
     body = <DetailsList details={details} />;
   } else {
     body = (
@@ -232,7 +205,7 @@ function HoursContent({
       {needsKakaoPhone && <KakaoPhone tripId={tripId} poiId={poiId} />}
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
         <span className="min-w-0 flex-1" data-testid="place-info-hours-source">
-          {sourceLine(details)}
+          {placeDetailsSourceLine(details)}
         </span>
         <button
           type="button"

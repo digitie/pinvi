@@ -1,7 +1,8 @@
 'use client';
 
 import { apiClient } from '@/lib/api';
-import { ApiError, poiApi } from '@pinvi/api-client';
+import { poiApi } from '@pinvi/api-client';
+import { placeDetailsRefreshErrorMessage } from '@pinvi/domain';
 import type { ExternalEnrichment, PoiPlaceDetails } from '@pinvi/schemas';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -16,16 +17,7 @@ export type PlaceDetailsRefreshState =
   | { status: 'done' }
   | { status: 'error'; message: string };
 
-function refreshErrorMessage(error: unknown): string {
-  if (error instanceof ApiError && error.status === 429) {
-    const wait = error.retryAfterSeconds ?? null;
-    return wait ? `${wait}초 뒤에 다시 읽어올 수 있습니다.` : '잠시 뒤에 다시 읽어올 수 있습니다.';
-  }
-  if (error instanceof ApiError && error.status === 403) {
-    return '이 여행을 편집할 수 있는 사람만 다시 읽어올 수 있습니다.';
-  }
-  return '장소 정보를 다시 읽어오지 못했습니다. 잠시 뒤 다시 시도해 주세요.';
-}
+const refreshErrorMessage = placeDetailsRefreshErrorMessage;
 
 /**
  * 장소 영업 정보(`GET …/place-details`) — 처음 쓸 때 한 번 받는다. 실패는 조용히 빈 상태다.

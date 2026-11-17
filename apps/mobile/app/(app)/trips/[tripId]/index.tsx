@@ -4,8 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@pinvi/api-client';
-import { friendlyErrorText, placeWeatherCards, tripDaysToMapPoints } from '@pinvi/domain';
+import {
+  canEditTrip,
+  friendlyErrorText,
+  placeWeatherCards,
+  tripDaysToMapPoints,
+} from '@pinvi/domain';
 import { api } from '../../../../lib/api';
+import { useAuth } from '../../../../lib/auth';
 import { useTripMapLinking } from '../../../../lib/useTripMapLinking';
 import { useTripTransport } from '../../../../lib/useTripTransport';
 import { useVWorldToken } from '../../../../lib/vworldToken';
@@ -24,6 +30,7 @@ import {
 import { TripDayHeader } from '../../../../components/TripDayHeader';
 import { TripMapPanel } from '../../../../components/TripMap';
 import { TripPoiRow } from '../../../../components/TripPoiRow';
+import { PlaceSheet } from '../../../../components/PlaceSheet';
 
 const SHARE_VISIBILITY_LABELS: Record<string, string> = {
   view_only: '읽기 전용',
@@ -75,6 +82,13 @@ export default function TripDetailScreen() {
   const transport = useTripTransport({ active: true, points });
 
   const linking = useTripMapLinking(points);
+  const { user } = useAuth();
+  // 읽기 전용 장소 정보 시트 — 지도 마커나 목록 줄의 '정보' 버튼으로 연다.
+  const [sheetPoiId, setSheetPoiId] = useState<string | null>(null);
+  const sheetPoi = useMemo(
+    () => days?.flatMap((day) => day.pois).find((p) => p.poi_id === sheetPoiId) ?? null,
+    [days, sheetPoiId],
+  );
   const vworldToken = useVWorldToken();
 
   const createShareMutation = useMutation({
@@ -131,7 +145,10 @@ export default function TripDetailScreen() {
         points={points}
         selectedPoiId={linking.selectedPoiId}
         focus={linking.focus}
-        onSelectPoi={linking.selectFromMap}
+        onSelectPoi={(poiId) => {
+          linking.selectFromMap(poiId);
+          setSheetPoiId(poiId);
+        }}
         transport={transport}
         vworldToken={vworldToken}
         collapsed={linking.mapCollapsed}
@@ -184,6 +201,7 @@ export default function TripDetailScreen() {
                         onPress={linking.selectFromList}
                         registerRow={linking.registerRow}
                         weatherTripId={tripId}
+                        onInfo={setSheetPoiId}
                       />
                     ))}
                   </View>
@@ -246,6 +264,23 @@ export default function TripDetailScreen() {
           </Card>
         </View>
       </ScrollView>
+      {sheetPoi ? (
+        <PlaceSheet
+          key={sheetPoi.poi_id}
+          tripId={tripId}
+          poi={sheetPoi}
+          coord={
+            linking.pointById.get(sheetPoi.poi_id)
+              ? {
+                  lon: linking.pointById.get(sheetPoi.poi_id)!.lon,
+                  lat: linking.pointById.get(sheetPoi.poi_id)!.lat,
+                }
+              : null
+          }
+          canEdit={canEditTrip(tripQuery.data, user?.user_id)}
+          onClose={() => setSheetPoiId(null)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
