@@ -1,5 +1,5 @@
 # CORE — auth/session · map interaction · mobile UX · resilience · a11y · perf · i18n
-# Target: PinVi prod (origin/main b1cef056 or newer). 45 cases, 44 scripted (CORE-005 manual).
+# Target: PinVi prod (origin/main b1cef056 or newer). 46 cases, 45 scripted (CORE-005 manual).
 # Target: PinVi prod (origin/main b1cef056 or newer). 44 cases, 43 scripted (CORE-005 manual).
 # Selectors verified against origin/main unless a case says `selector unverified against origin/main`.
 
