@@ -44,6 +44,11 @@ vi.mock('../components/VWorldMap', () => ({
   },
 }));
 
+const auth = vi.hoisted(() => ({ userId: 'user-owner' as string | null }));
+vi.mock('../lib/auth', () => ({
+  useAuth: () => ({ user: auth.userId ? { user_id: auth.userId } : null }),
+}));
+
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ tripId: 'trip-1' }),
   useRouter: () => ({ push: vi.fn() }),
@@ -61,6 +66,15 @@ const server = vi.hoisted(() => ({
   transportEnabled: true,
   // 장소별 현재 날씨 — 기본은 빈 카드(날씨 모름).
   weather: null as null | ((path: string) => unknown),
+  // 저장된 영업 정보 — 경포대만 전화가 있다.
+  placeDetails: (path: string): unknown => ({
+    opening_hours: ['매일 09:00~18:00'],
+    closed_days: null,
+    phone: path.includes('poi-a') ? '033-640-5000' : null,
+    website: null,
+    sources: { opening_hours: 'kor_travel_map' },
+    fetched_at: '2026-11-17T00:00:00Z',
+  }),
 }));
 
 function poi(id: string, title: string, coord: { lon: number; lat: number } | null, color: string) {
@@ -103,7 +117,9 @@ const TRIP_VIEW = {
     end_date: '2026-11-21',
     description: null,
     status: 'planned',
+    owner_user_id: 'user-owner',
   },
+  companions: [{ user_id: 'user-viewer', role: 'viewer' }],
   days: [
     day(1, [
       poi('poi-a', '경포대', { lon: 128.9, lat: 37.8 }, 'P-01'),
@@ -140,6 +156,20 @@ vi.mock('../lib/api', () => ({
             { layer: 'highway_incident', available: true },
           ],
         };
+      }
+      if (path.endsWith('/place-details/kakao-phone')) {
+        return {
+          provider: 'kakao',
+          matched: true,
+          name: null,
+          address: null,
+          phone: '033-111-2222',
+          provider_url: 'https://place.map.kakao.com/1',
+          external_id: '1',
+        };
+      }
+      if (path.endsWith('/place-details')) {
+        return server.placeDetails(path);
       }
       if (/^\/trips\/trip-1\/pois\/[^/]+\/weather$/.test(path)) {
         return (server.weather ?? emptyWeather)(path);
@@ -203,6 +233,7 @@ beforeEach(() => {
   server.paths = [];
   server.transportEnabled = true;
   server.weather = null;
+  auth.userId = 'user-owner';
   poiWeatherStore.reset();
 });
 
@@ -344,5 +375,56 @@ describe('모바일 여행 상세 지도', () => {
     });
     expect(screen.queryByRole('button', { name: '주유소' })).toBeNull();
     expect(nearRequests()).toEqual([]);
+  });
+
+  it('지도 마커를 누르면 읽기 전용 장소 시트가 열리고, 요약만 보이며 항목은 접혀 있다', async () => {
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: 'marker 경포대' }));
+    const sheet = await screen.findByTestId('place-sheet');
+    expect(within(sheet).getByTestId('place-sheet-title').textContent).toBe('경포대');
+    expect(within(sheet).queryByTestId('place-sheet-hours')).toBeNull();
+    expect(within(sheet).queryByTestId('place-sheet-memo')).toBeNull();
+    // 저장된 영업시간 요약(오늘 줄)은 요약에 늘 보인다.
+    expect(await within(sheet).findByTestId('place-sheet-today-hours')).toBeTruthy();
+    // 편집할 수 있는 사람(소유자)에게만 편집 화면 연결.
+    expect(within(sheet).getByRole('button', { name: '장소 편집' })).toBeTruthy();
+  });
+
+  it('영업 정보: 저장된 전화가 있으면 카카오를 부르지 않고, 없으면 카카오 전화를 출처와 함께 보인다', async () => {
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: 'marker 경포대' }));
+    let sheet = await screen.findByTestId('place-sheet');
+    fireEvent.click(within(sheet).getByTestId('place-sheet-hours-toggle'));
+    expect((await within(sheet).findByTestId('place-sheet-phone')).textContent).toBe(
+      '033-640-5000',
+    );
+    expect(server.paths.some((p) => p.endsWith('/kakao-phone'))).toBe(false);
+    fireEvent.click(within(sheet).getByRole('button', { name: '닫기' }));
+    await waitFor(() => expect(screen.queryByTestId('place-sheet')).toBeNull());
+
+    // 목록 줄의 '정보' 버튼으로도 연다.
+    fireEvent.click(screen.getByRole('button', { name: '안목해변 장소 정보' }));
+    sheet = await screen.findByTestId('place-sheet');
+    fireEvent.click(within(sheet).getByTestId('place-sheet-hours-toggle'));
+    const kakao = await within(sheet).findByTestId('place-sheet-kakao-phone');
+    expect(kakao.textContent).toContain('033-111-2222');
+    expect(kakao.textContent).toContain('출처: 카카오맵');
+    expect(server.paths.filter((p) => p.endsWith('/kakao-phone'))).toHaveLength(1);
+  });
+
+  it('메모·지도 앱 항목, 보기 전용 동행에게는 편집 연결이 없다', async () => {
+    auth.userId = 'user-viewer';
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: 'marker 오죽헌' }));
+    const sheet = await screen.findByTestId('place-sheet');
+    expect(within(sheet).queryByRole('button', { name: '장소 편집' })).toBeNull();
+    fireEvent.click(within(sheet).getByTestId('place-sheet-memo-toggle'));
+    expect(within(sheet).getByTestId('place-sheet-memo').textContent).toContain('메모가 없습니다');
+    fireEvent.click(within(sheet).getByTestId('place-sheet-maps-toggle'));
+    expect(within(sheet).getByTestId('place-sheet-map-naver')).toBeTruthy();
+    expect(within(sheet).getByTestId('place-sheet-map-kakao')).toBeTruthy();
+    expect(within(sheet).getByTestId('place-sheet-map-google')).toBeTruthy();
+    // 메모를 펼치면 다른 항목은 접힌다(한 번에 하나).
+    expect(within(sheet).queryByTestId('place-sheet-memo')).toBeNull();
   });
 });

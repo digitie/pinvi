@@ -133,6 +133,10 @@ Web/Mobile이 공유한다(ADR-044/046). CI가 외부 git archive나 release ass
 1. **`GET /mobile/vworld/token`** — ✅ **구현됨**. 인증된 모바일 클라이언트에 server-issued
    VWorld 키 발급(`api_key`/`key_source`/`ttl_seconds`, 키 미설정 시 503). ADR-043 키 비번들
    정책의 서버 측 짝. 설정: `PINVI_VWORLD_API_KEY`. 향후 더 엄격히는 타일 프록시로 격상 가능.
+   - **공유 화면(로그인 없음)**: `GET /mobile/shared/{trip_id}/{token}/vworld/token` — 그 여행의 유효한 공유
+     토큰(해제·만료·삭제 여행은 404, `GET /trips/{id}/shared/{token}`과 같은 검증)일 때만 같은 키를 준다
+     (2026-11-17). 웹 공유 화면은 빌드타임 공개 설정 `NEXT_PUBLIC_VWORLD_API_KEY`로 그린다. `/transport/*`
+     등 다른 endpoint의 로그인 요구는 그대로다(공유 화면에는 교통 칩이 없다, NEAR-027).
 2. **모바일 인증 토큰 흐름** — ✅ **구현됨**. `get_current_user_id`가 cookie + Bearer 둘 다 수용하고,
    `POST /mobile/auth/{login,verify-email,refresh,logout}`가 access/refresh 토큰을 **본문으로** 반환·
    회전·폐기한다(웹 `/auth/*` cookie 경로는 그대로, 같은 인증 서비스 재사용). 앱은 SecureStore에 보관.

@@ -109,6 +109,7 @@ apps/mobile/
 ├── components/MapPin.tsx    # 원(+ maki 아이콘) + 이름 라벨 + 현재 날씨 / 작은 원 마커(자리는 mapPinLayout.ts)
 ├── components/Glyph.tsx     # 공용 그림 이름(@pinvi/domain) → lucide-react-native
 ├── components/MarkerIcon.tsx · WeatherIcon.tsx · PoiWeatherBadge.tsx
+├── components/PlaceSheet.tsx # 읽기 전용 장소 정보 아래 시트(웹 PlaceInfoPanel 대응)
 ├── components/TripMap.tsx   # 여행 상세 지도 패널(장소 마커·교통 칩·상태 줄·접기)
 ├── tests/                   # vitest + jsdom + RTL(react-native → react-native-web)
 ├── app.json                 # Expo Dev Client / New Architecture / minSdk 24 / VWorld 설정
