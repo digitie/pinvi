@@ -8,8 +8,8 @@
  * `transport-detail-freshness`, `transport-fuel-prices`, `transport-price-history-open`,
  * `transport-price-history`, `transport-price-history-unavailable`.
  */
-import { expect, test } from '@playwright/test';
-import { loginAsUser, shot, waitForRequest } from '../../helpers/live';
+import { expect, test, type Page } from '@playwright/test';
+import { dismissFeaturePopup, loginAsUser, shot, waitForRequest } from '../../helpers/live';
 import {
   DEFAULT_EXPLORE_ZOOM,
   FRESHNESS_RE,
@@ -34,6 +34,16 @@ test.setTimeout(180_000);
 
 const SOURCE_CAPTION = '출처: 한국석유공사·한국도로공사·한국공항공사(kor-travel-map 경유)';
 
+/**
+ * 검색으로 '서울역'(zoom 15)에 간 뒤, 고른 장소의 선택 popup을 사용자가 하듯 닫는다. popup은 날씨 줄이 늦게
+ * 붙으며 위로 자라는데, 폭 390 화면에서는 그 사이 레이어 체크박스를 덮어 체크가 막힌다(2026-11-17 mobile
+ * NEAR-005: `maplibregl-popup-content … intercepts pointer events`, 같은 순서의 NEAR-004는 통과).
+ */
+async function flyToSeoulStation(page: Page): Promise<void> {
+  await searchAndFly(page, '서울역');
+  await dismissFeaturePopup(page);
+}
+
 test.describe('NEAR transport detail dialog', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsUser(page);
@@ -42,7 +52,7 @@ test.describe('NEAR transport detail dialog', () => {
   test('NEAR-004 주유소 marker → dialog with product prices, brand/extras, freshness and source caption', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
-    await searchAndFly(page, '서울역'); // zoom 15 — individual (unclustered) markers
+    await flyToSeoulStation(page); // zoom 15 — individual (unclustered) markers
     const res = await toggleExpectingRequest(page, 'fuel_station', (q) => q.zoom === 15 && q.layers.includes('fuel_station'));
     const fuel = (await markersBody(res)).layers.find((l) => l.layer === 'fuel_station')!;
     test.skip(fuel.status !== 'ok' || fuel.items.length === 0, `fuel layer ${fuel.status}/${fuel.reason ?? ''} around 서울역`);
@@ -69,7 +79,7 @@ test.describe('NEAR transport detail dialog', () => {
   test('NEAR-005 가격 추이 보기 loads history rows or a non-error unavailable notice', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
-    await searchAndFly(page, '서울역');
+    await flyToSeoulStation(page);
     const res = await toggleExpectingRequest(page, 'fuel_station', (q) => q.zoom === 15);
     const fuel = (await markersBody(res)).layers.find((l) => l.layer === 'fuel_station')!;
     test.skip(fuel.status !== 'ok' || fuel.items.length === 0, 'no fuel stations to open');
@@ -136,7 +146,7 @@ test.describe('NEAR transport detail dialog', () => {
   test('NEAR-017 transport dialog has no POI linkage (no 일정에 추가 / 상세보기 / feature link) — ADR-076 D7', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
-    await searchAndFly(page, '서울역'); // zoom 15 — individual (unclustered) fuel markers
+    await flyToSeoulStation(page); // zoom 15 — individual (unclustered) fuel markers
     const res = await toggleExpectingRequest(page, 'fuel_station', (q) => q.zoom === 15 && q.layers.includes('fuel_station'));
     const fuel = (await markersBody(res)).layers.find((l) => l.layer === 'fuel_station')!;
     test.skip(fuel.status !== 'ok' || fuel.items.length === 0, 'no fuel stations to open');
@@ -154,7 +164,7 @@ test.describe('NEAR transport detail dialog', () => {
   test('NEAR-018 opening another marker swaps the dialog content; Escape closes and markers remain', async ({ page }) => {
     await page.goto('/map');
     await waitForControls(page);
-    await searchAndFly(page, '서울역');
+    await flyToSeoulStation(page);
     const res = await toggleExpectingRequest(page, 'fuel_station', (q) => q.zoom === 15 && q.layers.includes('fuel_station'));
     const fuel = (await markersBody(res)).layers.find((l) => l.layer === 'fuel_station')!;
     test.skip(fuel.status !== 'ok' || fuel.items.length < 2, 'need two fuel stations around 서울역');

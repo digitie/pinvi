@@ -175,9 +175,10 @@
   tags: [desktop, nearby]
   preconditions:
     - account: test@test.com (user)
+    - data: 주유소 레이어 status=ok(교통 upstream 장애면 skip), 서울 도심 zoom 12에 주유소 ≥1
   data_sources: [transport:gas]
   steps:
-    - /map(zoom 12) → '주유소' 체크 → 체크 해제
+    - /map(zoom 12) → '주유소' 체크 → 상태 줄이 결과 문구가 되고 마커가 그려질 때까지 대기 → 체크 해제
   expected:
     - 체크 해제, legend fuel_station 0, 상태 줄 없음
     - 마지막 레이어를 끌 때 markers-in-bounds 요청 0건(0.8초 관찰)

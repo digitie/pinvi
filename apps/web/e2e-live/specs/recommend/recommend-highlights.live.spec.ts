@@ -18,11 +18,22 @@ import {
 const isHighlights = (r: Response) =>
   r.request().method() === 'GET' && /\/notice-plans\/[0-9a-f-]{36}\/highlights$/.test(new URL(r.url()).pathname);
 
+const NO_PLANS = '공개 추천 여행 없음(데이터 전제) — 이 기능은 이 환경에서 검증되지 않았다';
+
+/**
+ * 추천 여행 선반을 열고 카드의 '주변 축제·큐레이션' 토글들을 돌려준다. 공개된 추천 여행이 하나도 없으면
+ * 목록(`notice-plan-list`) 대신 빈 상태 문구가 그려진다 — 그때는 빈 배열을 돌려주고 호출부가 데이터 전제로
+ * skip한다(2026-11-17 prod: 추천 여행 0건인데 목록을 먼저 단언해 skip에 닿지 못하고 실패했다).
+ * 목록을 읽지 못한 오류(`notice-plans-error`)는 빈 상태가 아니므로 실패시킨다.
+ */
 async function openShelf(page: Page): Promise<Locator[]> {
   await page.goto('/notice-plans');
   await expect(page.getByRole('heading', { name: '추천 여행', exact: true })).toBeVisible({ timeout: 20_000 });
   const list = page.getByTestId('notice-plan-list');
-  await expect(list).toBeVisible({ timeout: 20_000 });
+  const empty = page.getByText('표시할 추천 여행이 없습니다.', { exact: true });
+  await expect(list.or(empty).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('notice-plans-error'), '추천 여행 목록을 오류 없이 읽는다').toHaveCount(0);
+  if (!(await list.isVisible())) return [];
   return list.locator('[data-testid^="notice-plan-highlights-toggle-"]').all();
 }
 
@@ -58,7 +69,7 @@ test.describe('REC 추천 여행 주변 축제·큐레이션', () => {
   test('REC-001 카드 펼침 — 축제·큐레이션 두 구역', async ({ page }, testInfo) => {
     await loginAsUser(page);
     const toggles = await openShelf(page);
-    test.skip(toggles.length === 0, '공개 추천 여행 없음(데이터 전제)');
+    test.skip(toggles.length === 0, NO_PLANS);
     const toggle = toggles[0]!;
     const { planId, body } = await expand(page, toggle);
     expect(['plan', 'upcoming']).toContain(body.window_basis);
@@ -89,6 +100,8 @@ test.describe('REC 추천 여행 주변 축제·큐레이션', () => {
   test('REC-002 주변 항목을 새 여행 1일차에 추가', async ({ page }, testInfo) => {
     test.skip(isMobileProject(), 'desktop only');
     await loginAsUser(page);
+    // 여행을 만들기 전에 본다 — 추천 여행이 없으면 만들 것도 없다.
+    test.skip((await openShelf(page)).length === 0, NO_PLANS);
     const title = `${e2ePrefix} REC-002 ${Date.now()}`;
     tripId = (await createTrip(page, { title, start: isoDate(30), end: isoDate(31) })).id;
     expect(await tripDayPoiCounts(page, tripId)).toEqual([0, 0]);
@@ -132,7 +145,7 @@ test.describe('REC 추천 여행 주변 축제·큐레이션', () => {
     test.skip(!isMobileProject(), 'mobile only');
     await loginAsUser(page);
     const toggles = await openShelf(page);
-    test.skip(toggles.length === 0, '공개 추천 여행 없음(데이터 전제)');
+    test.skip(toggles.length === 0, NO_PLANS);
     const { planId } = await expand(page, toggles[0]!);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(1);

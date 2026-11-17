@@ -13,7 +13,12 @@ async function expectBadgeAndPopup(page: Page, caseId: string) {
   const row = poiRows(page).first();
   const badge = row.getByTestId('weather-badge');
   // 장소 날씨는 첫 조회(위치 해석 캐시 미스)에 빈 카드일 수 있다 — 배지가 없으면 한 번 새로고침한다.
-  if (!(await badge.isVisible({ timeout: 30_000 }).catch(() => false))) {
+  // `isVisible({ timeout })`은 기다리지 않는다(Playwright는 그 timeout을 무시한다) — 실제로 기다린다.
+  const appeared = await badge.waitFor({ state: 'visible', timeout: 30_000 }).then(
+    () => true,
+    () => false,
+  );
+  if (!appeared) {
     annotate('첫 조회 빈 카드 — 새로고침 후 재확인');
     await page.reload();
     await openDay(page, 1);

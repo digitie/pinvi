@@ -161,10 +161,15 @@ test.describe('NEAR explore map panel', () => {
     await page.goto('/map');
     await waitForControls(page);
     // 기본 zoom 12(서울 도심) — 주유소가 늘 있다.
-    await toggleExpectingRequest(page, 'fuel_station');
-    await expect(stateLine(page, 'fuel_station')).toBeVisible();
-    const before = await legendMarkers(page, 'fuel_station').count();
-    expect(before).toBeGreaterThan(0);
+    const res = await toggleExpectingRequest(page, 'fuel_station');
+    const fuel = (await markersBody(res)).layers.find((l) => l.layer === 'fuel_station')!;
+    // upstream(교통 서비스)이 내려가 있으면 지울 마커가 없다 — 같은 전제의 NEAR-004·005와 같이 skip한다.
+    test.skip(fuel.status !== 'ok', `fuel layer ${fuel.status}/${fuel.reason ?? ''} — 지울 마커가 없다`);
+    expect(fuel.items.filter((i) => i.coord).length, 'central Seoul has fuel stations at zoom 12').toBeGreaterThan(0);
+    // 응답이 막 도착한 시점에는 상태 줄이 아직 "불러오는 중"이고 마커도 그려지기 전이다(2026-11-17: 그때 센
+    // 마커 수 0으로 실패) — 결과 문구로 바뀌고 마커가 그려질 때까지 기다린다.
+    await expectLayerLineShape(page, 'fuel_station');
+    await expect(legendMarkers(page, 'fuel_station')).not.toHaveCount(0);
     const mark = Date.now();
     await chip(page, 'fuel_station').uncheck();
     await expect(chip(page, 'fuel_station')).not.toBeChecked();

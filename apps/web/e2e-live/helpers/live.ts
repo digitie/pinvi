@@ -25,6 +25,7 @@ import {
   type Cookie,
   type Locator,
   type Page,
+  type Request,
   type Response,
   type TestInfo,
 } from '@playwright/test';
@@ -241,6 +242,49 @@ export async function submitLogin(page: Page, submit: Locator): Promise<Response
   }
 }
 
+/**
+ * Next 소프트 내비게이션(`router.push`)이 실제로 끝났는지 본다. 부른 시점부터 라우터(RSC) 요청을 세고, 돌려준
+ * 함수는 진행 중인 요청이 없는 상태가 0.5초 이어질 때까지 기다린다(끝나지 않으면 오류로 알린다).
+ *
+ * URL은 라우터가 전환을 커밋하는 순간 바뀌지만 그 화면의 RSC 요청은 그 뒤에도 진행 중일 수 있다. 그 사이에
+ * `page.goto`를 부르면 Firefox는 떠나는 문서의 fetch를 곧바로 실패시키고, Next는 RSC fetch 실패를 브라우저
+ * 내비게이션으로 대체하므로(`fetch-server-response`: "Falling back to browser navigation") 그 이동이 우리
+ * goto를 `NS_BINDING_ABORTED`로 끊고 화면은 원래 URL에 남는다(2026-11-17 Firefox CORE-016: 로그인 → /home
+ * 직후의 `/trips` 이동). Chromium은 새 문서가 커밋될 때까지 fetch를 끊지 않아 드러나지 않는다.
+ */
+export function watchRouterRequests(page: Page): (timeoutMs?: number) => Promise<void> {
+  const pending = new Set<Request>();
+  const onRequest = (req: Request) => {
+    if (req.headers()['rsc'] === '1' || new URL(req.url()).searchParams.has('_rsc')) pending.add(req);
+  };
+  const onDone = (req: Request) => {
+    pending.delete(req);
+  };
+  page.on('request', onRequest);
+  page.on('requestfinished', onDone);
+  page.on('requestfailed', onDone);
+  return async (timeoutMs = 20_000) => {
+    const quietMs = 500;
+    const deadline = Date.now() + timeoutMs;
+    let quietSince = Date.now();
+    try {
+      for (;;) {
+        if (pending.size > 0) quietSince = Date.now();
+        else if (Date.now() - quietSince >= quietMs) return;
+        if (Date.now() > deadline) {
+          const paths = [...pending].map((req) => new URL(req.url()).pathname).join(', ');
+          throw new Error(`라우터(RSC) 요청이 ${timeoutMs} ms 안에 끝나지 않았다: ${paths}`);
+        }
+        await page.waitForTimeout(50);
+      }
+    } finally {
+      page.off('request', onRequest);
+      page.off('requestfinished', onDone);
+      page.off('requestfailed', onDone);
+    }
+  };
+}
+
 export interface LoginOptions {
   /** Skip the session cache and log in through the form (auth/session cases that rotate tokens). */
   fresh?: boolean;
@@ -256,6 +300,7 @@ async function loginWithUserForm(page: Page, email: string, password: string, op
   await expect(submit).toBeEnabled({ timeout: 20_000 });
   await page.getByTestId('login-email').fill(email);
   await page.getByTestId('login-password').fill(password);
+  const routerSettled = watchRouterRequests(page);
   const res = await submitLogin(page, submit);
   if (res && !knownApiBase) {
     const url = new URL(res.url());
@@ -266,6 +311,8 @@ async function loginWithUserForm(page: Page, email: string, password: string, op
   }
   // 로그인 기본 목적지는 개인 홈(/home, #748 후속). 배포 전 prod는 /trips라 둘 다 받는다.
   await expect(page).toHaveURL(/\/(?:home|trips)(?:[?#].*)?$/, { timeout: 30_000 });
+  // URL이 바뀐 것은 전환 커밋일 뿐이다 — 로그인 뒤 소프트 내비게이션이 끝난 다음에 다른 곳으로 간다.
+  await routerSettled();
   await rememberSession(page, email);
   // 이후 케이스는 로그인 직후 여행 목록에 있다고 가정한다(세션 재사용 경로와 같은 출발점).
   if (!/\/trips(?:[?#].*)?$/.test(page.url())) {
@@ -573,18 +620,38 @@ export async function searchAndAddPlace(
   const input = box.getByRole('textbox', { name: '장소·주소 검색' });
   await expect(input).toBeVisible();
   await input.fill('');
+  // 통합 검색은 upstream(Map·geo·Kakao·Naver)이 실패해도 200으로 답하고 그 소스를 `degraded_sources`에 적는다.
+  // 화면은 그때도 '검색 결과가 없습니다.'라서, 결과가 없으면 "장소가 없다"와 "소스가 비었다"를 오류에서 가른다.
+  const degraded = page
+    .waitForResponse(
+      (r) => {
+        const url = new URL(r.url());
+        return r.request().method() === 'GET' && url.pathname.endsWith('/search') && url.searchParams.get('q') === query;
+      },
+      { timeout: 45_000 },
+    )
+    .then(async (r) => ((await r.json()) as { data?: { degraded_sources?: string[] } }).data?.degraded_sources ?? [])
+    .catch(() => null);
   await input.fill(query);
   const rows = box.locator('ul > li');
-  await expect
-    .poll(
-      async () => {
-        if ((await rows.count()) > 0) return 'rows';
-        const alert = box.locator('p[role="alert"]');
-        return (await alert.count()) > 0 ? ((await alert.first().textContent()) ?? 'alert') : 'pending';
-      },
-      { timeout: 45_000, message: `검색 '${query}' 결과 대기` },
-    )
-    .toBe('rows');
+  let state = 'pending';
+  try {
+    await expect
+      .poll(
+        async () => {
+          const alert = box.locator('p[role="alert"]');
+          if ((await rows.count()) > 0) state = 'rows';
+          else state = (await alert.count()) > 0 ? ((await alert.first().textContent()) ?? 'alert') : 'pending';
+          return state;
+        },
+        { timeout: 45_000 },
+      )
+      .toBe('rows');
+  } catch {
+    const sources = state === 'pending' ? null : await degraded;
+    const why = sources?.length ? ` — 비운 소스: ${sources.join(', ')}(upstream 실패·시간 초과)` : '';
+    throw new Error(`검색 '${query}' 결과 대기: ${state}${why}`);
+  }
   const count = await rows.count();
   let target: Locator | null = null;
   let targetText = '';
