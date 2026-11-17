@@ -9,7 +9,7 @@ import {
   currentWeather,
   formatTemp,
   todayRange,
-} from '@/lib/weatherNow';
+} from '@pinvi/domain';
 import type { FeatureWeatherCard } from '@pinvi/schemas';
 import { AlertTriangle } from 'lucide-react';
 import { useMemo, useState } from 'react';

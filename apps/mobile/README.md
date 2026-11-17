@@ -31,6 +31,15 @@ React Native 앱이다.
 > gate 필수 check다. React Doctor의 full/warning gate는 mobile-typecheck에서 실행하고, mobile-export와 mobile-wasm-macos도 필수다(`mobile-doctor`는 별도의 `expo-doctor` 정보성). `build` 스크립트는 없어 루트
 > `npm run build --if-present`에서는 건너뛴다.
 
+### 네이티브 모듈 추가 → dev client 재빌드 (2026-11-17)
+
+- 지도 마커·날씨 아이콘(lucide 그림, 목록 밖 maki SVG)을 그리려고 **`react-native-svg` 15.16.0**(Expo SDK58 번들
+  버전)과 **`lucide-react-native` 1.72.0**(웹 `lucide-react`와 같은 버전)을 넣었다. `react-native-svg`는 네이티브
+  모듈이라 **기존 EAS development build로는 그림이 그려지지 않는다 — `npm run build:development:android`/`ios`로
+  dev client를 다시 만들어 설치해야 한다.** Expo Web export·vitest는 영향 없다.
+- 두 패키지는 공통 의존성 정책 `versions`에 없어 검사기가 막지 않는다. 다음 kor-travel-common 릴리스 때 중앙
+  기록 후보다(지금 중앙을 바꾸면 모든 소비자 guard가 재vendor 전까지 깨진다).
+
 ### 단위·컴포넌트 시험 (`npm --workspace @pinvi/mobile run test`)
 
 - 러너는 웹·공용 패키지와 같은 **vitest 5.1.0 + jsdom 31.0.0 + @testing-library/react 16.3.3**(공통 의존성
@@ -93,10 +102,13 @@ apps/mobile/
 │   ├── storage.ts           # AsyncStorage → zustand StateStorage
 │   ├── stores.ts            # createAuthStore(AsyncStorage 주입)
 │   ├── vworldToken.ts       # server-issued VWorld 키 query(탐색·여행 지도 공용)
+│   ├── poiWeather.ts        # 장소별 현재 날씨 공유 캐시(@pinvi/hooks createPoiWeatherStore, 동시 2건)
 │   ├── tripMapCamera.ts     # 여행 지도 첫 시점(장소를 모두 담는 중심·줌, 여백 반영 — 뜬 뒤는 fitBounds)
 │   └── useTripTransport.ts  # 여행 장소 반경 교통 레이어(markers-near, 웹 반경 모드와 같은 규칙)
 ├── components/VWorldMap.*    # .native RN / .web lazy web public adapter (공유 tarball은 ../web/vendor)
-├── components/MapPin.tsx    # 원 + 이름 라벨 / 작은 원 마커(두 어댑터 공용, 자리는 mapPinLayout.ts anchor/offset)
+├── components/MapPin.tsx    # 원(+ maki 아이콘) + 이름 라벨 + 현재 날씨 / 작은 원 마커(자리는 mapPinLayout.ts)
+├── components/Glyph.tsx     # 공용 그림 이름(@pinvi/domain) → lucide-react-native
+├── components/MarkerIcon.tsx · WeatherIcon.tsx · PoiWeatherBadge.tsx
 ├── components/TripMap.tsx   # 여행 상세 지도 패널(장소 마커·교통 칩·상태 줄·접기)
 ├── tests/                   # vitest + jsdom + RTL(react-native → react-native-web)
 ├── app.json                 # Expo Dev Client / New Architecture / minSdk 24 / VWorld 설정

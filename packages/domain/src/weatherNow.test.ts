@@ -8,7 +8,7 @@ import {
   hourlyForecast,
   kstDateKey,
   todayRange,
-} from '@/lib/weatherNow';
+} from './weatherNow';
 
 // 2026-11-16 19:00 KST (10:00Z) — prod 샘플과 같은 시각대.
 const NOW = Date.parse('2026-11-16T10:00:00Z');

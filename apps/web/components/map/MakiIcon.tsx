@@ -1,7 +1,7 @@
 'use client';
 
 import { bundledMarkerIcon } from '@/lib/markerIconGlyphs';
-import { makiIconName, makiIconUrl } from '@/lib/makiIcons';
+import { makiIconName, makiIconUrl } from '@pinvi/domain';
 import type { LucideProps } from 'lucide-react';
 import { createElement, useState } from 'react';
 

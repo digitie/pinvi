@@ -7,3 +7,10 @@ export type {
   LocationAdapter,
   UseUserLocationOptions,
 } from './useUserLocation';
+export {
+  POI_WEATHER_MAX_CONCURRENT,
+  __resetMinuteNowForTest,
+  createPoiWeatherStore,
+  useMinuteNow,
+} from './poiWeatherStore';
+export type { PoiWeatherLoader, PoiWeatherState } from './poiWeatherStore';

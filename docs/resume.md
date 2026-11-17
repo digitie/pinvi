@@ -1,3 +1,8 @@
+## 모바일 마커 아이콘·날씨 (2026-11-17)
+
+PR claude feat/mobile-place-detail(후속 1/3): 마커 maki/lucide 아이콘 + 현재 날씨, 목록 날씨 배지, weatherNow·markerIcons·날씨 캐시 공용화.
+다음: 후속 2/3 공유 화면 지도, 3/3 읽기 전용 장소 시트. EAS dev client 재빌드(react-native-svg).
+
 ## 모바일 여행 지도 (2026-11-17)
 
 PR claude feat/mobile-trip-map: 여행 상세 위 지도(장소 원+이름, 목록 연동, 접기) + 여행 장소 반경 주유소·교통 돌발 칩.

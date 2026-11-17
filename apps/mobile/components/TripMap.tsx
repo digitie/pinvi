@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
-import type { TransportItem } from '@pinvi/schemas';
+import type { TransportItem, TripWeatherCard } from '@pinvi/schemas';
+import { useMinuteNow } from '@pinvi/hooks';
 import {
   TRANSPORT_LAYER_META,
+  placeCurrentWeather,
   pointsBounds,
   transportLayerStatusText,
   transportMarkerId,
   type TripMapPoint,
+  type WeatherConditionKind,
 } from '@pinvi/domain';
 import { fitCameraToPoints, type CameraPadding, type CameraTarget } from '../lib/tripMapCamera';
 import type { TripTransportState } from '../lib/useTripTransport';
+import { usePoiWeatherPeekAll } from '../lib/poiWeather';
 import { useVWorldToken } from '../lib/vworldToken';
 import { TransportItemCard } from './TransportLayers';
 import { Button, Muted } from './ui';
@@ -76,6 +80,12 @@ export interface TripMapPanelProps {
   onToggleCollapsed: () => void;
   width: number;
   height: number;
+  /**
+   * 마커 이름 옆 현재 날씨의 출처 — 장소별 현재 카드 공유 캐시의 키(`tripId`, 목록 배지가 받은 카드를 요청 없이
+   * 읽는다)와 여행 화면이 이미 받은 일자 카드(`placeWeatherCards`). 둘 다 없으면 날씨 아이콘이 없다.
+   */
+  tripId?: string | null;
+  dayWeatherCards?: Readonly<Record<string, TripWeatherCard>>;
 }
 
 /**
@@ -128,6 +138,8 @@ function TripMapCanvas({
   width,
   height,
   mapRef,
+  tripId = null,
+  dayWeatherCards,
 }: TripMapPanelProps & { mapRef: RefObject<VWorldMapHandle | null> }) {
   const tokenQuery = useVWorldToken();
   const lastZoomRef = useRef<number | null>(null);
@@ -169,6 +181,23 @@ function TripMapCanvas({
   const selectedTransport: TransportItem | null =
     selectedTransportId != null ? transport.itemForMarker(selectedTransportId) : null;
 
+  // 마커 이름 옆 현재 날씨 — 새 요청 없이 이미 받은 카드에서(웹 `usePlaceWeather`와 같은 판정). 모르면 null.
+  const peekWeather = usePoiWeatherPeekAll();
+  const now = useMinuteNow();
+  const weatherByPoi = useMemo(() => {
+    const result = new Map<string, { condition: WeatherConditionKind; night: boolean }>();
+    if (now === 0) return result;
+    for (const p of points) {
+      const weather = placeCurrentWeather(
+        tripId ? peekWeather(tripId, p.poiId) : null,
+        dayWeatherCards?.[p.poiId] ?? null,
+        now,
+      );
+      if (weather) result.set(p.poiId, { condition: weather.condition, night: weather.night });
+    }
+    return result;
+  }, [points, tripId, peekWeather, dayWeatherCards, now]);
+
   const markers = useMemo<PlatformMarkerItem[]>(
     () => [
       ...transport.markers.map((m) => ({
@@ -187,6 +216,8 @@ function TripMapCanvas({
           coordinate: [p.lon, p.lat] as [number, number],
           color: p.color,
           label: p.title,
+          icon: p.icon,
+          weather: weatherByPoi.get(p.poiId) ?? null,
           ariaLabel: p.title,
           selected,
           // 여행 장소가 교통 마커 위, 고른 장소가 맨 위.
@@ -194,7 +225,7 @@ function TripMapCanvas({
         };
       }),
     ],
-    [transport.markers, points, selectedPoiId, selectedTransport],
+    [transport.markers, points, selectedPoiId, selectedTransport, weatherByPoi],
   );
 
   if (tokenQuery.isError || (tokenQuery.isSuccess && !tokenQuery.data.api_key)) {

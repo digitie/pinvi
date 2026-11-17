@@ -4,6 +4,9 @@
  * 저장값은 maki 아이콘 이름(`custom_marker_icon`, `^[a-z0-9_-]{1,64}$`)이고, 서버·kor-travel-map이
  * 주는 카테고리 아이콘도 같은 이름 공간이다. 고르기 목록에 없는 이름(카테고리가 준 값)도 그대로
  * 그리며, 그림을 못 받으면 `marker`로 대신한다.
+ *
+ * 웹(`lucide-react`)과 모바일(`lucide-react-native`)은 같은 lucide 그림 이름(`MARKER_ICON_GLYPHS`,
+ * `weatherGlyphName`)을 각자의 컴포넌트로 바꿔 그린다 — 같은 장소가 두 화면에서 다른 그림으로 보이지 않게.
  */
 
 export const MAKI_ICON_BASE_URL = 'https://unpkg.com/@mapbox/maki@8.0.0/icons';
@@ -33,7 +36,7 @@ export interface MarkerIconOption {
 /**
  * 장소 마커 아이콘 고르기 목록 — 여행 장소에 흔한 종류 위주(구글·네이버 지도 카테고리 칩 참고).
  * 모든 이름은 maki 8.0.0에 있는 아이콘이고(2026-11-16 unpkg 200 확인), 화면에서는 앱에 묶인 lucide
- * 그림으로 그린다(`lib/markerIconGlyphs.ts` — 외부 요청 없음).
+ * 그림으로 그린다(`MARKER_ICON_GLYPHS` — 외부 요청 없음).
  */
 export const MARKER_ICON_OPTIONS: readonly MarkerIconOption[] = [
   { icon: 'marker', label: '기본 핀' },
@@ -73,3 +76,57 @@ export const MARKER_ICON_OPTIONS: readonly MarkerIconOption[] = [
   { icon: 'ferry', label: '배' },
   { icon: 'hospital', label: '병원' },
 ];
+
+/**
+ * 아이콘 고르기 목록의 maki 이름 → 앱에 묶인 lucide 그림 이름. 목록 밖 이름(카테고리가 준 maki 이름)은
+ * 없다 — 그 경우 maki SVG를 받아 그린다(`makiIconUrl`).
+ */
+export const MARKER_ICON_GLYPHS = {
+  marker: 'MapPin',
+  star: 'Star',
+  heart: 'Heart',
+  home: 'House',
+  lodging: 'BedDouble',
+  campsite: 'Tent',
+  restaurant: 'UtensilsCrossed',
+  cafe: 'Coffee',
+  bakery: 'Croissant',
+  bar: 'Beer',
+  shop: 'ShoppingBag',
+  grocery: 'ShoppingCart',
+  attraction: 'Sparkles',
+  viewpoint: 'Camera',
+  museum: 'Landmark',
+  monument: 'Landmark',
+  castle: 'Castle',
+  'religious-buddhist': 'Flower2',
+  park: 'Trees',
+  mountain: 'Mountain',
+  beach: 'Umbrella',
+  swimming: 'Waves',
+  'amusement-park': 'FerrisWheel',
+  zoo: 'PawPrint',
+  aquarium: 'Fish',
+  theatre: 'Drama',
+  golf: 'Flag',
+  bicycle: 'Bike',
+  parking: 'SquareParking',
+  fuel: 'Fuel',
+  car: 'Car',
+  bus: 'Bus',
+  rail: 'TrainFront',
+  airport: 'Plane',
+  ferry: 'Ship',
+  hospital: 'Hospital',
+} as const satisfies Record<string, string>;
+
+/** 마커 아이콘으로 쓰는 lucide 그림 이름. */
+export type MarkerGlyphName = (typeof MARKER_ICON_GLYPHS)[keyof typeof MARKER_ICON_GLYPHS];
+
+/** maki 이름(별칭 적용 전·후 모두)에 해당하는 묶인 lucide 그림 이름. 목록 밖이면 null. */
+export function markerGlyphName(icon: string): MarkerGlyphName | null {
+  const name = makiIconName(icon);
+  return Object.prototype.hasOwnProperty.call(MARKER_ICON_GLYPHS, name)
+    ? MARKER_ICON_GLYPHS[name as keyof typeof MARKER_ICON_GLYPHS]
+    : null;
+}

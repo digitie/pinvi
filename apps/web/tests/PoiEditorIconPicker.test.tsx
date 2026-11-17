@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { PoiEditor } from '@/components/trips/PoiEditor';
-import { MARKER_ICON_OPTIONS } from '@/lib/makiIcons';
+import { MARKER_ICON_OPTIONS } from '@pinvi/domain';
 import { hasBundledIcon } from '@/lib/markerIconGlyphs';
 import { MARKER_PALETTE } from '@pinvi/design-tokens';
 import { TripViewPoiSchema } from '@pinvi/schemas';

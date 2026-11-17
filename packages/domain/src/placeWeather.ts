@@ -8,7 +8,7 @@
  * 같은 장소가 목록과 지도에서 다른 날씨로 보이지 않게.
  */
 
-import { currentWeather, type CurrentWeather } from '@/lib/weatherNow';
+import { currentWeather, type CurrentWeather } from './weatherNow';
 import type { FeatureWeatherCard, TripViewDay, TripWeatherCard } from '@pinvi/schemas';
 
 /** 여행의 모든 일자에서 POI별 일자 날씨 카드(카드가 없는 장소는 뺀다). */

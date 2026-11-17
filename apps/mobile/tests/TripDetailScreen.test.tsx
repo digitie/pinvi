@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlatformMarkerItem, PlatformVWorldMapProps } from '../components/VWorldMap.types';
+import { rainyDayCard, rainyPoiCard } from './fixtures/weather';
 
 /**
  * 여행 상세 화면 — 네이티브 지도(`vworld-map-rn`)는 mock으로 바꾸고, 화면이 지도에 넘기는 마커·첫 시점·
@@ -48,9 +49,18 @@ vi.mock('expo-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
+const emptyWeather = (path: string): unknown => ({
+  feature_id: path,
+  is_stale: false,
+  source_styles: [],
+  metrics: [],
+});
+
 const server = vi.hoisted(() => ({
   paths: [] as string[],
   transportEnabled: true,
+  // 장소별 현재 날씨 — 기본은 빈 카드(날씨 모름).
+  weather: null as null | ((path: string) => unknown),
 }));
 
 function poi(id: string, title: string, coord: { lon: number; lat: number } | null, color: string) {
@@ -79,6 +89,8 @@ function day(index: number, pois: ReturnType<typeof poi>[]) {
     holidays: [],
     rise_set: null,
     rise_set_reference: null,
+    weather_cards: {},
+    weather_by_feature_id: {},
     pois,
   };
 }
@@ -129,6 +141,9 @@ vi.mock('../lib/api', () => ({
           ],
         };
       }
+      if (/^\/trips\/trip-1\/pois\/[^/]+\/weather$/.test(path)) {
+        return (server.weather ?? emptyWeather)(path);
+      }
       if (path.startsWith('/transport/markers-near')) {
         return {
           radius_m: { fuel_station: 10_000, highway_incident: 20_000 },
@@ -159,7 +174,14 @@ vi.mock('../lib/api', () => ({
   },
 }));
 
+// 경포대(poi-a)는 여행 응답의 일자 날씨 카드로 비가 온다(마커 날씨는 새 요청 없이 이 카드에서).
+Object.assign(TRIP_VIEW.days[0]!, {
+  weather_cards: { 'card-1': rainyDayCard() },
+  weather_by_feature_id: { 'feature-poi-a': { state: 'found', card_key: 'card-1' } },
+});
+
 const { default: TripDetailScreen } = await import('../app/(app)/trips/[tripId]/index');
+const { poiWeatherStore } = await import('../lib/poiWeather');
 
 function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -180,9 +202,34 @@ beforeEach(() => {
   map.mounts = 0;
   server.paths = [];
   server.transportEnabled = true;
+  server.weather = null;
+  poiWeatherStore.reset();
 });
 
 describe('모바일 여행 상세 지도', () => {
+  it('마커는 원 안 아이콘과 이름 옆 현재 날씨를 싣고, 목록 줄은 좌표를 아는 장소만 날씨를 묻는다', async () => {
+    server.weather = (path) => (path.includes('poi-b') ? rainyPoiCard() : emptyWeather(path));
+    renderScreen();
+    await screen.findByTestId('vworld-map');
+    const poiA = () => markers().find((m) => m.id === 'poi:poi-a');
+    const poiB = () => markers().find((m) => m.id === 'poi:poi-b');
+    // 아이콘 없는 장소도 기본 핀 아이콘(웹과 같은 해석).
+    expect(poiA()?.icon).toBeTruthy();
+    // 일자 카드에서 — 요청 없이.
+    await waitFor(() => expect(poiA()?.weather).toMatchObject({ condition: 'rain' }));
+    // 장소별 현재 카드(목록 배지가 받은 공유 캐시)에서.
+    await waitFor(() => expect(poiB()?.weather).toMatchObject({ condition: 'rain' }));
+    expect(markers().find((m) => m.id === 'poi:poi-c')?.weather).toBeNull();
+
+    const badge = await within(screen.getByTestId('trip-poi-row-poi-b')).findByTestId(
+      'weather-badge',
+    );
+    expect(badge.textContent).toContain('12');
+    const weatherRequests = server.paths.filter((p) => p.endsWith('/weather'));
+    expect(weatherRequests.some((p) => p.includes('poi-d'))).toBe(false);
+    expect(weatherRequests.filter((p) => p.includes('poi-b'))).toHaveLength(1);
+  });
+
   it('좌표 있는 여행 장소를 일자·마커 색 + 이름 라벨 마커로 그리고, 모두 담는 시점으로 연다', async () => {
     renderScreen();
     await screen.findByTestId('vworld-map');

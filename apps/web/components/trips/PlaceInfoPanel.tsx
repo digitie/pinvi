@@ -10,7 +10,7 @@ import {
   type PlaceDetailsState,
 } from '@/lib/usePlaceDetails';
 import { useMinuteNow, usePoiWeather } from '@/lib/usePoiWeather';
-import { activeAlerts, kstDateKey, type WeatherAlert } from '@/lib/weatherNow';
+import { activeAlerts, kstDateKey, type WeatherAlert } from '@pinvi/domain';
 import { featureResolutionNotice } from '@pinvi/domain';
 import type { PoiPlaceDetails, TripViewPoi } from '@pinvi/schemas';
 import {
