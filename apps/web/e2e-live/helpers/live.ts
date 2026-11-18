@@ -166,13 +166,46 @@ async function rememberSession(page: Page, key: string): Promise<void> {
   });
 }
 
+/*
+ * The access cookie lives `pinvi_access_token_minutes` (10 min on prod, `max_age`), so a cached jar
+ * goes stale mid-run. The app refreshes on the first 401 and replays, but a case that asserts the
+ * status of the first response it sees (WX-016 weather, SRCH-055 search) or calls the API through
+ * `page.request` while that refresh is in flight (NTF-012) then reads 401 — on the 2026-11-18 prod
+ * run every expiry landed on such a case, 10 min apart. So a reused jar whose access cookie has less
+ * than this margin left is seeded without it: the landing page's first call 401s, the app refreshes
+ * there, and the case starts with a full access lifetime.
+ */
+const ACCESS_COOKIE = 'pinvi_access';
+const ACCESS_REFRESH_MARGIN_S = 5 * 60;
+
+function accessCookieFresh(cookies: Cookie[]): boolean {
+  const access = cookies.find((c) => c.name === ACCESS_COOKIE);
+  // `expires === -1` is a session cookie (no max_age) — nothing to anticipate.
+  if (!access) return false;
+  return access.expires < 0 || access.expires - Date.now() / 1000 > ACCESS_REFRESH_MARGIN_S;
+}
+
 async function reuseSession(page: Page, key: string, landing: string, ready: Locator): Promise<boolean> {
-  const cookies = sessionCache.get(key);
-  if (!cookies) return false;
-  await page.context().addCookies(cookies);
+  const cached = sessionCache.get(key);
+  if (!cached) return false;
+  const fresh = accessCookieFresh(cached);
+  await page.context().addCookies(fresh ? cached : cached.filter((c) => c.name !== ACCESS_COOKIE));
+  // Without an access cookie the landing page must refresh; wait for it so the snapshot below holds
+  // the rotated refresh token and the case does not race the app's in-flight refresh.
+  const refreshed = fresh
+    ? null
+    : page
+        .waitForResponse((res) => /\/auth\/refresh(\?|$)/.test(res.url()) && res.request().method() === 'POST', {
+          timeout: 20_000,
+        })
+        .catch(() => null);
   await page.goto(landing);
   try {
     await expect(ready).toBeVisible({ timeout: 20_000 });
+    if (refreshed) {
+      const res = await refreshed;
+      if (!res || !res.ok()) throw new Error('session refresh failed');
+    }
   } catch {
     sessionCache.delete(key);
     return false;
