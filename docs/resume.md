@@ -1,3 +1,7 @@
+## 2026-11-19 — 호환 lock 정렬 후보
+
+- MapLibre GL6.17의 geojson-vt를 호환 범위 안의 6.3.1로 고정하고 기존 Concierge와 registry SRI를 맞췄다. Common/RN exact pin은 유지하며 canonical guard 통과, 실제 빌드·운영 수용은 후속 PR CI/소유자 단계다.
+
 ## 2026-11-19 — Common workspace 설치 경로 회귀 수정
 
 - UI0.2.2/tokens0.1.3의 npm12 workspace 중첩 설치를 실제 Node package resolution으로 찾는다. 모바일은 tokens-only를 유지한다.
