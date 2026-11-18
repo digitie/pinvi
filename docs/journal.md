@@ -1,3 +1,8 @@
+## 2026-11-19 — 호환 전이 의존성 정렬
+
+- MapLibre GL6.17의 geojson-vt를 호환 범위 안의 6.3.1로 고정하고 기존 Concierge와 registry SRI를 맞췄다. 직접 라이브러리 버전·Common 산출물·RN exact style-spec은 유지한다.
+- Node26.13.1/npm12.0.1 lock-only와 고정 Common canonical/toolchain guard를 확인했다. 전체 설치·빌드·운영 적용은 하지 않았고 정확 PR CI는 별도다.
+
 ## 2026-11-18 (claude) — 교통 근처 조회 묶음 전환 + Map service·admin 재vendor (브랜치 `perf/t-read-pin-01-near-batch`)
 
 - 출처: Map 읽기 성능 계획 `T-READ-PIN-01` ③ — Map `T-READ-04`(`POST /v1/service/transport/{dataset}/near-batch`)와
