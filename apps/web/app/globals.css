@@ -12,6 +12,7 @@
 @import '@kor-travel/tokens/radix.css';
 @import '@pinvi/design-tokens/theme.css';
 @import '@kor-travel/ui/dagster.css';
+@source '../node_modules/@kor-travel/ui/dist';
 @source '../../../node_modules/@kor-travel/ui/dist';
 
 /* Tailwind v4에서도 토큰 정본은 `@pinvi/design-tokens`의 v3 preset 하나다(ADR: 웹만 v4, 모바일은
