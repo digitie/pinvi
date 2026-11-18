@@ -5,7 +5,7 @@
 > **상태(중대 변화)**: 2026-06-08 기준 **kor-travel-map이 운영급 HTTP API를 이미 구축했다.**
 > 더 이상 "목표/aspirational"이 아니라 **실재하는 계약**이다 — ADR-026/027(DEC-01=B)
 > 의 전제가 충족됨.
-> **2026-11-18 재vendor (service·admin/full, Map T-READ-04)**: Map `a381dee7b555f51f063bb93750f6b7ba85437cae`의
+> **2026-11-18 재vendor (service·admin/full, Map T-READ-04)**: Map `8e90e56e21d9170e1dee962a359bc733d1da4461`의
 > `openapi.service.json`·`openapi.json`을 byte-exact로 vendor했다 — service SHA-256
 > `ed380047bc420e4469bd6f4f88740cfd54c23a50d1a88ccb97215737d76df275`, admin(full)
 > `a370f2c9a1abf76dc722560bfd37ee32701fe390d3ab2dad86c44aa7cdf70e46`(user 불변). 바뀐 것은

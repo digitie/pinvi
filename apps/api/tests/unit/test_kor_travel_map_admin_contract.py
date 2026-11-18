@@ -66,7 +66,7 @@ def _query_names(operation: dict[str, Any]) -> set[str]:
 
 
 def test_admin_snapshot_is_byte_pinned_to_a_reviewed_map_revision() -> None:
-    assert _UPSTREAM_COMMIT == "a381dee7b555f51f063bb93750f6b7ba85437cae"
+    assert _UPSTREAM_COMMIT == "8e90e56e21d9170e1dee962a359bc733d1da4461"
     assert hashlib.sha256(_SNAPSHOT.read_bytes()).hexdigest() == _SNAPSHOT_SHA256
 
 

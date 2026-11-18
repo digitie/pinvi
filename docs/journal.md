@@ -2,7 +2,7 @@
 
 - 출처: Map 읽기 성능 계획 `T-READ-PIN-01` ③ — Map `T-READ-04`(`POST /v1/service/transport/{dataset}/near-batch`)와
   **한 pair 회전**으로 낸다. Map PR이 먼저 머지되고 이 PR이 뒤따른다.
-- 재vendor: Map `a381dee7b555f51f063bb93750f6b7ba85437cae`의 service·full OpenAPI를 byte-exact로(user 불변). service provenance(`map_release_revision`·sha),
+- 재vendor: Map `8e90e56e21d9170e1dee962a359bc733d1da4461`의 service·full OpenAPI를 byte-exact로(user 불변). service provenance(`map_release_revision`·sha),
   `.env.example` 기대값 넷, 계약 시험 핀 넷, admin 스냅샷 핀, `api.yml`의 wheel·이미지 provenance sha 둘, M05 pair 계약
   (`scripts/generate_m05_pair_contract.py --write`)을 같이 옮겼다.
 - client: `KorTravelMapTransportClient.near_batch`(POST, 재시도 0·`transport` 회로 그대로). 405는 새
