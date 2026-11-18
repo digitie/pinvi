@@ -6,7 +6,9 @@
 - 재시도 0회. 503 ``TRANSPORT_STATE_NOT_LOADED``는 결정적이고, 지도 요청은 다음 이동이 곧 재시도다.
 - 5xx는 problem ``code``를 실은 ``KorTravelMapTransportUnavailable``, 401/403은 ``code="UPSTREAM_AUTH"``.
 - 404는 ``KorTravelMapFeatureNotFound``, 409는 rate limit이 아니라 cursor 세대 만료
-  (``KorTravelMapTransportCursorExpired``), 그 밖 4xx는 ``KorTravelMapBadRequest``.
+  (``KorTravelMapTransportCursorExpired``), 405는 그 경로에 그 method가 없는 옛 Map
+  (``KorTravelMapTransportRouteMissing`` — 묶음 근처 조회의 fallback 신호), 그 밖 4xx는
+  ``KorTravelMapBadRequest``.
 - service 표면이라 public API key로 fallback하지 않는다.
 
 응답은 envelope의 ``data`` dict다(transport-only). PinVi schema 투영은 `services/transport_layers.py`.
@@ -18,7 +20,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Final, Literal
 
@@ -50,6 +52,12 @@ _DETAIL_PATHS: Final[dict[TransportDatasetPath, str]] = {
     "highway-incidents": "/v1/service/transport/highway-incidents/{feature_id}",
     "airports": "/v1/service/transport/airports/{feature_id}",
 }
+#: 묶음 근처 조회(Map T-READ-04) — 주유소·돌발만 있다.
+NearBatchDatasetPath = Literal["fuel-stations", "highway-incidents"]
+_NEAR_BATCH_PATHS: Final[dict[NearBatchDatasetPath, str]] = {
+    "fuel-stations": "/v1/service/transport/fuel-stations/near-batch",
+    "highway-incidents": "/v1/service/transport/highway-incidents/near-batch",
+}
 _PRICE_HISTORY_PATH: Final = "/v1/service/transport/fuel-stations/{feature_id}/price-history"
 _STATUS_PATH: Final = "/v1/service/transport/status"
 
@@ -68,6 +76,14 @@ class KorTravelMapTransportUnavailable(KorTravelMapError):
 
 class KorTravelMapTransportCursorExpired(KorTravelMapError):
     """409 ``TRANSPORT_STATE_GENERATION_EXPIRED`` — cursor의 세대가 사라졌다. 처음부터 다시."""
+
+
+class KorTravelMapTransportRouteMissing(KorTravelMapBadRequest):
+    """405 — 그 경로에 그 method가 없다(묶음 근처 route가 없는 옛 Map).
+
+    옛 Map은 ``POST /{dataset}/near-batch``를 ``GET /{dataset}/{feature_id}``가 잡아 405를 낸다.
+    ``KorTravelMapBadRequest``의 하위라 이 신호를 따로 잡지 않는 호출자에게는 종전과 같은 4xx다.
+    """
 
 
 class KorTravelMapTransportClient:
@@ -99,12 +115,26 @@ class KorTravelMapTransportClient:
             )
         if sc == status.HTTP_409_CONFLICT:
             raise KorTravelMapTransportCursorExpired(f"kor-travel-map transport 409 ({path})")
+        if sc == status.HTTP_405_METHOD_NOT_ALLOWED:
+            raise KorTravelMapTransportRouteMissing(
+                f"kor-travel-map transport 405 ({path})", code=_error_code(resp)
+            )
         if sc >= status.HTTP_400_BAD_REQUEST:
             raise KorTravelMapBadRequest(f"kor-travel-map transport {sc}", code=_error_code(resp))
         return self._map._decode_envelope(resp)
 
     async def _get(
         self, path: str, params: Mapping[str, Any] | None = None
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        return await self._request("GET", path, params=params)
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        json: Any | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         if not self._map.has_service_token:
             # 운영 Map은 service token 없이는 401이다 — 뷰포트마다 거절당하러 가지 않는다.
@@ -113,7 +143,7 @@ class KorTravelMapTransportClient:
             )
         try:
             resp = await self._map._send(
-                "GET", path, params=params, retry=False, circuit="transport"
+                method, path, params=params, json=json, retry=False, circuit="transport"
             )
         except KorTravelMapUnavailable as exc:
             raise KorTravelMapTransportUnavailable(str(exc)) from exc
@@ -155,6 +185,28 @@ class KorTravelMapTransportClient:
             params["cursor"] = cursor
         data, meta = await self._get(_LIST_PATHS[dataset], params)
         return self._map._thread_page(data, meta)
+
+    async def near_batch(
+        self,
+        dataset: NearBatchDatasetPath,
+        *,
+        points: Sequence[tuple[float, float]],
+        radius_m: float,
+        limit: int,
+    ) -> dict[str, Any]:
+        """묶음 근처 조회(Map T-READ-04). data는 목록과 같은 ``{items, truncated, freshness}``.
+
+        ``points``는 ``(lon, lat)`` 1~60곳이고 모든 중심에 같은 ``radius_m``을 쓴다. Map이 한 세대에서
+        각 중심 근처의 합집합을 가장 가까운 중심까지의 거리순으로 ``limit``건 자른다. 이 route가 없는
+        옛 Map은 405(``KorTravelMapTransportRouteMissing``)다.
+        """
+        body = {
+            "points": [{"lon": lon, "lat": lat} for lon, lat in points],
+            "radius_m": radius_m,
+            "limit": limit,
+        }
+        data, _meta = await self._request("POST", _NEAR_BATCH_PATHS[dataset], json=body)
+        return data
 
     async def detail(self, dataset: TransportDatasetPath, feature_id: str) -> dict[str, Any]:
         """단건. data = ``{item, freshness, ...}``. 404 → ``KorTravelMapFeatureNotFound``."""

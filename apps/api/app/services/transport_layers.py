@@ -25,7 +25,9 @@ from app.clients.kor_travel_map import (
 from app.clients.kor_travel_map_transport import (
     KorTravelMapTransportClient,
     KorTravelMapTransportCursorExpired,
+    KorTravelMapTransportRouteMissing,
     KorTravelMapTransportUnavailable,
+    NearBatchDatasetPath,
     TransportDatasetPath,
 )
 from app.schemas.transport import (
@@ -207,12 +209,20 @@ NEAR_RADIUS_M: Final[dict[TransportLayer, int]] = {
     "fuel_station": 10_000,
     "highway_incident": 20_000,
 }
-#: 한 요청이 받는 기준 장소 수 상한.
+#: 반경 표면 레이어의 Map 묶음 근처 조회 경로(Map T-READ-04).
+NEAR_BATCH_DATASET_PATH: Final[dict[TransportLayer, NearBatchDatasetPath]] = {
+    "fuel_station": "fuel-stations",
+    "highway_incident": "highway-incidents",
+}
+#: 한 요청이 받는 기준 장소 수 상한. Map 묶음 근처 조회의 중심 상한(60)과 같다 — 한 번에 보낸다.
 NEAR_MAX_POINTS: Final = 60
-#: 이 거리 안의 기준 장소는 한 번의 Map 근처 조회로 묶는다(조회 반경을 이만큼 넓히고 정확한 거리로 다시
-#: 거른다 — 묶어도 결과는 같다).
+#: 묶음 조회 반경에 더하는 여유(m). Map(Valkey)과 PinVi의 지구 반경이 달라(약 0.03%) 경계의 항목이 한쪽에서만
+#: 잡히지 않게 조금 넓혀 받고 PinVi 거리로 다시 거른다 — 옛 경로와 같은 집합이 된다.
+NEAR_BATCH_SLACK_M: Final = 50
+#: (옛 Map fallback) 이 거리 안의 기준 장소는 한 번의 Map 근처 조회로 묶는다(조회 반경을 이만큼 넓히고
+#: 정확한 거리로 다시 거른다 — 묶어도 결과는 같다).
 NEAR_MERGE_M: Final = 2_000
-#: 동시에 보내는 Map 근처 조회 수.
+#: (옛 Map fallback) 동시에 보내는 Map 근처 조회 수.
 NEAR_CONCURRENCY: Final = 6
 #: 반경 조회 레이어 하나의 상한(초). 조회가 여러 번이라 viewport 상한보다 넉넉하다.
 NEAR_LAYER_DEADLINE_SECONDS: Final[float] = 5.0
@@ -239,14 +249,14 @@ def cluster_points(
     return centers
 
 
-async def _layer_near_points(
+async def _near_pages_per_center(
     client: KorTravelMapTransportClient,
     layer: TransportLayer,
     points: Sequence[tuple[float, float]],
     limit: int,
-) -> TransportLayerResult:
+) -> list[dict[str, Any]]:
+    """옛 Map 경로 — 가까운 장소를 묶은 중심마다 근처 조회 한 번(동시 ``NEAR_CONCURRENCY``)."""
     radius = NEAR_RADIUS_M[layer]
-    centers = cluster_points(points)
     semaphore = asyncio.Semaphore(NEAR_CONCURRENCY)
 
     async def one(center: tuple[float, float]) -> dict[str, Any]:
@@ -257,9 +267,40 @@ async def _layer_near_points(
                 limit=limit,
             )
 
+    return list(await asyncio.gather(*(one(center) for center in cluster_points(points))))
+
+
+async def _near_pages(
+    client: KorTravelMapTransportClient,
+    layer: TransportLayer,
+    points: Sequence[tuple[float, float]],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """레이어당 Map 묶음 근처 조회 한 번. 그 route가 없는 옛 Map(405)이면 중심마다 조회로 떨어진다."""
+    try:
+        page = await client.near_batch(
+            NEAR_BATCH_DATASET_PATH[layer],
+            points=points,
+            radius_m=float(NEAR_RADIUS_M[layer] + NEAR_BATCH_SLACK_M),
+            limit=limit,
+        )
+    except KorTravelMapTransportRouteMissing:
+        # Map과 PinVi를 한 pair로 회전하므로 운영에서는 나오지 않는다 — 옛 Map과 짝지어진 경우의 안전망.
+        logger.info("transport.near_batch_unsupported", extra={"layer": layer})
+        return await _near_pages_per_center(client, layer, points, limit)
+    return [page]
+
+
+async def _layer_near_points(
+    client: KorTravelMapTransportClient,
+    layer: TransportLayer,
+    points: Sequence[tuple[float, float]],
+    limit: int,
+) -> TransportLayerResult:
+    radius = NEAR_RADIUS_M[layer]
     try:
         pages = await asyncio.wait_for(
-            asyncio.gather(*(one(center) for center in centers)),
+            _near_pages(client, layer, points, limit),
             timeout=NEAR_LAYER_DEADLINE_SECONDS,
         )
         truncated = False
@@ -280,7 +321,7 @@ async def _layer_near_points(
             for item in _items(layer, raw_items):
                 if item.coord is None:
                     continue
-                # 묶은 중심의 넓힌 반경이 아니라 실제 기준 장소들까지의 거리로 다시 거른다.
+                # 넓힌 반경(묶은 중심·여유)이 아니라 실제 기준 장소들까지의 PinVi 거리로 다시 거른다.
                 distance = min(
                     haversine_m(item.coord.lon, item.coord.lat, lon, lat) for lon, lat in points
                 )
@@ -321,8 +362,9 @@ async def markers_near_points(
 ) -> list[TransportLayerResult]:
     """기준 장소들(여행 장소)에서 레이어별 반경(`NEAR_RADIUS_M`) 안의 항목. 가까운 순, 레이어별 강등.
 
-    반경 거르기는 Map의 근처 검색(Valkey GEOSEARCH)이 하고, 여러 장소의 합집합·중복 제거·정확한 거리
-    재확인을 여기서 한다. 기준 장소가 없으면 Map을 부르지 않고 빈 ``ok``다.
+    레이어마다 Map 묶음 근처 조회(`near-batch`, Valkey GEOSEARCH 한 세대)를 한 번 부른다. Map이 합집합을
+    가장 가까운 중심까지의 거리순으로 자르고, 정확한 거리 재확인·``limit``은 여기서 다시 한다. 옛 Map(405)이면
+    중심마다 조회로 떨어진다. 기준 장소가 없으면 Map을 부르지 않고 빈 ``ok``다.
     """
     if not points:
         return [TransportLayerResult(layer=layer, status="ok") for layer in layers]

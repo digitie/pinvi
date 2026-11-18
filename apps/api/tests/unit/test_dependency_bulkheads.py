@@ -8,6 +8,7 @@ Telegram은 상한이 없어 정지 때 쓰기 트랜잭션을 쥔 요청이 tim
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Iterator
 from typing import Any
 
@@ -232,11 +233,16 @@ def _default_capped_map(handler: Any) -> KorTravelMapClient:
     )
 
 
-async def test_trip_transport_near_layers_are_not_rejected_by_their_own_fanout() -> None:
+@pytest.mark.parametrize(("map_has_near_batch", "expected_calls"), [(True, 2), (False, 122)])
+async def test_trip_transport_near_layers_are_not_rejected_by_their_own_fanout(
+    map_has_near_batch: bool, expected_calls: int
+) -> None:
     """레이어 2개 x 2 km 넘게 떨어진 장소 60곳, Map 호출마다 30 ms — 두 레이어 모두 상한 5초 안에 ``ok``.
 
     상한이 2였을 때는 한 요청의 동시 근처 조회(레이어당 6)가 자기 자리를 넘어 ``BULKHEAD_FULL``로 레이어
     전체가 ``unavailable``이었다. 즉시 답하는 대역은 자리를 오래 쥐지 않아 이 결함을 가리므로 지연을 넣는다.
+    Map T-READ-04 뒤에는 레이어당 묶음 조회 한 번이다(2회). 묶음 route가 없는 옛 Map(405)이면 중심마다
+    조회로 떨어져도(405 2회 + 120회) 같은 결과다.
     """
     from app.clients.kor_travel_map_transport import KorTravelMapTransportClient
     from app.services import transport_layers
@@ -248,7 +254,15 @@ async def test_trip_transport_near_layers_are_not_rejected_by_their_own_fanout()
         nonlocal sent
         sent += 1
         await asyncio.sleep(0.03)
-        dataset = request.url.path.rstrip("/").rsplit("/", 1)[-1]
+        segments = request.url.path.rstrip("/").split("/")
+        if request.method == "POST":
+            if not map_has_near_batch:
+                return httpx.Response(405, json={"detail": "Method Not Allowed"})
+            assert segments[-1] == "near-batch"
+            assert len(json.loads(request.content)["points"]) == 60
+            dataset = segments[-2]
+        else:
+            dataset = segments[-1]
         body = fx.list_body(dataset)
         body["data"]["items"] = []
         return httpx.Response(200, json=body)
@@ -270,7 +284,7 @@ async def test_trip_transport_near_layers_are_not_rejected_by_their_own_fanout()
         ("fuel_station", "ok", None),
         ("highway_incident", "ok", None),
     ]
-    assert sent == 120
+    assert sent == expected_calls
     assert _sample("kor_travel_map", "transport") == before
 
 

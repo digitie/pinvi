@@ -66,11 +66,14 @@
 } ] } }
 ```
 
-- 반경 거르기는 Map 근처 검색(`lon`·`lat`·`radius_m`, Valkey GEOSEARCH — Map ADR-114 D6)이 한다. PinVi는 2 km 안의
-  기준 장소를 한 조회로 묶어(반경 +2 km로 조회) 합치고, 모든 기준 장소까지의 대원 거리로 다시 걸러 중복을 없앤다.
-  `distance_m`은 가장 가까운 기준 장소까지의 거리다.
-- 5xx를 내지 않는다(`markers-in-bounds`와 같은 레이어별 강등, 레이어 기한 5초). Map 조회 하나라도 실패하면 그 레이어는 `unavailable`.
-- `truncated`: Map 조회 하나가 상한에 닿았거나 합친 결과가 `limit`을 넘었다.
+- 반경 거르기는 Map 묶음 근처 검색(`POST /v1/service/transport/{fuel-stations|highway-incidents}/near-batch`, Valkey
+  GEOSEARCH 한 세대 — Map T-READ-04)이 한다. 레이어마다 Map을 **한 번** 부르고 기준 장소 전부(최대 60)를 보낸다(반경 +50 m
+  여유). PinVi는 모든 기준 장소까지의 대원 거리로 다시 걸러 레이어 반경 밖을 버린다. `distance_m`은 가장 가까운 기준 장소까지의
+  거리다.
+- 묶음 route가 없는 옛 Map(405)과 짝지어지면 종전 경로로 떨어진다 — 2 km 안의 기준 장소를 한 조회로 묶어(반경 +2 km) 중심마다
+  근처 검색(`lon`·`lat`·`radius_m`)을 동시 6개로 보내고 같은 방식으로 합친다. 결과 집합은 같다.
+- 5xx를 내지 않는다(`markers-in-bounds`와 같은 레이어별 강등, 레이어 기한 5초). Map 조회가 실패하면(405 제외) 그 레이어는 `unavailable`.
+- `truncated`: Map 조회가 상한에 닿았거나 합친 결과가 `limit`을 넘었다.
 
 ## 상세 — `GET /transport/{fuel-stations|rest-areas|highway-incidents|airports}/{feature_id}`
 
