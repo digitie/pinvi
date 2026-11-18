@@ -5,6 +5,13 @@
 > **상태(중대 변화)**: 2026-06-08 기준 **kor-travel-map이 운영급 HTTP API를 이미 구축했다.**
 > 더 이상 "목표/aspirational"이 아니라 **실재하는 계약**이다 — ADR-026/027(DEC-01=B)
 > 의 전제가 충족됨.
+> **2026-11-18 재vendor (service·admin/full, Map T-READ-04)**: Map `a381dee7b555f51f063bb93750f6b7ba85437cae`의
+> `openapi.service.json`·`openapi.json`을 byte-exact로 vendor했다 — service SHA-256
+> `ed380047bc420e4469bd6f4f88740cfd54c23a50d1a88ccb97215737d76df275`, admin(full)
+> `a370f2c9a1abf76dc722560bfd37ee32701fe390d3ab2dad86c44aa7cdf70e46`(user 불변). 바뀐 것은
+> `POST /v1/service/transport/{fuel-stations,highway-incidents}/near-batch` 두 operation과 `NearBatchRequest`·
+> `NearBatchPoint`뿐이다. service provenance `map_release_revision`·admin 스냅샷 핀·M05 pair 계약을 같이 옮겼다.
+> Map과 **한 pair 회전**으로만 배포한다(Map만 먼저 돌리면 pair gate가 digest 불일치로 거부한다).
 > **2026-10-02 재vendor (Map ADR-105, weather 삭제 — 본문의 옛 핀·weather 서술보다 우선)**:
 > Map main `11b811d91eadf177d2a52319945e6c283b62dbe6`(#1293 머지 커밋)의
 > user/service/full OpenAPI를 byte-exact vendor했다 — user SHA-256

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterator
 from typing import Any
 
@@ -51,6 +52,8 @@ def _ok(request: httpx.Request) -> httpx.Response:
     if parts[0] == "status":
         return httpx.Response(200, json=fx.status_body())
     if len(parts) == 1:
+        return httpx.Response(200, json=fx.list_body(parts[0]))
+    if parts[1:] == ["near-batch"] and request.method == "POST":
         return httpx.Response(200, json=fx.list_body(parts[0]))
     if len(parts) == 3:
         return httpx.Response(200, json=fx.history_body(available=False))
@@ -244,9 +247,44 @@ async def test_markers_near_uses_map_near_search(
     assert fuel["status"] == "ok"
     assert fuel["items"][0]["feature_id"] == fx.FUEL_STATION_ID
     assert fuel["items"][0]["distance_m"] < 1000
-    # 같은 좌표 두 번은 한 번만 조회, 영역이 아니라 근처 검색.
+    # 레이어당 Map 묶음 근처 조회 한 번(T-READ-04), 같은 좌표 두 번은 한 점으로 보낸다.
     assert len(fake.requests) == 1
-    assert fake.requests[0].url.params["radius_m"] == "12000.0"
+    sent = fake.requests[0]
+    assert (sent.method, sent.url.path) == (
+        "POST",
+        "/v1/service/transport/fuel-stations/near-batch",
+    )
+    assert json.loads(sent.content) == {
+        "points": [{"lon": 127.03, "lat": 37.5}],
+        "radius_m": 10050.0,
+        "limit": 200,
+    }
+
+
+async def test_markers_near_falls_back_on_a_map_without_near_batch(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    """옛 Map(묶음 route 없음 → 405)과 짝지어져도 중심마다 근처 조회로 같은 결과를 낸다."""
+    settings.pinvi_kor_travel_map_transport_enabled = True
+
+    def legacy(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(405, json={"detail": "Method Not Allowed"})
+        return _ok(request)
+
+    fake = _install(legacy)
+    resp = await _get(
+        client,
+        auth_cookies,
+        verified_user,
+        "/transport/markers-near?points=127.03,37.5&layers=fuel_station",
+    )
+    assert resp.status_code == 200, resp.text
+    fuel = resp.json()["data"]["layers"][0]
+    assert fuel["status"] == "ok"
+    assert fuel["items"][0]["feature_id"] == fx.FUEL_STATION_ID
+    assert [r.method for r in fake.requests] == ["POST", "GET"]
+    assert fake.requests[1].url.params["radius_m"] == "12000.0"
 
 
 async def test_markers_near_defaults_and_validation(

@@ -1,3 +1,19 @@
+## 2026-11-18 (claude) — 교통 근처 조회 묶음 전환 + Map service·admin 재vendor (브랜치 `perf/t-read-pin-01-near-batch`)
+
+- 출처: Map 읽기 성능 계획 `T-READ-PIN-01` ③ — Map `T-READ-04`(`POST /v1/service/transport/{dataset}/near-batch`)와
+  **한 pair 회전**으로 낸다. Map PR이 먼저 머지되고 이 PR이 뒤따른다.
+- 재vendor: Map `a381dee7b555f51f063bb93750f6b7ba85437cae`의 service·full OpenAPI를 byte-exact로(user 불변). service provenance(`map_release_revision`·sha),
+  `.env.example` 기대값 넷, 계약 시험 핀 넷, admin 스냅샷 핀, `api.yml`의 wheel·이미지 provenance sha 둘, M05 pair 계약
+  (`scripts/generate_m05_pair_contract.py --write`)을 같이 옮겼다.
+- client: `KorTravelMapTransportClient.near_batch`(POST, 재시도 0·`transport` 회로 그대로). 405는 새
+  `KorTravelMapTransportRouteMissing`(`KorTravelMapBadRequest` 하위 — 따로 잡지 않는 호출자에겐 종전 4xx 그대로).
+- `markers_near_points`: 레이어마다 묶음 한 번, 기준 장소 전부(최대 60, Map 상한과 같다), 반경 +50 m 여유(Valkey와 PinVi의
+  지구 반경 차 약 0.03%) 뒤 PinVi 거리로 다시 거른다. 405면 종전 경로(2 km 묶음·중심마다 조회 동시 6)로 떨어진다 — 계획이
+  요구한 fallback이다(해제 조건 ⑤). 그 밖 오류(503 등)는 fallback 없이 레이어 강등.
+- 시험: 레이어당 Map 한 번(계수), 묶음·fallback 결과 동일, 정확 반경 재거르기, 503 강등, 30 ms 지연 60곳 x 2레이어가 묶음(2회)·
+  fallback(405 2회 + 120회) 모두 5초 안 `ok`, 실제 보낸 본문이 vendored `NearBatchRequest`를 통과하고 상한이 맞는다.
+  기존 반경 시험은 옛 Map 경로로 유지.
+
 ## 2026-11-18 (claude) — Node 26.13.1 전환 (브랜치 `chore/node-26.13.1`)
 
 - 출처: 소유자 결정(2026-11-17) — 모든 저장소 Node 26.13.1(최신 LTS), npm은 12.0.1 유지. common T-029 채택 커밋

@@ -42,7 +42,15 @@ from app.schemas.transport import (
     TransportCoord,
     TransportFreshness,
 )
-from app.services.transport_layers import LAYER_DATASET_PATH, LAYER_MAP_DATASET, PRODUCT_CODE_BY_KEY
+from app.services.transport_layers import (
+    LAYER_DATASET_PATH,
+    LAYER_MAP_DATASET,
+    NEAR_BATCH_DATASET_PATH,
+    NEAR_BATCH_SLACK_M,
+    NEAR_MAX_POINTS,
+    NEAR_RADIUS_M,
+    PRODUCT_CODE_BY_KEY,
+)
 from tests import transport_map_fixtures as fx
 from tests.openapi_subset import json_types as _json_types
 from tests.openapi_subset import schema_errors as _errors
@@ -79,15 +87,26 @@ _EXPECTED_QUERY: dict[str, set[str]] = {
         "cursor",  # Map ADR-114 D6 T4 — PinVi는 보내지 않는다(첫 페이지만 읽는다)
     },
     "/v1/service/transport/status": set(),
+    # Map T-READ-04 묶음 근처 조회 — POST 본문만, query 없음.
+    **{f"/v1/service/transport/{d}/near-batch": set() for d in NEAR_BATCH_DATASET_PATH.values()},
 }
 
 
 async def _sent_queries() -> dict[str, set[str]]:
     """client를 MockTransport로 실제 호출해 **나간** query 키를 경로별로 모은다(손으로 적은 표가 아니다)."""
+    sent, _bodies = await _sent_requests()
+    return sent
+
+
+async def _sent_requests() -> tuple[dict[str, set[str]], dict[str, Any]]:
+    """나간 (경로별 query 키, 경로별 JSON 본문)."""
     sent: dict[str, set[str]] = {}
+    bodies: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         sent.setdefault(request.url.path, set()).update(request.url.params.keys())
+        if request.content:
+            bodies[request.url.path] = json.loads(request.content)
         return httpx.Response(200, json={"data": {}, "meta": {"duration_ms": 0}})
 
     client = KorTravelMapTransportClient(
@@ -104,11 +123,27 @@ async def _sent_queries() -> dict[str, set[str]]:
     await client.fuel_price_history(
         "f1", product_code="B027", since=datetime(2026, 10, 1, tzinfo=KST), limit=5
     )
-    return sent
+    for layer, near_dataset in NEAR_BATCH_DATASET_PATH.items():
+        await client.near_batch(
+            near_dataset,
+            points=[(126.5, 37.5)] * NEAR_MAX_POINTS,
+            radius_m=float(NEAR_RADIUS_M[layer] + NEAR_BATCH_SLACK_M),
+            limit=_MAX_LIMIT,
+        )
+    return sent, bodies
+
+
+def _operation(spec: dict[str, Any], path: str) -> dict[str, Any]:
+    """경로의 유일한 operation(transport 표면은 경로마다 method 하나 — GET 또는 near-batch POST)."""
+    item = spec["paths"][path]
+    ops = [item[m] for m in ("get", "post", "put", "patch", "delete") if m in item]
+    assert len(ops) == 1, path
+    op: dict[str, Any] = ops[0]
+    return op
 
 
 def _query_names(spec: dict[str, Any], path: str) -> set[str]:
-    op = spec["paths"][path]["get"]
+    op = _operation(spec, path)
     return {p["name"] for p in op.get("parameters", []) if p["in"] == "query"}
 
 
@@ -138,6 +173,34 @@ def test_client_module_requests_exactly_the_transport_paths(spec: dict[str, Any]
     requested = set(re.findall(r'"(/v1/[^"]*)"', source))
     transport_paths = {p for p in spec["paths"] if p.startswith("/v1/service/transport")}
     assert requested == transport_paths
+
+
+async def test_near_batch_request_body_matches_map_schema(spec: dict[str, Any]) -> None:
+    """PinVi가 실제로 보낸 묶음 본문(상한까지 채움)이 Map ``NearBatchRequest``를 통과하고 상한이 맞는다."""
+    _sent, bodies = await _sent_requests()
+    schemas = spec["components"]["schemas"]
+    request_schema = schemas["NearBatchRequest"]
+    for layer, near_dataset in NEAR_BATCH_DATASET_PATH.items():
+        path = f"/v1/service/transport/{near_dataset}/near-batch"
+        op = spec["paths"][path]["post"]
+        assert op["requestBody"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/NearBatchRequest"
+        }
+        # 응답은 같은 dataset의 목록 응답과 같은 schema다 — PinVi가 같은 해석기를 쓴다.
+        list_op = spec["paths"][f"/v1/service/transport/{near_dataset}"]["get"]
+        assert (
+            op["responses"]["200"]["content"]["application/json"]["schema"]
+            == list_op["responses"]["200"]["content"]["application/json"]["schema"]
+        )
+        body = bodies[path]
+        errors = _errors(spec, {"$ref": "#/components/schemas/NearBatchRequest"}, body, "$")
+        assert errors == [], errors
+        assert body["radius_m"] <= request_schema["properties"]["radius_m"]["maximum"], layer
+    assert NEAR_MAX_POINTS == request_schema["properties"]["points"]["maxItems"]
+    assert _MAX_LIMIT == request_schema["properties"]["limit"]["maximum"]
+    assert set(LAYER_DATASET_PATH[layer] for layer in NEAR_BATCH_DATASET_PATH) == set(
+        NEAR_BATCH_DATASET_PATH.values()
+    )
 
 
 def test_pinvi_limit_matches_map_cap(spec: dict[str, Any]) -> None:
