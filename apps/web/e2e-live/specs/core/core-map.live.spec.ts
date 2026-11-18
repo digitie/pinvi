@@ -5,7 +5,7 @@
  *   components/map/TransportLayerControls.tsx, vendor vworld-map-web Marker.js / VWorldMapView.web.js,
  *   vworld-map-core vworldStyle.js (attribution text).
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Response } from '@playwright/test';
 import {
   createTrip,
   deleteTrip,
@@ -30,14 +30,45 @@ import {
 
 const ATTRIBUTION = '공간정보 오픈플랫폼 브이월드';
 
+const isInBoundsGet = (r: Response) =>
+  r.url().includes('/features/in-bounds') && r.request().method() === 'GET';
+
+/**
+ * The first explore-map in-bounds must succeed — except for one transient Map-unavailable 503, which is
+ * retried exactly once through the app's own "다시 불러오기" button and recorded as a `map-unavailable`
+ * annotation. 2026-11-18 CORE-016 @firefox (edb32c94): under n150 disk-I/O pressure (PSI io some avg300≈36%)
+ * the cold Map query for the default Seoul viewport took 5.6–7.0 s (Map `slow_request db_ms≈5.9 s`), PinVi's
+ * 5 s Map read timeout fired (`kor_travel_map.unavailable … ReadTimeout`, not resent by design since #702) and
+ * the page showed `feature-map-error`. The same bbox answered 200 ~150 times earlier that day. A second 503
+ * fails the case at once; no 200 within 45 s fails it as before.
+ */
 async function openExploreMap(page: Page) {
-  const inBounds = page.waitForResponse(
-    (r) => r.url().includes('/features/in-bounds') && r.status() === 200,
-    { timeout: 45_000 },
-  );
-  await gotoTolerant(page, '/map');
-  await waitForMapCanvas(page);
-  await inBounds;
+  const statuses: number[] = [];
+  const onResponse = (r: Response) => {
+    if (isInBoundsGet(r)) statuses.push(r.status());
+  };
+  page.on('response', onResponse);
+  try {
+    await gotoTolerant(page, '/map');
+    await waitForMapCanvas(page);
+    const deadline = Date.now() + 45_000;
+    let retried = false;
+    while (!statuses.includes(200)) {
+      const unavailable = statuses.filter((s) => s === 503).length;
+      if (unavailable >= 2) throw new Error(`/features/in-bounds 503 again after one retry: ${statuses.join(',')}`);
+      if (unavailable === 1 && !retried) {
+        retried = true;
+        annotate(test.info(), 'map-unavailable', 'first /features/in-bounds 503 — retried once via 다시 불러오기');
+        await page.getByTestId('feature-map-error').getByRole('button', { name: '다시 불러오기' }).click();
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`no 200 /features/in-bounds within 45 s (statuses: ${statuses.join(',') || 'none'})`);
+      }
+      await page.waitForTimeout(250);
+    }
+  } finally {
+    page.off('response', onResponse);
+  }
   // Default Seoul viewport can be all clusters — zoom in until an individual feature pin renders.
   await ensureFeatureMarkers(page, 1);
 }
