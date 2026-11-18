@@ -48,10 +48,14 @@ test.describe('ADM users / audit (read-only)', () => {
     for (const status of ['disabled', 'active']) {
       const res = waitForGet(page, new RegExp(`/admin/users\\?.*status_filter=${status}`));
       await adminSelect(page, 'admin-users-status-filter').selectOption(status);
-      await res;
+      // The list keeps the previous page on screen until the filtered one renders
+      // (keepPreviousData), so counting rows right after the response reads the stale list. Wait
+      // until the table shows exactly what the API answered (prod may have 0 disabled users).
+      const body = (await (await res).json()) as { data?: { items?: unknown[] }; items?: unknown[] };
+      const expected = (body.data?.items ?? body.items ?? []).length;
       const rows = page.locator('[data-testid^="admin-users-row-"]');
-      const count = await rows.count();
-      for (let i = 0; i < count; i += 1) await expect(rows.nth(i)).toContainText(status);
+      await expect(rows).toHaveCount(expected, { timeout: 15_000 });
+      for (let i = 0; i < expected; i += 1) await expect(rows.nth(i)).toContainText(status);
     }
   });
 
