@@ -8,6 +8,7 @@ import {
   claimErrorReloadAttempt,
   clearErrorReloadAttempt,
   isLikelyRecoverableNextRuntimeError,
+  shouldAutoReloadForError,
 } from '@/lib/error-recovery';
 import { errorDigest, friendlyErrorText } from '@pinvi/domain';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
@@ -42,10 +43,13 @@ export function RouteError({
 
   useEffect(() => {
     if (!recoverable || typeof window === 'undefined') return;
+    // 페이지 이탈 중 끊긴 fetch(Firefox NetworkError 등)는 reload하지 않는다. reload가
+    // 사용자의 이동을 취소하고, 이 경우 claim도 소모하지 않는다.
+    if (!shouldAutoReloadForError(error)) return;
     if (claimErrorReloadAttempt(window.location.pathname)) {
       window.location.reload();
     }
-  }, [recoverable]);
+  }, [error, recoverable]);
 
   const retry = () => {
     if (typeof window !== 'undefined') {
