@@ -323,12 +323,26 @@ export function watchRouterRequests(page: Page): (timeoutMs?: number) => Promise
  * page (e.g. the post-login /home RSC fetch) can abort our goto in Firefox even after `watchRouterRequests`
  * reported quiet (2026-11-17 cat12 CORE-016 @firefox: `page.goto('/map')`). Retrying once is enough: the stray
  * navigation has committed by then. Any other error, or a second abort, is rethrown.
+ *
+ * `NS_ERROR_FAILURE` is the same race seen from the other side (2026-11-18 CORE-016 @firefox, c21d9c5e): Firefox
+ * fails the leaving page's in-flight fetches as soon as our goto starts, the segment error boundary classifies
+ * "NetworkError when attempting to fetch resource" as recoverable and calls `location.reload()`
+ * (`components/feedback/RouteError.tsx`), and that reload cancels our goto. The leaving page's snapshot showed
+ * the boundary's "런타임 상태가 서버와 맞지 않아" panel. Each tolerated abort is recorded as a `goto-abort`
+ * annotation, never hidden.
  */
 export async function gotoTolerant(page: Page, url: string): Promise<void> {
   try {
     await page.goto(url);
   } catch (err) {
-    if (!String(err).includes('NS_BINDING_ABORTED')) throw err;
+    const text = String(err);
+    const code = ['NS_BINDING_ABORTED', 'NS_ERROR_FAILURE'].find((c) => text.includes(c));
+    if (!code) throw err;
+    try {
+      test.info().annotations.push({ type: 'goto-abort', description: `${url}: ${code} — retried once` });
+    } catch {
+      // outside a test
+    }
     await page.waitForLoadState('load').catch(() => undefined);
     await page.goto(url);
   }
