@@ -49,12 +49,13 @@ ENV NEXT_PUBLIC_GRAFANA_URL=${NEXT_PUBLIC_GRAFANA_URL}
 ENV NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH=${NEXT_PUBLIC_GRAFANA_DASHBOARD_PATH}
 ENV NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED=${NEXT_PUBLIC_PINVI_RESTORE_HOTSWAP_UI_ENABLED}
 ENV NEXT_PUBLIC_VWORLD_API_KEY=${NEXT_PUBLIC_VWORLD_API_KEY}
-RUN npx --yes npm@12.0.1 --workspace apps/web run build
+RUN npx --yes npm@12.0.1 --workspace apps/web run build \
+    && mkdir -p /repo/apps/web/node_modules
 
 # ─────────────────────────────────────────────
 FROM node:26.13.1-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS runtime
 RUN npm install --global npm@12.0.1
-WORKDIR /app
+WORKDIR /app/apps/web
 
 ARG PINVI_BUILD_ENVIRONMENT=development
 ARG PINVI_SOURCE_REVISION=development
@@ -81,24 +82,11 @@ COPY --from=build /repo/apps/web/.next ./.next
 COPY --from=build /repo/apps/web/public ./public
 COPY --from=build /repo/apps/web/package.json ./package.json
 COPY --from=build /repo/apps/web/next.config.mjs ./next.config.mjs
-# 런타임에는 루트 트리만 넣는다. 중첩분을 덧씌우려던 초안은 두 가지로
-# 틀렸다(적대 리뷰 MAJOR-1/2):
-#
-# 1. `COPY`는 디렉터리를 **합친다**(replace가 아니다). 같은 패키지의 두
-#    버전을 겹치면 v4의 `package.json`·`exports`가 v3의 `lib/`·`src/`
-#    위에 얹힌 **혼종 디렉터리**가 나온다 — 요청 시점에 `Cannot find
-#    module`로 죽는, 막으려던 바로 그 실패다.
-# 2. 그 경로가 없으면 COPY가 **빌드를 죽인다**. 지금 중첩되는 것은
-#    `apps/mobile`이 tailwind v3를 고정해서 생긴 `tailwindcss` 하나뿐이라,
-#    mobile이 v4로 올라가면 중첩이 사라지고 프로덕션 빌드가 깨진다.
-#    "어느 workspace가 중첩되는지 열거하지 않는다"고 해 놓고 한 개를
-#    결박한 셈이었다.
-#
-# 2026-11-11 모바일도 Tailwind4.3.5로 맞춰 현재 Tailwind3 중첩은 없다.
-# 이 정렬 여부는 check-mobile-styling.mjs가 lock 전체에서 검사한다. 런타임 우선순위가 실제로 필요해지면 그때의 정답은
-# 이 자리의 손수 병합이 아니라 Next `output: 'standalone'`이다 — 추적된
-# 의존만 그대로 담아 이 문제와 이미지 크기를 함께 없앤다.
-COPY --from=build /repo/node_modules ./node_modules
+# Preserve Node's root/workspace lookup hierarchy without merging package versions.
+# An empty workspace node_modules is created above for fully hoisted installs.
+COPY --from=build /repo/node_modules /app/node_modules
+COPY --from=build /repo/packages /app/packages
+COPY --from=build /repo/apps/web/node_modules ./node_modules
 
 # Next의 이미지/fetch·응답 캐시와 npx 캐시만 runtime 사용자에게 쓰기를 허용한다.
 # 앱 루트·정적 파일·전체 node_modules는 기존 root 소유/읽기 권한을 유지한다.

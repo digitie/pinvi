@@ -1,3 +1,10 @@
+## 2026-11-19 — Common workspace 설치 경로 회귀 수정
+
+- UI0.2.2/tokens0.1.3의 npm12 workspace 중첩 설치를 실제 Node package resolution으로 찾는다. 모바일은 tokens-only를 유지한다.
+- Tailwind가 root 및 web workspace의 Common dist를 탐색한다. Docker runtime은 root와 web node_modules 및 내부 workspace packages를 원래 계층으로 보존해 패키지 버전을 덮어쓰지 않는다.
+- 고정 R pack을 실제 npm fresh install한 root/nested 두 배치에서 checker·Tailwind 출력·runtime VirtualTable import PASS. 이전 root 고정 checker와 root-only runtime 복사는 nested 배치에서 실패하는 negative control로 확인했다. 기존 이미지 부팅 CI step도 실제 Common 로딩을 검증한다. job 구조/순서 변경 없음.
+- full app fresh install/build/image 수용은 새 exact-head CI로 확인한다. 원본 독립 리뷰는 보존하고 수정 head와 별도 closure 증거로 재확인을 받는다. 운영 적용 없음.
+
 ## 2026-11-18 — 공통 표 수정 산출물과 고정 catalog C 채택 준비
 
 - 실제 main pack R(`706aaa7821588dfca72f660c9161f56be2d0445f`)의 UI0.2.2·tokens0.1.3를 소비한다. VirtualTable의 좁은 grid 가로 접근 수정은 공통 라이브러리에서 받는다.
