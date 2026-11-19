@@ -13,7 +13,10 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import pytest
 import yaml
+from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 
 _ETL_ROOT = Path(__file__).resolve().parents[1]
 _DAGSTER_YAML = _ETL_ROOT / "dagster.yaml"
@@ -119,3 +122,30 @@ def test_own_instance_max_runtime_equals_the_job_tag() -> None:
 
     config = yaml.safe_load(_DAGSTER_YAML.read_text(encoding="utf-8"))
     assert config["run_monitoring"]["max_runtime_seconds"] == PINVI_RUN_MAX_RUNTIME_SECONDS
+
+
+@pytest.mark.parametrize(
+    ("compose", "service"),
+    [("docker-compose.yml", "dagster"), ("docker-compose.app.yml", "app-dagster")],
+)
+def test_standalone_storage_keeps_the_installed_psycopg2_driver(
+    compose: str, service: str
+) -> None:
+    """SQLAlchemy 2.1의 bare-URL 기본값으로 미설치 psycopg3를 선택하지 않는다.
+
+    실제 compose 입력으로 DBAPI를 로드하되 연결은 열지 않는다. 계정과 DB는
+    placeholder로 치환하며, 앱의 asyncpg 연결과 독립 storage를 구분한다.
+    """
+    source = _ETL_ROOT.parents[1] / "infra" / compose
+    config = yaml.safe_load(source.read_text(encoding="utf-8"))
+    environment = config["services"][service]["environment"]
+    url = make_url(environment["PINVI_DAGSTER_PG_URL"]).set(
+        username="unused", password="unused", host="invalid", port=1, database="unused"
+    )
+    engine = create_engine(url)
+    try:
+        assert engine.dialect.driver == "psycopg2"
+        assert engine.dialect.dbapi.__name__ == "psycopg2"
+        assert make_url(environment["PINVI_DATABASE_URL"]).drivername == "postgresql+asyncpg"
+    finally:
+        engine.dispose()

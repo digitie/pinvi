@@ -6,20 +6,19 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 
 dependencies = [
-  "kor-travel-common[http] @ git+https://github.com/digitie/kor-travel-common.git@c289b4624c8640eb918cc915803e72ae754e58fb#subdirectory=packages/py/kor-travel-common",
-  "fastapi>=0.115",
-  "uvicorn[standard]>=0.32",
-  "pydantic>=2.9",
-  "pydantic-settings>=2.6",
-  # apps/etl와 같은 이유로 상한을 둔다 — 2.1.0의 driver 기본값 변경이 이 앱에는
-  # 아직 안 터졌지만(전부 +asyncpg 명시), 무상한 핀은 같은 부류의 drift를 반복한다.
-  "sqlalchemy[asyncio]>=2.0.36,<2.1",
-  "asyncpg>=0.30",
-  "alembic>=1.14",
+  "kor-travel-common[http] @ git+https://github.com/digitie/kor-travel-common.git@67efe2e546ecef41e54a866bf4862d608ace343d#subdirectory=packages/py/kor-travel-common",
+  "fastapi==0.165.0",
+  "uvicorn[standard]==0.54.0",
+  "pydantic==2.14.4",
+  "pydantic-settings==2.16.3",
+  # 앱 연결은 명시적인 +asyncpg를 유지하고 선택 application patch를 고정한다.
+  "sqlalchemy[asyncio]==2.1.9",
+  "asyncpg==0.32.0",
+  "alembic==1.20.1",
   "argon2-cffi>=23.1",
   "passlib[argon2]>=1.7",
   "python-jose[cryptography]>=3.3",
-  "httpx>=0.27",
+  "httpx==0.28.1",
   "tenacity>=9.0",
   "structlog>=24.4",
   "python-multipart>=0.0.12",
@@ -38,7 +37,7 @@ dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
   "pytest-split>=0.10",
-  "httpx>=0.27",
+  "httpx==0.28.1",
   "ruff>=0.7",
   "mypy>=1.13",
   "types-passlib",

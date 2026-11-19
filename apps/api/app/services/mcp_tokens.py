@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from jose import JWTError, jwt
-from sqlalchemy import Select, String, and_, cast, or_, select
+from sqlalchemy import String, and_, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -125,7 +125,7 @@ async def list_admin_mcp_tokens(
     limit: int = 100,
 ) -> list[McpToken]:
     now = datetime.now(UTC)
-    query: Select[tuple[McpToken]] = select(McpToken)
+    query = select(McpToken)
     filters: list[Any] = []
     if user_id is not None:
         filters.append(McpToken.user_id == user_id)

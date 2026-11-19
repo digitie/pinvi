@@ -471,7 +471,7 @@ services:
       PINVI_DATABASE_URL: postgresql+asyncpg://${PINVI_APP_DB_USER:-pinvi_app}:${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}@app-postgres:5432/pinvi
       # instance storage(run/event log/schedule) — 앱 DB가 아니라 app-dagster-db-init이 만든
       # `pinvi_dagster`와 그 전용 login. 이름은 apps/etl/dagster.yaml이 읽는 env와 같아야 한다.
-      PINVI_DAGSTER_PG_URL: postgresql://${PINVI_DAGSTER_DB_USER:-pinvi_dagster_app}:${PINVI_DAGSTER_DB_PASSWORD:-${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}}@app-postgres:5432/pinvi_dagster
+      PINVI_DAGSTER_PG_URL: postgresql+psycopg2://${PINVI_DAGSTER_DB_USER:-pinvi_dagster_app}:${PINVI_DAGSTER_DB_PASSWORD:-${PINVI_APP_DB_PASSWORD:-pinvi_app_smoke}}@app-postgres:5432/pinvi_dagster
       PINVI_RUSTFS_ENDPOINT_URL: http://app-rustfs:9000
       PINVI_RUSTFS_BUCKET: pinvi-media
       PINVI_RUSTFS_ACCESS_KEY_ID: ${PINVI_RUSTFS_ACCESS_KEY_ID:-rustfsadmin}

@@ -94,7 +94,7 @@ async def _persist_or_load_pre_cas_attempt(
     """최초 GET tuple을 한 번만 기록하고, 동시 같은 key는 그 행을 재사용한다."""
     async with session_factory() as db:
         async with db.begin():
-            inserted = await db.scalar(
+            inserted: KtmCacheTargetRestoreFenceAttempt | None = await db.scalar(
                 pg_insert(KtmCacheTargetRestoreFenceAttempt)
                 .values(
                     idempotency_key=idempotency_key,
