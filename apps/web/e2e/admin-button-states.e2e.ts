@@ -298,6 +298,8 @@ async function tabFocusOutline(page: Page, selector: string) {
 test('관리자 포커스 규칙은 관리자 손 버튼에만 걸리고 사용자 화면 버튼에는 걸리지 않는다', async ({
   page,
 }) => {
+  // 전환 애니메이션 도중 값을 읽지 않도록 reduced-motion(전역 0.01ms 전환)으로 잰다.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   // 양성 대조: 관리자 화면의 손 버튼은 규칙을 지우면 포커스 표시가 달라진다(규칙이 실제로 작동한다).
   await page.setViewportSize({ width: 1280, height: 900 });
   await setup(page);

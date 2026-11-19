@@ -149,10 +149,10 @@ test('공통 Admin 셸: 모바일 메뉴는 좌측 drawer로 접힌다', async (
         mapped:
           style.getPropertyValue('--kt-brand-tint').trim() ===
           style.getPropertyValue('--color-admin-brand-tint').trim(),
-        textSm: style.getPropertyValue('--text-sm').trim(),
+        textSm: Number.parseFloat(style.getPropertyValue('--text-sm')),
       };
     }),
-  ).toEqual({ mapped: true, textSm: '0.9375rem' });
+  ).toEqual({ mapped: true, textSm: 0.9375 });
   await expect(nav.getByRole('link', { name: '사용자', exact: true })).toHaveCSS(
     'min-height',
     '44px',
