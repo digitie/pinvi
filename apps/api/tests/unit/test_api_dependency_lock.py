@@ -79,7 +79,10 @@ def test_every_image_pip_install_refuses_unlisted_packages() -> None:
     dockerfile = _uncommented(_DOCKERFILE.read_text(encoding="utf-8"))
     installs = _pip_installs(dockerfile)
     tools = [cmd for cmd in installs if " pip==" in cmd]
-    assert len(tools) == 1 and re.fullmatch(r"pip install pip==\d+\.\d+(?:\.\d+)?", tools[0]), tools
+    assert len(tools) == 1 and re.fullmatch(
+        r"pip install pip==\d+\.\d+(?:\.\d+)? --constraint /tmp/build-constraints.txt",
+        tools[0],
+    ), tools
     app_installs = [cmd for cmd in installs if cmd != tools[0]]
     assert any(" -r " in cmd for cmd in app_installs), app_installs
     assert any(cmd.endswith(" -e .") for cmd in app_installs), app_installs
@@ -158,4 +161,20 @@ def test_the_build_environments_are_pinned() -> None:
     assert required <= pins.keys(), f"고정 안 된 build 의존성: {sorted(required - pins.keys())}"
     assert "COPY apps/api/build-constraints.txt /tmp/build-constraints.txt" in (
         _DOCKERFILE.read_text(encoding="utf-8")
+    )
+
+
+def test_installer_and_shared_policy_consume_the_canonical_build_constraints() -> None:
+    """pip bootstrap도 실제 constraints를 소비하며 중앙 guard와 같은 입력을 본다."""
+    dockerfile = _uncommented(_DOCKERFILE.read_text(encoding="utf-8"))
+    tool = next(cmd for cmd in _pip_installs(dockerfile) if " pip==" in cmd)
+    pip_version = re.fullmatch(
+        r"pip install pip==(\S+) --constraint /tmp/build-constraints.txt", tool
+    )
+    assert pip_version is not None
+    assert pip_version.group(1) == _pinned_lines(_BUILD_CONSTRAINTS)["pip"]
+    workflow = _API_WORKFLOW.read_text(encoding="utf-8")
+    assert '"$GITHUB_WORKSPACE/apps/api" --repo pinvi --strict-python-application' in workflow
+    assert (
+        "--constraints build-constraints.txt --python-build-tools --python-version 3.12" in workflow
     )

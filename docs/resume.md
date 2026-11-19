@@ -7189,3 +7189,12 @@ trip primary region을 `poi_snapshot` source로 보강한다.
 
 - required status check는 `Aggregate CI gate`로 적용
 - T-130 `/public/*`은 완료. 앱 내부 공통 rate-limit 미들웨어만 T-195 후속.
+
+
+## 2026-11-20 — API·ETL 전체 사용 shared Python graph 정렬
+
+- API/ETL은 `uv lock --upgrade`로 전체 graph를 갱신하되 실제 사용하는 Common76 catalog 교집합을 exact 선택했다. guard는 immutable `694b814ce625778d31b6aa57b8ae2c8c4f22a752`의 `--strict-python-application --constraints build-constraints.txt --python-build-tools --python-version 3.12`를 소비한다. consumer merge 전에 이 head의 canonical main ancestry를 확인한다.
+- AWS SDK/core는 이번 batch의 `1.44.7`로 고정했다. 이후 릴리스를 추적하지 않는다. 미사용 psycopg3를 추가하지 않았고 ETL Dagster `1.13.24`/postgres `0.29.24` 및 psycopg2-binary `2.9.13`은 유지한다. Common Python ref `67efe2e546ecef41e54a866bf4862d608ace343d`도 유지하고, KASI Git 입력은 canonical `4259e574468435355be79d3fe85b394249ab1989`로 맞춘다.
+- build isolation의 pluggy/tomlkit, ETL setuptools를 catalog에 맞췄다. Docker API/ETL과 ETL CI의 pip bootstrap은 `pip==26.3`과 **실제 `--constraint` 입력**을 함께 소비한다. 앱 lock에 installer 전용 package를 추가하지 않는다. `--build-constraint`만으로 bootstrap pip가 설치된다고 주장하지 않는다. 기존 installer/lock 계약 테스트가 bootstrap과 guard 입력도 결박한다.
+- 로컬 독립 Python3.12.13 환경에서 초기 API unit 2,365 PASS/기존 9 skip, ETL 82 PASS, Mypy 292 files, 양쪽 Ruff/pip check가 통과했다. 최종 AWS patch/tooling delta 후 API lock·provenance·storage 105 PASS, ETL lock 11 PASS, 양쪽 constrained wheel build와 실제 설치본 교집합 Common76 guard failing=0이다. 초기 ETL focused 실패는 새 `--constraint`가 포함된 실제 명령의 기존 literal 기대를 누락한 한 곳으로, 기대를 실제 계약에 맞춘 뒤 11 PASS를 확인했다.
+- API app/ETL 구현, DB schema/Alembic, contracts, web/mobile/Map 및 Common frontend tgz bytes는 a041 기준과 동일하다. 이 기록은 source/로컬 설치 검증이다. 실제 accepted 런타임은 a041/SDK625이며 UI는 a049를 유지한다. 새 source normal/native/public SDK QA는 CI·merge 이후 별도로 수행하고, mobile EAS는 NOT_RUN이다.

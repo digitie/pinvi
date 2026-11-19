@@ -20,7 +20,7 @@ dependencies = [
   "sqlalchemy[asyncio]==2.1.9",
   "asyncpg==0.32.0",
   "httpx==0.28.1",
-  "python-kasi-api @ git+https://github.com/digitie/python-kasi-api.git@bc8fd49349212f840f58fe1a602bf77b2aaa1669",
+  "python-kasi-api @ git+https://github.com/digitie/python-kasi-api.git@4259e574468435355be79d3fe85b394249ab1989",
   "structlog>=24.4",
 ]
 
