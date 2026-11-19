@@ -1,3 +1,10 @@
+## 2026-11-19 — 공통 관리자 셸(@kor-travel/ui 0.2.3) 채택
+
+- admin(`app/(admin)/admin/`)만 공통 `AdminShell`로 교체: lg 이상 좌측 rail(접힘 키 `pinvi.admin.sidebar.collapsed`, 기존 "1"/"0" 그대로 읽고 씀), 미만은 상단 바 메뉴 버튼 → 좌측 drawer(최대 280px). 사용자 화면은 그대로다.
+- 맨 위 한 줄은 "영역 - 페이지" h1(영역 = 메뉴 그룹)과 작은 페이지 설명뿐이다. `AdminPage`가 `AdminPageTitle`로 상단 바를 덮어쓰고, 동작 버튼은 본문 첫 줄, 상세 식별자(`trip_id` 등)는 본문 `identifier`로 둔다.
+- 버튼 테두리: ui 0.2.2 Button의 ring 3px+border-ring, 그리고 포커스 유틸 없는 손 `<button>`의 브라우저 기본 `outline:auto`(이중 링)가 원인. 0.2.3 Button(2px outline)과 admin 범위 `@layer base` 2px 단일 outline으로 맞췄다. drawer는 Portal이라 admin 토큰을 `[data-slot='admin-shell-drawer']`에도 건다.
+- ui 0.2.3·tokens 0.1.4(mobile은 tokens만), common-ref `d644632`. e2e: `admin-common-shell`·`admin-button-states`(PC 1280·모바일 390 상태별 측정·스크린샷), live ADM-001/008/040 셀렉터 갱신·ADM-045 추가, `admin-live-matrix` 430px drawer 대응. 배포는 별도다.
+
 ## 2026-11-19 — 호환 lock 정렬 후보
 
 - MapLibre GL6.17의 geojson-vt를 호환 범위 안의 6.3.1로 고정하고 기존 Concierge와 registry SRI를 맞췄다. Common/RN exact pin은 유지하며 canonical guard 통과, 실제 빌드·운영 수용은 후속 PR CI/소유자 단계다.

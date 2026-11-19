@@ -438,7 +438,7 @@ test('Admin 시스템 화면이 의존 API와 Docker 상태를 표시한다', as
 
   await page.goto('/admin/system');
 
-  await expect(page.getByRole('heading', { name: '시스템', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: '시스템 운영 - 시스템', exact: true })).toBeVisible();
   await expect(page.getByTestId('admin-system-dependency-pinvi_api')).toContainText('정상');
   await expect(page.getByTestId('admin-system-dependency-kor_travel_map_api')).toContainText(
     '주의',

@@ -1,8 +1,14 @@
 'use client';
 
-import { ADMIN_MAIN_CONTENT_ID, AdminSkipLink } from '@/components/admin/admin-shell-parts';
+import { ADMIN_MAIN_CONTENT_ID } from '@/components/admin/admin-shell-parts';
 import { AdminQueryProvider } from '@/components/admin/AdminQueryProvider';
-import { AppMenu, type AppMenuGroup, type AppMenuLinkProps } from '@kor-travel/ui';
+import {
+  AdminShell,
+  AppMenu,
+  type AdminShellSlotState,
+  type AppMenuGroup,
+  type AppMenuLinkProps,
+} from '@kor-travel/ui';
 import { ApiClient, ApiError, authApi, queryKeys } from '@pinvi/api-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -11,8 +17,6 @@ import {
   Ban,
   BarChart3,
   Bug,
-  ChevronsLeft,
-  ChevronsRight,
   ClipboardCheck,
   Gavel,
   GitCompare,
@@ -42,7 +46,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { redirect, usePathname, useRouter } from 'next/navigation';
-import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 // 좌측 메뉴 이동 중 RSC/client transition 실패가 Next 기본 오류 화면으로 새지 않도록
 // document navigation으로 이동한다 (kor-travel-geo T-278 이식).
 import { DocumentNavLink } from '@/components/navigation/DocumentNavLink';
@@ -107,22 +111,40 @@ const NAV_GROUPS: {
   },
 ];
 const ADMIN_ROLES = new Set(['admin', 'operator', 'cpo']);
+/** 접힘 상태 저장 키. 공통 셸이 기존 "1"/"0" 저장값을 그대로 읽고 같은 형식으로 쓴다. */
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'pinvi.admin.sidebar.collapsed';
-const SIDEBAR_CHANGED_EVENT = 'pinvi-admin-sidebar-change';
-function readSidebarCollapsed() {
-  return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1';
+const ADMIN_AREA_FALLBACK = 'Pinvi 관리';
+const ADMIN_SHELL_LABELS = {
+  openMenu: 'Admin 메뉴 열기',
+  closeMenu: 'Admin 메뉴 닫기',
+  menu: 'Admin 메뉴',
+  collapseRail: 'Admin 메뉴 접기',
+  expandRail: 'Admin 메뉴 펼치기',
+};
+
+function adminSection(pathname: string) {
+  return pathname.split('/').slice(0, 3).join('/');
 }
-function subscribeSidebar(callback: () => void) {
-  window.addEventListener('storage', callback);
-  window.addEventListener(SIDEBAR_CHANGED_EVENT, callback);
-  return () => {
-    window.removeEventListener('storage', callback);
-    window.removeEventListener(SIDEBAR_CHANGED_EVENT, callback);
-  };
-}
-function toggleSidebarCollapsed() {
-  window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, readSidebarCollapsed() ? '0' : '1');
-  window.dispatchEvent(new Event(SIDEBAR_CHANGED_EVENT));
+
+/**
+ * 상단 바 기본 제목("영역 - 페이지")을 nav 정본에서 고른다. 영역은 메뉴 그룹, 페이지는 메뉴 라벨이다.
+ * 하위 경로(상세 등)는 가장 긴 href 접두사를, 그것도 없으면 같은 `/admin/<구역>`의 항목을 쓴다.
+ * 페이지가 `AdminPage`로 더 구체적인 제목을 주면 그 값이 덮어쓴다.
+ */
+function adminNavTitle(pathname: string): { area: string; title?: string } {
+  let best: { area: string; title: string; score: number } | null = null;
+  for (const group of NAV_GROUPS) {
+    for (const item of group.items) {
+      const exact = pathname === item.href;
+      const nested = item.href !== '/admin' && pathname.startsWith(`${item.href}/`);
+      const sameSection =
+        item.href !== '/admin' && adminSection(item.href) === adminSection(pathname);
+      const score = exact || nested ? item.href.length + 1000 : sameSection ? item.href.length : -1;
+      if (score >= 0 && (!best || score > best.score))
+        best = { area: group.title, title: item.label, score };
+    }
+  }
+  return best ? { area: best.area, title: best.title } : { area: ADMIN_AREA_FALLBACK };
 }
 
 const COMMON_MENU_GROUPS: AppMenuGroup[] = NAV_GROUPS.map((group) => ({
@@ -178,11 +200,6 @@ function useAdminGuardModel({ children }: { children: ReactNode }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const pathname = usePathname();
-  const sidebarCollapsed = useSyncExternalStore(
-    subscribeSidebar,
-    readSidebarCollapsed,
-    () => false,
-  );
   // login 페이지 자체는 가드 적용 X (무한 redirect 방지)
   const isLoginPage = pathname === '/admin/login';
 
@@ -233,7 +250,6 @@ function useAdminGuardModel({ children }: { children: ReactNode }) {
     logoutError,
     me,
     pathname,
-    sidebarCollapsed,
   };
 }
 
@@ -277,106 +293,114 @@ type AdminGuardView4Model = Extract<
   { renderBranch: 'render4' }
 >;
 function AdminGuardView4({ viewModel }: { viewModel: AdminGuardView4Model }) {
-  const { children, loggingOut, logout, logoutError, me, pathname, sidebarCollapsed } = viewModel;
+  const { children, loggingOut, logout, logoutError, me, pathname } = viewModel;
+  const navTitle = adminNavTitle(pathname);
+  // 공통 AdminShell(@kor-travel/ui 0.2.3): lg 이상은 좌측 rail(접힘 4rem), 미만은 상단 바 메뉴
+  // 버튼으로 여는 좌측 drawer다. 맨 위 한 줄은 "영역 - 페이지" 제목과 작은 설명만 둔다 — 페이지는
+  // `AdminPage`가 `AdminPageTitle`로 제목·설명을 덮어쓴다. 셸 안 AppMenu에는 orientation을 주지 않는다
+  // (rail·drawer가 배치를 알린다). drawer는 Portal이라 `[data-pv-surface='admin']` 밖으로 나가므로
+  // globals.css가 `[data-slot='admin-shell-drawer']`에도 같은 admin 토큰을 건다.
   return (
-    <div className="pinvi-admin-shell flex min-h-dvh min-w-0 max-w-full flex-col overflow-x-clip bg-canvas lg:flex-row">
-      {/* 좌측 rail은 nav 항목이 30개가 넘는다 — 키보드/스크린리더 사용자가 매 페이지마다 그걸
-          전부 통과하지 않도록 본문 건너뛰기를 nav 앞에 둔다(kor-travel-map admin 규약, T-356). */}
-      <AdminSkipLink />
-      <aside
-        className={`flex w-full max-w-[100dvw] min-w-0 shrink-0 flex-col border-b border-admin-line bg-canvas transition-[width] duration-200 lg:sticky lg:top-0 lg:h-dvh lg:border-b-0 lg:border-r ${
-          sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'
-        }`}
-        data-collapsed={sidebarCollapsed ? 'true' : 'false'}
-        data-testid="admin-sidebar"
+    <AdminShell
+      testId="admin-shell"
+      area={navTitle.area}
+      title={navTitle.title}
+      navigationKey={pathname}
+      collapsedStorageKey={SIDEBAR_COLLAPSED_STORAGE_KEY}
+      mainId={ADMIN_MAIN_CONTENT_ID}
+      mainClassName="overflow-x-clip px-4 py-6 sm:px-6 lg:px-8"
+      labels={ADMIN_SHELL_LABELS}
+      brand={AdminBrand}
+      railFooter={(state) => (
+        <AdminRailFooter
+          state={state}
+          email={me.email}
+          roles={me.roles}
+          loggingOut={loggingOut}
+          logout={logout}
+          logoutError={logoutError}
+        />
+      )}
+      menu={
+        <AppMenu
+          groups={COMMON_MENU_GROUPS}
+          pathname={pathname}
+          linkComponent={CommonDocumentLink}
+          label="관리자 주요 메뉴"
+          testId="admin-common-menu"
+        />
+      }
+    >
+      {children}
+    </AdminShell>
+  );
+}
+
+function AdminBrand({ collapsed }: AdminShellSlotState) {
+  return (
+    <DocumentNavLink
+      href="/admin"
+      aria-label="Pinvi Admin"
+      title={collapsed ? 'Pinvi Admin' : undefined}
+      className="flex min-w-0 items-baseline gap-2 rounded-control text-sm font-semibold tracking-tight text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kt-focus"
+    >
+      {collapsed ? (
+        <span aria-hidden="true">pv</span>
+      ) : (
+        <>
+          <span>Pinvi</span>
+          <span className="text-xs text-muted">admin</span>
+        </>
+      )}
+    </DocumentNavLink>
+  );
+}
+
+function AdminRailFooter({
+  state,
+  email,
+  roles,
+  loggingOut,
+  logout,
+  logoutError,
+}: {
+  state: AdminShellSlotState;
+  email: string;
+  roles: string[];
+  loggingOut: boolean;
+  logout: () => Promise<void>;
+  logoutError: string | null;
+}) {
+  const { collapsed } = state;
+  return (
+    <div className="flex flex-col gap-1">
+      <div
+        className={`flex min-w-0 items-center gap-2 py-1 text-xs text-muted ${collapsed ? 'justify-center' : 'px-2'}`}
+        data-testid="admin-me"
+        title={email}
+        aria-label={`로그인 사용자 ${email}`}
       >
-        <div
-          className={`flex h-14 shrink-0 items-center justify-between gap-2 border-b border-admin-line px-3 ${sidebarCollapsed ? 'lg:h-auto lg:flex-col lg:py-2' : ''}`}
-        >
-          <DocumentNavLink
-            href="/admin"
-            aria-label="Pinvi Admin"
-            className="flex min-w-0 items-baseline gap-2 text-sm font-semibold tracking-tight text-ink"
-          >
-            <span className={sidebarCollapsed ? 'lg:hidden' : ''}>Pinvi</span>
-            <span
-              className={sidebarCollapsed ? 'text-xs text-muted lg:hidden' : 'text-xs text-muted'}
-            >
-              admin
-            </span>
-            <span aria-hidden="true" className={sidebarCollapsed ? 'hidden lg:inline' : 'hidden'}>
-              pv
-            </span>
-          </DocumentNavLink>
-          <button
-            type="button"
-            aria-label={sidebarCollapsed ? 'Admin 메뉴 펼치기' : 'Admin 메뉴 접기'}
-            title={sidebarCollapsed ? 'Admin 메뉴 펼치기' : 'Admin 메뉴 접기'}
-            aria-pressed={sidebarCollapsed}
-            data-testid="admin-sidebar-toggle"
-            className="hidden size-9 shrink-0 items-center justify-center rounded-control text-muted hover:bg-admin-subtle hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary lg:flex"
-            onClick={toggleSidebarCollapsed}
-          >
-            {sidebarCollapsed ? (
-              <ChevronsRight className="size-4" aria-hidden="true" />
-            ) : (
-              <ChevronsLeft className="size-4" aria-hidden="true" />
-            )}
-          </button>
-        </div>
-        <div
-          className="pinvi-common-menu min-h-0 max-w-full overflow-x-auto px-2 py-2 lg:flex-1 lg:overflow-x-hidden lg:overflow-y-auto"
-          data-collapsed={sidebarCollapsed}
-        >
-          <AppMenu
-            groups={COMMON_MENU_GROUPS}
-            pathname={pathname}
-            linkComponent={CommonDocumentLink}
-            label="관리자 주요 메뉴"
-            testId="admin-common-menu"
-          />
-        </div>
-        <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t border-admin-line p-2 lg:flex-col lg:items-stretch">
-          <div
-            className="flex min-w-0 items-center gap-2 px-2 py-1 text-xs text-muted"
-            data-testid="admin-me"
-            title={me.email}
-            aria-label={`로그인 사용자 ${me.email}`}
-          >
-            <UserRound className="size-4 shrink-0" aria-hidden="true" />
-            <span className={sidebarCollapsed ? 'truncate lg:sr-only' : 'truncate'}>
-              {me.roles.filter((r) => r !== 'user').join(', ') || 'user'}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => void logout()}
-            disabled={loggingOut}
-            aria-label="로그아웃"
-            title="로그아웃"
-            className="flex min-h-11 items-center gap-2 rounded-control lg:min-h-9 px-3 text-xs text-muted hover:bg-admin-subtle hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait"
-          >
-            <LogOut className="size-4 shrink-0" aria-hidden="true" />
-            <span className={sidebarCollapsed ? 'lg:sr-only' : ''}>
-              {loggingOut ? '로그아웃 중…' : '로그아웃'}
-            </span>
-          </button>
-          {logoutError ? (
-            <p role="alert" className="text-xs text-admin-danger">
-              {logoutError}
-            </p>
-          ) : null}
-        </footer>
-      </aside>
-      {/* `tabIndex={-1}`이라야 skip link가 실제로 포커스를 옮긴다(그냥 앵커면 스크롤만 되고
-          다음 Tab이 nav로 되돌아간다). 링 자체는 이 컨테이너에 필요 없어 끈다. */}
-      <main
-        className="min-w-0 flex-1 overflow-x-clip px-4 py-6 focus-visible:outline-0 sm:px-6 lg:px-8 lg:py-8"
-        id={ADMIN_MAIN_CONTENT_ID}
-        tabIndex={-1}
+        <UserRound className="size-4 shrink-0" aria-hidden="true" />
+        <span className={collapsed ? 'sr-only' : 'truncate'}>
+          {roles.filter((r) => r !== 'user').join(', ') || 'user'}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => void logout()}
+        disabled={loggingOut}
+        aria-label="로그아웃"
+        title="로그아웃"
+        className={`flex min-h-11 items-center gap-2 rounded-control text-xs text-muted hover:bg-admin-subtle hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kt-focus disabled:cursor-wait lg:min-h-9 ${collapsed ? 'justify-center px-0' : 'px-3'}`}
       >
-        {children}
-      </main>
+        <LogOut className="size-4 shrink-0" aria-hidden="true" />
+        <span className={collapsed ? 'sr-only' : ''}>{loggingOut ? '로그아웃 중…' : '로그아웃'}</span>
+      </button>
+      {logoutError ? (
+        <p role="alert" className="text-xs text-admin-danger">
+          {logoutError}
+        </p>
+      ) : null}
     </div>
   );
 }

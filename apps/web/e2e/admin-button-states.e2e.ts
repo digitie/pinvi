@@ -1,0 +1,329 @@
+import { test, expect } from './fixtures';
+import type { Page } from '@playwright/test';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+type ButtonVariants = (options: { variant: string }) => string;
+
+/**
+ * 공통 Button의 실제 cva(`@kor-travel/ui/button-variants`)를 불러온다. 이 패키지는 ESM `import`
+ * 조건만 내보내 CJS로 변환되는 테스트에서 `import`/`require`로 직접 못 부르므로, package.json 위치에서
+ * dist 파일 URL을 만들어 네이티브 동적 import로 읽는다.
+ */
+async function loadButtonVariants(): Promise<ButtonVariants> {
+  const pkg = createRequire(__filename).resolve('@kor-travel/ui/package.json');
+  const url = pathToFileURL(join(dirname(pkg), 'dist/button-variants.js')).href;
+  const nativeImport = new Function('u', 'return import(u)') as (
+    u: string,
+  ) => Promise<{ buttonVariants: ButtonVariants }>;
+  return (await nativeImport(url)).buttonVariants;
+}
+
+// FS-7.8 버튼 테두리 점검. 관리자 범위의 버튼 변형마다 Tab 포커스·hover·active·disabled를 잰다.
+// - Tab 포커스: outline 2px 단일(solid, offset 2px), box-shadow ring 없음, 테두리 두께 불변
+// - hover·active(누르는 중): 테두리 두께 불변, 포커스 outline 없음, 위치 이동 1px 이하
+// - disabled: 테두리 두께가 활성 상태와 같다
+// 공통 Button(cva)은 실제 `buttonVariants`로, 손으로 만든 페이지 버튼은 페이지에 있는 클래스 그대로
+// 관리자 `<main>` 안에 심는다(관리자 CSS 범위·토큰을 그대로 받는다). 셸 자신의 버튼도 함께 잰다.
+
+const user = {
+  user_id: '77777777-7777-4777-8777-777777777777',
+  email: 'admin@example.com',
+  nickname: '관리자',
+  avatar_url: null,
+  status: 'active',
+  roles: ['user', 'admin'],
+  email_verified_at: '2026-06-01T09:00:00+09:00',
+  has_password: true,
+  oauth_identities: [],
+};
+
+const VARIANTS = [
+  'default',
+  'outline',
+  'secondary',
+  'ghost',
+  'destructive',
+  'destructive-solid',
+  'link',
+] as const;
+
+// 페이지에서 그대로 옮긴 손 버튼(abuse/backup 새로고침, trips 생성, etl 갱신).
+const LEGACY = {
+  'legacy-refresh':
+    'inline-flex h-10 items-center gap-2 rounded-sm border border-hairline px-3 text-sm font-semibold text-ink hover:bg-surface-soft',
+  'legacy-cta':
+    'inline-flex items-center gap-2 rounded-sm bg-cta hover:bg-cta-hover px-3 py-2 text-sm text-on-primary',
+  'legacy-small':
+    'inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-sm',
+} as const;
+
+type Probe = {
+  bw: string;
+  outlineStyle: string;
+  outlineWidth: string;
+  outlineOffset: string;
+  boxShadow: string;
+  focusVisible: boolean;
+  x: number;
+  y: number;
+};
+
+async function probe(page: Page, selector: string): Promise<Probe> {
+  return page.locator(selector).evaluate((el) => {
+    const s = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    return {
+      bw: [s.borderTopWidth, s.borderRightWidth, s.borderBottomWidth, s.borderLeftWidth].join(' '),
+      outlineStyle: s.outlineStyle,
+      outlineWidth: s.outlineWidth,
+      outlineOffset: s.outlineOffset,
+      boxShadow: s.boxShadow,
+      focusVisible: el.matches(':focus-visible'),
+      x: r.x,
+      y: r.y,
+    };
+  });
+}
+
+async function mountFixture(page: Page) {
+  const buttonVariants = await loadButtonVariants();
+  const fixtures = [
+    ...VARIANTS.map((variant) => ({
+      id: `btn-${variant}`,
+      className: buttonVariants({ variant }),
+      label: variant,
+    })),
+    ...Object.entries(LEGACY).map(([id, className]) => ({ id, className, label: id })),
+  ];
+  await page.getByRole('main').evaluate((main, items) => {
+    const box = document.createElement('div');
+    box.id = 'button-state-fixture';
+    box.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px;padding:12px;';
+    const start = document.createElement('span');
+    start.id = 'fixture-start';
+    start.tabIndex = -1;
+    start.textContent = '시작';
+    box.append(start);
+    for (const item of items) {
+      for (const disabled of [false, true]) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.id = disabled ? `${item.id}-disabled` : item.id;
+        button.className = item.className;
+        button.textContent = disabled ? `${item.label} (disabled)` : item.label;
+        button.disabled = disabled;
+        box.append(button);
+      }
+    }
+    main.prepend(box);
+  }, fixtures);
+  return fixtures.map((item) => item.id);
+}
+
+async function setup(page: Page) {
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/auth/me',
+    (route) =>
+      route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: user }) }),
+  );
+  await page.route(
+    (url) => url.port === '12801' && url.pathname === '/admin/users',
+    (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { items: [], total: 0, page: 1, limit: 50 } }),
+      }),
+  );
+  await page.goto('/admin/users');
+  await expect(page.locator('[data-slot="admin-shell-title"]')).toHaveText('Pinvi 운영 - 사용자');
+}
+
+const output = process.env.PINVI_PLAYWRIGHT_RUNNER_OUTPUT_DIR;
+
+for (const viewport of [
+  { name: 'pc', width: 1280, height: 900 },
+  { name: 'mobile', width: 390, height: 844 },
+]) {
+  test(`관리자 버튼 변형별 포커스·hover·active·disabled 테두리 점검(${viewport.name} ${viewport.width})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await setup(page);
+    const ids = await mountFixture(page);
+    const fixture = page.locator('#button-state-fixture');
+    const shoot = async (state: string) => {
+      if (output)
+        await fixture.screenshot({
+          path: join(output, `pinvi-admin-buttons-${viewport.name}-${state}.png`),
+        });
+    };
+    await shoot('rest');
+
+    const rest = new Map<string, Probe>();
+    for (const id of ids) {
+      const base = await probe(page, `#${id}`);
+      rest.set(id, base);
+      // 쉬는 상태에서 포커스 링이나 ring 그림자가 없다.
+      expect(base.outlineStyle, id).toBe('none');
+      // disabled도 같은 테두리 두께를 쓴다.
+      expect((await probe(page, `#${id}-disabled`)).bw, `${id} disabled`).toBe(base.bw);
+    }
+
+    // Tab 포커스: 시작점에서 Tab을 눌러 차례로 지나간다(disabled는 건너뛴다).
+    await page.locator('#fixture-start').focus();
+    for (const id of ids) {
+      await page.keyboard.press('Tab');
+      await expect(page.locator(`#${id}`)).toBeFocused();
+      const focused = await probe(page, `#${id}`);
+      expect(focused.focusVisible, id).toBe(true);
+      expect(
+        {
+          style: focused.outlineStyle,
+          width: focused.outlineWidth,
+          offset: focused.outlineOffset,
+          shadow: focused.boxShadow,
+          bw: focused.bw,
+        },
+        `${id} Tab 포커스`,
+      ).toEqual({
+        style: 'solid',
+        width: '2px',
+        offset: '2px',
+        shadow: 'none',
+        bw: rest.get(id)?.bw,
+      });
+      if (id === 'btn-outline' || id === 'legacy-refresh') await shoot(`focus-${id}`);
+    }
+    await page.locator('#fixture-start').focus();
+    await shoot('focus-cleared');
+
+    // hover·active(누르는 중): 포인터 상호작용은 포커스 링을 띄우지 않고 테두리 두께도 그대로다.
+    for (const id of ids) {
+      const button = page.locator(`#${id}`);
+      await button.hover();
+      const hovered = await probe(page, `#${id}`);
+      expect(hovered.bw, `${id} hover`).toBe(rest.get(id)?.bw);
+      expect(hovered.outlineStyle, `${id} hover`).toBe('none');
+      if (id === 'btn-outline') await shoot('hover-outline');
+      await page.mouse.down();
+      const pressed = await probe(page, `#${id}`);
+      expect(pressed.bw, `${id} active`).toBe(rest.get(id)?.bw);
+      expect(pressed.focusVisible, `${id} active`).toBe(false);
+      expect(pressed.outlineStyle === 'none' || pressed.outlineWidth === '0px', `${id} active outline`).toBe(true);
+      expect(Math.abs(pressed.y - (rest.get(id)?.y ?? 0)), `${id} active 이동`).toBeLessThanOrEqual(1);
+      expect(Math.abs(pressed.x - (rest.get(id)?.x ?? 0)), `${id} active 이동`).toBeLessThanOrEqual(1);
+      if (id === 'btn-outline' || id === 'legacy-refresh') await shoot(`active-${id}`);
+      await page.mouse.up();
+    }
+
+    // 셸 자신의 버튼(데스크톱 rail 접기, 모바일 메뉴 열기)도 Tab 포커스 때 2px 단일 outline이다.
+    const shellButton = page.locator(
+      viewport.width >= 1024
+        ? '[data-slot="admin-shell-collapse"]'
+        : '[data-slot="admin-shell-menu-button"]',
+    );
+    await shellButton.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(shellButton).toBeFocused();
+    const shellFocus = await shellButton.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        style: s.outlineStyle,
+        width: s.outlineWidth,
+        offset: s.outlineOffset,
+        shadow: s.boxShadow,
+        border: s.borderTopWidth,
+      };
+    });
+    expect(shellFocus).toEqual({
+      style: 'solid',
+      width: '2px',
+      offset: '2px',
+      shadow: 'none',
+      border: '0px',
+    });
+    if (output)
+      await page.screenshot({
+        path: join(output, `pinvi-admin-buttons-${viewport.name}-shell-focus.png`),
+      });
+  });
+}
+
+/**
+ * globals.css의 관리자 포커스 규칙(@layer base 안)을 CSSOM에서 찾아 지운다. 지운 규칙 수를 돌려준다.
+ * 규칙을 끈 전후의 계산값을 비교해 "이 규칙이 이 요소에 영향을 주는가"를 직접 잰다.
+ */
+async function removeAdminFocusRule(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    let removed = 0;
+    const walk = (list: CSSRuleList, owner: CSSStyleSheet | CSSGroupingRule) => {
+      for (let i = list.length - 1; i >= 0; i -= 1) {
+        const rule = list[i];
+        if (
+          rule instanceof CSSStyleRule &&
+          rule.selectorText.includes('admin-shell-drawer') &&
+          rule.selectorText.includes(':focus-visible')
+        ) {
+          owner.deleteRule(i);
+          removed += 1;
+        } else if (rule instanceof CSSGroupingRule) walk(rule.cssRules, rule);
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        walk(sheet.cssRules, sheet);
+      } catch {
+        // 교차 출처 시트는 건너뛴다.
+      }
+    }
+    return removed;
+  });
+}
+
+async function tabFocusOutline(page: Page, selector: string) {
+  const target = page.locator(selector);
+  await target.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(target).toBeFocused();
+  return target.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return [s.outlineStyle, s.outlineWidth, s.outlineOffset, s.outlineColor, s.boxShadow].join(' | ');
+  });
+}
+
+test('관리자 포커스 규칙은 관리자 손 버튼에만 걸리고 사용자 화면 버튼에는 걸리지 않는다', async ({
+  page,
+}) => {
+  // 전환 애니메이션 도중 값을 읽지 않도록 reduced-motion(전역 0.01ms 전환)으로 잰다.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  // 양성 대조: 관리자 화면의 손 버튼은 규칙을 지우면 포커스 표시가 달라진다(규칙이 실제로 작동한다).
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await setup(page);
+  await mountFixture(page);
+  const adminWith = await tabFocusOutline(page, '#legacy-refresh');
+  expect(await removeAdminFocusRule(page)).toBeGreaterThan(0);
+  const adminWithout = await tabFocusOutline(page, '#legacy-refresh');
+  expect(adminWith).not.toBe(adminWithout);
+
+  // 사용자 화면: 실제 로그인 버튼의 Tab 포커스 표시가 규칙 유무와 무관하다.
+  await page.route(/.*\/auth\/oauth\/providers$/, (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { providers: [{ provider: 'google', enabled: true }] } }),
+    }),
+  );
+  await page.goto('/login');
+  await expect(page.getByTestId('login-submit')).toBeVisible();
+  expect(await page.locator('[data-pv-surface="admin"], [data-slot^="admin-shell"]').count()).toBe(
+    0,
+  );
+  await page.getByTestId('login-password').fill('password1234');
+  const userWith = await tabFocusOutline(page, '[data-testid="login-submit"]');
+  expect(await removeAdminFocusRule(page)).toBeGreaterThan(0);
+  const userWithout = await tabFocusOutline(page, '[data-testid="login-submit"]');
+  expect(userWith).toBe(userWithout);
+});

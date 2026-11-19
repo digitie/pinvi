@@ -1,3 +1,4 @@
+import { AdminPageTitle } from '@kor-travel/ui';
 import type { ReactNode } from 'react';
 
 import { FilterBar as AdminFilterBar } from '@/components/admin/filter-bar';
@@ -6,21 +7,46 @@ import { SectionCard } from '@/components/admin/section-card';
 export interface AdminPageProps {
   title: string;
   description?: string;
+  /**
+   * 상세 화면의 식별자(`trip_id …` 등). 상단 바 설명은 한 줄 말줄임이라 좁은 화면에서 잘리므로
+   * 읽고 복사해야 하는 값은 본문 첫 줄에 줄바꿈 가능하게 둔다.
+   */
+  identifier?: string;
   actions?: ReactNode;
   children: ReactNode;
 }
 
-/** SPEC V8 M-3 — Admin 공통 페이지 chrome. */
-export function AdminPage({ title, description, actions, children }: AdminPageProps) {
+/**
+ * SPEC V8 M-3 — Admin 공통 페이지 chrome.
+ *
+ * 제목·설명은 본문에 그리지 않고 공통 AdminShell의 한 줄 상단 바로 올린다(`AdminPageTitle`).
+ * 상단 바가 "영역 - 페이지" h1과 작은 설명을 맡으므로 본문에는 h1이 없다. 동작 버튼은 텍스트
+ * 버튼이 여러 개인 화면이 많아 모바일 상단 바(아이콘 1~2개 규약)에 넣지 않고 본문 첫 줄에 둔다.
+ */
+export function AdminPage({ title, description, identifier, actions, children }: AdminPageProps) {
   return (
     <div className="space-y-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">{title}</h1>
-          {description && <p className="mt-1 text-sm text-muted">{description}</p>}
+      <AdminPageTitle title={title} description={description} />
+      {identifier || actions ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {identifier ? (
+            <p
+              className="min-w-0 font-mono text-xs text-muted [overflow-wrap:anywhere]"
+              data-testid="admin-page-identifier"
+            >
+              {identifier}
+            </p>
+          ) : null}
+          {actions ? (
+            <div
+              className="ml-auto flex flex-wrap items-center justify-end gap-2"
+              data-slot="admin-page-actions"
+            >
+              {actions}
+            </div>
+          ) : null}
         </div>
-        {actions && <div className="flex gap-2">{actions}</div>}
-      </header>
+      ) : null}
       {children}
     </div>
   );

@@ -1,4 +1,5 @@
 import AdminLayout from '@/app/(admin)/admin/layout';
+import { AdminPage } from '@/components/admin/AdminPage';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,12 +55,57 @@ describe('PinVi 공통 관리자 셸', () => {
     );
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
   });
-  it('접힘을 저장하면서 메뉴의 접근성 이름을 보존한다', async () => {
+  it('기존 "1"/"0" 저장값을 읽고 같은 형식으로 접힘을 저장한다', async () => {
+    localStorage.setItem('pinvi.admin.sidebar.collapsed', '0');
     await open();
+    const rail = document.querySelector('[data-slot="admin-shell-rail"]');
+    expect(rail).not.toHaveAttribute('data-collapsed');
     await userEvent.click(screen.getByRole('button', { name: 'Admin 메뉴 접기' }));
-    expect(screen.getByTestId('admin-sidebar')).toHaveAttribute('data-collapsed', 'true');
+    expect(rail).toHaveAttribute('data-collapsed', 'true');
     expect(localStorage.getItem('pinvi.admin.sidebar.collapsed')).toBe('1');
     expect(screen.getByRole('link', { name: '사용자' })).toHaveAttribute('aria-label', '사용자');
+    await userEvent.click(screen.getByRole('button', { name: 'Admin 메뉴 펼치기' }));
+    expect(localStorage.getItem('pinvi.admin.sidebar.collapsed')).toBe('0');
+  });
+  it('저장된 "1"이면 접힌 rail로 시작한다', async () => {
+    localStorage.setItem('pinvi.admin.sidebar.collapsed', '1');
+    await open();
+    expect(document.querySelector('[data-slot="admin-shell-rail"]')).toHaveAttribute(
+      'data-collapsed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Admin 메뉴 펼치기' })).toBeInTheDocument();
+  });
+  it('상단 바 한 줄에 "영역 - 페이지" 제목만 두고 페이지 설명은 작게 둔다', async () => {
+    mocks.pathname = '/admin/users';
+    render(
+      <AdminLayout>
+        <AdminPage title="사용자" description="운영 계정 조회와 상태 관리">
+          본문
+        </AdminPage>
+      </AdminLayout>,
+    );
+    const heading = await screen.findByRole('heading', { level: 1 });
+    expect(heading).toHaveTextContent('Pinvi 운영 - 사용자');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    const header = heading.closest('[data-slot="admin-shell-header"]');
+    expect(header).not.toBeNull();
+    expect(header?.querySelector('[data-slot="admin-shell-description"]')).toHaveTextContent(
+      '운영 계정 조회와 상태 관리',
+    );
+    expect(screen.getByRole('main')).not.toHaveTextContent('운영 계정 조회와 상태 관리');
+    expect(screen.getByRole('button', { name: 'Admin 메뉴 열기' })).toBeInTheDocument();
+  });
+  it('하위 경로는 가장 가까운 메뉴 그룹을 영역으로 쓴다', async () => {
+    mocks.pathname = '/admin/debug/request/abc';
+    render(
+      <AdminLayout>
+        <AdminPage title="Request timeline">본문</AdminPage>
+      </AdminLayout>,
+    );
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
+      '지도 데이터 - Request timeline',
+    );
   });
   it('로그아웃 실패 시 이동하지 않고 재시도 성공 후 로그인으로 이동한다', async () => {
     mocks.logout.mockRejectedValueOnce(new Error('내부 오류 원문'));

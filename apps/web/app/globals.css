@@ -117,7 +117,8 @@
  * `--text-*--line-height`도 함께 가려야 한다 — 유틸이
  * `line-height: var(--tw-leading, var(--text-sm--line-height))`로 읽기 때문이다.
  * ───────────────────────────────────────────────────────────────────────────── */
-[data-pv-surface='admin'] {
+[data-pv-surface='admin'],
+[data-slot='admin-shell-drawer'] {
   --text-xs: 0.84375rem; /* 13.5px — pinvi 기본 12px */
   --text-xs--line-height: 1.5;
   --text-sm: 0.9375rem; /* 15px — pinvi 기본 14px. admin 본문 크기 */
@@ -164,6 +165,18 @@ body {
   button:not(:disabled),
   [role='button']:not([aria-disabled='true']) {
     cursor: pointer;
+  }
+
+  /* 관리자 표면의 키보드 포커스 표시(FS-7.8). 손으로 만든 `<button>`·링크 상당수가 포커스 유틸 없이
+     브라우저 기본 `outline: auto`(Chrome은 흰 띠를 낀 이중 링)에 맡겨져 있어, Tab 포커스 때 테두리가
+     굵어지거나 두 겹으로 보였다. 공통 Button(0.2.3)과 같은 2px 단일 outline·offset 2px·--kt-focus로
+     맞춘다. base 레이어라 요소 자신의 `focus-visible:outline-*`/`outline-hidden` 유틸이 항상 이긴다.
+     상태(hover/active/disabled) 스타일은 두지 않는다. 입력 컨트롤(input/select/textarea)은
+     이번 범위 밖이라 기존 규칙을 유지한다. 사용자 표면에는 걸리지 않는다. */
+  :is([data-pv-surface='admin'], [data-slot='admin-shell-drawer'])
+    :is(button, a[href], summary, [role='button'], [role='link'], [role='tab']):focus-visible {
+    outline: 2px solid var(--kt-focus);
+    outline-offset: 2px;
   }
 }
 
@@ -257,8 +270,11 @@ body {
   }
 }
 
-/* 공통 로그인·메뉴의 색상 역할을 PinVi 팔레트에 매핑한다. 사용자 표면에는 전파하지 않는다. */
-[data-pv-surface='admin'] {
+/* 공통 로그인·메뉴·관리자 셸의 색상 역할을 PinVi 팔레트에 매핑한다. 사용자 표면에는 전파하지 않는다.
+   관리자 셸의 모바일 drawer는 Radix Portal로 body에 붙어 `[data-pv-surface='admin']` 밖에 놓이므로
+   같은 값을 drawer 자신에도 건다(drawer 안 메뉴·로그아웃이 다른 색으로 그려지지 않게). */
+[data-pv-surface='admin'],
+[data-slot='admin-shell-drawer'] {
   --kt-font-sans: var(--font-sans);
   --kt-brand: var(--color-cta);
   --kt-brand-hover: var(--color-cta-hover);
@@ -277,44 +293,6 @@ body {
   --kt-destructive-tint: var(--color-admin-danger-tint);
   --kt-control-line: var(--color-admin-control-line);
 }
-.pinvi-common-menu [data-slot='app-menu'] {
-  padding: 0;
-  gap: 1.25rem;
-}
-.pinvi-common-menu [data-slot='app-menu-group-label'] {
-  font-size: var(--text-2xs);
-  margin-bottom: 0.5rem;
-}
-.pinvi-common-menu [data-slot='app-menu-link'] {
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-@media (min-width: 1024px) {
-  .pinvi-common-menu [data-slot='app-menu-link'] {
-    min-height: var(--spacing-control-sm);
-    padding-block: 0.375rem;
-  }
-  .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-link'] {
-    justify-content: center;
-    padding-inline: 0.5rem;
-  }
-  .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-group-label'],
-  .pinvi-common-menu[data-collapsed='true']
-    [data-slot='app-menu-link']
-    > span:not([aria-hidden='true']),
-  .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-link'] > kbd {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-  }
-  .pinvi-common-menu[data-collapsed='true'] [data-slot='app-menu-link'] {
-    min-height: var(--spacing-control);
-  }
-}
-
 /* 라이브러리의 첫 popup inline z-index(2)보다 앱 지도 패널(z10)이 높다.
    선택 popup의 닫기를 막지 않도록 앱 전용 class만 올린다. dialog/sheet(z50)는 그대로 위다. */
 .pinvi-map-popup {
@@ -356,12 +334,14 @@ body {
   --color-destructive: var(--color-error-text);
   --color-surface-subtle: var(--color-admin-subtle);
 }
-[data-pv-surface='admin'] .bg-muted {
+[data-pv-surface='admin'] .bg-muted,
+[data-slot='admin-shell-drawer'] .bg-muted {
   background-color: var(--color-admin-subtle);
 }
 
 /* 관리자만 공통 부품의 radius를 밀도 프로필에 맞춘다. */
-[data-pv-surface='admin'] {
+[data-pv-surface='admin'],
+[data-slot='admin-shell-drawer'] {
   --radius-sm: var(--radius-control);
   --radius-md: var(--radius-control);
   --radius-lg: var(--radius-panel);

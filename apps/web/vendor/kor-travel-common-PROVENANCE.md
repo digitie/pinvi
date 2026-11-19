@@ -1,5 +1,22 @@
 # 공통 산출물 채택 출처
 
+관리자 셸(T-222) 채택: @kor-travel/ui 0.2.3 · @kor-travel/tokens 0.1.4. 운영 적용은 별도다.
+
+pack 생성 SOURCE_SHA: 0e2a3f5aa16323df0d009360802661c9bc496dc6 (common PR #70)
+고정 catalog commit: d644632ea9eaf2f6b6baa49305d65fae5bbc0bd4 (common PR #71)
+정책 commit: d644632ea9eaf2f6b6baa49305d65fae5bbc0bd4
+main 발행 근거: https://github.com/digitie/kor-travel-common/actions/runs/44459847805/artifacts/14500111373
+producer: 0e2a3f5aa16323df0d009360802661c9bc496dc6
+
+- @kor-travel/tokens 0.1.4 sha512-k6StI02tH/iRxKimczN0btU+MS9AvDZLlR/6Bn6xQHhZ5Mb79pkyIALd4RkoLT2GP3qlwR89YEgOaBiBxACDpA==
+- @kor-travel/ui 0.2.3 sha512-upv+JtiVcF+zg3C/KcZy9UQckx0n3vc0n4ANr3/elWM8PQ4srljxgTQmaBK4IxulEj8pd8gc7mnG3M67oFIQUQ==
+
+artifact의 SRI 파일과 내려받은 tgz의 sha512를 다시 계산해 위 값과 같음을 확인했다.
+기존 직접 의존성만 갱신한다(@kor-travel/toast는 PinVi가 쓰지 않는다). Pinvi 모바일은 tokens-only를 유지한다.
+package-lock은 두 tgz의 version·resolved·integrity·peer(tokens 0.1.4)만 바꿨다(의존성 목록 불변 확인). 일관성은 n150 runner의 Node26/npm12 `npm ci`로 확인한다.
+
+## 과거 출처 기록 — 0.2.2 채택
+
 고정 catalog/policy C는 main 병합 P(2b0c02a2018c2c8c791bc6d6c7b5a2290579e09e)의 선행 commit이다. 실제 R/P pack bytes 동일성이 확인됐다. 운영 적용은 별도다.
 
 pack 생성 SOURCE_SHA: 706aaa7821588dfca72f660c9161f56be2d0445f
