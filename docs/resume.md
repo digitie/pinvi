@@ -1,3 +1,11 @@
+## 2026-11-19 — Common 정본 UI·tokens 정렬 후보
+
+- Common catalog d644632ea9eaf2f6b6baa49305d65fae5bbc0bd4, producer 0e2a3f5aa16323df0d009360802661c9bc496dc6의 원본 CI artifact14500111373을 사용한다. 중앙 canonical pack과 byte 동일하며 재pack하지 않았다.
+- web은 UI0.2.3/tokens0.1.4, mobile은 tokens0.1.4만 설치한다. UI96+tokens25=121개 regular file을 원본 tarball에서 산출했다. unused toast는 추가하지 않는다.
+- root/web/mobile artifact 원장의 SHA512/file 상대경로, root lock, 고정 Common workflow/common-ref를 함께 갱신한다. NativeWind5 RC/Tailwind4/React·RN과 기존 style-spec 호환 예외는 유지한다.
+- 이번 범위는 정본 의존성 정렬이다. 기존 관리자 인증·메뉴와 공개 여행 UI는 유지하며 별도 소비자 UI 재설계를 섞지 않는다. 모바일 EAS/store 실행·운영 수용을 주장하지 않는다.
+- 검증: Node26.13.1/npm12.0.1 lock 무결성·중앙 pack byte/SHA512·변경 lock 범위 검사는 PASS다. 설치·UI 회귀·Doctor·exact-head CI 결과는 PR evidence에 구분하여 기록한다. build/deploy는 부모의 quiet 일정에 맞춘다.
+
 ## 2026-11-19 — 호환 lock 정렬 후보
 
 - MapLibre GL6.17의 geojson-vt를 호환 범위 안의 6.3.1로 고정하고 기존 Concierge와 registry SRI를 맞췄다. Common/RN exact pin은 유지하며 canonical guard 통과, 실제 빌드·운영 수용은 후속 PR CI/소유자 단계다.
