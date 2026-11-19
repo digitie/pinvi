@@ -249,7 +249,7 @@ async function loginViaUi(page: Page) {
     await page.locator('[data-slot="login-submit"]').click();
     try {
       await expect(page).toHaveURL(/\/admin(?:[?#].*)?$/);
-      await expect(page.getByTestId('admin-me')).toBeVisible();
+      await expect(page.getByTestId('admin-shell')).toBeVisible();
       return;
     } catch {
       const alertText = await page
@@ -344,6 +344,21 @@ function navTestId(pathname: string) {
   return `admin-nav-${pathname.replace(/[^a-z0-9]+/gi, '-')}`;
 }
 
+/**
+ * 공통 AdminShell: lg(1024) 이상은 rail, 그 아래(mobile-wide 430)는 상단 바 메뉴 버튼으로 여는 좌측
+ * drawer다. drawer가 열리면 메뉴가 DOM에 두 벌이므로 rail 또는 dialog 범위로 찾는다.
+ */
+async function navLink(page: Page, pathname: string) {
+  const rail = page.locator('[data-slot="admin-shell-rail"]');
+  if (await rail.isVisible()) return rail.getByTestId(navTestId(pathname));
+  const dialog = page.getByRole('dialog');
+  if (!(await dialog.isVisible())) {
+    await page.locator('[data-slot="admin-shell-menu-button"]').click();
+    await expect(dialog).toBeVisible();
+  }
+  return dialog.getByTestId(navTestId(pathname));
+}
+
 function pathnameOf(value: string) {
   try {
     return new URL(value).pathname;
@@ -358,7 +373,10 @@ async function setViewport(page: Page, viewport: UiViewport) {
 
 async function expectAdminShell(page: Page, heading: string) {
   await expect(page.locator('main')).toBeVisible();
-  await expect(page.getByTestId('admin-me')).toBeVisible();
+  await expect(page.getByTestId('admin-shell')).toBeVisible();
+  // rail(데스크톱)에서만 사용자 표시가 늘 보인다. 모바일은 drawer 안에 있다.
+  const rail = page.locator('[data-slot="admin-shell-rail"]');
+  if (await rail.isVisible()) await expect(rail.getByTestId('admin-me')).toBeVisible();
   await expect(
     page.getByRole('heading', { name: new RegExp(escapeRegExp(heading)) }).first(),
   ).toBeVisible();
@@ -481,7 +499,7 @@ function pushNavigationCases(cases: AdminUiCase[]) {
         pushCase(cases, `nav clicks ${route.path} repeat=${repeat}`, viewport, async (page) => {
           await openRoute(page, dashboardRoute);
           await throttle();
-          await page.getByTestId(navTestId(route.path)).click();
+          await (await navLink(page, route.path)).click();
           await reloginIfNeeded(page, route.path);
           await expectAdminShell(page, route.heading);
           if (route.table) {

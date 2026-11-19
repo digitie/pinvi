@@ -128,7 +128,7 @@ test('공통 Admin 셸: 모바일 메뉴는 좌측 drawer로 접힌다', async (
   const menuButton = page.locator(MENU_BUTTON);
   await expect(menuButton).toBeVisible();
   await expect(menuButton).toHaveAccessibleName('Admin 메뉴 열기');
-  await expect(menuButton).toHaveCSS('min-height', '44px');
+  expect((await menuButton.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
   if (output) await page.screenshot({ path: join(output, 'pinvi-admin-mobile.png') });
 
   await menuButton.click();
@@ -227,10 +227,12 @@ test('공통 Admin 셸: 맨 위 한 줄은 "영역 - 페이지" 제목과 작은
       expect(box?.height ?? 0).toBeLessThanOrEqual(56);
       const titleBox = await title.boundingBox();
       const descriptionBox = await description.boundingBox();
-      if (width >= 1024 || (descriptionBox?.width ?? 0) > 0)
-        expect(
-          Math.abs((titleBox?.y ?? 0) + (titleBox?.height ?? 0) - ((descriptionBox?.y ?? 0) + (descriptionBox?.height ?? 0))),
-        ).toBeLessThanOrEqual(6);
+      // 모바일에서도 설명이 말줄임으로 사라지지 않고 보인다.
+      expect(descriptionBox?.width ?? 0).toBeGreaterThan(40);
+      // 제목과 설명은 같은 줄(밑선 기준)에 있다.
+      const titleBottom = (titleBox?.y ?? 0) + (titleBox?.height ?? 0);
+      const descriptionBottom = (descriptionBox?.y ?? 0) + (descriptionBox?.height ?? 0);
+      expect(Math.abs(titleBottom - descriptionBottom)).toBeLessThanOrEqual(6);
       if (output)
         await page.screenshot({
           path: join(output, `pinvi-admin-title-${width}-${route.path.replace(/\W+/g, '-')}.png`),

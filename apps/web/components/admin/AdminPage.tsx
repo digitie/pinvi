@@ -7,6 +7,11 @@ import { SectionCard } from '@/components/admin/section-card';
 export interface AdminPageProps {
   title: string;
   description?: string;
+  /**
+   * 상세 화면의 식별자(`trip_id …` 등). 상단 바 설명은 한 줄 말줄임이라 좁은 화면에서 잘리므로
+   * 읽고 복사해야 하는 값은 본문 첫 줄에 줄바꿈 가능하게 둔다.
+   */
+  identifier?: string;
   actions?: ReactNode;
   children: ReactNode;
 }
@@ -18,13 +23,28 @@ export interface AdminPageProps {
  * 상단 바가 "영역 - 페이지" h1과 작은 설명을 맡으므로 본문에는 h1이 없다. 동작 버튼은 텍스트
  * 버튼이 여러 개인 화면이 많아 모바일 상단 바(아이콘 1~2개 규약)에 넣지 않고 본문 첫 줄에 둔다.
  */
-export function AdminPage({ title, description, actions, children }: AdminPageProps) {
+export function AdminPage({ title, description, identifier, actions, children }: AdminPageProps) {
   return (
     <div className="space-y-6">
       <AdminPageTitle title={title} description={description} />
-      {actions ? (
-        <div className="flex flex-wrap items-center justify-end gap-2" data-slot="admin-page-actions">
-          {actions}
+      {identifier || actions ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {identifier ? (
+            <p
+              className="min-w-0 font-mono text-xs text-muted [overflow-wrap:anywhere]"
+              data-testid="admin-page-identifier"
+            >
+              {identifier}
+            </p>
+          ) : null}
+          {actions ? (
+            <div
+              className="ml-auto flex flex-wrap items-center justify-end gap-2"
+              data-slot="admin-page-actions"
+            >
+              {actions}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {children}

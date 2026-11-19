@@ -910,7 +910,7 @@ function AdminTripDetailPageView2({ viewModel }: { viewModel: AdminTripDetailPag
   return (
     <AdminPage
       title={trip.title}
-      description={`trip_id ${trip.trip_id}`}
+      identifier={`trip_id ${trip.trip_id}`}
       actions={
         <Link href="/admin/trips" className="rounded-sm border border-hairline px-3 py-2 text-sm">
           목록으로

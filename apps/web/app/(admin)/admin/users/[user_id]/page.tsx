@@ -608,7 +608,7 @@ function AdminUserDetailPageView2({ viewModel }: { viewModel: AdminUserDetailPag
   return (
     <AdminPage
       title={user.email_revealed ? user.email : user.email_masked}
-      description={`user_id ${user.user_id}`}
+      identifier={`user_id ${user.user_id}`}
       actions={
         <Link href="/admin/users" className="rounded-sm border border-hairline px-3 py-2 text-sm">
           목록으로

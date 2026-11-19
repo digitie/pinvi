@@ -13,7 +13,7 @@ producer: 0e2a3f5aa16323df0d009360802661c9bc496dc6
 
 artifact의 SRI 파일과 내려받은 tgz의 sha512를 다시 계산해 위 값과 같음을 확인했다.
 기존 직접 의존성만 갱신한다(@kor-travel/toast는 PinVi가 쓰지 않는다). Pinvi 모바일은 tokens-only를 유지한다.
-lock은 Node26/npm12로 재생성한다.
+package-lock은 두 tgz의 version·resolved·integrity·peer(tokens 0.1.4)만 바꿨다(의존성 목록 불변 확인). 일관성은 n150 runner의 Node26/npm12 `npm ci`로 확인한다.
 
 ## 과거 출처 기록 — 0.2.2 채택
 

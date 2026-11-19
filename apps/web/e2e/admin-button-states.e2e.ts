@@ -234,7 +234,62 @@ for (const viewport of [
   });
 }
 
-test('관리자 포커스 규칙은 사용자 화면에 걸리지 않는다', async ({ page }) => {
+/**
+ * globals.css의 관리자 포커스 규칙(@layer base 안)을 CSSOM에서 찾아 지운다. 지운 규칙 수를 돌려준다.
+ * 규칙을 끈 전후의 계산값을 비교해 "이 규칙이 이 요소에 영향을 주는가"를 직접 잰다.
+ */
+async function removeAdminFocusRule(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    let removed = 0;
+    const walk = (list: CSSRuleList, owner: CSSStyleSheet | CSSGroupingRule) => {
+      for (let i = list.length - 1; i >= 0; i -= 1) {
+        const rule = list[i];
+        if (
+          rule instanceof CSSStyleRule &&
+          rule.selectorText.includes('admin-shell-drawer') &&
+          rule.selectorText.includes(':focus-visible')
+        ) {
+          owner.deleteRule(i);
+          removed += 1;
+        } else if (rule instanceof CSSGroupingRule) walk(rule.cssRules, rule);
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        walk(sheet.cssRules, sheet);
+      } catch {
+        // 교차 출처 시트는 건너뛴다.
+      }
+    }
+    return removed;
+  });
+}
+
+async function tabFocusOutline(page: Page, selector: string) {
+  const target = page.locator(selector);
+  await target.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(target).toBeFocused();
+  return target.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return [s.outlineStyle, s.outlineWidth, s.outlineOffset, s.outlineColor, s.boxShadow].join(' | ');
+  });
+}
+
+test('관리자 포커스 규칙은 관리자 손 버튼에만 걸리고 사용자 화면 버튼에는 걸리지 않는다', async ({
+  page,
+}) => {
+  // 양성 대조: 관리자 화면의 손 버튼은 규칙을 지우면 포커스 표시가 달라진다(규칙이 실제로 작동한다).
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await setup(page);
+  await mountFixture(page);
+  const adminWith = await tabFocusOutline(page, '#legacy-refresh');
+  expect(await removeAdminFocusRule(page)).toBeGreaterThan(0);
+  const adminWithout = await tabFocusOutline(page, '#legacy-refresh');
+  expect(adminWith).not.toBe(adminWithout);
+
+  // 사용자 화면: 실제 로그인 버튼의 Tab 포커스 표시가 규칙 유무와 무관하다.
   await page.route(/.*\/auth\/oauth\/providers$/, (route) =>
     route.fulfill({
       contentType: 'application/json',
@@ -246,26 +301,9 @@ test('관리자 포커스 규칙은 사용자 화면에 걸리지 않는다', as
   expect(await page.locator('[data-pv-surface="admin"], [data-slot^="admin-shell"]').count()).toBe(
     0,
   );
-  // 사용자 화면에 관리자 스코프 밖 동일 마크업을 심어도 관리자 outline이 붙지 않는다.
-  await page.evaluate(() => {
-    const button = document.createElement('button');
-    button.id = 'user-probe';
-    button.className = 'rounded-sm border border-hairline px-3 py-1 text-sm';
-    button.textContent = 'probe';
-    document.body.prepend(button);
-  });
-  await page.locator('#user-probe').focus();
-  await page.keyboard.press('Shift+Tab');
-  await page.keyboard.press('Tab');
-  await expect(page.locator('#user-probe')).toBeFocused();
-  const outline = await page.locator('#user-probe').evaluate((el) => {
-    const s = getComputedStyle(el);
-    return { style: s.outlineStyle, color: s.outlineColor };
-  });
-  const adminFocus = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue('--kt-focus').trim(),
-  );
-  // 브라우저 기본(auto) 그대로이며 관리자 규칙(2px solid --kt-focus)이 아니다.
-  expect(outline.style).not.toBe('solid');
-  expect(adminFocus === '' || outline.color !== adminFocus).toBe(true);
+  await page.getByTestId('login-password').fill('password1234');
+  const userWith = await tabFocusOutline(page, '[data-testid="login-submit"]');
+  expect(await removeAdminFocusRule(page)).toBeGreaterThan(0);
+  const userWithout = await tabFocusOutline(page, '[data-testid="login-submit"]');
+  expect(userWith).toBe(userWithout);
 });

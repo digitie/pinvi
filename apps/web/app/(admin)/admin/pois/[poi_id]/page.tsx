@@ -442,7 +442,7 @@ function AdminPoiDetailPageView2({ viewModel }: { viewModel: AdminPoiDetailPageV
   return (
     <AdminPage
       title={featureTitle}
-      description={`poi_id ${poi.attachment_id}`}
+      identifier={`poi_id ${poi.attachment_id}`}
       actions={
         <Link href="/admin/pois" className="rounded-sm border border-hairline px-3 py-2 text-sm">
           목록으로

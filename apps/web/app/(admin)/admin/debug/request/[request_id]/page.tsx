@@ -133,7 +133,7 @@ export default function AdminRequestTimelinePage() {
   return (
     <AdminPage
       title="Request timeline"
-      description={requestId ?? ''}
+      identifier={requestId ? `request_id ${requestId}` : undefined}
       actions={
         <>
           <Link
