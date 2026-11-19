@@ -162,7 +162,7 @@ test('Admin retention page가 summary, dry-run, kill-switch guard를 렌더링�
 
   await page.goto('/admin/retention');
 
-  await expect(page.getByRole('heading', { name: 'Retention', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: '시스템 운영 - Retention', exact: true })).toBeVisible();
   await expect(page.getByTestId('admin-nav--admin-retention')).toBeVisible();
   await expect(page.getByTestId('admin-retention-pii-total')).toContainText('8');
   await expect(page.getByTestId('admin-retention-audit-total')).toContainText('1');

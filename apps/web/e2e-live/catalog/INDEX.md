@@ -14,11 +14,11 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | share | 35 | 31 | 1 | 3 |
 | poi | 40 | 32 | 6 | 2 |
 | notify | 32 | 23 | 4 | 5 |
-| admin | 44 | 37 | 5 | 2 |
+| admin | 45 | 38 | 5 | 2 |
 | core | 49 | 48 | 1 | 0 |
 | recommend | 3 | 3 | 0 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **585** | **532** | **29** | **24** |
+| **all** | **586** | **533** | **29** | **24** |
 
 Spec files: 68.
 
@@ -369,6 +369,7 @@ Spec files: 68.
 | ADM-042 | admin | 미확정 Map 명령의 실행 기록 확인·미실행 봉인·새 승인 | P1 | desktop, mobile, admin, a11y | manual |  |
 | ADM-043 | admin | 과거 Map 명령·실행 계정 변경과 확인창 열린 뒤 시도 교체 | P1 | desktop, mobile, admin | manual |  |
 | ADM-044 | admin | 신고로 숨긴 첨부는 장소·일자·여행 삭제와 휴지통 만료 뒤에도 보존, 신고 복원 뒤 정리 | P2 | desktop, admin, mutating | manual |  |
+| ADM-045 | admin | 모바일(390) 관리자 메뉴가 좌측 drawer 로 접히고 상단 바 한 줄에 '영역 - 페이지' 제목만 둔다 | P2 | mobile, admin, a11y | scripted | `specs/admin/admin-readonly-pages.live.spec.ts#ADM-045` |
 | CORE-001 | core | 로그인 — 하이드레이션 전 클릭이 입력을 지우지 않고 제출된다(#619) | P1 | desktop, mobile, auth | scripted | `specs/core/core-auth-session.live.spec.ts#CORE-001` |
 | CORE-002 | core | 잘못된 비밀번호 — '이메일 또는 비밀번호가 올바르지 않습니다.' 알림, URL 유지, 쿠키 미발급 | P1 | desktop, mobile, auth | scripted | `specs/core/core-auth-session.live.spec.ts#CORE-002` |
 | CORE-003 | core | 로그아웃 뒤 보호 페이지 접근은 /login으로 간다 | P1 | desktop, auth | scripted | `specs/core/core-auth-session.live.spec.ts#CORE-003` |

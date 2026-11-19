@@ -2,12 +2,22 @@
 // Selectors re-verified against origin/main b1cef056:
 //   apps/web/app/(admin)/admin/login/page.tsx  -> LoginForm from @kor-travel/ui: data-slot login-username/password/submit/error,
 //                                                 wrapper data-testid="admin-login", brand text 'Pinvi Admin'
-//   apps/web/app/(admin)/admin/layout.tsx      -> admin-sidebar, admin-me (aria-label '로그인 사용자 <email>'), admin-nav-*
+//   apps/web/app/(admin)/admin/layout.tsx      -> admin-shell (common AdminShell), admin-me (aria-label '로그인 사용자 <email>'), admin-nav-*
 // Contract: apps/api/app/core/rbac.py (non-admin => 404 RESOURCE_NOT_FOUND), apps/api/app/api/v1/auth.py (/auth/refresh)
 // Ordinary-user identity: PINVI_E2E_USER2_* (test2@test.com) when provisioned, else PINVI_E2E_USER_*.
 import { expect, test } from '@playwright/test';
 import { shot, isMobileProject } from '../../helpers/live';
-import { ADMIN_LOGIN, captureApiOrigin, loginAsOrdinaryUser, newAdminActor, ordinaryUserCreds, requireEnv } from '../../helpers/admin';
+import {
+  ADMIN_LOGIN,
+  ADMIN_SHELL,
+  adminNavLink,
+  captureApiOrigin,
+  closeAdminDrawer,
+  loginAsOrdinaryUser,
+  newAdminActor,
+  ordinaryUserCreds,
+  requireEnv,
+} from '../../helpers/admin';
 
 test.describe('ADM auth', () => {
   test('ADM-001 admin login lands on /admin with sidebar identity', async ({ page }) => {
@@ -23,12 +33,16 @@ test.describe('ADM auth', () => {
     await page.locator(ADMIN_LOGIN.submit).click();
 
     await expect(page).toHaveURL(/\/admin(?:[?#].*)?$/, { timeout: 30_000 });
-    await expect(page.getByTestId('admin-sidebar')).toBeVisible();
-    // Value compared only; never logged.
-    await expect(page.getByTestId('admin-me')).toHaveAttribute('aria-label', `로그인 사용자 ${email}`);
+    await expect(page.getByTestId('admin-shell')).toBeVisible();
     for (const href of ['/admin/feature-requests', '/admin/features', '/admin/dedup-review', '/admin/integrity', '/admin/audit']) {
-      await expect(page.getByTestId(`admin-nav-${href.replace(/[^a-z0-9]+/gi, '-')}`)).toBeVisible();
+      await expect(await adminNavLink(page, href)).toBeVisible();
     }
+    // Value compared only; never logged. On mobile the rail footer is rendered inside the open drawer.
+    const me = isMobileProject()
+      ? page.getByRole('dialog').getByTestId('admin-me')
+      : page.locator(ADMIN_SHELL.rail).getByTestId('admin-me');
+    await expect(me).toHaveAttribute('aria-label', `로그인 사용자 ${email}`);
+    await closeAdminDrawer(page);
     await shot(page, 'ADM-001', 'dashboard');
   });
 

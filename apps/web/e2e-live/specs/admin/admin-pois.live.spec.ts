@@ -104,7 +104,8 @@ test.describe.serial('ADM POI admin (mutating, self-cleaning)', () => {
     await expect(row).toContainText(masked);
     await row.getByRole('link').first().click();
     await expect(page).toHaveURL(new RegExp(`/admin/trips/${tripId}$`));
-    await expect(page.locator('main h1')).toContainText(title);
+    // The page title moved to the shell's one-line top bar (outside <main>).
+    await expect(page.locator('[data-slot="admin-shell-title"]')).toContainText(title);
     await shot(page, 'ADM-030', 'trip-detail');
   });
 });

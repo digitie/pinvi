@@ -55,6 +55,43 @@ export const ADMIN_LOGIN = {
   error: '[data-slot="login-error"]',
 } as const;
 
+/**
+ * 공통 관리자 셸(@kor-travel/ui 0.2.3 AdminShell) 선택자. lg(1024) 이상은 좌측 rail, 그 아래는 상단 바의
+ * 메뉴 버튼으로 여는 좌측 drawer다. drawer가 열리면 메뉴가 DOM에 두 벌(rail·drawer) 있으므로
+ * 메뉴 링크는 rail 또는 dialog 범위로 좁혀 찾는다. 열린 동안 메뉴 버튼은 Radix aria-hidden 때문에
+ * getByRole로 잡히지 않아 data-slot으로 찾는다.
+ */
+export const ADMIN_SHELL = {
+  root: '[data-testid="admin-shell"]',
+  rail: '[data-slot="admin-shell-rail"]',
+  collapse: '[data-slot="admin-shell-collapse"]',
+  menuButton: '[data-slot="admin-shell-menu-button"]',
+  header: '[data-slot="admin-shell-header"]',
+  title: '[data-slot="admin-shell-title"]',
+  description: '[data-slot="admin-shell-description"]',
+} as const;
+
+/** 지금 보이는 메뉴 범위(rail 또는 열린 drawer)의 `admin-nav-<href>` 링크. 모바일은 drawer를 먼저 연다. */
+export async function adminNavLink(page: Page, href: string) {
+  const testId = `admin-nav-${href.replace(/[^a-z0-9]+/gi, '-')}`;
+  const rail = page.locator(ADMIN_SHELL.rail);
+  if (await rail.isVisible()) return rail.getByTestId(testId);
+  const dialog = page.getByRole('dialog');
+  if (!(await dialog.isVisible())) {
+    await page.locator(ADMIN_SHELL.menuButton).click();
+    await expect(dialog).toBeVisible();
+  }
+  return dialog.getByTestId(testId);
+}
+
+/** 모바일 drawer가 열려 있으면 Escape로 닫고 닫힘을 기다린다. */
+export async function closeAdminDrawer(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog');
+  if (!(await dialog.isVisible())) return;
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+}
+
 /** Short unique tag so parallel/repeated runs never collide on titles. */
 export function runTag(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;

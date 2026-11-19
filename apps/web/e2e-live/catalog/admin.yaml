@@ -25,8 +25,8 @@
     - /admin 으로 이동 확인
   expected:
     - URL 이 /admin 으로 바뀐다
-    - 사이드바(admin-sidebar) 가 보이고 admin-me 의 aria-label 이 '로그인 사용자 <admin email>' 이다 (값은 env 와 비교만, 로그 금지)
-    - admin-nav--admin-feature-requests / -features / -dedup-review / -integrity / -audit 링크가 있다
+    - 공통 관리자 셸(data-testid=admin-shell) 이 보이고 rail([data-slot=admin-shell-rail]) 안 admin-me 의 aria-label 이 '로그인 사용자 <admin email>' 이다 (값은 env 와 비교만, 로그 금지)
+    - admin-nav--admin-feature-requests / -features / -dedup-review / -integrity / -audit 링크가 rail 안에 있다
   cleanup:
     - 없음 (read-only)
   automation: scripted
@@ -154,9 +154,9 @@
   steps:
     - NAV_GROUPS 의 운영/지도/시스템 그룹 중 dev-only(seed/reset) 와 grafana/backup 을 제외한 19개 href 로 순회
   expected:
-    - 각 경로에서 h1 제목이 보이고 Next 런타임 오류 텍스트('Application error', 'Unhandled Runtime Error') 가 없다
-    - 레일 링크 admin-nav-<href> 가 보이고 href 가 일치(aria-current 는 vendored AppMenu 소관이라 annotation 만)
-    - 모바일(390) 에서 레일이 가로 스크롤 nav 로 렌더되고 루트 가로 스크롤이 생기지 않는다
+    - 각 경로에서 상단 바 h1([data-slot=admin-shell-title], <main> 밖) 이 '영역 - 페이지' 형식으로 하나만 보이고 Next 런타임 오류 텍스트('Application error', 'Unhandled Runtime Error') 가 없다
+    - 메뉴 링크 admin-nav-<href> 가 보이고 href 가 일치(데스크톱은 rail, 모바일은 [data-slot=admin-shell-menu-button] 으로 연 drawer(role=dialog) 범위; aria-current 는 vendored AppMenu 소관이라 annotation 만)
+    - 모바일(390) 에서 메뉴는 좌측 drawer 로 접히고(rail 숨김) 루트 가로 스크롤이 생기지 않는다; drawer 는 Escape 로 닫는다
   cleanup:
     - 없음
   automation: scripted
@@ -736,9 +736,9 @@
     - 관리자 로그인 상태(데스크톱 ≥ lg)
   data_sources: []
   steps:
-    - admin-sidebar-toggle 클릭 → 새로고침 → 다시 클릭
+    - rail 접기 버튼([data-slot=admin-shell-collapse]) 클릭 → 새로고침 → localStorage 복원
   expected:
-    - admin-sidebar data-collapsed 'true' 유지 후 'false' 복귀; aria-pressed 동기화
+    - rail([data-slot=admin-shell-rail]) data-collapsed 'true' 가 새로고침 뒤에도 유지되고 복원 뒤 속성이 사라진다; 접기 버튼 aria-expanded 동기화
     - 첫 Tab 에서 본문 건너뛰기 링크가 포커스를 받는다
   cleanup:
     - localStorage 키 pinvi.admin.sidebar.collapsed 를 '0' 으로 되돌림
@@ -824,3 +824,22 @@
     - "fixture 여행·신고 정리"
   automation: manual
   notes: "2026-11-06 소유자 결정으로 변경(이전에는 부모 삭제·만료가 hold보다 우선). 2026-11-07: 확정 takedown은 180일 증거 보존(용량 제외) 뒤 자동 삭제, 이의제기 중에는 유지 — API 회귀 test_confirmed_takedown_is_evidence_for_retention_then_deleted_with_trash_trip. 비가역 정리 실행이라 prod catalog에서 자동화하지 않는다. API 회귀 test_moderation_hold_survives_parent_deletion_until_moderation_resolves·test_hard_deleted_day_keeps_attachment_charge[held]."
+
+- id: ADM-045
+  title: 모바일(390) 관리자 메뉴가 좌측 drawer 로 접히고 상단 바 한 줄에 '영역 - 페이지' 제목만 둔다
+  priority: P2
+  tags: [mobile, admin, a11y]
+  preconditions:
+    - 관리자 로그인 상태(모바일 < lg)
+  data_sources: []
+  steps:
+    - /admin/users 진입 → 상단 바 메뉴 버튼([data-slot=admin-shell-menu-button]) → Escape
+  expected:
+    - rail 은 숨김, 상단 바 h1 은 'Pinvi 운영 - 사용자', 상단 바 높이 56px 이하(앱 설명 문구 없음)
+    - drawer(role=dialog) 가 화면 왼쪽 끝(x=0)에서 280px 이하 폭으로 열리고 현재 메뉴(admin-nav--admin-users) 에 aria-current=page
+    - Escape 로 닫히면 포커스가 메뉴 버튼으로 돌아가고 루트 가로 스크롤이 없다
+  cleanup:
+    - 없음 (read-only)
+  automation: scripted
+  spec: specs/admin/admin-readonly-pages.live.spec.ts#ADM-045
+  notes: "@kor-travel/ui 0.2.3 AdminShell 채택(2026-11-19). drawer 가 열린 동안 메뉴가 DOM 에 두 벌이라 dialog 범위로 찾는다."

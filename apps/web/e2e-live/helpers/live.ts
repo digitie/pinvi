@@ -414,7 +414,7 @@ export async function loginAsAdmin(page: Page): Promise<void> {
   const password = requireEnv('PINVI_E2E_ADMIN_PASSWORD');
   trackApiBase(page);
   const key = `admin:${email}`;
-  if (await reuseSession(page, key, '/admin', page.getByTestId('admin-sidebar'))) return;
+  if (await reuseSession(page, key, '/admin', page.getByTestId('admin-shell'))) return;
   await page.goto('/admin/login');
   const root = page.getByTestId('admin-login');
   await expect(root).toBeVisible({ timeout: 20_000 });

@@ -25,7 +25,10 @@ function block(startPattern: RegExp): string {
 }
 
 const THEME = block(/@theme\s*\{/);
-const ADMIN_SCOPE = block(/\[data-pv-surface='admin'\]\s*\{/);
+// 관리자 셸 drawer는 Portal이라 scope 밖에 붙으므로 같은 블록이 drawer 선택자도 함께 갖는다.
+const ADMIN_SCOPE = block(
+  /\[data-pv-surface='admin'\](?:,\s*\[data-slot='admin-shell-drawer'\])?\s*\{/,
+);
 
 /** 사용자 표면과 이름이 겹쳐 전역에서 바꾸면 안 되는 단계. */
 const SHARED_STEPS = ['xs', 'sm', 'base', 'lg', 'xl', '2xl'] as const;

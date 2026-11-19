@@ -384,11 +384,12 @@ test('Admin 여행 상세가 상태 변경 audit을 표시한다', async ({ page
   await expect(page.getByRole('heading', { name: '부산 가족 여행' })).toBeVisible();
   await expect(page.getByTestId('admin-nav--admin-trips')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('admin-nav--admin')).not.toHaveAttribute('aria-current', 'page');
-  await expect(page.getByTestId('admin-sidebar')).toHaveAttribute('data-collapsed', 'false');
-  await page.getByTestId('admin-sidebar-toggle').click();
-  await expect(page.getByTestId('admin-sidebar')).toHaveAttribute('data-collapsed', 'true');
-  await page.getByTestId('admin-sidebar-toggle').click();
-  await expect(page.getByTestId('admin-sidebar')).toHaveAttribute('data-collapsed', 'false');
+  const rail = page.locator('[data-slot="admin-shell-rail"]');
+  await expect(rail).not.toHaveAttribute('data-collapsed', 'true');
+  await page.locator('[data-slot="admin-shell-collapse"]').click();
+  await expect(rail).toHaveAttribute('data-collapsed', 'true');
+  await page.locator('[data-slot="admin-shell-collapse"]').click();
+  await expect(rail).not.toHaveAttribute('data-collapsed', 'true');
   await expect(page.getByRole('link', { name: 'o***@example.com' })).toHaveAttribute(
     'href',
     `/admin/users/${ownerUserId}`,
