@@ -1,7 +1,24 @@
 import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
-import { buttonVariants } from '@kor-travel/ui/button-variants';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+type ButtonVariants = (options: { variant: string }) => string;
+
+/**
+ * 공통 Button의 실제 cva(`@kor-travel/ui/button-variants`)를 불러온다. 이 패키지는 ESM `import`
+ * 조건만 내보내 CJS로 변환되는 테스트에서 `import`/`require`로 직접 못 부르므로, package.json 위치에서
+ * dist 파일 URL을 만들어 네이티브 동적 import로 읽는다.
+ */
+async function loadButtonVariants(): Promise<ButtonVariants> {
+  const pkg = createRequire(__filename).resolve('@kor-travel/ui/package.json');
+  const url = pathToFileURL(join(dirname(pkg), 'dist/button-variants.js')).href;
+  const nativeImport = new Function('u', 'return import(u)') as (
+    u: string,
+  ) => Promise<{ buttonVariants: ButtonVariants }>;
+  return (await nativeImport(url)).buttonVariants;
+}
 
 // FS-7.8 버튼 테두리 점검. 관리자 범위의 버튼 변형마다 Tab 포커스·hover·active·disabled를 잰다.
 // - Tab 포커스: outline 2px 단일(solid, offset 2px), box-shadow ring 없음, 테두리 두께 불변
@@ -71,6 +88,7 @@ async function probe(page: Page, selector: string): Promise<Probe> {
 }
 
 async function mountFixture(page: Page) {
+  const buttonVariants = await loadButtonVariants();
   const fixtures = [
     ...VARIANTS.map((variant) => ({
       id: `btn-${variant}`,
