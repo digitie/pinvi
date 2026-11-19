@@ -1,3 +1,9 @@
+## 2026-11-20 — API·ETL 공통 백엔드 선택 버전 정렬 후보
+
+- API·ETL 직접 사용 축과 기존 전이 축을 각 uv.lock에서 정렬하고, Common Python은 같은 package tree의 실제 병합 67efe로 고정한다.
+- SQLAlchemy 2.1의 기본 driver 변경에는 독립 compose의 기존 psycopg2를 명시해 대응한다. UI·mobile·vendor·schema와 공유 host는 유지한다.
+- 세부 범위·검증·producer 병합 조건은 [작업 계획](execplan/shared-backend-application-alignment.md)에 기록한다. 실제 runtime 수용은 후속 정상 작업이다.
+
 ## 2026-11-19 — 호환 전이 의존성 정렬
 
 - MapLibre GL6.17의 geojson-vt를 호환 범위 안의 6.3.1로 고정하고 기존 Concierge와 registry SRI를 맞췄다. 직접 라이브러리 버전·Common 산출물·RN exact style-spec은 유지한다.

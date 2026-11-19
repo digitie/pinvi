@@ -117,7 +117,7 @@ def test_app_dagster_storage_url_resolves_to_what_the_one_shot_creates(
     storage = urlsplit(dagster_env[env_name])
     app = urlsplit(dagster_env["PINVI_DATABASE_URL"])
 
-    assert storage.scheme == "postgresql"
+    assert storage.scheme == "postgresql+psycopg2"
     assert (storage.hostname, storage.port) == ("app-postgres", 5432)
     # one-shot이 만드는 바로 그 login·password·database다.
     assert storage.username == init_env["PINVI_DAGSTER_DB_USER"]

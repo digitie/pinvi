@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -475,7 +475,7 @@ async def _trip_for_attachment(db: AsyncSession, attachment: CuratedPlanAttachme
             trip = await db.scalar(
                 select(Trip).where(Trip.trip_id == poi_trip_id, Trip.deleted_at.is_(None))
             )
-            return cast(Trip | None, trip)
+            return trip
     return None
 
 

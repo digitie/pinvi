@@ -117,9 +117,21 @@ jobs:
           # 모든 PR 경로 검사는 merge ref가 아니라 동일한 PR head를 검증한다.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - uses: actions/checkout@v4
+        with:
+          repository: digitie/kor-travel-common
+          ref: b566840cb111fa8b1184498aa892b0fd5ce7e5c6
+          path: common-python-policy
+          persist-credentials: false
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Check exact used Python application versions
+        run: >-
+          python -B "$GITHUB_WORKSPACE/common-python-policy/tools/check_versions.py"
+          "$GITHUB_WORKSPACE/apps/api" --repo pinvi --strict-python-application
 
       # 의존성은 `uv.lock`에서만 온다. 종전 `pip install -e ".[dev]"`는 pyproject 하한만 보고
       # 실행 시점 PyPI 최신을 받아, 코드 변경 없이 upstream 릴리스 하나로 CI가 빨개졌다

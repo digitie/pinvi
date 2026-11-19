@@ -1,3 +1,9 @@
+## 2026-11-20 — API·ETL 공통 백엔드 선택 버전 정렬 후보
+
+- API·ETL 직접 사용 축과 기존 전이 축을 각 uv.lock에서 정렬하고, Common Python은 같은 package tree의 실제 병합 67efe로 고정한다.
+- SQLAlchemy 2.1의 기본 driver 변경에는 독립 compose의 기존 psycopg2를 명시해 대응한다. UI·mobile·vendor·schema와 공유 host는 유지한다.
+- 세부 범위·검증·producer 병합 조건은 [작업 계획](execplan/shared-backend-application-alignment.md)에 기록한다. 실제 runtime 수용은 후속 정상 작업이다.
+
 ## 2026-11-19 — 공통 관리자 셸(@kor-travel/ui 0.2.3) 채택
 
 - admin(`app/(admin)/admin/`)만 공통 `AdminShell`로 교체: lg 이상 좌측 rail(접힘 키 `pinvi.admin.sidebar.collapsed`, 기존 "1"/"0" 그대로 읽고 씀), 미만은 상단 바 메뉴 버튼 → 좌측 drawer(최대 280px). 사용자 화면은 그대로다.
