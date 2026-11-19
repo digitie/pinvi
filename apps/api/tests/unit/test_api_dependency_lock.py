@@ -175,4 +175,6 @@ def test_installer_and_shared_policy_consume_the_canonical_build_constraints() -
     assert pip_version.group(1) == _pinned_lines(_BUILD_CONSTRAINTS)["pip"]
     workflow = _API_WORKFLOW.read_text(encoding="utf-8")
     assert '"$GITHUB_WORKSPACE/apps/api" --repo pinvi --strict-python-application' in workflow
-    assert "--constraints build-constraints.txt --python-build-tools --python-version 3.12" in workflow
+    assert (
+        "--constraints build-constraints.txt --python-build-tools --python-version 3.12" in workflow
+    )
