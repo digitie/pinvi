@@ -1,3 +1,4 @@
+# installer pip도 bootstrap의 --constraint로 실제 소비한다(build isolation과 별도).
 # pip build isolation 환경 제약(Dockerfile·CI의 `--build-constraint`). 앱 의존성이 아니다 —
 # 그것은 `uv.lock`이 정본이다. 여기는 소스에서 빌드되는 두 가지의 build 환경만 `==`로 고정한다.
 #
@@ -16,8 +17,9 @@ editables==0.6
 hatchling==1.32.4
 packaging==26.3
 pathspec==1.1.1
-pluggy==1.6.0
-setuptools==84.0.0
-tomlkit==0.15.1
+pip==26.3
+pluggy==1.7.0
+setuptools==84.2.1
+tomlkit==0.15.2
 trove-classifiers==2026.9.21.13
 wheel==0.48.0

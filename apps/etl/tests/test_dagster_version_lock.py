@@ -70,10 +70,10 @@ def _pip_installs(text: str) -> list[str]:
 
 
 def _image_pip_version() -> str:
-    """이미지가 설치 도구로 까는 pip 버전. 그 명령은 **정확히** `pip install pip==<ver>`다."""
+    """이미지가 설치 도구로 까는 pip 버전. 그 명령은 exact pip와 실제 constraints 입력을 함께 소비한다."""
     tools = [cmd for cmd in _pip_installs(_dependency_install_step()) if " pip==" in cmd]
     assert len(tools) == 1, tools
-    matched = re.fullmatch(r"pip install pip==(\d+\.\d+(?:\.\d+)?)", tools[0])
+    matched = re.fullmatch(r"pip install pip==(\d+\.\d+(?:\.\d+)?) --constraint /tmp/build-constraints.txt", tools[0])
     assert matched is not None, f"설치 도구 명령에 다른 것이 섞였다: {tools[0]!r}"
     return matched.group(1)
 
@@ -107,7 +107,10 @@ def _assert_app_installs_are_closed(installs: list[str], build_constraint: str) 
 def test_every_pip_install_refuses_unlisted_packages() -> None:
     """설치 도구 명령 하나(`pip install pip==<ver>` 그 자체)만 예외다."""
     step = _dependency_install_step()
-    tool = f"pip install pip=={_image_pip_version()}"
+    tool = (
+        f"pip install pip=={_image_pip_version()}"
+        " --constraint /tmp/build-constraints.txt"
+    )
     app_installs = [cmd for cmd in _pip_installs(step) if cmd != tool]
     _assert_app_installs_are_closed(app_installs, "/tmp/build-constraints.txt")
     assert "pip check" in step, "설치 목록이 불완전해도 빌드가 통과한다 — `pip check`가 없다"
@@ -149,7 +152,7 @@ def test_ci_installs_the_same_pip_as_the_image() -> None:
     """`--build-constraint`의 동작은 pip 버전에 달렸다 — CI와 이미지가 같은 pip여야 한다."""
     tools = [cmd for cmd in _pip_installs(_sanity_commands()) if " pip==" in cmd]
     assert len(tools) == 1, tools
-    matched = re.fullmatch(r"python -m pip install pip==(\S+) uv==\S+", tools[0])
+    matched = re.fullmatch(r"python -m pip install pip==(\S+) uv==\S+ --constraint build-constraints.txt", tools[0])
     assert matched is not None, f"CI 설치 도구 명령에 다른 것이 섞였다: {tools[0]!r}"
     assert matched.group(1) == _image_pip_version()
 
@@ -222,9 +225,17 @@ def test_ci_sanity_installs_from_the_lock_like_the_image() -> None:
     tools = [cmd for cmd in installs if " pip==" in cmd]
     assert len(tools) == 1, tools
     # 설치 도구 명령은 정확히 한 모양만 예외다(`test_ci_installs_the_same_pip_as_the_image`).
-    assert re.fullmatch(r"python -m pip install pip==\S+ uv==\S+", tools[0]), tools
+    assert re.fullmatch(r"python -m pip install pip==\S+ uv==\S+ --constraint build-constraints.txt", tools[0]), tools
     # CI는 working-directory가 apps/etl이다.
     _assert_app_installs_are_closed(
         [cmd for cmd in installs if cmd != tools[0]], "build-constraints.txt"
     )
     assert "pip check" in sanity
+
+
+def test_installer_and_shared_policy_consume_the_canonical_build_constraints() -> None:
+    """CI와 이미지 bootstrap이 같은 실제 제약을 소비하고 중앙 guard에도 전달한다."""
+    assert _image_pip_version() == _pinned_lines(_BUILD_CONSTRAINTS)["pip"]
+    workflow = _ETL_WORKFLOW.read_text(encoding="utf-8")
+    assert '"$GITHUB_WORKSPACE/apps/etl" --repo pinvi --strict-python-application' in workflow
+    assert "--constraints build-constraints.txt --python-build-tools --python-version 3.12" in workflow

@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: digitie/kor-travel-common
-          ref: b566840cb111fa8b1184498aa892b0fd5ce7e5c6
+          ref: 694b814ce625778d31b6aa57b8ae2c8c4f22a752
           path: common-python-policy
           persist-credentials: false
 
@@ -84,6 +84,7 @@ jobs:
         run: >-
           python -B "$GITHUB_WORKSPACE/common-python-policy/tools/check_versions.py"
           "$GITHUB_WORKSPACE/apps/etl" --repo pinvi --strict-python-application
+          --constraints build-constraints.txt --python-build-tools --python-version 3.12
 
       # 이미지(`apps/etl/Dockerfile`)와 같은 경로로 설치한다 — `uv.lock`에서만.
       # `pip install -e ".[dev]"`는 pyproject 하한만 보고 CI 시점 최신을 받아,
@@ -91,7 +92,7 @@ jobs:
       # `pyproject.toml [tool.uv] required-version`과 같다(테스트로 묶임).
       - name: Install dependencies (from uv.lock)
         run: |
-          python -m pip install pip==26.2.1 uv==0.11.21
+          python -m pip install pip==26.3 uv==0.11.21 --constraint build-constraints.txt
           uv --no-cache export --locked --extra dev --no-emit-project --no-hashes \
             --format requirements-txt --output-file "$RUNNER_TEMP/requirements.lock.txt"
           pip install --no-deps --build-constraint build-constraints.txt -r "$RUNNER_TEMP/requirements.lock.txt"

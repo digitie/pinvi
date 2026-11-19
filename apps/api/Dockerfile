@@ -68,7 +68,7 @@ COPY apps/api/build-constraints.txt /tmp/build-constraints.txt
 RUN uv --no-cache export --locked --no-dev --no-emit-project --no-hashes \
         --format requirements-txt --output-file /tmp/requirements.lock.txt \
     && rm /usr/local/bin/uv \
-    && pip install pip==26.2.1 \
+    && pip install pip==26.3 --constraint /tmp/build-constraints.txt \
     && pip install --no-deps --build-constraint /tmp/build-constraints.txt -r /tmp/requirements.lock.txt \
     && rm /tmp/requirements.lock.txt
 
