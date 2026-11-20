@@ -1,3 +1,10 @@
+## 2026-11-20 (claude) — admin-live-matrix [0072] 430px 표 숨김은 설계, 단언을 고침
+
+- t1120b 뒤 live matrix [0072](`mobile-wide` 430, `/admin/feature-requests` 첫 route 시험)에서 `admin-table-scroll`이 숨김으로 실패.
+- 회귀 아님: `AdminTable`은 `mobileCard`를 받은 화면에서 md(768) 미만·행 있음이면 표를 `hidden md:block`으로 숨기고
+  `admin-mobile-cards`를 그린다(#462, 2026-08). #789 셸 변경과 무관하다(브레이크포인트·AdminTable 불변).
+- `waitForAdminTable`이 표 또는 모바일 카드 중 **보이는 쪽**을 기다리게 했다(`or` + `filter({ visible: true })`).
+
 ## 2026-11-20 — API·ETL 공통 백엔드 선택 버전 정렬 후보
 
 - API·ETL 직접 사용 축과 기존 전이 축을 각 uv.lock에서 정렬하고, Common Python은 같은 package tree의 실제 병합 67efe로 고정한다.

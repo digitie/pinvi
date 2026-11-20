@@ -427,8 +427,19 @@ function backupMutationPath(value: string, method: string) {
   return pathname.startsWith('/admin/backup') ? pathname : null;
 }
 
+/**
+ * 표 화면 준비. `AdminTable`은 `mobileCard`를 받은 화면(Feature 제안 등)에서 md(768) 미만이고 행이
+ * 있으면 표를 `hidden md:block`으로 숨기고 `admin-mobile-cards`를 대신 그린다(#462부터의 설계).
+ * mobile-wide(430)에서 표만 기다리면 정상 화면이 "숨은 표"로 실패한다 — 둘 중 보이는 쪽을 본다.
+ */
 async function waitForAdminTable(page: Page) {
-  await expect(page.getByTestId('admin-table-scroll').first()).toBeVisible();
+  await expect(
+    page
+      .getByTestId('admin-table-scroll')
+      .or(page.getByTestId('admin-mobile-cards'))
+      .filter({ visible: true })
+      .first(),
+  ).toBeVisible();
   await expect(page.getByText('불러오는 중…')).toHaveCount(0, { timeout: 15_000 });
   await expectNoBlockingErrors(page);
 }
