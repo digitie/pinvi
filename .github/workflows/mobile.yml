@@ -56,6 +56,10 @@ jobs:
       - name: Check lockfile integrity coverage
         run: node scripts/check-lockfile-integrity.mjs
 
+      # 스타일 계약은 소스와 잠금 파일만 읽으므로 설치 전에 검사한다.
+      - name: Check mobile styling contract
+        run: node scripts/check-mobile-styling.mjs
+
       # T-358 — npm 10.9.7은 lockfile 없는 설치에서 arborist 버그(`edgesOut`)로 죽는다.
       # `npx --yes npm@12.0.1 ci`만 쓰는 job도 로컬(npm 12)과 해석이 갈리지 않도록 같은 버전으로 맞춘다.
       - name: Pin npm 12.0.1
@@ -66,9 +70,6 @@ jobs:
 
       - name: Check mobile common dependencies
         run: npm --workspace @pinvi/mobile run check:dependencies
-
-      - name: Check mobile styling contract
-        run: npm --workspace @pinvi/mobile run check:styling
 
       - name: React Doctor (@pinvi/mobile)
         run: npm --workspace @pinvi/mobile run doctor
