@@ -681,6 +681,12 @@ Pinvi 쪽도 같이 정리한다(잔여 정리, 범위 작음).
   실패해 `run_failure_sensor`(ADR-050)를 통해 통지된다. 🟡 2026-09-18 수동
   재실측: 실효 보존 약 9.6일 — 진행 중이나 이 게이트를 아직 통과하지 못한다
   (§4.2 참조).
+  **2026-11-24 갱신**: n150 실측에서 `/resolve`가 15~19초·가끔 503(forecast 2.4~6.8초)이라
+  10초 timeout에 걸려 14회 중 13회 실패했다(Map 수집 실패 감사 2026-11-23 §1.3 — 같은 기간 n150
+  "PinVi → weather 10초 ReadTimeout 10건"이 모두 이 가드다). 이제 대표 anchor id
+  (`airkorea-station-5852754068ed`, run config `reference_location_id`)의 forecast를 바로 읽고,
+  404·빈 응답일 때만 `/resolve`(60초)로 다시 찾는다. resource timeout 30초, 재시도는 일시 오류
+  (연결·timeout·5xx)만 지수 backoff+jitter로 3회 — 임계 미달·4xx·계약 위반은 재시도 없이 실패한다.
 
 ---
 

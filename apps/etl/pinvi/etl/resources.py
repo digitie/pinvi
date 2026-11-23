@@ -66,7 +66,8 @@ class KorTravelWeatherResource(ConfigurableResource[Any]):
     """
 
     base_url: str
-    timeout: float = 10.0
+    # 2026-11 n150 실측: 가장 오래된 행부터 여는 forecast 2.4~6.8초. 10초는 여유가 없었다.
+    timeout: float = 30.0
 
     def create_client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout)
