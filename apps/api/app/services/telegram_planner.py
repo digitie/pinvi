@@ -465,8 +465,10 @@ async def pending_work(*, now: datetime | None = None) -> dict[str, int | bool]:
 
     매분 run을 띄우면 운영 run의 절반이 할 일 없는 planner였다(동의 사용자 0명에도 매분
     launch). 이 점검은 `_plan_users`가 이번 tick에 무언가를 적재할 **가능성이 있는**
-    사용자만 센다. 판정은 planner 조건의 상위집합이다 — 틀리면 run을 한 번 더 띄울 뿐
-    알림을 놓치지 않는다.
+    사용자만 센다. 일간·주간은 `plan_user`와 **같은 조건**을 그대로 옮겼고, 특보만 새 발표
+    여부를 모르므로 넓게(여행 기간 전체) 잡는다. 여기가 planner보다 좁아지면 알림을 놓친다 —
+    `plan_user`·`prepare_weather`의 조건을 바꾸면 이 함수도 같이 바꾸고
+    `tests/integration/test_telegram_planner_pending.py`의 planner 대조 시험을 늘린다.
 
     - 특보: 동의(`weather_enabled_at`)가 있고 오늘(KST)이 기간 안인 여행이 있으면 매분
       대상이다. 새 발표가 있는지는 weather를 불러야 알 수 있으므로 여기서 부르지 않는다.

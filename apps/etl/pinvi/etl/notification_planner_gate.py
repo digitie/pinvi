@@ -21,8 +21,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
-
 from pinvi.etl.resources import PinviNotificationPlannerResource
 
 PENDING_PATH = "/internal/telegram/plan/pending"
@@ -36,24 +34,26 @@ def planner_has_pending_work(context: Any) -> bool:
         # planner asset도 키가 없으면 no-op이다. 빈 run을 띄우지 않는다.
         return False
     try:
-        with planner.create_gate_client() as client:
-            response = client.get(
-                PENDING_PATH,
-                headers={"X-Pinvi-Notification-Planner-Key": planner.planner_key},
-            )
-    except httpx.HTTPError as exc:
-        # 원문 message는 URL을 담을 수 있어 형식 이름만 남긴다.
+        return _ask(context, planner)
+    except Exception as exc:  # noqa: BLE001 - 점검이 tick을 실패시키면 run도 실패 통지도 없다
+        # 원문 message는 URL·응답 일부를 담을 수 있어 형식 이름만 남긴다.
         context.log.warning("알림 planner 점검 실패(%s) — run을 띄운다", type(exc).__name__)
         return True
+
+
+def _ask(context: Any, planner: PinviNotificationPlannerResource) -> bool:
+    with planner.create_gate_client() as client:
+        response = client.get(
+            PENDING_PATH,
+            headers={"X-Pinvi-Notification-Planner-Key": planner.planner_key},
+        )
     if response.status_code != 200:
         context.log.warning("알림 planner 점검 HTTP %s — run을 띄운다", response.status_code)
         return True
-    try:
-        data = response.json().get("data")
-    except ValueError:
-        data = None
+    body = response.json()
+    data = body.get("data") if isinstance(body, dict) else None
     due = data.get("due") if isinstance(data, dict) else None
-    if type(due) is not bool:
+    if not isinstance(data, dict) or type(due) is not bool:
         context.log.warning("알림 planner 점검 응답 형식 오류 — run을 띄운다")
         return True
     counts = {key: data[key] for key in _COUNT_KEYS if type(data.get(key)) is int}

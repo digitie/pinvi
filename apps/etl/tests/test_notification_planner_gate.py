@@ -111,6 +111,10 @@ def test_pending_work_launches_one_run(monkeypatch: pytest.MonkeyPatch, tmp_path
         lambda request: httpx.Response(200, json={"data": {"due": "yes"}}),
         lambda request: httpx.Response(200, json={"unexpected": True}),
         lambda request: httpx.Response(200, content=b"not json"),
+        # JSON이지만 객체가 아닌 본문(프록시 등) — tick을 실패시키지 않고 run을 띄운다.
+        lambda request: httpx.Response(200, json=[]),
+        lambda request: httpx.Response(200, json=None),
+        lambda request: httpx.Response(200, json={"data": []}),
     ],
 )
 def test_check_failure_fails_open_to_a_run(

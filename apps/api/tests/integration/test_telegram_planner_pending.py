@@ -108,7 +108,7 @@ async def test_daily_without_linked_target_is_not_pending(
 async def test_weather_pending_only_while_a_trip_is_in_progress(
     client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any
 ) -> None:
-    from app.services.telegram_planner import pending_work
+    from app.services.telegram_planner import pending_work, plan_due
 
     user_id = verified_user[0]
     cookies = auth_cookies(user_id)
@@ -116,13 +116,70 @@ async def test_weather_pending_only_while_a_trip_is_in_progress(
     body = {"weather_enabled": True, "send_time": "23:59"}
     assert (await client.put(PREFERENCES, json=body, cookies=cookies)).status_code == 200
 
-    # 여행 전날(KST 11-04)에는 특보 대상 여행이 없다.
-    assert (await pending_work(now=KST_0800_NOV5 - timedelta(days=1)))["due"] is False
-    # 여행 기간에는 새 발표 여부를 weather에 물어야 하므로 매분 대상이다.
+    def acted(result: dict[str, int]) -> bool:
+        return result["enqueued"] + result["failed"] > 0
+
+    # 여행 전날(KST 11-04)에는 특보 대상 여행이 없고 planner도 아무것도 쓰지 않는다.
+    before = KST_0800_NOV5 - timedelta(days=1)
+    assert (await pending_work(now=before))["due"] is False
+    assert not acted(await plan_due(now=before))
+    # 여행 기간에는 새 발표 여부를 weather에 물어야 하므로 매분 대상이다. weather client가
+    # 없으면 planner는 조회 실패 이력(`weather_alert_error`)을 남긴다 — 실제로 일을 하는 분이다.
     during = await pending_work(now=KST_0800_NOV5)
     assert during["due"] is True and during["weather"] == 1
+    assert acted(await plan_due(now=KST_0800_NOV5))
     # 여행 종료 다음 날(KST 11-07)에는 다시 대상이 아니다.
-    assert (await pending_work(now=KST_0800_NOV5 + timedelta(days=2)))["due"] is False
+    after = KST_0800_NOV5 + timedelta(days=2)
+    assert (await pending_work(now=after))["due"] is False
+    assert not acted(await plan_due(now=after))
+
+
+async def test_undated_trip_and_weekly_only_match_the_planner(
+    client: Any, verified_user: Any, auth_cookies: Any, session_factory: Any
+) -> None:
+    from app.services.telegram_planner import pending_work, plan_due
+
+    user_id = verified_user[0]
+    cookies = auth_cookies(user_id)
+    response = await client.post("/trips", json={"title": "날짜 미정"}, cookies=cookies)
+    assert response.status_code == 201, response.text
+    undated = response.json()["data"]["trip_id"]
+    async with session_factory() as db:
+        target = TelegramTarget(
+            user_id=uuid.UUID(user_id),
+            telegram_chat_id="-100701",
+            last_verified_at=datetime.now(UTC),
+        )
+        db.add(target)
+        await db.flush()
+        db.add(TripTelegramTarget(trip_id=uuid.UUID(undated), telegram_target_id=target.id))
+        await db.commit()
+        target_id = str(target.id)
+    body = {
+        "weather_enabled": True,
+        "daily_enabled": True,
+        "weekly_enabled": True,
+        "weekly_target_id": target_id,
+        "weekly_day": 3,
+        "send_time": "08:00",
+    }
+    assert (await client.put(PREFERENCES, json=body, cookies=cookies)).status_code == 200
+    # 날짜 없는 여행은 특보·일간·주간 어느 쪽에도 걸리지 않는다.
+    assert (await pending_work(now=KST_0800_NOV5))["due"] is False
+    result = await plan_due(now=KST_0800_NOV5)
+    assert result["enqueued"] + result["failed"] == 0
+
+    # 7일 안 출발 여행이 생기면 주간만 due — 일간·특보는 오늘 기간이 아니다.
+    response = await client.post(
+        "/trips",
+        json={"title": "다음 주", "start_date": "2026-11-08", "end_date": "2026-11-09"},
+        cookies=cookies,
+    )
+    assert response.status_code == 201, response.text
+    pending = await pending_work(now=KST_0800_NOV5)
+    assert pending == {"due": True, "users": 1, "weather": 0, "daily": 0, "weekly": 1}
+    assert (await plan_due(now=KST_0800_NOV5))["enqueued"] == 1
+    assert (await pending_work(now=KST_0800_NOV5))["due"] is False
 
 
 async def test_inactive_user_is_not_pending(
