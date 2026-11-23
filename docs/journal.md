@@ -1,3 +1,9 @@
+## 2026-11-23 (claude) — 공통 입력·선택 포커스(@kor-travel/ui 0.2.5) 채택
+
+- ui 0.2.3→0.2.5·tokens 0.1.4→0.1.6(mobile은 tokens만), common-ref `ade7b3e`(catalog #82), pack `fe14114`(common #81, main CI artifact 14782962353). toast 0.1.5는 PinVi가 쓰지 않아 받지 않았다. 의존 목록 불변, ui peer만 tokens 0.1.6.
+- 공통 Input·NativeSelect·SelectTrigger·Textarea·Checkbox·Switch·Badge 등이 FS-7.8 단일 outline 2px·offset 2px(`--kt-focus`)를 직접 낸다(0.2.4 TabsTrigger 포함). admin 범위 `@layer base` 포커스 규칙에 `input`·`select`·`textarea`를 더해 손으로 만든 입력·체크박스도 같은 outline이 되게 하고, 충돌하던 `outline-hidden focus:border-primary`(backup 3·moderation 1·RestoreHotswapDialog 2)와 여행 검색 입력 2곳의 `outline-hidden`을 지웠다.
+- e2e `admin-button-states`: `/admin/users` 검색 입력·상태 선택의 Tab 포커스 2px outline 하나, ring·테두리 변화 없음(PC 1280·모바일 390). OpenAPI·마이그레이션 변경 없음. 배포는 Map과 한 pair 회전으로 한다.
+
 ## 2026-11-20 (claude) — admin-live-matrix [0072] 430px 표 숨김은 설계, 단언을 고침
 
 - t1120b 뒤 live matrix [0072](`mobile-wide` 430, `/admin/feature-requests` 첫 route 시험)에서 `admin-table-scroll`이 숨김으로 실패.

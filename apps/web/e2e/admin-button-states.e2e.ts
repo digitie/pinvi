@@ -252,6 +252,65 @@ for (const viewport of [
   });
 }
 
+// 입력·선택(공통 0.2.5 Input·NativeSelect)도 버튼과 같은 단일 outline이다. 예전 공통 recipe의
+// `outline-none` + 3px 반투명 ring(box-shadow) + `focus-visible:border-ring` 테두리 색 변화가 없어야 한다.
+for (const viewport of [
+  { name: 'pc', width: 1280, height: 900 },
+  { name: 'mobile', width: 390, height: 844 },
+]) {
+  test(`관리자 입력·선택 Tab 포커스는 2px outline 하나, ring·테두리 변화 없음(${viewport.name} ${viewport.width})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await setup(page);
+    for (const testId of ['admin-users-search', 'admin-users-status-filter']) {
+      const field = page.getByTestId(testId);
+      await expect(field).toBeVisible();
+      const style = () =>
+        field.evaluate((el) => {
+          const s = getComputedStyle(el);
+          return {
+            focusVisible: el.matches(':focus-visible'),
+            outlineStyle: s.outlineStyle,
+            outlineWidth: s.outlineWidth,
+            outlineOffset: s.outlineOffset,
+            boxShadow: s.boxShadow,
+            borderWidth: s.borderTopWidth,
+            borderColor: s.borderTopColor,
+          };
+        });
+      const rest = await style();
+      expect(rest.outlineStyle, `${testId} rest`).toBe('none');
+      await field.focus();
+      await page.keyboard.press('Shift+Tab');
+      await page.keyboard.press('Tab');
+      await expect(field).toBeFocused();
+      const focused = await style();
+      expect(
+        {
+          focusVisible: focused.focusVisible,
+          style: focused.outlineStyle,
+          width: focused.outlineWidth,
+          offset: focused.outlineOffset,
+          shadow: focused.boxShadow,
+          bw: focused.borderWidth,
+          bc: focused.borderColor,
+        },
+        `${testId} Tab 포커스`,
+      ).toEqual({
+        focusVisible: true,
+        style: 'solid',
+        width: '2px',
+        offset: '2px',
+        shadow: rest.boxShadow,
+        bw: rest.borderWidth,
+        bc: rest.borderColor,
+      });
+    }
+  });
+}
+
 /**
  * globals.css의 관리자 포커스 규칙(@layer base 안)을 CSSOM에서 찾아 지운다. 지운 규칙 수를 돌려준다.
  * 규칙을 끈 전후의 계산값을 비교해 "이 규칙이 이 요소에 영향을 주는가"를 직접 잰다.

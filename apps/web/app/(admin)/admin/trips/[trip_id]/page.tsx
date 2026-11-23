@@ -1268,7 +1268,7 @@ function TripOperationTarget({ viewModel }: { viewModel: AdminTripDetailPageView
           <input
             value={targetTripQuery}
             onChange={(e) => setTargetTripQuery(e.target.value)}
-            className="min-w-0 flex-1 bg-transparent text-sm outline-hidden"
+            className="min-w-0 flex-1 bg-transparent text-sm"
             placeholder="여행 제목 또는 owner 검색"
             data-testid="admin-operation-target-search"
           />

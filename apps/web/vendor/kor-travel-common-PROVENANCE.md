@@ -1,5 +1,22 @@
 # 공통 산출물 채택 출처
 
+입력·선택 포커스(FS-7.8) 채택: @kor-travel/ui 0.2.5 · @kor-travel/tokens 0.1.6. 운영 적용은 별도다.
+
+pack 생성 SOURCE_SHA: fe141143cc8ba75e8fd0b6134e1c9e518e294fa2 (common PR #81)
+고정 catalog commit: ade7b3eb50c0197caad4a1c98fcb97cffbc2a8a4 (common PR #82)
+정책 commit: ade7b3eb50c0197caad4a1c98fcb97cffbc2a8a4
+main 발행 근거: https://github.com/digitie/kor-travel-common/actions/runs/45095095455/artifacts/14782962353 (ZIP sha256:065bfbdfed8a81c4538371d0515f2ff23cc5b67826f8d1f42a7db1431408ab72)
+producer: fe141143cc8ba75e8fd0b6134e1c9e518e294fa2
+
+- @kor-travel/tokens 0.1.6 sha512-y9uEIo9dTG/XlohG+kQs9goL10tsEVgHLwUA81XMskts1oZJaim+7UBsG773l/Q1W54MUOFWF1BLsmlFNjGrAA==
+- @kor-travel/ui 0.2.5 sha512-GKICXj4/I4pZQHvbrLy4qL7Bbtn757soe7g8M9phZrNXOsSXtU5bFhharNAWpjD6/qXxSyVWtfTxrZqsgAk2hA==
+
+artifact의 SRI 파일과 내려받은 tgz의 sha512를 다시 계산해 위 값과 catalog가 같음을 확인했다.
+기존 직접 의존성만 갱신한다(@kor-travel/toast는 PinVi가 쓰지 않는다). Pinvi 모바일은 tokens-only를 유지한다.
+package-lock은 두 tgz의 version·resolved·integrity·peer(tokens 0.1.6)만 바꿨다(의존성 목록 불변 확인).
+
+## 과거 출처 기록 — 0.2.3 채택
+
 관리자 셸(T-222) 채택: @kor-travel/ui 0.2.3 · @kor-travel/tokens 0.1.4. 운영 적용은 별도다.
 
 pack 생성 SOURCE_SHA: 0e2a3f5aa16323df0d009360802661c9bc496dc6 (common PR #70)
