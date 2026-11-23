@@ -16,6 +16,14 @@
 찾는다). 그 행의 `known_at`(없으면 `collected_at`)과 지금 사이의 간격이 실효 보존
 일수다.
 
+기준 location은 서울시청 대표 anchor id(`DEFAULT_REFERENCE_LOCATION_ID`)를 바로 쓴다.
+2026-11 n150 실측에서 `/v1/weather/resolve`는 15~19초 걸리고 가끔 503이었고(forecast는
+2.4~6.8초), 10초 timeout에 걸려 이 가드가 14회 중 13회 실패했다(Map 저장소 수집 실패 감사
+2026-11-23 §1.3). id가 사라졌거나(404) 행이 없을 때만 `/resolve`로 다시 찾는다.
+
+재시도는 일시 오류(연결·timeout·5xx)만 한다. 임계 미달·응답 계약 위반은 다시 불러도 같으므로
+재시도 없이 바로 실패한다(`WeatherRetentionGuardError`는 `allow_retries=False`인 `Failure`).
+
 이 asset은 DB에 쓰지 않고 `kor-travel-weather`의 이미 정규화된 공개 응답 필드
 2개(`known_at`/`collected_at`)만 읽으므로 provider raw → DTO 변환(금지룰 3)에
 해당하지 않는다.
@@ -29,7 +37,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from dagster import Backoff, Field, RetryPolicy, asset
+from dagster import Backoff, Failure, Field, Jitter, RetryPolicy, asset
 
 from pinvi.etl.resources import KorTravelWeatherResource
 
@@ -38,10 +46,17 @@ DEFAULT_MIN_RETENTION_DAYS = 6
 DEFAULT_REFERENCE_LAT = 37.5665  # 서울시청 — 항상 데이터가 쌓이는 안정적 기준점
 DEFAULT_REFERENCE_LON = 126.9780
 DEFAULT_SAMPLE_LIMIT = 50
+# 서울시청 좌표의 대표 anchor(`docs/integrations/kor-travel-weather.md` §1.2 실측, 2026-11 재확인).
+DEFAULT_REFERENCE_LOCATION_ID = "airkorea-station-5852754068ed"
+# `/resolve`만 따로 길게 기다린다(실측 15~19초). 나머지 호출은 resource timeout을 쓴다.
+RESOLVE_TIMEOUT_SECONDS = 60.0
 
 
-class WeatherRetentionGuardError(Exception):
-    """`kor-travel-weather` 실효 보존이 임계치 미만일 때 발생한다."""
+class WeatherRetentionGuardError(Failure):
+    """실효 보존 임계 미달 또는 응답 계약 위반. 다시 불러도 같으므로 재시도하지 않는다."""
+
+    def __init__(self, description: str) -> None:
+        super().__init__(description=description, allow_retries=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +127,9 @@ def evaluate_retention_horizon(
 
 
 def _unwrap_data(resp: httpx.Response, *, what: str) -> Any:
+    if 400 <= resp.status_code < 500:
+        # 4xx는 요청·계약 문제라 재시도해도 같다. 5xx는 아래에서 일시 오류로 올라가 재시도된다.
+        raise WeatherRetentionGuardError(f"kor-travel-weather {what} HTTP {resp.status_code}")
     resp.raise_for_status()
     body = resp.json()
     if not isinstance(body, Mapping) or "data" not in body:
@@ -122,7 +140,9 @@ def _unwrap_data(resp: httpx.Response, *, what: str) -> Any:
 async def resolve_reference_location(client: httpx.AsyncClient, *, lat: float, lon: float) -> str:
     """좌표 → 대표 anchor `location_id`. `/v1/weather/resolve` 1회 discovery 호출."""
 
-    resp = await client.get("/v1/weather/resolve", params={"lat": lat, "lon": lon})
+    resp = await client.get(
+        "/v1/weather/resolve", params={"lat": lat, "lon": lon}, timeout=RESOLVE_TIMEOUT_SECONDS
+    )
     data = _unwrap_data(resp, what="/v1/weather/resolve")
     location = data.get("location") if isinstance(data, Mapping) else None
     location_id = location.get("location_id") if isinstance(location, Mapping) else None
@@ -152,11 +172,41 @@ async def fetch_oldest_surviving_values(
     return [item for item in data if isinstance(item, Mapping)]
 
 
+async def fetch_reference_values(
+    client: httpx.AsyncClient,
+    *,
+    location_id: str,
+    lat: float,
+    lon: float,
+    now: datetime,
+    limit: int = DEFAULT_SAMPLE_LIMIT,
+) -> tuple[str, list[Mapping[str, Any]]]:
+    """고정 기준 location을 먼저 읽고, 없거나(404) 비었을 때만 `/resolve`로 다시 찾는다."""
+
+    if location_id:
+        try:
+            values = await fetch_oldest_surviving_values(client, location_id, now=now, limit=limit)
+        except WeatherRetentionGuardError:
+            values = []
+        if values:
+            return location_id, values
+    resolved = await resolve_reference_location(client, lat=lat, lon=lon)
+    return resolved, await fetch_oldest_surviving_values(client, resolved, now=now, limit=limit)
+
+
 @asset(
     group_name="pinvi_weather_retention",
-    retry_policy=RetryPolicy(max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL),
+    # 일시 오류만 재시도한다(임계 미달·계약 위반은 `allow_retries=False`). jitter로 같은 분에
+    # 몰린 다른 tenant 호출과 겹치지 않게 한다.
+    retry_policy=RetryPolicy(
+        max_retries=3, delay=60, backoff=Backoff.EXPONENTIAL, jitter=Jitter.PLUS_MINUS
+    ),
     # schema가 없으면 run config 없는 launch(스케줄·UI)에서 op_config가 None이 된다.
     config_schema={
+        # 빈 문자열이면 매번 `/resolve`로 찾는다.
+        "reference_location_id": Field(
+            str, default_value=DEFAULT_REFERENCE_LOCATION_ID, is_required=False
+        ),
         "reference_lat": Field(float, default_value=DEFAULT_REFERENCE_LAT, is_required=False),
         "reference_lon": Field(float, default_value=DEFAULT_REFERENCE_LON, is_required=False),
         "min_retention_days": Field(
@@ -173,6 +223,9 @@ async def pinvi_weather_retention_horizon_guard(  # type: ignore[no-untyped-def]
     context,
     kor_travel_weather: KorTravelWeatherResource,
 ) -> dict[str, Any]:
+    reference_location_id = str(
+        context.op_config.get("reference_location_id", DEFAULT_REFERENCE_LOCATION_ID)
+    )
     reference_lat = float(context.op_config.get("reference_lat", DEFAULT_REFERENCE_LAT))
     reference_lon = float(context.op_config.get("reference_lon", DEFAULT_REFERENCE_LON))
     min_retention_days = int(
@@ -183,9 +236,13 @@ async def pinvi_weather_retention_horizon_guard(  # type: ignore[no-untyped-def]
     now = datetime.now(UTC)
     client = kor_travel_weather.create_client()
     try:
-        location_id = await resolve_reference_location(client, lat=reference_lat, lon=reference_lon)
-        values = await fetch_oldest_surviving_values(
-            client, location_id, now=now, limit=sample_limit
+        location_id, values = await fetch_reference_values(
+            client,
+            location_id=reference_location_id,
+            lat=reference_lat,
+            lon=reference_lon,
+            now=now,
+            limit=sample_limit,
         )
     finally:
         await client.aclose()

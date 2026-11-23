@@ -1,3 +1,9 @@
+## 2026-11-24 (claude) — 날씨 보존 지평 가드: `/resolve` 대신 고정 기준 location
+
+- 출처: Map 저장소 수집 실패 감사(2026-11-23) §1.3 P1·§1.2 #6. `pinvi_weather_retention_horizon_job` 14일 15회 중 14회 실패 — 10회는 매 시도 정확히 10초 뒤 `httpx.ReadTimeout`(첫 호출 `/v1/weather/resolve`), 3회(11-13~15)는 code-server launch 실패. n150 PinVi code-server에서 실측한 weather 응답은 `/resolve` 15~19초·가끔 503, forecast 2.4~6.8초, 기준 location 7.3일 보존(임계 6일 통과).
+- 대표 anchor id(`airkorea-station-5852754068ed`)의 forecast를 바로 읽고 404·빈 응답일 때만 `/resolve`(timeout 60초)로 찾는다. resource timeout 10→30초. 재시도는 일시 오류만 지수 backoff+`Jitter.PLUS_MINUS`로 3회, `WeatherRetentionGuardError`는 `Failure(allow_retries=False)`라 임계 미달·4xx·계약 위반은 바로 실패한다.
+- 시험: `apps/etl/tests/test_weather_retention_horizon.py`에 고정 id·404/빈 응답 fallback·`/resolve` 긴 timeout·빈 id·5xx 재시도 대상·4xx 즉시 실패·retry policy jitter·resource timeout·asset 직접 실행 9건 추가. ETL 92건 통과.
+- 배포: ETL 이미지(code-server)만. 배포 다음 KST 05:00 run이 SUCCESS인지, metadata `location_id`가 위 id인지 확인.
 ## 2026-11-24 (claude) — 예약 알림 planner: 할 일이 있을 때만 run
 
 - 출처: Map 저장소 `docs/reports/2026-11-23-collection-failure-audit.md` §1.2·§4 #12. n150 14일 PinVi run 19,006 중 16,451이 매분 planner run이었고, prod 동의 사용자는 0명(읽기 전용 조회)이라 전부 빈 run이었다. run launch는 그 기간 code-server fd 고갈·gRPC timeout 실패의 표면이기도 했다.
