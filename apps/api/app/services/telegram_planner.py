@@ -391,6 +391,146 @@ async def _single_flight() -> AsyncIterator[bool]:
             raise
 
 
+def _active(user: User | None) -> bool:
+    return (
+        user is not None and user.is_active and user.deleted_at is None and user.status == "active"
+    )
+
+
+async def _daily_pending(db: AsyncSession, user_id: uuid.UUID, *, today: date) -> bool:
+    """`plan_user` 일간 분기가 지금 적재할 회차가 하나라도 있는가."""
+    rows = await db.execute(
+        select(Trip, TripDay)
+        .join(TripDay, TripDay.trip_id == Trip.trip_id)
+        .where(Trip.owner_user_id == user_id, Trip.deleted_at.is_(None))
+        .order_by(Trip.trip_id, TripDay.day_index)
+    )
+    for trip, day in rows:
+        target_date = effective_date(trip, day)
+        if target_date not in (today, today + timedelta(days=1)):
+            continue
+        assert target_date is not None
+        key = _daily_key(trip.trip_id, target_date, today)
+        existing = await db.scalar(
+            select(TelegramNotification.id).where(
+                TelegramNotification.user_id == user_id,
+                TelegramNotification.occurrence_key == key,
+            )
+        )
+        if existing is None and await linked_targets(db, trip):
+            return True
+    return False
+
+
+async def _weekly_pending(
+    db: AsyncSession, user_id: uuid.UUID, pref: TelegramPreferences, *, today: date
+) -> bool:
+    """`plan_user` 주간 분기가 오늘 회차를 아직 적재하지 않았는가."""
+    if pref.weekly_target_id is None:
+        return False
+    upcoming = await db.scalar(
+        select(Trip.trip_id)
+        .where(
+            Trip.owner_user_id == user_id,
+            Trip.deleted_at.is_(None),
+            Trip.start_date >= today,
+            Trip.start_date < today + timedelta(days=7),
+        )
+        .limit(1)
+    )
+    if upcoming is None:
+        return False
+    target = await db.scalar(
+        select(TelegramTarget.id).where(
+            TelegramTarget.id == pref.weekly_target_id,
+            TelegramTarget.user_id == user_id,
+            TelegramTarget.deleted_at.is_(None),
+            TelegramTarget.is_enabled.is_(True),
+            TelegramTarget.last_verified_at.is_not(None),
+        )
+    )
+    if target is None:
+        return False
+    existing = await db.scalar(
+        select(TelegramNotification.id).where(
+            TelegramNotification.user_id == user_id,
+            TelegramNotification.occurrence_key == f"weekly:{today}",
+        )
+    )
+    return existing is None
+
+
+async def pending_work(*, now: datetime | None = None) -> dict[str, int | bool]:
+    """Dagster 예약이 이번 분에 planner run을 띄울지 정하는 읽기 전용 점검.
+
+    매분 run을 띄우면 운영 run의 절반이 할 일 없는 planner였다(동의 사용자 0명에도 매분
+    launch). 이 점검은 `_plan_users`가 이번 tick에 무언가를 적재할 **가능성이 있는**
+    사용자만 센다. 일간·주간은 `plan_user`와 **같은 조건**을 그대로 옮겼고, 특보만 새 발표
+    여부를 모르므로 넓게(여행 기간 전체) 잡는다. 여기가 planner보다 좁아지면 알림을 놓친다 —
+    `plan_user`·`prepare_weather`의 조건을 바꾸면 이 함수도 같이 바꾸고
+    `tests/integration/test_telegram_planner_pending.py`의 planner 대조 시험을 늘린다.
+
+    - 특보: 동의(`weather_enabled_at`)가 있고 오늘(KST)이 기간 안인 여행이 있으면 매분
+      대상이다. 새 발표가 있는지는 weather를 불러야 알 수 있으므로 여기서 부르지 않는다.
+    - 일간: `send_time`이 지났고, 오늘·내일 일자 중 발생키가 없고 연결 대상이 있는 일자가 있다.
+    - 주간: 요일·`send_time`이 맞고 7일 안 출발 여행·검증 대상이 있으며 오늘 발생키가 없다.
+
+    외부 HTTP를 부르지 않고 잠금도 잡지 않는다. 사용자 식별자·본문은 응답하지 않는다.
+    """
+    current = now or datetime.now(UTC)
+    local = current.astimezone(KST)
+    today = local.date()
+    hhmm = local.strftime("%H:%M")
+    weather = daily = weekly = 0
+    async with db_session.async_session_factory() as db:
+        prefs = list(
+            (
+                await db.scalars(
+                    select(TelegramPreferences).where(
+                        or_(
+                            TelegramPreferences.weather_enabled.is_(True),
+                            TelegramPreferences.daily_enabled.is_(True),
+                            TelegramPreferences.weekly_enabled.is_(True),
+                        )
+                    )
+                )
+            ).all()
+        )
+        for pref in prefs:
+            if not _active(await db.get(User, pref.user_id)):
+                continue
+            if pref.weather_enabled and pref.weather_enabled_at is not None:
+                in_trip = await db.scalar(
+                    select(Trip.trip_id)
+                    .where(
+                        Trip.owner_user_id == pref.user_id,
+                        Trip.deleted_at.is_(None),
+                        Trip.start_date <= today,
+                        Trip.end_date >= today,
+                    )
+                    .limit(1)
+                )
+                if in_trip is not None:
+                    weather += 1
+            if hhmm < pref.send_time:
+                continue
+            if pref.daily_enabled and await _daily_pending(db, pref.user_id, today=today):
+                daily += 1
+            if (
+                pref.weekly_enabled
+                and local.weekday() == pref.weekly_day
+                and await _weekly_pending(db, pref.user_id, pref, today=today)
+            ):
+                weekly += 1
+    return {
+        "due": bool(weather or daily or weekly),
+        "users": len(prefs),
+        "weather": weather,
+        "daily": daily,
+        "weekly": weekly,
+    }
+
+
 async def plan_due(
     *,
     now: datetime | None = None,

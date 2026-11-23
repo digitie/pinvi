@@ -1,3 +1,11 @@
+## 2026-11-24 (claude) — 예약 알림 planner: 할 일이 있을 때만 run
+
+- 출처: Map 저장소 `docs/reports/2026-11-23-collection-failure-audit.md` §1.2·§4 #12. n150 14일 PinVi run 19,006 중 16,451이 매분 planner run이었고, prod 동의 사용자는 0명(읽기 전용 조회)이라 전부 빈 run이었다. run launch는 그 기간 code-server fd 고갈·gRPC timeout 실패의 표면이기도 했다.
+- API `GET /internal/telegram/plan/pending`(planner 키 전용, 읽기 전용, 외부 HTTP 없음)이 이번 분에 적재 가능성이 있는지 센다 — 특보(동의 + 오늘이 기간 안인 여행), 일간(`send_time` 경과 + 발생키 없는 오늘·내일 일자 + 연결 대상), 주간(요일·`send_time` + 7일 안 출발 + 검증 대상 + 오늘 키 없음). planner 조건의 상위집합이다.
+- ETL schedule은 매분 tick 그대로(`send_time` 분 단위·특보 30분 창), `coalescing_schedule(should_execute=...)`로 `due`일 때만 run. 점검 실패·옛 API 404는 run을 띄운다(fail-open). 키 미설정은 run 없음.
+- 시험: API 통합 `test_telegram_planner_pending.py`(send_time 전후·적재 뒤 해제·연결 대상 없음·특보 기간·비활성 사용자·키 경계), ETL `test_notification_planner_gate.py`(정의된 schedule로 tick 평가: skip·run·fail-open 6종·키 없음·coalescing 우선). 기존 telegram 통합 55건 통과.
+- 배포: API·ETL 이미지 둘 다(release export). 순서 무관 — 옛 API에 새 ETL이 붙으면 404로 이전처럼 매분 run.
+
 ## 2026-11-23 (claude) — 공통 입력·선택 포커스(@kor-travel/ui 0.2.5) 채택
 
 - ui 0.2.3→0.2.5·tokens 0.1.4→0.1.6(mobile은 tokens만), common-ref `ade7b3e`(catalog #82), pack `fe14114`(common #81, main CI artifact 14782962353). toast 0.1.5는 PinVi가 쓰지 않아 받지 않았다. 의존 목록 불변, ui peer만 tokens 0.1.6.

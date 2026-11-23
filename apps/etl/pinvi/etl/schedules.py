@@ -10,6 +10,7 @@ from __future__ import annotations
 from dagster import DefaultScheduleStatus, define_asset_job
 from kortravelcommon.dagster import coalescing_schedule
 
+from pinvi.etl.notification_planner_gate import planner_has_pending_work
 from pinvi.etl.run_tags import PINVI_LOCATION_NAME, PINVI_PROJECT, job_tags
 
 kasi_special_days_job = define_asset_job(
@@ -55,6 +56,7 @@ pinvi_telegram_notification_planner_job = define_asset_job(
 )
 
 schedules = [
+    # tick은 매분(사용자가 고른 KST 분·특보 30분 창), run은 할 일이 있을 때만 띄운다.
     coalescing_schedule(
         project=PINVI_PROJECT,
         location_name=PINVI_LOCATION_NAME,
@@ -63,6 +65,8 @@ schedules = [
         cron_schedule="* * * * *",
         execution_timezone="Asia/Seoul",
         default_status=DefaultScheduleStatus.RUNNING,
+        should_execute=planner_has_pending_work,
+        required_resource_keys={"notification_planner"},
     ),
     coalescing_schedule(
         project=PINVI_PROJECT,
