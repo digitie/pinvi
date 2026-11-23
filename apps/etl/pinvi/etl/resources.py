@@ -80,3 +80,7 @@ class PinviNotificationPlannerResource(ConfigurableResource[Any]):
 
     def create_client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(base_url=self.base_url, timeout=120)
+
+    def create_gate_client(self) -> httpx.Client:
+        """예약 tick의 할 일 점검용. schedule 평가는 동기이고 gRPC 60초 안에 끝나야 한다."""
+        return httpx.Client(base_url=self.base_url, timeout=10)

@@ -32,6 +32,13 @@ Bot API의 양의 retry_after와 backoff를 오류 관측 시각부터 적용한
 
 운영 최종 적용/실제 수신자 검증은 Claude Code 담당이다. 이 작업은 WSL 소유 HTTP fixture와 실제 로컬 PG/API/웹/Prometheus만 검증한다.
 
+## planner run gate (2026-11-24)
+
+- schedule tick은 매분 그대로다(사용자가 고른 KST 분·특보 30분 창). tick마다 `GET /internal/telegram/plan/pending`을 먼저 불러 `due`일 때만 run을 띄운다. 동의 사용자가 없거나 이미 적재를 마친 분에는 tick이 SKIPPED로 끝나고 run이 생기지 않는다(이전에는 하루 약 1,400 run, 공유 plane run의 절반).
+- 특보 동의 사용자의 여행 기간에는 새 발표 여부를 weather에 물어야 하므로 매분 run이 뜬다. 이건 의도다.
+- 점검 실패(연결 오류·5xx·형식 오류)와 점검 경로가 없는 옛 API(404)는 run을 띄운다. API가 죽어 있으면 planner run이 실패해 `pinvi_run_failure_sensor` 통지가 그대로 나간다. tick 로그에 `알림 planner 점검 …`이 반복되면 API 쪽을 본다.
+- 판정 범위가 planner보다 좁아지면 알림을 놓친다. 두 조건은 `app.services.telegram_planner`의 `pending_work`와 `plan_user`/`prepare_weather`에 있고 `tests/integration/test_telegram_planner_pending.py`가 묶는다.
+
 ## 0106 planner 상한·공정 drain·본문 보존 (2026-11-06 소유자 결정)
 
 0105 뒤 0106을 적용한다. 세 nullable 열(`telegram_notification_preferences.last_planned_at`, `telegram_notification_deliveries.claim_token`, `telegram_notifications.body_purged_at`)과 부분 index 하나만 추가하므로 이전 코드와 함께 동작한다(forward-safe). 신규 테이블이 없어 runtime ACL 대상은 그대로다.
