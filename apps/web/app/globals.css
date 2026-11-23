@@ -171,10 +171,22 @@ body {
      브라우저 기본 `outline: auto`(Chrome은 흰 띠를 낀 이중 링)에 맡겨져 있어, Tab 포커스 때 테두리가
      굵어지거나 두 겹으로 보였다. 공통 Button(0.2.3)과 같은 2px 단일 outline·offset 2px·--kt-focus로
      맞춘다. base 레이어라 요소 자신의 `focus-visible:outline-*`/`outline-hidden` 유틸이 항상 이긴다.
-     상태(hover/active/disabled) 스타일은 두지 않는다. 입력 컨트롤(input/select/textarea)은
-     이번 범위 밖이라 기존 규칙을 유지한다. 사용자 표면에는 걸리지 않는다. */
+     상태(hover/active/disabled) 스타일은 두지 않는다. 입력 컨트롤(input/select/textarea)도 같은
+     레시피다 — 공통 0.2.5 Input·NativeSelect·Checkbox 등은 같은 outline을 직접 내고, 손으로 만든
+     `<input>`·`<textarea>`(체크박스 포함)는 이 규칙이 그린다(예전 `outline-hidden focus:border-primary`
+     덧대기는 지웠다). 사용자 표면에는 걸리지 않는다. */
   :is([data-pv-surface='admin'], [data-slot='admin-shell-drawer'])
-    :is(button, a[href], summary, [role='button'], [role='link'], [role='tab']):focus-visible {
+    :is(
+      button,
+      a[href],
+      summary,
+      input,
+      select,
+      textarea,
+      [role='button'],
+      [role='link'],
+      [role='tab']
+    ):focus-visible {
     outline: 2px solid var(--kt-focus);
     outline-offset: 2px;
   }

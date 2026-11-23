@@ -303,7 +303,7 @@ export default function AdminModerationPage() {
                 <select
                   value={selectedAction}
                   onChange={(event) => setSelectedAction(event.target.value as ModerationAction)}
-                  className="h-10 rounded-sm border border-hairline px-3 text-sm outline-hidden focus:border-primary"
+                  className="h-10 rounded-sm border border-hairline px-3 text-sm"
                 >
                   {availableActions(selectedReport).map((action) => (
                     <option key={action} value={action}>
