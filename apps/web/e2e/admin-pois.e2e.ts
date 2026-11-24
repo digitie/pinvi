@@ -494,3 +494,78 @@ test('Admin POI 상세에서 POI 이동 운영 작업을 실행한다', async ({
     access_reason: 'POI 일정 조정',
   });
 });
+
+// 공통 ui 0.2.6 DialogTitle: 닫기 버튼을 그릴 때만 `pr-7`을 비우고, 제목은 항상 `wrap-anywhere`로
+// 줄바꿈한다. PinVi 관리자 Dialog는 공통 닫기 버튼을 끄고(showCloseButton=false) 자기 "닫기" 버튼을
+// 머리글에 둔다. 그래서 제목 오른쪽 여백은 0이고, 띄어쓰기 없는 긴 제목도 가로로 넘치지 않고
+// 자기 칸 안에서 줄바꿈해 닫기 버튼과 겹치지 않아야 한다(Tailwind가 공통 dist의
+// `wrap-anywhere`를 실제로 생성하는지도 함께 확인된다).
+for (const viewport of [
+  { name: 'pc', width: 1280, height: 900 },
+  { name: 'mobile', width: 390, height: 844 },
+]) {
+  test(`Admin POI 생성 Dialog 긴 제목은 닫기 버튼과 겹치지 않게 줄바꿈한다(${viewport.name} ${viewport.width})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.route(
+      (url) => url.port === '12801' && url.pathname === '/admin/pois',
+      async (route) => {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: { items: [], total: 0, page: 1, limit: 50 } }),
+        });
+      },
+    );
+
+    await page.goto('/admin/pois');
+    await page.getByTestId('admin-poi-create-open').click();
+    const dialog = page.getByTestId('admin-poi-create-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('[data-slot="dialog-close"]')).toHaveCount(0);
+
+    const title = dialog.locator('[data-slot="dialog-title"]');
+    await expect(title).toHaveText('POI 생성');
+    const close = dialog.getByRole('button', { name: '닫기', exact: true });
+    await expect(close).toBeVisible();
+
+    const measure = await title.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { wrap: s.overflowWrap, paddingRight: s.paddingRight };
+    });
+    expect(measure).toEqual({ wrap: 'anywhere', paddingRight: '0px' });
+
+    await title.evaluate((el) => {
+      el.textContent = 'POI생성'.repeat(40);
+    });
+    const geometry = await page.evaluate(() => {
+      const dialogEl = document.querySelector('[data-testid="admin-poi-create-dialog"]');
+      const titleEl = dialogEl?.querySelector('[data-slot="dialog-title"]');
+      const closeEl = [...(dialogEl?.querySelectorAll('button') ?? [])].find(
+        (b) => b.textContent?.trim() === '닫기',
+      );
+      if (!(titleEl instanceof HTMLElement) || !closeEl || !dialogEl) return null;
+      const t = titleEl.getBoundingClientRect();
+      const c = closeEl.getBoundingClientRect();
+      const d = dialogEl.getBoundingClientRect();
+      return {
+        titleOverflow: titleEl.scrollWidth - titleEl.clientWidth,
+        titleRight: t.right,
+        dialogRight: d.right,
+        overlapsClose: !(
+          t.right <= c.left ||
+          c.right <= t.left ||
+          t.bottom <= c.top ||
+          c.bottom <= t.top
+        ),
+        heightPerFont: t.height / parseFloat(getComputedStyle(titleEl).fontSize),
+      };
+    });
+    expect(geometry).not.toBeNull();
+    expect(geometry!.titleOverflow).toBeLessThanOrEqual(0);
+    expect(geometry!.overlapsClose).toBe(false);
+    expect(geometry!.titleRight).toBeLessThanOrEqual(geometry!.dialogRight);
+    // 한 줄이면 높이가 글자 크기 정도(leading-none)다 — 여러 줄로 접혔는지 본다.
+    expect(geometry!.heightPerFont).toBeGreaterThan(1.8);
+  });
+}

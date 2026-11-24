@@ -1,3 +1,9 @@
+## 2026-11-24 (claude) — @kor-travel/ui 0.2.6 채택(터치 영역·아코디언 outline·Dialog 긴 제목)
+
+- ui 0.2.5→0.2.6·tokens 0.1.6→0.1.7(mobile은 tokens만), common-ref `309b881`(catalog #84), pack `05d7f91`(common #83, main CI artifact 14803131043). toast 0.1.6은 PinVi가 쓰지 않아 받지 않았다. 의존 목록 불변, ui peer만 tokens 0.1.7. tokens CSS는 0.1.6과 같다(내장 정책 bytes만 바뀐 patch).
+- 0.2.6 변경 셋 중 PinVi에 닿는 것은 DialogTitle 하나다: 제목이 항상 `wrap-anywhere`로 줄바꿈하고, 공통 닫기 버튼을 그릴 때만 `pr-7`을 비운다. PinVi 관리자·사용자 Dialog는 모두 `showCloseButton={false}`라 제목 여백은 그대로이고, 띄어쓰기 없는 긴 관리자 Dialog 제목이 가로로 넘치지 않고 줄바꿈한다. VirtualTable 선택 칸(PinVi는 행 선택 미사용)·AccordionContent(미사용)는 영향 없음.
+- e2e `admin-pois`: POI 생성 Dialog 제목 `overflow-wrap:anywhere`·오른쪽 여백 0·공통 닫기 없음, 긴 제목이 넘치지 않고 여러 줄로 접혀 "닫기" 버튼과 겹치지 않음(PC 1280·모바일 390). OpenAPI·마이그레이션 변경 없음. 배포는 web 이미지만.
+
 ## 2026-11-24 (claude) — 날씨 보존 지평 가드: `/resolve` 대신 고정 기준 location
 
 - 출처: Map 저장소 수집 실패 감사(2026-11-23) §1.3 P1·§1.2 #6. `pinvi_weather_retention_horizon_job` 14일 15회 중 14회 실패 — 10회는 매 시도 정확히 10초 뒤 `httpx.ReadTimeout`(첫 호출 `/v1/weather/resolve`), 3회(11-13~15)는 code-server launch 실패. n150 PinVi code-server에서 실측한 weather 응답은 `/resolve` 15~19초·가끔 503, forecast 2.4~6.8초, 기준 location 7.3일 보존(임계 6일 통과).
