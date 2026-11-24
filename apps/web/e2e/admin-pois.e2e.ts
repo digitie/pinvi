@@ -1,3 +1,4 @@
+import { expectDialogBodyFits } from './dialog-body-geometry';
 import { expect, test } from './fixtures';
 import type {
   AdminOperationImpact,
@@ -535,8 +536,8 @@ for (const viewport of [
     });
     expect(measure).toEqual({ wrap: 'anywhere', paddingRight: '0px' });
 
-    // 긴 제목이 Dialog의 가로 스크롤 폭을 늘리지 않아야 한다(390에서 이 Dialog 본문은 원래 몇 px 가로로
-    // 넘친다 — 제목과 무관한 기존 상태라 절대 폭 대신 주입 전후 scrollWidth를 비교한다).
+    // 긴 제목이 Dialog의 가로 스크롤 폭을 늘리지 않아야 한다. 본문 가로 넘침은 아래 "본문은 가로로
+    // 넘치지 않는다" 시험이 고쳤으므로 주입 전후가 같고 절대로도 넘치지 않는다.
     const scrollBefore = await dialog.evaluate((el) => el.scrollWidth);
     await title.evaluate((el) => {
       el.textContent = 'POI생성'.repeat(40);
@@ -553,6 +554,7 @@ for (const viewport of [
       return {
         titleOverflow: titleEl.scrollWidth - titleEl.clientWidth,
         dialogScrollWidth: dialogEl.scrollWidth,
+        dialogClientWidth: dialogEl.clientWidth,
         overlapsClose: !(
           t.right <= c.left ||
           c.right <= t.left ||
@@ -566,7 +568,73 @@ for (const viewport of [
     expect(geometry!.titleOverflow).toBeLessThanOrEqual(0);
     expect(geometry!.overlapsClose).toBe(false);
     expect(geometry!.dialogScrollWidth).toBe(scrollBefore);
+    expect(geometry!.dialogScrollWidth).toBeLessThanOrEqual(geometry!.dialogClientWidth);
     // 한 줄이면 높이가 글자 크기 정도(leading-none)다 — 여러 줄로 접혔는지 본다.
     expect(geometry!.heightPerFont).toBeGreaterThan(1.8);
+  });
+}
+
+// POI 생성 Dialog 본문은 좁은 화면에서 가로로 넘치지 않는다. 본문 grid가 암시적 auto 칸이고 입력이
+// 고유 폭(datetime-local 등)을 가져 390에서 칸이 313px로 커졌고(본문 안쪽 294px), 공통 Dialog의 auto
+// 칸이 그 폭을 모달 전체로 넘겼다(Dialog scrollWidth 377 > 358). 본문 grid를 minmax(0,1fr) 칸으로,
+// 입력을 w-full·min-w-0으로 두고, 여행계획 검색 칸은 16rem 기준으로 접힌다. 검색 결과(띄어쓰기 없는 긴
+// 제목·긴 마스킹 이메일)와 선택 줄의 trip_id도 자기 상자 안에서 줄바꿈한다.
+const longTrip: AdminTripSummary = {
+  ...tripSummary,
+  trip_id: '12121212-1212-4212-8212-121212121212',
+  title: '띄어쓰기없이아주길게이어지는여행계획제목'.repeat(2),
+  owner_email_masked: 'very-long-owner-mailbox-name***@example-company-domain.co.kr',
+};
+for (const viewport of [
+  { name: 'mobile-320', width: 320, height: 640 },
+  { name: 'mobile-390', width: 390, height: 844 },
+  { name: 'pc-1280', width: 1280, height: 900 },
+]) {
+  test(`Admin POI 생성 Dialog 본문은 가로로 넘치지 않는다(${viewport.name})`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.route(
+      (url) => url.port === '12801' && url.pathname === '/admin/trips',
+      async (route) => {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            data: { items: [tripSummary, longTrip], total: 2, page: 1, limit: 8 },
+          }),
+        });
+      },
+    );
+    await page.route(
+      (url) => url.port === '12801' && url.pathname === '/admin/pois',
+      async (route) => {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: { items: [], total: 0, page: 1, limit: 50 } }),
+        });
+      },
+    );
+
+    await page.goto('/admin/pois');
+    await page.getByTestId('admin-poi-create-open').click();
+    const dialog = page.getByTestId('admin-poi-create-dialog');
+    await expect(dialog).toBeVisible();
+    await page.getByTestId('admin-poi-trip-search').fill('부산');
+    await page.getByTestId('admin-poi-trip-search-submit').click();
+    await page.getByTestId(`admin-poi-trip-result-${longTrip.trip_id}`).click();
+    await expect(page.getByTestId('admin-poi-trip-selected')).toContainText(longTrip.trip_id);
+
+    const rows = await expectDialogBodyFits(dialog, 'admin-poi-create-body', [
+      'admin-poi-trip-search',
+      'admin-poi-trip-results',
+      `admin-poi-trip-result-${tripId}`,
+      `admin-poi-trip-result-${longTrip.trip_id}`,
+      'admin-poi-trip-selected',
+      'admin-poi-create-arrival',
+      'admin-poi-create-submit',
+    ]);
+    // md 이상은 검색 칸·버튼 한 줄과 필드 두 열, 미만은 버튼이 다음 줄·필드 한 열이다(이전과 같은 배치).
+    expect(rows).toEqual({
+      searchSameRow: viewport.width >= 768,
+      fieldsSameRow: viewport.width >= 768,
+    });
   });
 }

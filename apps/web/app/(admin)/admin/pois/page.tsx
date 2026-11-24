@@ -323,11 +323,11 @@ function AdminPoiCreateDialogView0({ viewModel }: { viewModel: AdminPoiCreateDia
             닫기
           </Button>
         </DialogHeader>
-        <div className="p-4">
+        <div className="p-4" data-testid="admin-poi-create-body">
           {formError && (
             <p
               role="alert"
-              className="mb-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
+              className="mb-4 rounded-sm bg-error-bg p-3 text-sm text-error-text wrap-anywhere"
               data-testid="admin-poi-create-error"
             >
               {formError}
@@ -335,13 +335,13 @@ function AdminPoiCreateDialogView0({ viewModel }: { viewModel: AdminPoiCreateDia
           )}
 
           <form onSubmit={onTripSearch} className="mb-4 flex flex-wrap items-end gap-2">
-            <label className="flex min-w-64 flex-1 flex-col gap-1 text-sm">
+            <label className="flex min-w-0 flex-[1_1_16rem] flex-col gap-1 text-sm">
               <span className="text-xs text-muted">여행계획 검색</span>
               <input
                 type="search"
                 value={tripQueryInput}
                 onChange={(event) => setTripQueryInput(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
+                className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                 placeholder="제목, 지역, trip_id, owner"
                 data-testid="admin-poi-trip-search"
               />
@@ -361,7 +361,7 @@ function AdminPoiCreateDialogView0({ viewModel }: { viewModel: AdminPoiCreateDia
               {tripQueryResult.data?.items.length === 0 && (
                 <p className="text-sm text-muted">검색 결과 없음</p>
               )}
-              <div className="grid gap-2">
+              <div className="grid grid-cols-1 gap-2" data-testid="admin-poi-trip-results">
                 {tripQueryResult.data?.items.map((trip) => (
                   <button
                     key={trip.trip_id}
@@ -370,11 +370,11 @@ function AdminPoiCreateDialogView0({ viewModel }: { viewModel: AdminPoiCreateDia
                     className="flex items-center justify-between gap-3 rounded-sm border border-hairline px-3 py-2 text-left text-sm"
                     data-testid={`admin-poi-trip-result-${trip.trip_id}`}
                   >
-                    <span>
-                      <span className="font-medium text-ink">{trip.title}</span>
-                      <span className="ml-2 text-muted">{trip.owner_email_masked}</span>
+                    <span className="flex min-w-0 flex-wrap gap-x-2 wrap-anywhere">
+                      <span className="min-w-0 font-medium text-ink">{trip.title}</span>
+                      <span className="min-w-0 text-muted">{trip.owner_email_masked}</span>
                     </span>
-                    <span className="text-xs text-muted">{trip.status}</span>
+                    <span className="shrink-0 text-xs text-muted">{trip.status}</span>
                   </button>
                 ))}
               </div>
@@ -383,14 +383,16 @@ function AdminPoiCreateDialogView0({ viewModel }: { viewModel: AdminPoiCreateDia
 
           {selectedTrip && (
             <p
-              className="mb-4 rounded-sm bg-surface-soft px-3 py-2 text-sm"
+              className="mb-4 rounded-sm bg-surface-soft px-3 py-2 text-sm wrap-anywhere"
               data-testid="admin-poi-trip-selected"
             >
               선택: {selectedTrip.title} · {selectedTrip.trip_id}
             </p>
           )}
 
-          <form onSubmit={onCreate} className="grid gap-4">
+          {/* 본문 grid는 minmax(0,1fr) 칸(grid-cols-1), 입력은 w-full·min-w-0이다 — 암시적 auto 칸은
+            입력 고유 폭(datetime-local 등)만큼 커져 390px 이하에서 본문과 Dialog를 가로로 넘쳤다. */}
+          <form onSubmit={onCreate} className="grid grid-cols-1 gap-4">
             <AdminPoiCreateDialogView0Part0 viewModel={viewModel} />
 
             <label className="flex flex-col gap-1 text-sm">
@@ -398,7 +400,7 @@ function AdminPoiCreateDialogView0({ viewModel }: { viewModel: AdminPoiCreateDia
               <textarea
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
-                className="min-h-16 rounded-sm border border-hairline px-3 py-2"
+                className="min-h-16 w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                 data-testid="admin-poi-create-note"
               />
             </label>
@@ -408,7 +410,7 @@ function AdminPoiCreateDialogView0({ viewModel }: { viewModel: AdminPoiCreateDia
               <textarea
                 value={accessReason}
                 onChange={(event) => setAccessReason(event.target.value)}
-                className="min-h-16 rounded-sm border border-hairline px-3 py-2"
+                className="min-h-16 w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                 maxLength={500}
                 data-testid="admin-poi-create-reason"
               />
@@ -616,7 +618,7 @@ function AdminPoiCreateDialogView0Part0({
     setUserUrl,
   } = viewModel;
   return (
-    <div className="grid gap-3 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-xs text-muted">일차</span>
         <input
@@ -624,7 +626,7 @@ function AdminPoiCreateDialogView0Part0({
           min={1}
           value={dayIndex}
           onChange={(event) => setDayIndex(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           data-testid="admin-poi-create-day"
         />
       </label>
@@ -633,7 +635,7 @@ function AdminPoiCreateDialogView0Part0({
         <input
           value={sortOrder}
           onChange={(event) => setSortOrder(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           maxLength={80}
           data-testid="admin-poi-create-sort"
         />
@@ -643,7 +645,7 @@ function AdminPoiCreateDialogView0Part0({
         <input
           value={featureId}
           onChange={(event) => setFeatureId(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           maxLength={200}
           data-testid="admin-poi-create-feature-id"
         />
@@ -653,7 +655,7 @@ function AdminPoiCreateDialogView0Part0({
         <input
           value={poiName}
           onChange={(event) => setPoiName(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           data-testid="admin-poi-create-name"
         />
       </label>
@@ -663,7 +665,7 @@ function AdminPoiCreateDialogView0Part0({
           inputMode="decimal"
           value={lon}
           onChange={(event) => setLon(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           data-testid="admin-poi-create-lon"
         />
       </label>
@@ -673,7 +675,7 @@ function AdminPoiCreateDialogView0Part0({
           inputMode="decimal"
           value={lat}
           onChange={(event) => setLat(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           data-testid="admin-poi-create-lat"
         />
       </label>
@@ -682,7 +684,7 @@ function AdminPoiCreateDialogView0Part0({
         <input
           value={addressLabel}
           onChange={(event) => setAddressLabel(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           data-testid="admin-poi-create-address"
         />
       </label>
@@ -691,7 +693,7 @@ function AdminPoiCreateDialogView0Part0({
         <input
           value={markerColor}
           onChange={(event) => setMarkerColor(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           placeholder="P-08"
           data-testid="admin-poi-create-marker-color"
         />
@@ -701,7 +703,7 @@ function AdminPoiCreateDialogView0Part0({
         <input
           value={markerIcon}
           onChange={(event) => setMarkerIcon(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           maxLength={64}
           data-testid="admin-poi-create-marker-icon"
         />
@@ -712,7 +714,7 @@ function AdminPoiCreateDialogView0Part0({
           type="datetime-local"
           value={arrivalAt}
           onChange={(event) => setArrivalAt(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           data-testid="admin-poi-create-arrival"
         />
       </label>
@@ -722,7 +724,7 @@ function AdminPoiCreateDialogView0Part0({
           type="datetime-local"
           value={departureAt}
           onChange={(event) => setDepartureAt(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           data-testid="admin-poi-create-departure"
         />
       </label>
@@ -732,7 +734,7 @@ function AdminPoiCreateDialogView0Part0({
           inputMode="decimal"
           value={budgetAmount}
           onChange={(event) => setBudgetAmount(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           data-testid="admin-poi-create-budget"
         />
       </label>
@@ -742,7 +744,7 @@ function AdminPoiCreateDialogView0Part0({
           inputMode="decimal"
           value={actualAmount}
           onChange={(event) => setActualAmount(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           data-testid="admin-poi-create-actual"
         />
       </label>
@@ -751,7 +753,7 @@ function AdminPoiCreateDialogView0Part0({
         <input
           value={currency}
           onChange={(event) => setCurrency(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2 uppercase"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2 uppercase"
           maxLength={3}
           data-testid="admin-poi-create-currency"
         />
@@ -761,7 +763,7 @@ function AdminPoiCreateDialogView0Part0({
         <input
           value={userUrl}
           onChange={(event) => setUserUrl(event.target.value)}
-          className="rounded-sm border border-hairline px-3 py-2"
+          className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
           data-testid="admin-poi-create-url"
         />
       </label>

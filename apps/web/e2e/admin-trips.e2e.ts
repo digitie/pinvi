@@ -1,3 +1,4 @@
+import { expectDialogBodyFits } from './dialog-body-geometry';
 import { expect, test } from './fixtures';
 import type {
   AdminOperationImpact,
@@ -589,3 +590,68 @@ test('Admin 여행 상세에서 날짜 이동 운영 작업을 실행한다', as
     access_reason: '일정 통합',
   });
 });
+
+// 여행계획 생성 Dialog도 POI 생성 Dialog와 같은 구성이라 같은 이유로 좁은 화면에서 본문이 넘쳤다
+// (본문 grid 암시적 auto 칸 + 폭 없는 date 입력·select, 320에서 16rem 검색 칸 > 본문 안쪽 224px).
+// 같은 수정(grid-cols-1, 입력·선택 w-full·min-w-0, 검색 칸 16rem 기준 접힘, 결과·선택 줄 줄바꿈)을 지킨다.
+const longOwner: AdminUserSummary = {
+  ...ownerSummary,
+  user_id: '13131313-1313-4313-8313-131313131313',
+  nickname: '띄어쓰기없이아주길게이어지는운영대상닉네임'.repeat(2),
+  email_masked: 'very-long-owner-mailbox-name***@example-company-domain.co.kr',
+};
+for (const viewport of [
+  { name: 'mobile-320', width: 320, height: 640 },
+  { name: 'mobile-390', width: 390, height: 844 },
+  { name: 'pc-1280', width: 1280, height: 900 },
+]) {
+  test(`Admin 여행계획 생성 Dialog 본문은 가로로 넘치지 않는다(${viewport.name})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.route(
+      (url) => url.port === '12801' && url.pathname === '/admin/users',
+      async (route) => {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            data: { items: [ownerSummary, longOwner], total: 2, page: 1, limit: 8 },
+          }),
+        });
+      },
+    );
+    await page.route(
+      (url) => url.port === '12801' && url.pathname === '/admin/trips',
+      async (route) => {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ data: { items: [], total: 0, page: 1, limit: 50 } }),
+        });
+      },
+    );
+
+    await page.goto('/admin/trips');
+    await page.getByTestId('admin-trip-create-open').click();
+    const dialog = page.getByTestId('admin-trip-create-dialog');
+    await expect(dialog).toBeVisible();
+    await page.getByTestId('admin-trip-owner-search').fill('owner');
+    await page.getByTestId('admin-trip-owner-search-submit').click();
+    await page.getByTestId(`admin-trip-owner-result-${longOwner.user_id}`).click();
+    await expect(page.getByTestId('admin-trip-owner-selected')).toContainText(longOwner.user_id);
+
+    const rows = await expectDialogBodyFits(dialog, 'admin-trip-create-body', [
+      'admin-trip-owner-search',
+      'admin-trip-owner-results',
+      `admin-trip-owner-result-${ownerUserId}`,
+      `admin-trip-owner-result-${longOwner.user_id}`,
+      'admin-trip-owner-selected',
+      'admin-trip-create-start',
+      'admin-trip-create-visibility',
+      'admin-trip-create-submit',
+    ]);
+    expect(rows).toEqual({
+      searchSameRow: viewport.width >= 768,
+      fieldsSameRow: viewport.width >= 768,
+    });
+  });
+}
