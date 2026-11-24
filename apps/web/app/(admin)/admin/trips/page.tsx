@@ -225,11 +225,11 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
             닫기
           </Button>
         </DialogHeader>
-        <div className="p-4">
+        <div className="p-4" data-testid="admin-trip-create-body">
           {formError && (
             <p
               role="alert"
-              className="mb-4 rounded-sm bg-error-bg p-3 text-sm text-error-text"
+              className="mb-4 rounded-sm bg-error-bg p-3 text-sm text-error-text wrap-anywhere"
               data-testid="admin-trip-create-error"
             >
               {formError}
@@ -237,13 +237,13 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
           )}
 
           <form onSubmit={onOwnerSearch} className="mb-4 flex flex-wrap items-end gap-2">
-            <label className="flex min-w-64 flex-1 flex-col gap-1 text-sm">
+            <label className="flex min-w-0 flex-[1_1_16rem] flex-col gap-1 text-sm">
               <span className="text-xs text-muted">소유자 검색</span>
               <input
                 type="search"
                 value={ownerQueryInput}
                 onChange={(event) => setOwnerQueryInput(event.target.value)}
-                className="rounded-sm border border-hairline px-3 py-2"
+                className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                 placeholder="마스킹 이메일, 닉네임, user_id"
                 data-testid="admin-trip-owner-search"
               />
@@ -263,7 +263,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
               {ownerQueryResult.data?.items.length === 0 && (
                 <p className="text-sm text-muted">검색 결과 없음</p>
               )}
-              <div className="grid gap-2">
+              <div className="grid grid-cols-1 gap-2" data-testid="admin-trip-owner-results">
                 {ownerQueryResult.data?.items.map((user) => (
                   <button
                     key={user.user_id}
@@ -272,13 +272,13 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
                     className="flex items-center justify-between gap-3 rounded-sm border border-hairline px-3 py-2 text-left text-sm"
                     data-testid={`admin-trip-owner-result-${user.user_id}`}
                   >
-                    <span>
-                      <span className="font-medium text-ink">
+                    <span className="flex min-w-0 flex-wrap gap-x-2 wrap-anywhere">
+                      <span className="min-w-0 font-medium text-ink">
                         {user.nickname ?? user.email_masked}
                       </span>
-                      <span className="ml-2 text-muted">{user.email_masked}</span>
+                      <span className="min-w-0 text-muted">{user.email_masked}</span>
                     </span>
-                    <span className="text-xs text-muted">{user.status}</span>
+                    <span className="shrink-0 text-xs text-muted">{user.status}</span>
                   </button>
                 ))}
               </div>
@@ -287,21 +287,21 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
 
           {selectedOwner && (
             <p
-              className="mb-4 rounded-sm bg-surface-soft px-3 py-2 text-sm"
+              className="mb-4 rounded-sm bg-surface-soft px-3 py-2 text-sm wrap-anywhere"
               data-testid="admin-trip-owner-selected"
             >
               선택: {selectedOwner.nickname ?? selectedOwner.email_masked} · {selectedOwner.user_id}
             </p>
           )}
 
-          <form onSubmit={onCreate} className="grid gap-4">
-            <div className="grid gap-3 md:grid-cols-2">
+          <form onSubmit={onCreate} className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-xs text-muted">여행계획명</span>
                 <input
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
+                  className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                   maxLength={200}
                   data-testid="admin-trip-create-title"
                 />
@@ -311,7 +311,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
                 <input
                   value={regionHint}
                   onChange={(event) => setRegionHint(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
+                  className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                   maxLength={120}
                   data-testid="admin-trip-create-region"
                 />
@@ -321,7 +321,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
                 <input
                   value={primaryRegionCode}
                   onChange={(event) => setPrimaryRegionCode(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
+                  className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                   pattern="[0-9]{2,10}"
                   data-testid="admin-trip-create-region-code"
                 />
@@ -331,7 +331,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
                 <select
                   value={visibility}
                   onChange={(event) => setVisibility(event.target.value as TripVisibility)}
-                  className="rounded-sm border border-hairline px-3 py-2"
+                  className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                   data-testid="admin-trip-create-visibility"
                 >
                   {CREATE_VISIBILITIES.map((item) => (
@@ -346,7 +346,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
                 <select
                   value={status}
                   onChange={(event) => setStatus(event.target.value as TripStatus)}
-                  className="rounded-sm border border-hairline px-3 py-2"
+                  className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                   data-testid="admin-trip-create-status"
                 >
                   {CREATE_STATUSES.map((item) => (
@@ -362,7 +362,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
                   type="date"
                   value={startDate}
                   onChange={(event) => setStartDate(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
+                  className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                   data-testid="admin-trip-create-start"
                 />
               </label>
@@ -372,7 +372,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
                   type="date"
                   value={endDate}
                   onChange={(event) => setEndDate(event.target.value)}
-                  className="rounded-sm border border-hairline px-3 py-2"
+                  className="w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                   data-testid="admin-trip-create-end"
                 />
               </label>
@@ -383,7 +383,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                className="min-h-20 rounded-sm border border-hairline px-3 py-2"
+                className="min-h-20 w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                 data-testid="admin-trip-create-description"
               />
             </label>
@@ -393,7 +393,7 @@ function AdminTripCreateDialog({ onClose }: { onClose: () => void }) {
               <textarea
                 value={accessReason}
                 onChange={(event) => setAccessReason(event.target.value)}
-                className="min-h-16 rounded-sm border border-hairline px-3 py-2"
+                className="min-h-16 w-full min-w-0 rounded-sm border border-hairline px-3 py-2"
                 maxLength={500}
                 data-testid="admin-trip-create-reason"
               />
