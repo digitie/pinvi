@@ -9,7 +9,7 @@ requires-python = ">=3.12"
 # 올릴 때는 `uv lock --upgrade-package dagster==<ver> ...`로 lock을 갱신한다 —
 # 공유 Dagster plane에서 code-server는 host보다 새 dagster를 돌리면 안 된다.
 dependencies = [
-  "kor-travel-common[dagster] @ git+https://github.com/digitie/kor-travel-common.git@67efe2e546ecef41e54a866bf4862d608ace343d#subdirectory=packages/py/kor-travel-common",
+  "kor-travel-common[dagster] @ git+https://github.com/digitie/kor-travel-common.git@ec5e16888fd3de069762f34c3cd06fe867e06688#subdirectory=packages/py/kor-travel-common",
   "dagster>=1.9",
   "dagster-webserver>=1.9",
   # instance storage를 PostgreSQL로 둔다(`apps/etl/dagster.yaml`).
