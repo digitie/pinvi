@@ -535,6 +535,9 @@ for (const viewport of [
     });
     expect(measure).toEqual({ wrap: 'anywhere', paddingRight: '0px' });
 
+    // 긴 제목이 Dialog의 가로 스크롤 폭을 늘리지 않아야 한다(390에서 이 Dialog 본문은 원래 몇 px 가로로
+    // 넘친다 — 제목과 무관한 기존 상태라 절대 폭 대신 주입 전후 scrollWidth를 비교한다).
+    const scrollBefore = await dialog.evaluate((el) => el.scrollWidth);
     await title.evaluate((el) => {
       el.textContent = 'POI생성'.repeat(40);
     });
@@ -547,11 +550,9 @@ for (const viewport of [
       if (!(titleEl instanceof HTMLElement) || !closeEl || !dialogEl) return null;
       const t = titleEl.getBoundingClientRect();
       const c = closeEl.getBoundingClientRect();
-      const d = dialogEl.getBoundingClientRect();
       return {
         titleOverflow: titleEl.scrollWidth - titleEl.clientWidth,
-        titleRight: t.right,
-        dialogRight: d.right,
+        dialogScrollWidth: dialogEl.scrollWidth,
         overlapsClose: !(
           t.right <= c.left ||
           c.right <= t.left ||
@@ -564,7 +565,7 @@ for (const viewport of [
     expect(geometry).not.toBeNull();
     expect(geometry!.titleOverflow).toBeLessThanOrEqual(0);
     expect(geometry!.overlapsClose).toBe(false);
-    expect(geometry!.titleRight).toBeLessThanOrEqual(geometry!.dialogRight);
+    expect(geometry!.dialogScrollWidth).toBe(scrollBefore);
     // 한 줄이면 높이가 글자 크기 정도(leading-none)다 — 여러 줄로 접혔는지 본다.
     expect(geometry!.heightPerFont).toBeGreaterThan(1.8);
   });
