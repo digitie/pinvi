@@ -11,8 +11,9 @@ live 검증은 별도 설정 `apps/web/playwright.admin-live.config.ts`로만 �
 - `apps/web/e2e/admin-live-grafana.live.ts`
 - `apps/web/e2e/admin-live-backup.live.ts`
 - `apps/web/e2e/admin-live-map-marker-parity.live.ts`
-- 전체 catalog는 `6343 tests in 5 files` 기준이다. UI 기준 live matrix 6,336건,
-  로그인 검증 2개, catalog drift 1개, Debug live read-only 1개, Grafana live read-only 1개,
+- 전체 catalog는 UI 기준 live matrix(2026-11-25 기준 5,162건 — 정확한 수는 고정하지 않는다.
+  catalog 검사가 하한 2000·family 비지 않음·이름 유일을 보고, PR CI `web` e2e job이 같은 검사를 돈다),
+  로그인 검증 2개, catalog 검사 1개, Debug live read-only 1개, Grafana live read-only 1개,
   Backup live read-only 1개, Map marker parity read-only 1개를 실행한다.
 - route render, 좌측 navigation, 검색/필터, 테이블 정렬, placeholder 범위, dashboard card,
   MCP token 발급 form의 client validation을 실제 브라우저에서 검증한다.

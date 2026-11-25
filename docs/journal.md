@@ -1,3 +1,19 @@
+## 2026-11-25 (claude) — admin live 카탈로그 검사: 정확한 case 수 상수 대신 불변식
+
+- 출처: 2026-11-25 n150 운영 최종 e2e(admin live, 읽기 전용 구간)에서 `UI live case catalog` 검사만 실패 — 상수
+  `EXPECTED_LIVE_UI_CASE_COUNT = 6336`(#288, 2026-06)인데 실제 카탈로그는 5162건. 화면·필터 정리로 카탈로그가 줄었는데
+  상수를 따라 고치지 않은 drift이고, 회귀가 아니다.
+- 상수를 새 값으로 바꾸면 다음 표면 변경에서 같은 실패가 되풀이된다(곱으로 늘고 준다). 그래서 `admin-live-matrix.live.ts`가
+  family 표(`uiCaseFamilies`, 순서 = case 번호 순서 — `PINVI_ADMIN_LIVE_CASE_START/END` 의미 불변)로 카탈로그를 만들고,
+  검사는 지켜야 할 성질만 본다: 하한 2000건, 모든 family가 비지 않음(한 family가 조용히 사라지는 회귀 — 입력 목록이
+  빈 family만 예외: placeholder route는 gap plan에서 모두 실제 화면이 돼 지금 0개), case 이름 유일(실패 보고에서 case를
+  가리키는 키), `run`이 함수.
+- 시험: n150에서 카탈로그 검사만 최소 설정(globalSetup·live env·브라우저 없음, 쓰기 없음)으로 돌려 `1 passed`(현재
+  5162건, 이름 중복 0). 첫 시도에서 빈 placeholder family를 잡아 예외 규칙을 넣었다.
+  live 카탈로그 쓰기 단계([e2e] 여행 생성)는 돌리지 않았다. 앱 코드·OpenAPI·마이그레이션 변경 없음.
+- 근본 원인은 이 검사가 PR CI에서 돌지 않았던 것이라(적대 리뷰), `web` e2e job에 브라우저·live env 없는 카탈로그 검사
+  step을 더했다(`-g "UI live case catalog"`). runbook(`admin-live-e2e.md`·`v100-live-gate.md`)의 6,336건 표기도 고쳤다.
+
 ## 2026-11-25 (claude) — Resend 거절 영구 실패 분류·발신 설정 경고(#720)
 
 - 출처: #720. prod `trip_invite` 7통이 Resend 403으로 5회씩(35건) 실패했다. 발신 주소가 코드 기본값 `Pinvi <noreply@send.pinvi.local>`이고(컨테이너 env에 `PINVI_RESEND_FROM_EMAIL` 없음, 읽기 전용 확인) `.local`은 Resend가 검증할 수 없는 도메인이다. 같은 읽기 전용 확인에서 `PINVI_WEB_BASE_URL`도 컨테이너에 없어 메일 링크(인증·재설정·초대)가 `http://localhost:12805`로 나간다는 것을 찾았다.

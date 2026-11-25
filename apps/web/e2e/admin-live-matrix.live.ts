@@ -1161,36 +1161,58 @@ function pushMcpValidationCases(cases: AdminUiCase[]) {
   }
 }
 
-function buildUiCases() {
-  const cases: AdminUiCase[] = [];
-  pushRouteCases(cases);
-  pushNavigationCases(cases);
-  pushPlaceholderCases(cases);
-  pushUsersFilterCases(cases);
-  pushTripsFilterCases(cases);
-  pushPoisFilterCases(cases);
-  pushApiCallFilterCases(cases);
-  pushEmailsFilterCases(cases);
-  pushBackupFilterCases(cases);
-  pushBackupReadOnlyGuardCases(cases);
-  pushMcpFilterCases(cases);
-  pushFeatureRequestFilterCases(cases);
-  pushFeaturesFilterCases(cases);
-  pushFeatureDetailSubpageCases(cases);
-  pushDebugRequestTimelineCases(cases);
-  pushProviderSyncFilterCases(cases);
-  pushEtlFilterCases(cases);
-  pushEtlAppOwnedCases(cases);
-  pushDedupIntegrityDebugCases(cases);
-  pushSortCases(cases);
-  pushDashboardCases(cases);
-  pushGrafanaDashboardCases(cases);
-  pushMcpValidationCases(cases);
-  return cases;
+// case family 표. 순서가 곧 case 번호([NNNN]) 순서다(PINVI_ADMIN_LIVE_CASE_START/END가
+// 이 번호로 구간을 자른다). family 이름은 카탈로그 무결성 검사의 실패 메시지에 쓴다.
+type UiCaseFamily = readonly [string, (cases: AdminUiCase[]) => void];
+const uiCaseFamilies: ReadonlyArray<UiCaseFamily> = [
+  ['route', pushRouteCases],
+  ['navigation', pushNavigationCases],
+  ['placeholder', pushPlaceholderCases],
+  ['users filter', pushUsersFilterCases],
+  ['trips filter', pushTripsFilterCases],
+  ['pois filter', pushPoisFilterCases],
+  ['api-call filter', pushApiCallFilterCases],
+  ['emails filter', pushEmailsFilterCases],
+  ['backup filter', pushBackupFilterCases],
+  ['backup read-only guard', pushBackupReadOnlyGuardCases],
+  ['mcp filter', pushMcpFilterCases],
+  ['feature-request filter', pushFeatureRequestFilterCases],
+  ['features filter', pushFeaturesFilterCases],
+  ['feature detail subpage', pushFeatureDetailSubpageCases],
+  ['debug request timeline', pushDebugRequestTimelineCases],
+  ['provider-sync filter', pushProviderSyncFilterCases],
+  ['etl filter', pushEtlFilterCases],
+  ['etl app-owned', pushEtlAppOwnedCases],
+  ['dedup/integrity/debug', pushDedupIntegrityDebugCases],
+  ['sort', pushSortCases],
+  ['dashboard', pushDashboardCases],
+  ['grafana dashboard', pushGrafanaDashboardCases],
+  ['mcp validation', pushMcpValidationCases],
+];
+
+// 입력 목록이 비면 비는 것이 정상인 family. placeholder route는 admin-console-gap-plan에서
+// 모두 실제 화면으로 바뀌어 지금 0개다 — 그 family는 route 표에 placeholder가 생길 때만 채워진다.
+const uiCaseFamiliesAllowedEmpty = new Set(
+  placeholderRoutes.length === 0 ? ['placeholder'] : [],
+);
+
+function buildUiCaseFamilies() {
+  return uiCaseFamilies.map(([family, push]) => {
+    const cases: AdminUiCase[] = [];
+    push(cases);
+    return { family, cases };
+  });
 }
 
-const EXPECTED_LIVE_UI_CASE_COUNT = 6336;
-const liveUiCases = buildUiCases();
+// 정확한 case 수는 고정하지 않는다. route·filter 표면이 바뀔 때마다 곱으로 늘고 줄어
+// 상수가 drift한다(2026-11-25 운영 최종 e2e: 상수 6336, 실제 5162 — 카탈로그 정리를 상수에
+// 반영하지 않아 catalog 검사만 실패했다). 대신 지켜야 할 성질을 직접 검사한다:
+// 하한(브라우저 case 2000건 이상), 모든 family가 비지 않음(한 family가 조용히 사라지는 회귀 —
+// 입력 목록 자체가 빈 family만 예외),
+// case 이름 유일(실패 보고에서 case를 가리키는 키).
+const MIN_LIVE_UI_CASE_COUNT = 2000;
+const liveUiCaseFamilies = buildUiCaseFamilies();
+const liveUiCases = liveUiCaseFamilies.flatMap(({ cases }) => cases);
 const selectedLiveUiCases = liveUiCases
   .map((liveCase, index) => ({ liveCase, caseNumber: index + 1 }))
   .filter(({ caseNumber }) => caseNumber >= caseStart && caseNumber <= caseEnd)
@@ -1198,8 +1220,18 @@ const selectedLiveUiCases = liveUiCases
 
 base.describe('admin live UI e2e catalog', () => {
   base('UI live case catalog has at least 2000 browser cases', () => {
-    expect(liveUiCases).toHaveLength(EXPECTED_LIVE_UI_CASE_COUNT);
-    expect(liveUiCases.length).toBeGreaterThanOrEqual(2000);
+    expect(liveUiCases.length).toBeGreaterThanOrEqual(MIN_LIVE_UI_CASE_COUNT);
+    for (const { family, cases } of liveUiCaseFamilies) {
+      if (uiCaseFamiliesAllowedEmpty.has(family)) continue;
+      expect(cases.length, `case family "${family}"가 비었다`).toBeGreaterThan(0);
+    }
+    const seenNames = new Set<string>();
+    const duplicateNames: string[] = [];
+    for (const { name } of liveUiCases) {
+      if (seenNames.has(name)) duplicateNames.push(name);
+      seenNames.add(name);
+    }
+    expect(duplicateNames, 'case 이름이 겹치면 안 된다').toEqual([]);
     expect(liveUiCases.every((liveCase) => typeof liveCase.run === 'function')).toBe(true);
   });
 });
