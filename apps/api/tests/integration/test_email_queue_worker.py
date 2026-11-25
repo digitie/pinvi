@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from sqlalchemy import select
 
+from app.clients.resend import ResendClient
 from app.core.config import settings
 from app.models.email_deliverability import EmailSuppression
 from app.models.email_queue import EmailQueue
@@ -214,3 +218,112 @@ async def test_email_outbox_worker_lifespan_can_be_disabled(
 
     async with email_service.email_outbox_worker_lifespan(app):
         assert not hasattr(app.state, "email_outbox_worker")
+
+
+def _mock_resend(
+    monkeypatch: pytest.MonkeyPatch, status: int, body: dict[str, object]
+) -> list[int]:
+    """`create_resend_client`를 MockTransport로 바꾼다. 반환 목록은 Resend 호출 횟수다."""
+
+    calls: list[int] = []
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(status, json=body, request=request)
+
+    @asynccontextmanager
+    async def _factory() -> AsyncIterator[ResendClient]:
+        async with httpx.AsyncClient(
+            base_url="https://api.resend.test",
+            transport=httpx.MockTransport(_handler),
+        ) as http:
+            yield ResendClient(http)
+
+    monkeypatch.setattr(settings, "pinvi_resend_api_key", "re_worker_test_key")
+    monkeypatch.setattr(email_service, "create_resend_client", _factory)
+    return calls
+
+
+async def _enqueue_invite(session_factory, to_email: str, now: datetime) -> None:  # type: ignore[no-untyped-def]
+    async with session_factory() as db:
+        db.add(
+            EmailQueue(
+                to_email=to_email,
+                subject="Pinvi 여행 초대: 서울",
+                template="trip_invite",
+                payload={"invite_url": "https://pinvi.test/trips/x", "trip_title": "서울"},
+                scheduled_at=now,
+            )
+        )
+        await db.commit()
+
+
+@pytest.mark.parametrize(
+    ("status", "name", "message"),
+    [
+        (403, "validation_error", "The send.pinvi.local domain is not verified."),
+        (422, "invalid_from_address", "Invalid `from` field."),
+    ],
+)
+async def test_resend_permanent_rejection_fails_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory,
+    status: int,
+    name: str,
+    message: str,
+) -> None:
+    """#720 — 미검증 발신 도메인 403·from 형식 422는 5회 backoff 없이 첫 시도에 failed."""
+
+    now = datetime.now(UTC)
+    to_email = f"permanent-{status}@pinvi.test"
+    calls = _mock_resend(
+        monkeypatch, status, {"statusCode": status, "name": name, "message": message}
+    )
+    await _enqueue_invite(session_factory, to_email, now)
+
+    async with session_factory() as db:
+        result = await process_pending_email_batch(db, now=now)
+
+    assert result.claimed == 1
+    assert result.failed == 1
+    assert result.retried == 0
+    assert len(calls) == 1
+
+    async with session_factory() as db:
+        row = await db.scalar(select(EmailQueue).where(EmailQueue.to_email == to_email))
+        assert row is not None
+        assert row.status == "failed"
+        assert row.attempts == 1
+        assert row.last_error == f"resend_permanent:{status}:{name}:{message}"
+        assert "re_worker_test_key" not in (row.last_error or "")
+
+    # 닫힌 row는 다음 batch가 다시 집지 않는다.
+    async with session_factory() as db:
+        again = await process_pending_email_batch(db, now=now + timedelta(days=1))
+    assert again.claimed == 0
+    assert len(calls) == 1
+
+
+async def test_resend_server_error_still_backs_off(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory,
+) -> None:
+    now = datetime.now(UTC)
+    to_email = "transient-503@pinvi.test"
+    calls = _mock_resend(monkeypatch, 503, {"name": "internal_server_error", "message": "down"})
+    await _enqueue_invite(session_factory, to_email, now)
+
+    async with session_factory() as db:
+        result = await process_pending_email_batch(db, now=now)
+
+    assert result.retried == 1
+    assert result.failed == 0
+    assert len(calls) == 1
+
+    async with session_factory() as db:
+        row = await db.scalar(select(EmailQueue).where(EmailQueue.to_email == to_email))
+        assert row is not None
+        assert row.status == "pending"
+        assert row.attempts == 1
+        assert row.scheduled_at > now
+        assert "503" in (row.last_error or "")

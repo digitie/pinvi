@@ -48,6 +48,13 @@ Resend "verified" 상태 확인 후 발송 시작.
 | `PINVI_WEB_BASE_URL`                        | dev `http://localhost:12805`, production `https://pinvi.example.com` |
 | `PINVI_EMAIL_VERIFICATION_PATH`             | `/verify-email`                                                      |
 
+`PINVI_RESEND_FROM_EMAIL` 기본값 `Pinvi <noreply@send.pinvi.local>`은 개발용 자리표시자다 — `.local`은
+Resend가 검증할 수 없어 실제 발송은 403이다. 빈 값은 기본값으로 본다. staging/production 기동 시 발신 주소가
+기본값·주소 아님·예약/사설 도메인(`.local`·`.localhost`·`.test`·`.example`·`.invalid`·`.internal`·`.lan`·
+`home.arpa`·`example.com/net/org`)이면, 또는 `PINVI_WEB_BASE_URL`이 loopback이면(메일 링크가 수신자에게 열리지
+않는다) `pinvi.email.config_warning` 경고를 남긴다. 관리자 `/admin/emails/deliverability`의 `from_domain` 점검도
+같은 판정으로 error다. 기동은 막지 않는다 — 메일은 부가 경로라 이 설정 하나로 인증·여행 API 전체를 내리지 않는다.
+
 미설정 시 (`PINVI_RESEND_API_KEY` 빈값) → "콘솔 출력 모드" — `email_queue`에
 적재되지만 발송 X, stdout에 렌더링 결과 출력. 가입은 성공하지만
 `verification_email_dispatched=false`.
@@ -79,6 +86,12 @@ Worker:
 - 5초 폴링 + 50 row batch
 - 실패 시 `attempts + 1`, exponential backoff (30s / 5m / 30m / 1h / 4h)
 - `attempts >= 5` → `status='failed'` + Sentry alert
+- **영구 거절은 재시도하지 않는다(#720).** Resend 4xx 중 408·409·429를 뺀 응답(400 검증, 401 key,
+  403 미검증 발신 도메인, 422 `from`/`to` 형식 등)은 `ResendPermanentError`로 첫 시도에
+  `status='failed'`가 되고 `last_error='resend_permanent:<status>:<name>:<message>'`를 남긴다
+  (이메일 주소·`re_` key 모양은 가리고 200자로 자른다). 로그는 `email.worker_permanent_failure`(error).
+  설정을 고친 뒤 이미 닫힌 row는 `/admin/emails`의 재발송(`POST /admin/emails/{id}/resend`)으로 다시 보낸다.
+  5xx·429·408·409·네트워크 오류는 위 backoff 대상이다.
 - 여러 API worker가 동시에 떠도 `FOR UPDATE SKIP LOCKED`로 같은 row 중복 발송을 막는다.
 
 ## 4. 발송 코드

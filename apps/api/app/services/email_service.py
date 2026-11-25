@@ -20,7 +20,7 @@ from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.resend import create_resend_client
+from app.clients.resend import ResendPermanentError, create_resend_client
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.email_queue import EmailQueue
@@ -178,6 +178,22 @@ async def process_pending_email_batch(
             continue
         try:
             row.resend_id = await _send_email_row(row)
+        except ResendPermanentError as exc:
+            # 403(미검증 발신 도메인)·422(from 형식) 같은 거절은 재시도해도 같은 답이다(#720).
+            # backoff 5회를 태우지 않고 바로 failed로 닫고, 원인 코드·요약을 남긴다.
+            row.status = "failed"
+            row.last_error = exc.summary
+            failed += 1
+            log.error(
+                "email.worker_permanent_failure",
+                email_id=str(row.email_id),
+                template=row.template,
+                attempts=row.attempts,
+                status_code=exc.status_code,
+                error_name=exc.error_name,
+                error=exc.summary,
+            )
+            continue
         except Exception as exc:
             if row.attempts >= MAX_EMAIL_ATTEMPTS:
                 row.status = "failed"

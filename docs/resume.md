@@ -1,3 +1,12 @@
+## 2026-11-25 (claude) — Resend 거절 영구 실패 분류·발신 설정 경고(#720)
+
+- 출처: #720. prod `trip_invite` 7통이 Resend 403으로 5회씩(35건) 실패했다. 발신 주소가 코드 기본값 `Pinvi <noreply@send.pinvi.local>`이고(컨테이너 env에 `PINVI_RESEND_FROM_EMAIL` 없음, 읽기 전용 확인) `.local`은 Resend가 검증할 수 없는 도메인이다. 같은 읽기 전용 확인에서 `PINVI_WEB_BASE_URL`도 컨테이너에 없어 메일 링크(인증·재설정·초대)가 `http://localhost:12805`로 나간다는 것을 찾았다.
+- `ResendClient.send_email`: 4xx 중 408·409·429를 뺀 응답(400·401·403·404·422 …)은 `ResendPermanentError`. worker는 첫 시도에 `status='failed'`로 닫고 `last_error='resend_permanent:<code>:<name>:<message>'`(이메일 주소·`re_` key 모양 가림, 200자)를 남기며 `email.worker_permanent_failure`를 error로 찍는다. 5xx·429·408·409·네트워크 오류는 종전 backoff 5회 그대로.
+- 설정: `DEFAULT_RESEND_FROM_EMAIL` 상수, 빈 `PINVI_RESEND_FROM_EMAIL`은 기본값으로(Manager compose의 `${VAR:-}` 대비). staging/production 기동 시 발신 주소가 기본값·주소 아님·예약/사설 도메인(`.local`·`.test`·`example.com` 등)이거나 `PINVI_WEB_BASE_URL`이 loopback이면 `pinvi.email.config_warning` 경고. 관리자 `/admin/emails/deliverability`의 `from_domain` 점검도 같은 판정으로 error를 낸다.
+- 기동 거부는 하지 않았다: 메일은 부가 경로라 발신 주소 하나로 인증·여행 API 전체를 내리면 장애가 커진다. 이미지 회전과 `.env` 설정이 따로 움직이므로(값은 소유자가 Manager root `.env`에 넣는다) 거부는 회전 순서에 따라 API 전체 중단이 된다. 선례: geofence 설정의 비치명 문제는 기동 경고(`validate_geofence_configuration`).
+- 시험: unit `test_resend_failure_classification.py`(403·422 영구·요약 가림/길이·비JSON·5xx/429/408/409 재시도 대상·상태표·발신 주소 판정 10종·빈 env 기본값·production 경고 2종·비운영 무경고·관리자 점검), integration `test_email_queue_worker.py`(403·422 첫 시도 failed·재집계 없음, 503 backoff).
+- 배포: API 이미지. 값(`PINVI_RESEND_FROM_EMAIL`·`PINVI_WEB_BASE_URL`, webhook을 쓰면 `PINVI_RESEND_WEBHOOK_SECRET`)은 Manager compose 배선(별도 Manager PR) 뒤 소유자가 root `.env`에 넣는다. 이미 failed로 닫힌 옛 초대 메일은 설정 뒤 `/admin/emails`의 재발송으로 다시 보낸다.
+
 ## 2026-11-24 (claude) — @kor-travel/ui 0.2.6 채택(터치 영역·아코디언 outline·Dialog 긴 제목)
 
 - ui 0.2.5→0.2.6·tokens 0.1.6→0.1.7(mobile은 tokens만), common-ref `309b881`(catalog #84), pack `05d7f91`(common #83, main CI artifact 14803131043). toast 0.1.6은 PinVi가 쓰지 않아 받지 않았다. 의존 목록 불변, ui peer만 tokens 0.1.7. tokens CSS는 0.1.6과 같다(내장 정책 bytes만 바뀐 patch).

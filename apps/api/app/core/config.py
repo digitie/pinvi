@@ -43,6 +43,9 @@ from app.core.m05_runtime_lease import (
 
 PinviEnvironment = Literal["development", "test", "smoke", "isolated", "staging", "production"]
 _STRICT_RESTORE_EXECUTOR_ENVIRONMENTS = frozenset({"staging", "production"})
+# 개발용 자리표시자 — `.local`은 Resend가 검증할 수 없어 실제 발송은 403이다(#720).
+# staging/production은 `PINVI_RESEND_FROM_EMAIL`로 검증된 도메인 주소를 줘야 한다.
+DEFAULT_RESEND_FROM_EMAIL = "Pinvi <noreply@send.pinvi.local>"
 _SERVICE_PROVENANCE_FILENAME = "kor-travel-map-service-provenance-v1.json"
 _PACKAGED_SERVICE_PROVENANCE_PATH = f"_contract_data/{_SERVICE_PROVENANCE_FILENAME}"
 _M05_PAIR_PROVENANCE_FILENAME = "kor-travel-map-m05-pair-provenance-v1.json"
@@ -702,7 +705,7 @@ class Settings(BaseSettings):
     # Resend
     pinvi_resend_api_key: str = ""
     pinvi_resend_api_base_url: str = "https://api.resend.com"
-    pinvi_resend_from_email: str = "Pinvi <noreply@send.pinvi.local>"
+    pinvi_resend_from_email: str = DEFAULT_RESEND_FROM_EMAIL
     pinvi_resend_timeout_seconds: int = 5
     pinvi_resend_webhook_secret: str = ""
     pinvi_resend_webhook_allow_unsigned: bool = False
@@ -1465,6 +1468,15 @@ class Settings(BaseSettings):
         raw = value.get_secret_value() if isinstance(value, SecretStr) else value
         if isinstance(raw, str) and raw == "":
             return None
+        return value
+
+    @field_validator("pinvi_resend_from_email", mode="before")
+    @classmethod
+    def _empty_resend_from_email_is_default(cls, value: object) -> object:
+        """Manager compose는 미설정 발신 주소를 `${VAR:-}`(빈 문자열)로 넘긴다 — 기본값으로 본다."""
+
+        if isinstance(value, str) and not value.strip():
+            return DEFAULT_RESEND_FROM_EMAIL
         return value
 
     @field_validator("pinvi_dagster_location_name")
