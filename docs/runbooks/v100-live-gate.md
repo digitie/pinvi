@@ -186,7 +186,7 @@ T-273의 repo-side 실행 가능성 보강과 read-only gate evidence는 대부�
 
 | Phase                        | 현재 상태                                                                                                                                 | 다음 조건                                                                    |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Admin read-only full catalog | 통과. `6343 tests in 5 files` 기준이며 N150 runner에서 확인했다.                                                                        | release 직전 drift가 있으면 `admin-live-smoke` → 필요한 범위만 재실행        |
+| Admin read-only full catalog | 통과. 당시 `6343 tests in 5 files` 기준이며 N150 runner에서 확인했다(2026-11-25 matrix 5,162건).                                                                        | release 직전 drift가 있으면 `admin-live-smoke` → 필요한 범위만 재실행        |
 | Local smoke                  | 통과. local DB migration, API `/health`, Web `/admin/login` 확인.                                                                       | release evidence 대체가 아니라 repo-side 실행 가능성 확인용                  |
 | MCP live                     | 통과. 일회성 token 발급, tool list, `list_trips`, `search_features`, token 회수 확인.                                                     | release 직전 token/도메인 변경 시 재실행                                     |
 | Perf/Security smoke          | 통과. API p95/error-rate와 CSP/CORS/security header 확인. rate-limit probe는 운영 안전상 skip.                                            | release 직전 운영 HTTPS 대상 재실행                                          |

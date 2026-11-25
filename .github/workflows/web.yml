@@ -266,6 +266,14 @@ jobs:
           e2e/admin-feature-request-queue-live-mutating.live.ts
           e2e/admin-feature-reference-reconciliations-live-mutating.live.ts
 
+      # admin live UI matrix 카탈로그 불변식(하한·family 비지 않음·이름 유일). 브라우저·live env 없이
+      # 카탈로그 생성만 검사한다 — 카탈로그를 바꾸는 PR에서 바로 잡히게(2026-11-25 상수 drift 재발 방지).
+      - name: Verify admin live UI catalog invariants
+        working-directory: apps/web
+        run: >-
+          npx playwright test -c playwright.admin-live.config.ts
+          e2e/admin-live-matrix.live.ts -g "UI live case catalog"
+
       - name: Install Playwright chromium
         working-directory: apps/web
         run: npx playwright install --with-deps chromium

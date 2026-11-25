@@ -11,6 +11,8 @@
 - 시험: n150에서 카탈로그 검사만 최소 설정(globalSetup·live env·브라우저 없음, 쓰기 없음)으로 돌려 `1 passed`(현재
   5162건, 이름 중복 0). 첫 시도에서 빈 placeholder family를 잡아 예외 규칙을 넣었다.
   live 카탈로그 쓰기 단계([e2e] 여행 생성)는 돌리지 않았다. 앱 코드·OpenAPI·마이그레이션 변경 없음.
+- 근본 원인은 이 검사가 PR CI에서 돌지 않았던 것이라(적대 리뷰), `web` e2e job에 브라우저·live env 없는 카탈로그 검사
+  step을 더했다(`-g "UI live case catalog"`). runbook(`admin-live-e2e.md`·`v100-live-gate.md`)의 6,336건 표기도 고쳤다.
 
 ## 2026-11-25 (claude) — Resend 거절 영구 실패 분류·발신 설정 경고(#720)
 

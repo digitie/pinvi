@@ -1225,9 +1225,12 @@ base.describe('admin live UI e2e catalog', () => {
       if (uiCaseFamiliesAllowedEmpty.has(family)) continue;
       expect(cases.length, `case family "${family}"가 비었다`).toBeGreaterThan(0);
     }
-    const duplicateNames = liveUiCases
-      .map((liveCase) => liveCase.name)
-      .filter((name, index, names) => names.indexOf(name) !== index);
+    const seenNames = new Set<string>();
+    const duplicateNames: string[] = [];
+    for (const { name } of liveUiCases) {
+      if (seenNames.has(name)) duplicateNames.push(name);
+      seenNames.add(name);
+    }
     expect(duplicateNames, 'case 이름이 겹치면 안 된다').toEqual([]);
     expect(liveUiCases.every((liveCase) => typeof liveCase.run === 'function')).toBe(true);
   });
