@@ -38,6 +38,7 @@ from app.middleware.security_headers import (
     security_headers_exception_handler,
 )
 from app.services.cache_target_sync_worker import cache_target_sync_worker_lifespan
+from app.services.email_deliverability import email_config_warnings
 from app.services.email_service import email_outbox_worker_lifespan
 from app.services.feature_reference_reconciliation_worker import (
     feature_reference_reconciliation_worker_lifespan,
@@ -59,6 +60,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     for warning in validate_geofence_configuration():
         log.warning("pinvi.geofence.config_warning", warning=warning)
+    for warning in email_config_warnings():
+        log.warning("pinvi.email.config_warning", warning=warning)
     # kor-travel-map OpenAPI HTTP client (ADR-026/027) — feature read/batch 경로.
     # 레거시 in-process Protocol stub(etl_bridge)은 T-175에서 제거됨.
     # admin client(T-180)는 사용자 제안 승인 시 `/v1/admin/features*` change API 호출.

@@ -1,3 +1,14 @@
+## 2026-11-25 (claude) — Resend 거절 영구 실패 분류·발신 설정 경고(#720)
+
+- 출처: #720. prod `trip_invite` 7통이 Resend 403으로 5회씩(35건) 실패했다. 발신 주소가 코드 기본값 `Pinvi <noreply@send.pinvi.local>`이고(컨테이너 env에 `PINVI_RESEND_FROM_EMAIL` 없음, 읽기 전용 확인) `.local`은 Resend가 검증할 수 없는 도메인이다. 같은 읽기 전용 확인에서 `PINVI_WEB_BASE_URL`도 컨테이너에 없어 메일 링크(인증·재설정·초대)가 `http://localhost:12805`로 나간다는 것을 찾았다.
+- `ResendClient.send_email`: 4xx 중 408·409·429를 뺀 응답(400·401·403·404·422 …)은 `ResendPermanentError`. worker는 첫 시도에 `status='failed'`로 닫고 `last_error='resend_permanent:<code>:<name>:<message>'`(이메일 주소·`re_` key 모양 가림, 200자)를 남기며 `email.worker_permanent_failure`를 error로 찍는다. 5xx·429·408·409·네트워크 오류는 종전 backoff 5회 그대로.
+- 설정: `DEFAULT_RESEND_FROM_EMAIL` 상수, 빈 `PINVI_RESEND_FROM_EMAIL`은 기본값으로(Manager compose의 `${VAR:-}` 대비). staging/production 기동 시 발신 주소가 기본값·주소 아님·예약/사설 도메인(`.local`·`.test`·`example.com` 등)이거나 `PINVI_WEB_BASE_URL`이 loopback이면 `pinvi.email.config_warning` 경고. 관리자 `/admin/emails/deliverability`의 `from_domain` 점검도 같은 판정으로 error를 낸다.
+- 기동 거부는 하지 않았다: 메일은 부가 경로라 발신 주소 하나로 인증·여행 API 전체를 내리면 장애가 커진다. 이미지 회전과 `.env` 설정이 따로 움직이므로(값은 소유자가 Manager root `.env`에 넣는다) 거부는 회전 순서에 따라 API 전체 중단이 된다. 선례: geofence 설정의 비치명 문제는 기동 경고(`validate_geofence_configuration`).
+- 시험: unit `test_resend_failure_classification.py`(403·422 영구·요약 가림/길이·비JSON·5xx/429/408/409 재시도 대상·상태표·발신 주소 판정 10종·빈 env 기본값·production 경고 2종·비운영 무경고·관리자 점검), integration `test_email_queue_worker.py`(403·422 첫 시도 failed·재집계 없음, 503 backoff).
+- 적대 리뷰 반영: 링크가 적재 시점 origin으로 payload에 고정돼 있어 "설정 뒤 재발송"이 localhost 링크를 다시 보냈다 → 발송 때 현재 origin으로 다시 만든다(초대 `trip_id`·`companion_id`, 인증·재설정 `token`). production 콘솔 모드는 발신 주소 경고 대신 콘솔 모드 경고, web origin 판정은 `ipaddress` loopback·unspecified, `PINVI_WEB_BASE_URL` 끝 `/` 제거. `/admin/system` `pinvi_web` 점검이 같은 값을 쓴다는 점과 env·이미지 동시 적용 순서를 문서화.
+- 적대 리뷰 2인째 반영: 401·403·404·405(계정·설정 수준)는 맞은 row만 failed로 닫고 batch를 멈춘 뒤 900초 프로세스 단위 정지(`email.worker_paused`) — 남은 메일은 pending·attempts 그대로, 재기동하면 풀린다. 400·422(그 메일만의 문제)는 정지 없음. 깨진 `PINVI_WEB_BASE_URL`(urlsplit ValueError)도 기동을 막지 않고 경고, `resend.dev` 시험 발신자 판정 추가. `retry_exhausted` 지표가 영구 실패를 포함한다는 점 문서화. 429 quota(`daily_quota_exceeded`) 구분은 기존 동작이라 범위 밖.
+- 배포: API 이미지. 값(`PINVI_RESEND_FROM_EMAIL`·`PINVI_WEB_BASE_URL`, webhook을 쓰면 `PINVI_RESEND_WEBHOOK_SECRET`)은 Manager compose 배선(별도 Manager PR) 뒤 소유자가 root `.env`에 넣는다. env와 새 이미지는 한 번의 재생성으로 함께 적용한다(401·403도 바로 닫히므로). 이미 failed로 닫힌 옛 초대 메일은 설정 뒤 `/admin/emails`의 재발송으로 다시 보낸다(링크는 새 origin으로 다시 만들어진다).
+
 ## 2026-11-24 (claude) — @kor-travel/ui 0.2.6 채택(터치 영역·아코디언 outline·Dialog 긴 제목)
 
 - ui 0.2.5→0.2.6·tokens 0.1.6→0.1.7(mobile은 tokens만), common-ref `309b881`(catalog #84), pack `05d7f91`(common #83, main CI artifact 14803131043). toast 0.1.6은 PinVi가 쓰지 않아 받지 않았다. 의존 목록 불변, ui peer만 tokens 0.1.7. tokens CSS는 0.1.6과 같다(내장 정책 bytes만 바뀐 patch).

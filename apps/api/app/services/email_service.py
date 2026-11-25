@@ -9,18 +9,19 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from html import escape
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.resend import create_resend_client
+from app.clients.resend import ResendPermanentError, create_resend_client
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.email_queue import EmailQueue
@@ -30,6 +31,16 @@ log = get_logger("email")
 
 MAX_EMAIL_ATTEMPTS = 5
 RETRY_BACKOFF_SECONDS = (30, 300, 1800, 3600, 14400)
+# 계정·설정 수준 거절(401 key·403 발신 도메인 등) 뒤 발송을 멈추는 시간. 그 설정은 행마다 같으므로 나머지 대기
+# 메일을 한 통씩 태워 failed로 만들지 않는다. 설정을 고치려면 컨테이너를 다시 만들어야 하고(프로세스 상태라 그때
+# 풀린다), 그 뒤 대기 메일은 그대로 나간다(#720 적대 리뷰).
+PROVIDER_PAUSE_SECONDS = 900
+_provider_paused_until: datetime | None = None
+
+
+def reset_provider_pause() -> None:
+    global _provider_paused_until
+    _provider_paused_until = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +156,12 @@ async def process_pending_email_batch(
 ) -> EmailBatchResult:
     """pending email을 `FOR UPDATE SKIP LOCKED`로 가져와 한 batch 발송합니다."""
 
+    global _provider_paused_until
     current = now or datetime.now(UTC)
+    if _provider_paused_until is not None:
+        if current < _provider_paused_until:
+            return EmailBatchResult(claimed=0, sent=0, retried=0, failed=0)
+        _provider_paused_until = None
     result = await db.execute(
         select(EmailQueue)
         .where(
@@ -178,6 +194,32 @@ async def process_pending_email_batch(
             continue
         try:
             row.resend_id = await _send_email_row(row)
+        except ResendPermanentError as exc:
+            # 403(미검증 발신 도메인)·422(from 형식) 같은 거절은 재시도해도 같은 답이다(#720).
+            # backoff 5회를 태우지 않고 바로 failed로 닫고, 원인 코드·요약을 남긴다.
+            row.status = "failed"
+            row.last_error = exc.summary
+            failed += 1
+            log.error(
+                "email.worker_permanent_failure",
+                email_id=str(row.email_id),
+                template=row.template,
+                attempts=row.attempts,
+                status_code=exc.status_code,
+                error_name=exc.error_name,
+                error=exc.summary,
+            )
+            if exc.account_level:
+                # 이 batch의 남은 row는 attempts를 올리지 않고 pending 그대로 둔다(commit은 아래에서).
+                _provider_paused_until = current + timedelta(seconds=PROVIDER_PAUSE_SECONDS)
+                log.error(
+                    "email.worker_paused",
+                    status_code=exc.status_code,
+                    error_name=exc.error_name,
+                    paused_until=_provider_paused_until.isoformat(),
+                )
+                break
+            continue
         except Exception as exc:
             if row.attempts >= MAX_EMAIL_ATTEMPTS:
                 row.status = "failed"
@@ -325,19 +367,21 @@ async def _send_email_payload(
 
 
 def _render_template(template: str, payload: dict[str, Any]) -> str:
+    # 링크는 적재 시점의 `pinvi_web_base_url`로 payload에 저장돼 있다. 발송(재발송 포함) 때 현재 origin으로
+    # 다시 만든다 — origin 설정을 고친 뒤 재발송한 메일이 옛 origin(예: localhost)을 가리키지 않게(#720).
     if template == "verify_email":
         return _render_verify_html(
-            verify_url=str(payload["verify_url"]),
+            verify_url=_current_token_url(str(payload["verify_url"]), _build_verify_url),
             expires_in_hours=int(payload.get("expires_in_hours", 24)),
         )
     if template == "reset_password":
         return _render_reset_password_html(
-            reset_url=str(payload["reset_url"]),
+            reset_url=_current_token_url(str(payload["reset_url"]), _build_password_reset_url),
             expires_in_minutes=int(payload.get("expires_in_minutes", 60)),
         )
     if template == "trip_invite":
         return _render_trip_invite_html(
-            invite_url=str(payload["invite_url"]),
+            invite_url=_current_trip_invite_url(payload, stored=str(payload["invite_url"])),
             trip_title=str(payload["trip_title"]),
         )
     return _render_generic_html(template=template, payload=payload)
@@ -420,6 +464,20 @@ def _render_generic_html(*, template: str, payload: dict[str, Any]) -> str:
       </body>
     </html>
     """
+
+
+def _current_token_url(stored: str, build: Callable[[str], str]) -> str:
+    tokens = parse_qs(urlsplit(stored).query).get("token")
+    return build(tokens[0]) if tokens and tokens[0] else stored
+
+
+def _current_trip_invite_url(payload: dict[str, Any], *, stored: str) -> str:
+    try:
+        trip_id = uuid.UUID(str(payload["trip_id"]))
+        companion_id = uuid.UUID(str(payload["companion_id"]))
+    except (KeyError, ValueError):
+        return stored
+    return _build_trip_invite_url(trip_id=trip_id, companion_id=companion_id)
 
 
 def _build_verify_url(token: str) -> str:
