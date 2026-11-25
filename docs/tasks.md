@@ -7,6 +7,7 @@
 - [/] T-COMMON-20261111 — 원 A OCI/ENV source 동등성+validSHA 음성검사 수정, 원 B CI경로 green. 같은 final head 원 A/B closure·actual image CI 확인.  SDK4 latest/필수Doctor20·main476 bounded merge 뒤 fresh hosted export/smoke·web CI 확인.  C11 actual7종297파일·원장/lock/guard·unit527·type/Doctor0 검증. N150 새 production 전체browser209/0/기존flagSKIP4·canvas3·restore2 PASS. 소비자 독립2리뷰·정확 HEAD CI·merge·부모 go 및 이미지 배포. 근거: docs/reports/common-unification-20261111.md.
 
 - [/] #636/#638 — PR688 일정 수동 전송·사용자 opt-in 일간/주간 예약의 최종 WSL UI·두 전문 적대리뷰·정확HEAD CI 후 일반 merge. 운영·실수신자 전송 없음.
+- [ ] #720 — Resend 발송 복구(소유자): Manager root `.env`에 `PINVI_RESEND_FROM_EMAIL`(Resend verified 도메인)·`PINVI_WEB_BASE_URL`(공개 origin)·(webhook을 쓰면) `PINVI_RESEND_WEBHOOK_SECRET` → Manager #648 설치 + PinVi #801 이미지를 한 번의 compose 재생성으로 적용 → 기동 로그 `pinvi.email.config_warning` 없음 → `/admin/emails`에서 failed 초대 7통 재발송·1통 수신 확인 뒤 #720 닫기.
 - [ ] #637 — Weather201의 공식 지역별 발령/해제·행정구역 매핑 계약을 선병합하고 Pinvi 대표지역 특보 알림을 후속 구현한다.
 
 이 문서는 완료되지 않은 작업만 의존 순서대로 한 줄씩 나열한다. lane, 담당자 구분,

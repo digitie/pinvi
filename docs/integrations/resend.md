@@ -53,7 +53,10 @@ Resend가 검증할 수 없어 실제 발송은 403이다. 빈 값은 기본값�
 기본값·주소 아님·예약/사설 도메인(`.local`·`.localhost`·`.test`·`.example`·`.invalid`·`.internal`·`.lan`·
 `home.arpa`·`example.com/net/org`)이면, 또는 `PINVI_WEB_BASE_URL`이 loopback이면(메일 링크가 수신자에게 열리지
 않는다) `pinvi.email.config_warning` 경고를 남긴다. 관리자 `/admin/emails/deliverability`의 `from_domain` 점검도
-같은 판정으로 error다. 기동은 막지 않는다 — 메일은 부가 경로라 이 설정 하나로 인증·여행 API 전체를 내리지 않는다.
+같은 판정으로 error다. production에서 `PINVI_RESEND_API_KEY`가 비면 발신 주소 경고 대신 콘솔 모드 경고를 남긴다.
+`PINVI_WEB_BASE_URL`은 끝의 `/`를 떼고 읽는다. 이 값은 관리자 `/admin/system`의 `pinvi_web` 점검 대상이기도 하다 —
+공개 origin으로 바꾸면 그 점검도 공개 origin으로 나간다(hairpin NAT·접근 제어가 있으면 web이 degraded로 보일 수 있다).
+기동은 막지 않는다 — 메일은 부가 경로라 이 설정 하나로 인증·여행 API 전체를 내리지 않는다.
 
 미설정 시 (`PINVI_RESEND_API_KEY` 빈값) → "콘솔 출력 모드" — `email_queue`에
 적재되지만 발송 X, stdout에 렌더링 결과 출력. 가입은 성공하지만
@@ -91,7 +94,16 @@ Worker:
   `status='failed'`가 되고 `last_error='resend_permanent:<status>:<name>:<message>'`를 남긴다
   (이메일 주소·`re_` key 모양은 가리고 200자로 자른다). 로그는 `email.worker_permanent_failure`(error).
   설정을 고친 뒤 이미 닫힌 row는 `/admin/emails`의 재발송(`POST /admin/emails/{id}/resend`)으로 다시 보낸다.
+  링크는 발송 때 현재 `PINVI_WEB_BASE_URL`로 다시 만든다(초대는 payload의 `trip_id`·`companion_id`, 인증·재설정은
+  저장된 링크의 `token`) — origin을 고친 뒤 재발송해도 옛 origin 링크가 나가지 않는다. 인증·재설정 token은 만료됐을
+  수 있으니 그 메일은 사용자가 다시 요청하게 한다.
   5xx·429·408·409·네트워크 오류는 위 backoff 대상이다.
+- **계정·설정 수준 거절은 발송을 멈춘다.** 영구 거절 중 400·422만 그 메일만의 문제다. 401(key)·403(발신 도메인·key
+  비활성)·404·405 같은 나머지는 다음 메일도 같은 답을 받으므로, 맞은 row만 failed로 닫고 batch를 멈춘 뒤 프로세스 단위로
+  `PROVIDER_PAUSE_SECONDS`(900초) 동안 발송하지 않는다(`email.worker_paused`). 남은 메일은 attempts를 올리지 않고 pending으로
+  남는다. 설정을 고치려면 컨테이너를 다시 만들어야 하고 그때 정지가 풀리므로, 대기 메일은 고친 뒤 그대로 나간다.
+  key·발신 주소를 바꾸는 배포는 env와 새 이미지를 **한 번의 재생성**으로 함께 적용한다.
+- ETL `pinvi_email_outbox`·`/admin/etl`의 `retry_exhausted`는 `status='failed'`를 모두 세므로 attempts=1인 영구 실패도 들어간다.
 - 여러 API worker가 동시에 떠도 `FOR UPDATE SKIP LOCKED`로 같은 row 중복 발송을 막는다.
 
 ## 4. 발송 코드

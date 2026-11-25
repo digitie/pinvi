@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -65,14 +66,14 @@ _UNDELIVERABLE_TLDS = frozenset(
 )
 _UNDELIVERABLE_DOMAINS = ("home.arpa", "example.com", "example.net", "example.org")
 _SENDER_CHECK_ENVIRONMENTS = frozenset({"staging", "production"})
-_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def resend_from_email_problem(from_email: str) -> str | None:
     """발신 주소가 실제 발송에 쓸 수 없는 값이면 사유 코드를 돌려준다.
 
     `default` — 코드 기본값 그대로(env 미설정), `invalid_address` — 주소 형식이 아님,
-    `undeliverable_domain` — `.local` 같은 예약·사설 도메인. 쓸 수 있으면 None.
+    `resend_test_sender` — Resend 시험 발신자(소유자에게만 간다), `undeliverable_domain` — `.local` 같은
+    예약·사설 도메인. 쓸 수 있으면 None.
     """
 
     if from_email.strip() == DEFAULT_RESEND_FROM_EMAIL:
@@ -80,6 +81,9 @@ def resend_from_email_problem(from_email: str) -> str | None:
     domain = _extract_email_domain(from_email)
     if domain is None:
         return "invalid_address"
+    if domain == "resend.dev" or domain.endswith(".resend.dev"):
+        # Resend 시험 발신자(`onboarding@resend.dev`)는 계정 소유자에게만 보낸다 — 다른 수신자는 403.
+        return "resend_test_sender"
     if domain.rsplit(".", 1)[-1] in _UNDELIVERABLE_TLDS or any(
         domain == reserved or domain.endswith(f".{reserved}") for reserved in _UNDELIVERABLE_DOMAINS
     ):
@@ -97,21 +101,41 @@ def email_config_warnings() -> list[str]:
     if settings.pinvi_environment not in _SENDER_CHECK_ENVIRONMENTS:
         return []
     warnings: list[str] = []
-    problem = resend_from_email_problem(settings.pinvi_resend_from_email)
-    if problem is not None:
-        domain = _extract_email_domain(settings.pinvi_resend_from_email)
+    if not settings.pinvi_resend_api_key.strip():
         warnings.append(
-            f"PINVI_RESEND_FROM_EMAIL is not a deliverable sender ({problem}, domain={domain}); "
-            "Resend rejects it (403/422) and every outbox email fails. Set it to an address on a "
-            "domain verified in Resend."
+            "PINVI_RESEND_API_KEY is empty: email console mode, outbox emails are marked sent "
+            "but never delivered."
         )
-    web_host = (urlsplit(settings.pinvi_web_base_url).hostname or "").lower()
-    if web_host in _LOOPBACK_HOSTS:
+    else:
+        problem = resend_from_email_problem(settings.pinvi_resend_from_email)
+        if problem is not None:
+            domain = _extract_email_domain(settings.pinvi_resend_from_email)
+            warnings.append(
+                f"PINVI_RESEND_FROM_EMAIL is not a deliverable sender ({problem}, domain={domain}); "
+                "Resend rejects it (403/422) and every outbox email fails. Set it to an address "
+                "on a domain verified in Resend."
+            )
+    if _is_local_web_origin(settings.pinvi_web_base_url):
         warnings.append(
-            f"PINVI_WEB_BASE_URL points at {web_host}; verify/reset/invite email links will not "
-            "open for recipients. Set it to the public web origin."
+            "PINVI_WEB_BASE_URL points at a loopback/unspecified host; verify/reset/invite email "
+            "links will not open for recipients. Set it to the public web origin."
         )
     return warnings
+
+
+def _is_local_web_origin(url: str) -> bool:
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        # 형식이 깨진 URL도 기동을 막지 않는다 — 링크가 열리지 않는 값이라 경고 대상이다.
+        return True
+    if host == "localhost" or host.endswith(".localhost") or not host:
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return address.is_loopback or address.is_unspecified
 
 
 @dataclass(frozen=True, slots=True)

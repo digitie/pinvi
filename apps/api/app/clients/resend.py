@@ -17,6 +17,9 @@ from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event
 # 나머지 4xx(400 검증, 401 key, 403 미검증 발신 도메인, 422 from/to 형식 등)는 설정이나 payload를
 # 고치기 전까지 몇 번을 보내도 같은 답이므로 영구 실패다(#720).
 _RETRYABLE_CLIENT_STATUS = frozenset({408, 409, 429})
+# 영구 거절 중 이 요청(payload·수신자)만의 문제인 것. 나머지(401·403·404·405 …)는 key·발신 도메인·base URL 같은
+# 계정·설정 문제라 다음 메일도 같은 답을 받는다 — worker가 발송을 잠시 멈춘다.
+_ROW_LEVEL_STATUS = frozenset({400, 422})
 _ERROR_MESSAGE_MAX_CHARS = 200
 _EMAIL_PATTERN = re.compile(r"[^\s<>\"'`@]+@[^\s<>\"'`@]+")
 _API_KEY_PATTERN = re.compile(r"\bre_[A-Za-z0-9_]+")
@@ -34,6 +37,10 @@ class ResendPermanentError(Exception):
         self.error_name = error_name
         self.message = message
         super().__init__(self.summary)
+
+    @property
+    def account_level(self) -> bool:
+        return self.status_code not in _ROW_LEVEL_STATUS
 
     @property
     def summary(self) -> str:

@@ -35,3 +35,13 @@ def _reset_weather_markers_cache() -> Iterator[None]:
     reset_weather_markers_cache()
     yield
     reset_weather_markers_cache()
+
+
+@pytest.fixture(autouse=True)
+def _reset_email_provider_pause() -> Iterator[None]:
+    """email worker의 프로세스 단위 발송 정지(#720)가 테스트 사이에 새지 않게 한다."""
+    from app.services.email_service import reset_provider_pause
+
+    reset_provider_pause()
+    yield
+    reset_provider_pause()

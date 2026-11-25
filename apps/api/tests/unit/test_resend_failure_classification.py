@@ -117,6 +117,7 @@ def test_permanent_status_table() -> None:
         ("noreply@send.pinvi.test", "undeliverable_domain"),
         ("Pinvi <noreply@send.pinvi.example.com>", "undeliverable_domain"),
         ("noreply@router.home.arpa", "undeliverable_domain"),
+        ("onboarding@resend.dev", "resend_test_sender"),
         ("not-an-address", "invalid_address"),
         ("", "invalid_address"),
         ("Pinvi <noreply@send.pinvi.app>", None),
@@ -161,10 +162,100 @@ def test_production_with_verified_sender_and_public_origin_is_quiet(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "pinvi_environment", "production")
+    monkeypatch.setattr(settings, "pinvi_resend_api_key", _API_KEY)
     monkeypatch.setattr(settings, "pinvi_resend_from_email", "Pinvi <noreply@send.pinvi.app>")
     monkeypatch.setattr(settings, "pinvi_web_base_url", "https://pinvi.app")
 
     assert email_config_warnings() == []
+
+
+def test_production_console_mode_warns_instead_of_claiming_resend_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """key가 없으면 Resend를 부르지 않는다 — 발신 주소 경고 대신 콘솔 모드 경고 하나."""
+
+    monkeypatch.setattr(settings, "pinvi_environment", "production")
+    monkeypatch.setattr(settings, "pinvi_resend_api_key", "")
+    monkeypatch.setattr(settings, "pinvi_resend_from_email", DEFAULT_RESEND_FROM_EMAIL)
+    monkeypatch.setattr(settings, "pinvi_web_base_url", "https://pinvi.app")
+
+    warnings = email_config_warnings()
+
+    assert len(warnings) == 1
+    assert "PINVI_RESEND_API_KEY" in warnings[0]
+    assert "console mode" in warnings[0]
+
+
+@pytest.mark.parametrize(
+    ("origin", "local"),
+    [
+        ("http://localhost:12805", True),
+        ("http://app.localhost", True),
+        ("http://127.0.0.2:12805", True),
+        ("http://0.0.0.0:12805", True),
+        ("http://[::1]:12805", True),
+        ("", True),
+        ("http://[broken", True),
+        ("https://pinvi.app", False),
+        ("http://192.168.0.10:12805", False),
+    ],
+)
+def test_loopback_web_origin_detection(
+    monkeypatch: pytest.MonkeyPatch,
+    origin: str,
+    local: bool,
+) -> None:
+    monkeypatch.setattr(settings, "pinvi_environment", "staging")
+    monkeypatch.setattr(settings, "pinvi_resend_api_key", _API_KEY)
+    monkeypatch.setattr(settings, "pinvi_resend_from_email", "Pinvi <noreply@send.pinvi.app>")
+    monkeypatch.setattr(settings, "pinvi_web_base_url", origin)
+
+    assert any("PINVI_WEB_BASE_URL" in w for w in email_config_warnings()) is local
+
+
+def test_web_base_url_trailing_slash_is_stripped() -> None:
+    configured = Settings(_env_file=None, pinvi_web_base_url="https://pinvi.app/ ")  # type: ignore[call-arg]
+    assert configured.pinvi_web_base_url == "https://pinvi.app"
+
+
+def test_stored_links_are_rebuilt_on_the_current_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#720 — localhost로 적재된 메일을 origin 설정 뒤 재발송하면 새 origin 링크가 나가야 한다."""
+
+    from app.services.email_service import _render_template
+
+    monkeypatch.setattr(settings, "pinvi_web_base_url", "https://pinvi.app")
+    trip_id = "11111111-1111-4111-8111-111111111111"
+    companion_id = "22222222-2222-4222-8222-222222222222"
+
+    invite = _render_template(
+        "trip_invite",
+        {
+            "invite_url": f"http://localhost:12805/trips/{trip_id}?invite={companion_id}",
+            "trip_id": trip_id,
+            "companion_id": companion_id,
+            "trip_title": "서울",
+        },
+    )
+    verify = _render_template(
+        "verify_email", {"verify_url": "http://localhost:12805/verify-email?token=tok-v"}
+    )
+    reset = _render_template(
+        "reset_password", {"reset_url": "http://localhost:12805/reset-password?token=tok-r"}
+    )
+
+    assert f"https://pinvi.app/trips/{trip_id}?invite={companion_id}" in invite
+    assert f"{settings.pinvi_email_verification_path}?token=tok-v" in verify
+    assert "https://pinvi.app" in verify
+    assert "tok-r" in reset
+    assert "https://pinvi.app" in reset
+    for html in (invite, verify, reset):
+        assert "localhost" not in html
+
+    # 재구성할 재료가 없으면 저장된 링크를 그대로 쓴다.
+    legacy = _render_template(
+        "trip_invite", {"invite_url": "https://old.example/x", "trip_title": "서울"}
+    )
+    assert "https://old.example/x" in legacy
 
 
 @pytest.mark.parametrize("environment", ["development", "test", "smoke", "isolated"])
@@ -204,3 +295,12 @@ def test_admin_from_domain_check_flags_placeholder_sender() -> None:
 
     assert checks["from_domain"].status == "error"
     assert checks["from_domain"].message == "send.pinvi.local (default)"
+
+
+@pytest.mark.parametrize(
+    ("status", "account_level"),
+    [(400, False), (422, False), (401, True), (403, True), (404, True), (405, True)],
+)
+def test_account_level_split(status: int, account_level: bool) -> None:
+    error = ResendPermanentError(status_code=status, error_name=None, message=None)
+    assert error.account_level is account_level

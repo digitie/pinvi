@@ -327,3 +327,83 @@ async def test_resend_server_error_still_backs_off(
         assert row.attempts == 1
         assert row.scheduled_at > now
         assert "503" in (row.last_error or "")
+
+
+async def test_account_level_rejection_pauses_sending_and_keeps_the_rest_pending(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory,
+) -> None:
+    """403(발신 도메인)은 계정 수준 — 맞은 row만 failed, 나머지는 pending 그대로, 정지가 풀리면 나간다."""
+
+    now = datetime.now(UTC)
+    responses = [
+        (
+            403,
+            {"name": "validation_error", "message": "The send.pinvi.local domain is not verified."},
+        ),
+        (200, {"id": "email_after_fix"}),
+    ]
+    calls: list[int] = []
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        status, body = responses[min(len(calls), len(responses) - 1)]
+        calls.append(status)
+        return httpx.Response(status, json=body, request=request)
+
+    @asynccontextmanager
+    async def _factory() -> AsyncIterator[ResendClient]:
+        async with httpx.AsyncClient(
+            base_url="https://api.resend.test", transport=httpx.MockTransport(_handler)
+        ) as http:
+            yield ResendClient(http)
+
+    monkeypatch.setattr(settings, "pinvi_resend_api_key", "re_worker_test_key")
+    monkeypatch.setattr(email_service, "create_resend_client", _factory)
+    await _enqueue_invite(session_factory, "first@pinvi.test", now)
+    await _enqueue_invite(session_factory, "second@pinvi.test", now + timedelta(seconds=1))
+    later = now + timedelta(seconds=2)
+
+    async with session_factory() as db:
+        result = await process_pending_email_batch(db, now=later)
+    assert (result.claimed, result.failed, result.retried, result.sent) == (2, 1, 0, 0)
+    assert calls == [403]
+
+    async with session_factory() as db:
+        rows = {row.to_email: row for row in (await db.scalars(select(EmailQueue))).all()}
+    assert rows["first@pinvi.test"].status == "failed"
+    assert rows["second@pinvi.test"].status == "pending"
+    assert rows["second@pinvi.test"].attempts == 0
+    assert rows["second@pinvi.test"].last_error is None
+
+    # 정지 중에는 Resend를 부르지 않는다.
+    async with session_factory() as db:
+        paused = await process_pending_email_batch(db, now=later + timedelta(seconds=60))
+    assert paused.claimed == 0
+    assert calls == [403]
+
+    # 정지가 끝나면(또는 재기동하면) 대기 메일이 나간다.
+    resumed_at = later + timedelta(seconds=email_service.PROVIDER_PAUSE_SECONDS + 1)
+    async with session_factory() as db:
+        resumed = await process_pending_email_batch(db, now=resumed_at)
+    assert (resumed.claimed, resumed.sent) == (1, 1)
+    assert calls == [403, 200]
+
+
+async def test_row_level_rejection_does_not_pause_the_queue(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory,
+) -> None:
+    """422는 그 메일만의 문제 — 다음 메일은 그대로 시도한다."""
+
+    now = datetime.now(UTC)
+    calls = _mock_resend(
+        monkeypatch, 422, {"name": "validation_error", "message": "Invalid `to` field."}
+    )
+    await _enqueue_invite(session_factory, "a-422@pinvi.test", now)
+    await _enqueue_invite(session_factory, "b-422@pinvi.test", now)
+
+    async with session_factory() as db:
+        result = await process_pending_email_batch(db, now=now)
+
+    assert (result.claimed, result.failed) == (2, 2)
+    assert len(calls) == 2

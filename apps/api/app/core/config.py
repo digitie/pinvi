@@ -1479,6 +1479,15 @@ class Settings(BaseSettings):
             return DEFAULT_RESEND_FROM_EMAIL
         return value
 
+    @field_validator("pinvi_web_base_url", mode="before")
+    @classmethod
+    def _web_base_url_has_no_trailing_slash(cls, value: object) -> object:
+        """링크는 `f"{base}{path}"`로 붙는다 — 끝의 `/`가 있으면 `//verify-email`이 된다."""
+
+        if isinstance(value, str):
+            return value.strip().rstrip("/")
+        return value
+
     @field_validator("pinvi_dagster_location_name")
     @classmethod
     def _dagster_location_name_is_exact(cls, value: str) -> str:
