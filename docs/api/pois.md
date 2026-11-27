@@ -133,6 +133,55 @@ Content-Type: application/json
 
 WebSocket broadcast: `poi.reordered` + `version`.
 
+### 3.2 `POST /trips/{trip_id}/pois/{poi_id}/move` — 장소 한 곳 옮기기 (같은 일자·다른 일자)
+
+웹 일정 패널의 끌어 놓기 한 번(같은 일자 안 순서 변경과 다른 일자로의 이동 모두)과 웹 손잡이 키보드·모바일
+↑/↓ 한 칸 이동이 이 요청 하나다(2026-11-27). `/reorder`는 일괄 정렬용으로 남는다.
+
+```http
+POST /trips/{trip_id}/pois/{poi_id}/move
+If-Match: 3                       // 옮길 장소의 version
+Content-Type: application/json
+
+{ "day_index": 2, "before_poi_id": "uuid" }   // before_poi_id: 이 장소 바로 앞. null이면 그 일자 맨 끝
+```
+
+- 위치는 **서버가** 잠근 최신 순서에 기준 장소로 정한다. 클라이언트는 정렬 키를 만들지 않는다 — 그 사이
+  다른 사람이 도착 일자에 장소를 더해도 덮어쓰지 않는다.
+- 한 트랜잭션: Trip 행 잠금 → 옮길 장소 잠금(version 확인) → 도착 일자 장소 잠금. 도착 일자는 균등 키
+  (`(i+1)*100`의 base36 4자리, 웹 `evenRanks`와 같은 형식)로 다시 매기되 **키가 바뀐 행만** 쓰고 그 행마다
+  `version + 1`. 출발 일자는 빠진 자리만 남아 순서가 그대로라 쓰지 않는다.
+- 같은 일자에서 순서가 그대로인 이동(자기 앞·바로 다음 장소 앞)은 아무것도 쓰지 않는다 — `changed=[]`,
+  version 그대로, broadcast 없음.
+- 빈 일자로도 옮길 수 있다(일자 행이 있어야 한다).
+
+응답 200:
+
+```jsonc
+{
+  "data": {
+    "poi": { /* 옮긴 장소(PoiResponse) */ },
+    "from_day_index": 1,
+    "changed": [ /* 정렬 키·일자가 바뀐 장소 전부(옮긴 장소 포함), 도착 일자 순서 */ ]
+  }
+}
+```
+
+| 상황 | 응답 |
+| --- | --- |
+| `If-Match`가 현재 version과 다름 | 409 `VERSION_CONFLICT` |
+| `before_poi_id`가 도착 일자의 (지워지지 않은) 장소가 아님 — 그 사이 옮겨졌거나 지워짐 | 409 `SORT_ORDER_CONFLICT` |
+| `before_poi_id`가 옮길 장소 자신 | 422 `VALIDATION_ERROR` |
+| 도착 일자가 없음 / 장소가 없음·지워짐 | 404 `RESOURCE_NOT_FOUND` |
+| 보기 전용 동행(viewer) | 403 |
+| `If-Match` 없음 · `day_index < 1` · 알 수 없는 필드 | 422 |
+
+WebSocket broadcast(변경이 있을 때만): `poi.moved` + 옮긴 장소의 `version`
+([`websocket.md`](./websocket.md) §2.1).
+
+계획 도착·출발 시각(`planned_*_at`)은 날짜를 품은 값이지만 옮겨도 바꾸지 않는다 — 장소 편집기의 일자
+변경(`PATCH day_index`)과 같다.
+
 ## 4. LexoRank 정합성 (SPEC V8 E-6 Critical)
 
 - `sort_order TEXT COLLATE "C"` 필수 — JS LexoRank와 PG 정렬 일치

@@ -48,6 +48,7 @@ wss://pinvi-api.example.com/ws/trips/<trip_id>?token=<jwt>
 | `poi.updated`   | `{ "poi_id": "uuid", "changes": { /* 변경된 필드 */ }, "version": 5 }` |
 | `poi.deleted`   | `{ "poi_id": "uuid" }`                                                 |
 | `poi.reordered` | `{ "moves": [{ "poi_id": "uuid", "new_sort_order": "..." }] }`         |
+| `poi.moved`     | `{ "poi_id", "from_day_index", "to_day_index", "before_poi_id", "moves": [{ "poi_id", "day_index", "new_sort_order", "version" }] }` |
 
 ### 2.2 Day 이벤트
 

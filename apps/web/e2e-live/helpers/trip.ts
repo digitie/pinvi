@@ -92,7 +92,11 @@ export function mapStats(page: Page): Locator {
   return page.getByTestId('trip-map-stats');
 }
 
-/** HTML5 drag of POI row `from` onto row `to` (TripPoiList.tsx `draggable` li + onDrop). */
+/**
+ * HTML5 drag of POI row `from` onto row `to` (TripPoiList.tsx `draggable` li + onDrop). The dragged row
+ * ends up at index `to`: moving up drops on the upper half of the target row (before it), moving down
+ * on the lower half (after it) — TripPoiList picks the side from the pointer (`dropPlacement`).
+ */
 export async function dragPoi(page: Page, from: number, to: number): Promise<void> {
   // HTML5 drag events go straight to the source/target rows. `locator.dragTo` presses the mouse on the
   // source and then scrolls the target into view; in the scrollable plan panel (#705) the scroll moves a
@@ -105,7 +109,34 @@ export async function dragPoi(page: Page, from: number, to: number): Promise<voi
   const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
   await source.dispatchEvent('dragstart', { dataTransfer });
   await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  if (!box) throw new Error(`dragPoi: target row ${to} has no box`);
+  const clientX = box.x + box.width / 2;
+  const clientY = from > to ? box.y + 2 : box.y + box.height - 2;
+  await target.dispatchEvent('dragover', { dataTransfer, clientX, clientY });
+  await target.dispatchEvent('drop', { dataTransfer, clientX, clientY });
+  await source.dispatchEvent('dragend', { dataTransfer });
+  await dataTransfer.dispose();
+}
+
+/** A day row in the plan panel (TripDetail.tsx `trip-day-row` article, expanded or collapsed). */
+export function dayRow(page: Page, dayIndex: number): Locator {
+  return page.locator(`[data-testid="trip-day-row"][data-day-index="${dayIndex}"]`);
+}
+
+/**
+ * HTML5 drag of POI row `from` (in the expanded day) onto another day's row — the collapsed day header
+ * or an empty day. Dropping on the day row itself (not on one of its place lines) appends to that day.
+ */
+export async function dragPoiToDay(page: Page, from: number, dayIndex: number): Promise<void> {
+  const source = poiRows(page).nth(from);
+  const target = dayRow(page, dayIndex).getByRole('tab').first();
+  await source.scrollIntoViewIfNeeded();
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  await source.dispatchEvent('dragstart', { dataTransfer });
+  await target.scrollIntoViewIfNeeded();
   await target.dispatchEvent('dragover', { dataTransfer });
+  await expect(dayRow(page, dayIndex)).toHaveAttribute('data-drop-target', 'true');
   await target.dispatchEvent('drop', { dataTransfer });
   await source.dispatchEvent('dragend', { dataTransfer });
   await dataTransfer.dispose();

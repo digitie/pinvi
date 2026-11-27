@@ -62,6 +62,15 @@ class PoiReorderRequest(BaseModel):
     moves: list[PoiReorderMove] = Field(min_length=1, max_length=200)
 
 
+class PoiMoveRequest(BaseModel):
+    """장소 하나를 `day_index` 일자의 `before_poi_id` 바로 앞(null이면 맨 끝)으로 옮긴다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    day_index: int = Field(ge=1)
+    before_poi_id: uuid.UUID | None = None
+
+
 class PoiRiseSetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -98,6 +107,18 @@ class PoiResponse(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+
+
+class PoiMoveResponse(BaseModel):
+    """`POST /trips/{trip_id}/pois/{poi_id}/move` 응답.
+
+    `changed`는 정렬 위치·일자가 바뀐 장소 전부(옮긴 장소 포함, 도착 일자 순서)다. 순서가 그대로인
+    이동이면 빈 목록이고 `poi.version`도 그대로다.
+    """
+
+    poi: PoiResponse
+    from_day_index: int
+    changed: list[PoiResponse]
 
 
 class PoiPlaceDetails(BaseModel):

@@ -5,7 +5,14 @@ import { TripAttachmentsDisclosure } from '@/components/trips/TripAttachments';
 import { PoiRiseSetLine } from '@/components/trips/TripDayHeader';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 import { PoiWeatherBadge } from '@/components/weather/WeatherBadge';
-import { arrayMove, featureResolutionNotice, formatKstTime, paletteHex } from '@pinvi/domain';
+import { type PoiDrag, dropPlacement } from '@/lib/usePoiDrag';
+import {
+  featureResolutionNotice,
+  formatKstTime,
+  isNoopPoiMove,
+  paletteHex,
+  poiRowDropTarget,
+} from '@pinvi/domain';
 import type {
   PoiUpdate,
   TripViewPoi,
@@ -40,7 +47,15 @@ export interface TripPoiListProps {
   compact?: boolean;
   /** 편집 가능(쓰기 권한)일 때만 D&D·편집·삭제 노출. */
   editable?: boolean;
-  onReorder?: (orderedPoiIds: string[]) => void;
+  /**
+   * 일정 패널이 함께 쓰는 끌어 놓기 상태(`usePoiDrag`). 주면 행을 끌어 같은 일자 안이나 다른 일자로
+   * 옮길 수 있다(`dayIndex` 필요). 다른 일자에서 끌어 온 장소도 이 목록 행 앞뒤에 놓인다.
+   */
+  drag?: PoiDrag;
+  /** 끌기 손잡이에서 위·아래 화살표 — 한 칸 이동(첫·마지막 장소는 이전·다음 일자로 넘어간다). */
+  onStepMove?: (poiId: string, direction: 'up' | 'down') => void;
+  /** 끌기 손잡이 사용법을 적은 요소 id(`aria-describedby`) — 일정 패널이 한 번만 그린다. */
+  gripHintId?: string;
   onEditPoi?: (poi: TripViewPoi, patch: PoiUpdate) => void | boolean | Promise<void | boolean>;
   onDelete?: (poiId: string) => void;
   savingPoiId?: string | null;
@@ -89,7 +104,9 @@ export function TripPoiList({
   showCurrentWeather = false,
   compact = false,
   editable = false,
-  onReorder,
+  drag,
+  onStepMove,
+  gripHintId,
   onEditPoi,
   onDelete,
   savingPoiId = null,
@@ -97,7 +114,6 @@ export function TripPoiList({
   onEditToggle,
   onRefreshWeather,
 }: TripPoiListProps) {
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [editingInternal, setEditingInternal] = useState<string | null>(null);
   const controlled = editingPoiIdProp !== undefined;
   const editingPoiId = controlled ? editingPoiIdProp : editingInternal;
@@ -108,20 +124,21 @@ export function TripPoiList({
 
   if (pois.length === 0) return null;
 
-  const dndEnabled = editable && onReorder != null;
-
-  const handleDrop = (toIndex: number) => {
-    if (dragIndex == null || dragIndex === toIndex) {
-      setDragIndex(null);
-      return;
-    }
-    const order = arrayMove(
-      pois.map((p) => p.poi_id),
-      dragIndex,
-      toIndex,
-    );
-    onReorder?.(order);
-    setDragIndex(null);
+  const dndEnabled = editable && drag != null && dayIndex != null;
+  const dayOrder = { dayIndex: dayIndex ?? 0, poiIds: pois.map((p) => p.poi_id) };
+  // 놓을 자리 표시 — 이 일자를 가리키고, 제자리로 돌아오는 이동이 아닐 때만.
+  const dropTarget =
+    dndEnabled &&
+    drag.source &&
+    drag.target?.dayIndex === dayIndex &&
+    !isNoopPoiMove(drag.source.poiId, dayOrder, drag.target)
+      ? drag.target
+      : null;
+  const dropIndicator = (index: number): 'before' | 'after' | undefined => {
+    if (!dropTarget) return undefined;
+    if (dropTarget.beforePoiId === pois[index]?.poi_id) return 'before';
+    if (dropTarget.beforePoiId == null && index === pois.length - 1) return 'after';
+    return undefined;
   };
 
   return (
@@ -136,11 +153,38 @@ export function TripPoiList({
           <li
             key={poi.poi_id}
             draggable={dndEnabled}
-            onDragStart={dndEnabled ? () => setDragIndex(index) : undefined}
-            onDragOver={dndEnabled ? (event) => event.preventDefault() : undefined}
-            onDrop={dndEnabled ? () => handleDrop(index) : undefined}
-            onDragEnd={dndEnabled ? () => setDragIndex(null) : undefined}
-            className={dragIndex === index ? 'opacity-50' : undefined}
+            data-drop-indicator={dropIndicator(index)}
+            onDragStart={
+              dndEnabled
+                ? (event) => drag.start({ poiId: poi.poi_id, dayIndex: dayOrder.dayIndex }, event)
+                : undefined
+            }
+            onDragOver={
+              dndEnabled
+                ? (event) =>
+                    drag.over(poiRowDropTarget(dayOrder, index, dropPlacement(event)), event)
+                : undefined
+            }
+            onDrop={
+              dndEnabled
+                ? (event) =>
+                    drag.drop(poiRowDropTarget(dayOrder, index, dropPlacement(event)), event)
+                : undefined
+            }
+            onDragEnd={dndEnabled ? () => drag.end() : undefined}
+            className={
+              // 놓을 자리는 행 위·아래 2px 선 — 레이아웃이 밀리지 않게 inset 그림자로 그린다.
+              [
+                drag?.source?.poiId === poi.poi_id ? 'opacity-50' : '',
+                dropIndicator(index) === 'before'
+                  ? 'shadow-[inset_0_2px_0_0_var(--color-primary)]'
+                  : dropIndicator(index) === 'after'
+                    ? 'shadow-[inset_0_-2px_0_0_var(--color-primary)]'
+                    : '',
+              ]
+                .filter(Boolean)
+                .join(' ') || undefined
+            }
           >
             <PoiAttachments tripId={showInlineAttachments ? tripId : undefined} poiId={poi.poi_id}>
               {({ trigger: attachmentTrigger, panel: attachmentPanel }) => (
@@ -155,13 +199,23 @@ export function TripPoiList({
                 >
                   <div className="flex items-start gap-2">
                     {dndEnabled && (
-                      <span
-                        className="mt-0.5 shrink-0 cursor-grab text-muted"
-                        aria-hidden="true"
+                      <button
+                        type="button"
+                        className="mt-0.5 shrink-0 cursor-grab rounded-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-primary"
                         title="끌어서 순서 변경"
+                        aria-label="장소 옮기기"
+                        aria-describedby={gripHintId}
+                        aria-keyshortcuts={onStepMove ? 'ArrowUp ArrowDown' : undefined}
+                        data-poi-grip={poi.poi_id}
+                        onKeyDown={(event) => {
+                          if (!onStepMove) return;
+                          if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+                          event.preventDefault();
+                          onStepMove(poi.poi_id, event.key === 'ArrowUp' ? 'up' : 'down');
+                        }}
                       >
-                        <GripVertical className="h-4 w-4" />
-                      </span>
+                        <GripVertical className="h-4 w-4" aria-hidden="true" />
+                      </button>
                     )}
                     <button
                       type="button"

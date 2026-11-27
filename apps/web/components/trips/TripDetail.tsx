@@ -40,6 +40,7 @@ import {
 } from '@/lib/tripDateLabels';
 import { type PendingCreatedPoi, withCreatedPois } from '@/lib/tripViewCreatedPoi';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
+import { dropPlacement, usePoiDrag, type PoiDrag, type PoiDragSource } from '@/lib/usePoiDrag';
 import { placeWeatherCards } from '@pinvi/domain';
 import {
   ApiError,
@@ -56,9 +57,13 @@ import {
 import {
   appendRank,
   extractCoord,
+  isNoopPoiMove,
   paletteHex,
-  reorderMoves,
+  poiRowDropTarget,
+  poiStepMoveTarget,
   tripDaysToMapPoints,
+  type PoiDayOrder,
+  type PoiMoveTarget,
 } from '@pinvi/domain';
 import type {
   FeatureSummary,
@@ -69,6 +74,7 @@ import type {
   TripStatus,
   TripUpdate,
   TripView,
+  TripViewDay,
   TripViewPoi,
 } from '@pinvi/schemas';
 import {
@@ -92,7 +98,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 const STATUS_LABEL: Record<TripStatus, string> = {
   draft: '초안',
@@ -1022,14 +1028,30 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     });
   };
 
-  const handleReorder = (orderedPoiIds: string[]) => {
-    if (selectedDay == null) return;
-    const currentSortById = new Map(selectedDay.pois.map((p) => [p.poi_id, p.sort_order]));
-    const moves = reorderMoves(orderedPoiIds, currentSortById);
-    if (moves.length === 0) return;
-    void runMutation(() =>
-      poiApi(apiClient).reorder(tripId, { moves, day_index: selectedDay.day_index }),
-    );
+  // 장소 하나 옮기기 — 같은 일자 안 순서 변경과 다른 일자로의 이동이 같은 요청이다(`POST …/pois/{id}/move`).
+  // 위치는 서버가 최신 순서에 기준 장소(beforePoiId)로 정하고, version이 다르면 409 → 다시 불러온다.
+  // 결과: 실제로 옮겼으면 true(제자리 드롭·실패는 false).
+  const handleMovePoi = (source: PoiDragSource, target: PoiMoveTarget): Promise<boolean> => {
+    if (!view) return Promise.resolve(false);
+    const fromDay = view.days.find((day) => day.pois.some((p) => p.poi_id === source.poiId));
+    const poi = fromDay?.pois.find((p) => p.poi_id === source.poiId);
+    if (!fromDay || !poi) return Promise.resolve(false);
+    const fromOrder = { dayIndex: fromDay.day_index, poiIds: fromDay.pois.map((p) => p.poi_id) };
+    if (isNoopPoiMove(poi.poi_id, fromOrder, target)) return Promise.resolve(false);
+    const toDay = view.days.find((day) => day.day_index === target.dayIndex);
+    return runMutation(() =>
+      poiApi(apiClient).move(tripId, poi.poi_id, poi.version, {
+        day_index: target.dayIndex,
+        before_poi_id: target.beforePoiId,
+      }),
+    ).then((ok) => {
+      if (ok && target.dayIndex !== fromDay.day_index) {
+        // 접힌 일자로 옮기면 목록에서 사라지므로 어디로 갔는지 알린다(role=status).
+        const dayLabel = toDay?.title ?? `${target.dayIndex}일차`;
+        setAddNotice(`'${poi.title ?? '장소'}'을(를) ${dayLabel}로 옮겼어요.`);
+      }
+      return ok;
+    });
   };
 
   const handleEditPoi = (poi: { poi_id: string; version: number }, patch: PoiUpdate) => {
@@ -1443,7 +1465,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     handleEditTrip,
     handleKeepEditingConflict,
     handleMarkerContextMenu,
-    handleReorder,
+    handleMovePoi,
     handleSelectDay,
     handleSelectPoi,
     handleUpdateDay,
@@ -1997,7 +2019,10 @@ function TripDetailView2Part3({ viewModel }: { viewModel: TripDetailView2Model }
   return (
     <div className="shrink-0 border-b border-hairline bg-canvas px-3 pb-2">
       {/* 시트 손잡이 줄 — 제목은 위 작업 헤더가 이미 보여 주므로 여기서는 기간과 펼치기·닫기만 둔다. */}
-      <div className="flex items-center justify-between gap-2" data-testid="trip-panel-sheet-header">
+      <div
+        className="flex items-center justify-between gap-2"
+        data-testid="trip-panel-sheet-header"
+      >
         <span
           aria-hidden="true"
           className="absolute left-1/2 top-1.5 h-1 w-9 -translate-x-1/2 rounded-full bg-hairline"
@@ -2169,6 +2194,130 @@ async function refreshTripWeather(
   return result;
 }
 
+/**
+ * 일정 패널의 장소 옮기기 배선 — 끌어 놓기 상태(일자 사이 포함)와 손잡이 키보드 한 칸 이동.
+ * 키보드 이동 뒤에는 옮긴 장소의 손잡이로 초점을 돌려주고, 다른 일자로 넘어가면 그 일자를 펼친다.
+ */
+function useTripPlanPoiMoves(viewModel: TripDetailView2Model) {
+  const { busy, handleMovePoi, handleSelectDay, selectedDayIndex, view } = viewModel;
+  const drag = usePoiDrag((source, target) => void handleMovePoi(source, target));
+  const dndEnabled = !busy;
+  const gripHintId = useId();
+  // 이동 중(busy)에는 손잡이가 사라졌다가 재조회 뒤 다시 그려지므로, 그 뒤 렌더에서 초점을 준다.
+  const pendingGripFocus = useRef<string | null>(null);
+  const [gripFocusRequest, setGripFocusRequest] = useState(0);
+  useEffect(() => {
+    const poiId = pendingGripFocus.current;
+    if (poiId == null || busy) return;
+    const grip = document.querySelector<HTMLElement>(`[data-poi-grip="${CSS.escape(poiId)}"]`);
+    if (!grip) return;
+    grip.focus();
+    pendingGripFocus.current = null;
+  }, [gripFocusRequest, busy, view, selectedDayIndex]);
+  const dayOrders = view.days.map((day) => ({
+    dayIndex: day.day_index,
+    poiIds: day.pois.map((p) => p.poi_id),
+  }));
+  const handleStepMove = (poiId: string, direction: 'up' | 'down') => {
+    const target = poiStepMoveTarget(dayOrders, poiId, direction);
+    const from = dayOrders.find((day) => day.poiIds.includes(poiId));
+    if (!target || !from) return;
+    void handleMovePoi({ poiId, dayIndex: from.dayIndex }, target).then((ok) => {
+      if (!ok) return;
+      if (target.dayIndex !== from.dayIndex) handleSelectDay(target.dayIndex);
+      pendingGripFocus.current = poiId;
+      setGripFocusRequest((value) => value + 1);
+    });
+  };
+  return { drag, dndEnabled, dayOrders, gripHintId, handleStepMove };
+}
+
+/**
+ * 접힌 일자의 미리보기(앞 4곳 + "외 N곳"). 줄마다 끌어서 다른 일자로 옮기고, 그 줄 앞뒤에 놓을 수 있다.
+ * 끌어 온 장소가 이 일자를 가리키면 어디에 놓이는지 적는다.
+ */
+function CollapsedDayPreview({
+  day,
+  dayLabel,
+  dayOrder,
+  drag,
+  dndEnabled,
+  dropHere,
+  onSelectPoi,
+}: {
+  day: TripViewDay;
+  dayLabel: string;
+  dayOrder: PoiDayOrder;
+  drag: PoiDrag;
+  dndEnabled: boolean;
+  dropHere: boolean;
+  onSelectPoi: (poiId: string) => void;
+}) {
+  const dropBefore = dropHere
+    ? day.pois.find((p) => p.poi_id === drag.target?.beforePoiId)
+    : undefined;
+  return (
+    <div className="space-y-1 px-3 pb-2">
+      {day.pois.slice(0, 4).map((poi, index) => (
+        <button
+          key={poi.poi_id}
+          type="button"
+          onClick={() => onSelectPoi(poi.poi_id)}
+          draggable={dndEnabled}
+          data-testid="trip-day-preview-poi"
+          onDragStart={
+            dndEnabled
+              ? (event) => drag.start({ poiId: poi.poi_id, dayIndex: day.day_index }, event)
+              : undefined
+          }
+          onDragOver={
+            dndEnabled
+              ? (event) => drag.over(poiRowDropTarget(dayOrder, index, dropPlacement(event)), event)
+              : undefined
+          }
+          onDrop={
+            dndEnabled
+              ? (event) => drag.drop(poiRowDropTarget(dayOrder, index, dropPlacement(event)), event)
+              : undefined
+          }
+          onDragEnd={dndEnabled ? () => drag.end() : undefined}
+          className={
+            'flex w-full items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-surface-soft' +
+            (dropBefore?.poi_id === poi.poi_id
+              ? ' shadow-[inset_0_2px_0_0_var(--color-primary)]'
+              : '') +
+            (drag.source?.poiId === poi.poi_id ? ' opacity-50' : '')
+          }
+        >
+          <span
+            // 마커 팔레트 인라인 색 위 숫자라 순백이 맞다(T-313 예외).
+            // eslint-disable-next-line no-restricted-syntax
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+            style={{ backgroundColor: paletteHex(poi.marker_color) }}
+            aria-hidden="true"
+          >
+            {index + 1}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
+            {poi.title ?? poi.feature_id ?? '장소'}
+          </span>
+        </button>
+      ))}
+      {day.pois.length > 4 && <p className="pl-7 text-xs text-muted">외 {day.pois.length - 4}곳</p>}
+      {dropHere && (
+        <p
+          className="rounded-sm border border-dashed border-primary px-2 py-1 text-xs text-ink"
+          data-testid="trip-day-drop-hint"
+        >
+          {dropBefore
+            ? `${dayLabel} '${dropBefore.title ?? '장소'}' 앞에 놓기`
+            : `${dayLabel} 맨 끝에 놓기`}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
   const {
     addDayDisabledReason,
@@ -2183,7 +2332,6 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
     handleDelete,
     handleDeleteDay,
     handleEditPoi,
-    handleReorder,
     handleSelectDay,
     handleSelectPoi,
     handleUpdateDay,
@@ -2200,6 +2348,8 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
     visibleDayIndexes,
     visibleLayerCount,
   } = viewModel;
+  const { drag, dndEnabled, dayOrders, gripHintId, handleStepMove } =
+    useTripPlanPoiMoves(viewModel);
   return (
     <div
       id="trip-panel-plan"
@@ -2222,6 +2372,11 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
         aria-label="일자 목록"
         data-testid="trip-layer-list"
       >
+        {/* 장소 행 손잡이('장소 옮기기')의 설명 — 패널에 한 번만 둔다(aria-describedby). */}
+        <p id={gripHintId} className="sr-only">
+          끌어서 같은 일자나 다른 일자로 옮깁니다. 위·아래 화살표로 한 칸씩 옮기고, 첫 장소와 마지막
+          장소는 이전·다음 일자로 넘어갑니다.
+        </p>
         {view.days.length > 0 && (
           <div
             className="divide-y divide-hairline border-y border-hairline"
@@ -2233,15 +2388,33 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
               const visible = visibleDayIndexes.size === 0 || visibleDayIndexes.has(day.day_index);
               const dayLabel = day.title ?? `${day.day_index}일차`;
               const dayHolidayLabel = holidayLabel(day.holidays);
+              const dayOrder = dayOrders.find((order) => order.dayIndex === day.day_index)!;
+              // 일자 전체가 놓을 자리다(접힌 일자 줄·빈 일자 포함) — 행 위가 아니면 그 일자 맨 끝.
+              const appendTarget = { dayIndex: day.day_index, beforePoiId: null };
+              const dropHere =
+                drag.source != null &&
+                drag.target?.dayIndex === day.day_index &&
+                !isNoopPoiMove(drag.source.poiId, dayOrder, drag.target);
+              // 펼친 일자 안 순서 변경은 행 사이 선만으로 충분하다 — 일자 테두리는 다른 일자에서 올 때·접힌 일자만.
+              const outlineDay = dropHere && (!active || drag.source?.dayIndex !== day.day_index);
               return (
                 <article
                   key={day.day_index}
+                  data-testid="trip-day-row"
+                  data-day-index={day.day_index}
+                  data-drop-target={outlineDay ? 'true' : undefined}
+                  onDragOver={dndEnabled ? (event) => drag.over(appendTarget, event) : undefined}
+                  onDragLeave={dndEnabled ? (event) => drag.leave(day.day_index, event) : undefined}
+                  onDrop={dndEnabled ? (event) => drag.drop(appendTarget, event) : undefined}
                   // 패널 안 카드 금지(DESIGN.md Workbench 컨테인먼트 1층) — 리스트 row로
                   // 강등하고 선택은 accent ring이 아니라 ink rule + 중립 surface로 표시한다.
+                  // 끌어 온 장소를 받을 일자는 primary rule + 안쪽 outline으로 표시한다.
                   className={
-                    active
-                      ? 'border-l-2 border-ink bg-surface-soft'
-                      : 'border-l-2 border-transparent'
+                    outlineDay
+                      ? 'border-l-2 border-primary bg-surface-soft outline-2 -outline-offset-2 outline-primary'
+                      : active
+                        ? 'border-l-2 border-ink bg-surface-soft'
+                        : 'border-l-2 border-transparent'
                   }
                 >
                   <TripAttachmentsDisclosure
@@ -2392,7 +2565,9 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
                         showCurrentWeather
                         compact={mobileWebLayout}
                         editable={!busy}
-                        onReorder={handleReorder}
+                        drag={drag}
+                        onStepMove={handleStepMove}
+                        gripHintId={gripHintId}
                         onEditPoi={handleEditPoi}
                         dayOptions={view.days.map((day) => ({
                           day_index: day.day_index,
@@ -2408,33 +2583,15 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
                       />
                     </div>
                   ) : (
-                    <div className="space-y-1 px-3 pb-2">
-                      {day.pois.length > 0 &&
-                        day.pois.slice(0, 4).map((poi, index) => (
-                          <button
-                            key={poi.poi_id}
-                            type="button"
-                            onClick={() => handleSelectPoi(poi.poi_id)}
-                            className="flex w-full items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-surface-soft"
-                          >
-                            <span
-                              // 마커 팔레트 인라인 색 위 숫자라 순백이 맞다(T-313 예외).
-                              // eslint-disable-next-line no-restricted-syntax
-                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                              style={{ backgroundColor: paletteHex(poi.marker_color) }}
-                              aria-hidden="true"
-                            >
-                              {index + 1}
-                            </span>
-                            <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
-                              {poi.title ?? poi.feature_id ?? '장소'}
-                            </span>
-                          </button>
-                        ))}
-                      {day.pois.length > 4 && (
-                        <p className="pl-7 text-xs text-muted">외 {day.pois.length - 4}곳</p>
-                      )}
-                    </div>
+                    <CollapsedDayPreview
+                      day={day}
+                      dayLabel={dayLabel}
+                      dayOrder={dayOrder}
+                      drag={drag}
+                      dndEnabled={dndEnabled}
+                      dropHere={dropHere}
+                      onSelectPoi={handleSelectPoi}
+                    />
                   )}
                 </article>
               );

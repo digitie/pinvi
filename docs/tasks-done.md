@@ -1,5 +1,9 @@
 # tasks-done.md — 완료·아카이브
 
+## 2026-11-27 — 일정 장소 날짜끼리 끌어 옮기기
+
+- [x] 소유자 요청(날짜끼리 DnD). `POST /trips/{id}/pois/{poi_id}/move` 한 요청으로 같은 일자·다른 일자 이동, 웹 접힌 일자·빈 일자·미리보기 줄 드롭과 손잡이 ↑/↓(일자 경계 넘음), 모바일 ↑/↓ 동일. 근거 `docs/journal.md` 2026-11-27.
+
 ## 2026-11-05 — 한도 오류 격리·일자 출몰/권한 경합 (#684)
 
 - [x] Pinvi [PR687](https://github.com/digitie/pinvi/pull/687)을6f47dad로 병합했다. handler 최대1회·독립 cache/upsert/Trip fence·관리자 이동 뒤 원래 여행 재검증을 포함한다. 실패우선12·WSL단위1988/관련PG88/실제UI5, 정확21e1 두전문최종리뷰 무차단·CI9SUCCESS·병합tree동일성을 확인했다. 운영 접근/배포/시험은 없다.

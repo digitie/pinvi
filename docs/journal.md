@@ -1,3 +1,30 @@
+## 2026-11-27 (claude) — 일정 장소를 날짜끼리도 끌어 옮기기
+
+- 출처: 소유자 요청 "pinvi 에서 같은 날짜안에서만 위치가 DND 가능한데 날짜끼리도 이동가능하도록". 웹 일정 패널은
+  펼친 일자 하나의 목록에서만 HTML5 DnD(라이브러리 없음)로 순서를 바꿨고(`/pois/reorder`, 클라이언트가 그 일자 전체의
+  새 키를 보냄), 다른 일자로는 장소 편집기의 일자 선택(`PATCH day_index` → 맨 끝)으로만 갔다.
+- API `POST /trips/{id}/pois/{poi_id}/move` `{day_index, before_poi_id|null}` + `If-Match`(옮길 장소 version). 같은
+  일자 안 이동과 다른 일자로의 이동이 한 요청·한 트랜잭션이다: Trip 잠금 → 장소 잠금·version 확인 → 도착 일자 장소 잠금
+  → 서버가 최신 순서에 기준 장소로 자리를 정하고 도착 일자를 균등 키(웹 `evenRanks` 형식)로 다시 매겨 **바뀐 행만** 쓴다.
+  출발 일자는 쓰지 않는다(빠진 자리뿐). 제자리 이동은 쓰기·version·broadcast 없음. 기준 장소가 그 일자에 없으면 409
+  `SORT_ORDER_CONFLICT`, 자기 자신이면 422, 일자 없음 404, viewer 403. 실시간 `poi.moved`(metrics·web 무효화 목록 등록).
+  일자별 경로·거리는 저장하지 않고 요청 때 계산하므로 지울 캐시가 없고, cache target 투영은 기존 행 trigger가 받는다.
+- 웹: `usePoiDrag`(패널 하나가 끌기 상태를 공유) — 펼친 일자 행(위/아래 절반으로 앞/뒤), 접힌 일자 줄·빈 일자(맨 끝),
+  접힌 일자 미리보기 줄(앞/뒤)이 모두 놓을 자리다. 받을 일자는 primary 테두리·"N일차 맨 끝에 놓기" 안내, 행 사이는 2px 선.
+  장소 끌기가 아닌 끌기(파일)는 막지 않는다. Firefox용 `setData`. 같은 일자 순서 변경도 move로 바꿨다(클라이언트 키 계산
+  제거, version 충돌을 409로 드러냄). 접힌 일자로 옮기면 "…N일차로 옮겼어요" 안내(role=status).
+- 키보드: 손잡이를 `<button aria-label="장소 옮기기">`(title 유지, 설명은 패널 한 곳 `aria-describedby`)로 바꾸고 ↑/↓로
+  한 칸, 첫·마지막 장소는 이전 일자 맨 끝·다음 일자 맨 앞. 옮긴 뒤 그 일자를 펼치고 손잡이에 초점을 돌려준다.
+- 모바일(`trips/[tripId]/edit.tsx`): 기존 ↑/↓가 같은 규칙으로 일자를 넘는다(`poiApi.move`, 두 일자 낙관 순서). 모바일 앱에
+  끌어 놓기는 원래 없어 추가하지 않았다.
+- 시험: API 통합 `test_pois_move.py` 7건(다른 일자 기준 앞·빈 일자·맨 끝·같은 일자·제자리 무변경·version/기준/자기/일자
+  없음/지워진 장소·viewer 403/editor 200/외부인·동시 같은 version 하나만 성공·동시 같은 일자 둘 다 보존)과 기존 POI 통합
+  19건, unit `test_poi_even_ranks.py`, 전체 unit 2420(m05 두 건은 WSL에서 Windows worktree git 포인터를 못 읽는 환경 실패),
+  ruff·format·mypy strict. 웹 vitest 681(새 `tripPoiCrossDayDrag` 6), domain `poiMove.test.ts`, typecheck·lint·React Doctor
+  web/mobile 0. mocked Playwright `trip-detail.e2e.ts` 3건(접힌 일자·빈 일자·미리보기 줄 앞·키보드 초점)은 CI에서 돈다.
+  live 카탈로그 TRIP-072~074(쓰기 포함, 배포 뒤에만 통과)를 작성만 했고 돌리지 않았다. 기존 TRIP-030·시나리오 reorder
+  단언은 move 요청으로 바꿨다.
+- 배포: API·web 이미지(마이그레이션 없음). 모바일은 다음 앱 빌드. 구 web은 새 API에서도 `/reorder`로 그대로 동작한다.
 ## 2026-11-27 (claude) — web e2e 두 건 흔들림 원인 수정(main red 복구)
 
 - 출처: `web` workflow가 main `929b4243`(#805)에서 빨강. 실패는 두 시험이고 둘 다 앱 회귀가 아니라 시험의 측정 경쟁이다.

@@ -2,6 +2,8 @@ import {
   ExternalEnrichmentSchema,
   FeatureWeatherCardSchema,
   PoiCreateSchema,
+  PoiMoveRequestSchema,
+  PoiMoveResponseSchema,
   PoiPlaceDetailsSchema,
   PoiReorderRequestSchema,
   PoiResponseSchema,
@@ -9,7 +11,7 @@ import {
 } from '@pinvi/schemas';
 import { z } from 'zod';
 import type { ApiClient } from '../client';
-import type { PoiCreate, PoiReorderRequest, PoiUpdate } from '@pinvi/schemas';
+import type { PoiCreate, PoiMoveRequest, PoiReorderRequest, PoiUpdate } from '@pinvi/schemas';
 
 /** `docs/api/pois.md` 정본 POI API. */
 export const poiApi = (client: ApiClient) => ({
@@ -38,6 +40,18 @@ export const poiApi = (client: ApiClient) => ({
       method: 'POST',
       body: JSON.stringify(PoiReorderRequestSchema.parse(body)),
       schema: z.array(PoiResponseSchema),
+    }),
+
+  /**
+   * 장소 하나를 일자 안에서, 또는 다른 일자로 옮긴다 — `before_poi_id` 바로 앞, null이면 맨 끝.
+   * `version`은 옮길 장소의 version(If-Match, 다르면 409 VERSION_CONFLICT).
+   */
+  move: (tripId: string, poiId: string, version: number, body: PoiMoveRequest) =>
+    client.request(`/trips/${tripId}/pois/${poiId}/move`, {
+      method: 'POST',
+      headers: { 'If-Match': String(version) },
+      body: JSON.stringify(PoiMoveRequestSchema.parse(body)),
+      schema: PoiMoveResponseSchema,
     }),
 
   /**
