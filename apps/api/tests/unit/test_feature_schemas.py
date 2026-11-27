@@ -310,6 +310,7 @@ class TestPublicStatusFieldRemoved:
             "homepage_url",
             "enrichment",
             "degraded_providers",
+            "containing_areas",
         }
 
     @pytest.mark.parametrize("model", _DETAIL_CARD_ARMS)

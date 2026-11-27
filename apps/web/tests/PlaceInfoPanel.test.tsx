@@ -115,6 +115,7 @@ function placeCard(introduction: unknown) {
     homepage_url: null,
     enrichment: [],
     degraded_providers: [],
+    containing_areas: [],
     phone: null,
     business_hours: null,
     introduction,

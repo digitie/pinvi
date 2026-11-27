@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { FeatureDetailCard, ExternalEnrichment } from '@pinvi/schemas';
+import type { ContainingArea, FeatureDetailCard, ExternalEnrichment } from '@pinvi/schemas';
 import { FeatureDetailCardBody } from '@/components/map/FeatureDetailCardBody';
 
 function placeCard(over: Partial<Extract<FeatureDetailCard, { kind: 'place' }>> = {}) {
@@ -17,11 +17,90 @@ function placeCard(over: Partial<Extract<FeatureDetailCard, { kind: 'place' }>> 
     homepage_url: 'https://sb.example',
     enrichment: [],
     degraded_providers: [],
+    containing_areas: [],
     phone: '051-000-0000',
     business_hours: '09:00-22:00',
     ...over,
   } as Extract<FeatureDetailCard, { kind: 'place' }>;
 }
+
+describe('FeatureDetailCardBody containing areas', () => {
+  const area = (
+    over: Partial<ContainingArea> & Pick<ContainingArea, 'name' | 'area_kind'>,
+  ): ContainingArea => ({
+    feature_id: over.name,
+    category_label: null,
+    ...over,
+  });
+
+  it('국립공원·보호지역을 작은 면 순서대로 정보 칩으로 보여 준다', () => {
+    render(
+      <FeatureDetailCardBody
+        card={placeCard({
+          containing_areas: [
+            area({ name: '우이령', area_kind: 'protected_area', category_label: '명승' }),
+            area({ name: '북한산 국립공원', area_kind: 'national_park' }),
+            area({ name: '남한산성', area_kind: 'protected_area', category_label: null }),
+          ],
+        })}
+      />,
+    );
+    const chips = screen.getAllByTestId('feature-detail-card-body-containing-area');
+    expect(chips.map((chip) => chip.textContent)).toEqual([
+      '우이령(명승) 안',
+      '북한산 국립공원 안',
+      // 지정 종류를 모르면 이름만 — 일괄 "보호지역"을 지어 붙이지 않는다.
+      '남한산성 안',
+    ]);
+    const list = screen.getByRole('list', { name: '이 장소가 속한 구역' });
+    expect(list.querySelectorAll('li')).toHaveLength(3);
+  });
+
+  it('국립공원 이름에 종류어가 없으면 덧붙이고, 모르는 종류는 이름만 쓴다', () => {
+    render(
+      <FeatureDetailCardBody
+        card={placeCard({
+          containing_areas: [
+            area({ name: '지리산', area_kind: 'national_park' }),
+            area({ name: '광안리 관광특구', area_kind: 'tourism_district' }),
+          ],
+        })}
+      />,
+    );
+    const chips = screen.getAllByTestId('feature-detail-card-body-containing-area');
+    expect(chips.map((chip) => chip.textContent)).toEqual([
+      '지리산 국립공원 안',
+      '광안리 관광특구 안',
+    ]);
+  });
+
+  it('위험지역만 경고 스타일이고, live region 없이 sr-only로 경고를 전한다', () => {
+    render(
+      <FeatureDetailCardBody
+        card={placeCard({
+          containing_areas: [
+            area({ name: '낙석', area_kind: 'hazard_zone' }),
+            area({ name: '설악산 국립공원', area_kind: 'national_park' }),
+          ],
+        })}
+      />,
+    );
+    const chips = screen.getAllByTestId('feature-detail-card-body-containing-area');
+    const hazard = chips[0]!;
+    const park = chips[1]!;
+    expect(hazard).toHaveAttribute('data-area-kind', 'hazard_zone');
+    expect(hazard).toHaveTextContent('경고: 낙석 위험지역 안');
+    expect(hazard.className).toContain('text-error-text');
+    expect(park.className).not.toContain('text-error-text');
+    // 정적 속성이다 — 카드를 다시 그릴 때마다 화면낭독기가 끼어들면 안 된다.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('구역이 없으면 아무것도 그리지 않는다', () => {
+    render(<FeatureDetailCardBody card={placeCard({ containing_areas: [] })} />);
+    expect(screen.queryByTestId('feature-detail-card-body-containing-areas')).toBeNull();
+  });
+});
 
 describe('FeatureDetailCardBody', () => {
   it('초기 카드에서도 부분 정보 안내를 표시한다', () => {
@@ -133,6 +212,7 @@ describe('FeatureDetailCardBody', () => {
       homepage_url: null,
       enrichment: [],
       degraded_providers: [],
+      containing_areas: [],
       unit: '원/L',
       items: [{ name: '휘발유', price: '1650' }],
     } as Extract<FeatureDetailCard, { kind: 'price' }>;
@@ -158,4 +238,3 @@ describe('FeatureDetailCardBody', () => {
     );
   });
 });
-

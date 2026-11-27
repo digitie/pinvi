@@ -164,6 +164,7 @@ describe('FeatureDetailCardBody — 출처 소개', () => {
       homepage_url: null,
       enrichment: [],
       degraded_providers: [],
+      containing_areas: [],
       phone: null,
       business_hours: null,
       introduction,

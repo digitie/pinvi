@@ -50,8 +50,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "f1788da922c118650fc93e05aae42b3d0f5159f3"
-_SNAPSHOT_SHA256 = "8c8a6f7ad4b949a6e0af6d8d79a6d6defeba225354094eb6f1d4374d50a2e644"
+_UPSTREAM_COMMIT = "3010d7ed81fe2cc07681bb93e9e063a6a34a4ae4"
+_SNAPSHOT_SHA256 = "17ac805d0eb48b20379a07f55a0487d371a12fdf4690ba4dd4146e19a484f22f"
 
 # service profile 스냅샷 — byte-핀·재추출 절차는 cache-target 계약 테스트
 # (`test_kor_travel_map_cache_target_contract.py`)가 소유하고 본 파일은 읽기만 한다.
@@ -71,6 +71,8 @@ _CLIENT_PATHS = [
     "/v1/features/nearby",
     "/v1/features/search",
     "/v1/features/{feature_id}",
+    # 상세 카드의 "○○국립공원 안"(`api/v1/features.py::_attach_containing_areas`).
+    "/v1/features/{feature_id}/containing-areas",
     "/v1/features/batch",  # service profile (_SERVICE_PROFILE_PATHS)
     "/v1/categories",
     "/v1/public/beaches",
@@ -147,6 +149,7 @@ _CLIENT_QUERY_PARAMETERS: dict[str, set[str]] = {
         "include_total",
     },
     "/v1/features/{feature_id}": set(),
+    "/v1/features/{feature_id}/containing-areas": {"area_kind", "page_size"},
     # service profile POST 1경로 — 입력은 전부 body이고 query는 없다. 빈 집합이 "query로
     # 새는 필터가 없다"를 고정한다.
     "/v1/features/batch": set(),
@@ -270,6 +273,22 @@ _PUBLIC_API_KEY_SECURITY = [{"PublicApiKey": []}, {"ServiceToken": []}]
 # `meta.cluster.cluster_unit`를 `data`로 re-projection하므로 실제 값이 온다(위 `ClusterMeta` 핀).
 # `data.get("next_cursor")`/`get("total")`(`public.py _page_meta`)도 같은 방식이다(`PageMeta` 핀).
 _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
+    # `clients/kor_travel_map.py::get_feature_containing_areas` → `schemas/feature.ContainingArea`.
+    "ContainingAreasData": {
+        "items": {
+            "type": "array",
+            "items_ref": "ContainingAreaSummary",
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "ContainingAreaSummary": {
+        "feature_id": {"type": "string", "required": True, "nullable": False},
+        "name": {"type": "string", "required": True, "nullable": False},
+        "area_kind": {"type": "string", "required": True, "nullable": False},
+        # 표시 이름(`category_label`)으로 바꿔 싣는다 — 코드 자체는 PinVi 응답에 내보내지 않는다.
+        "category": {"type": "string", "required": True, "nullable": False},
+    },
     # `services/notice_plan_highlights.py` `_CurationGroup`/`_CurationFeature`/`_CurationMembership`.
     "FeatureCurationGroupsData": {
         "items": {
@@ -718,6 +737,7 @@ _ENDPOINT_DATA_SCHEMAS: dict[tuple[str, str], str] = {
     ("get", "/v1/features/nearby"): "FeaturesNearbyData",
     ("get", "/v1/features/search"): "FeatureSearchData",
     ("get", "/v1/features/{feature_id}"): "FeatureDetailResponse",
+    ("get", "/v1/features/{feature_id}/containing-areas"): "ContainingAreasData",
     ("post", "/v1/features/batch"): "FeatureBatchData",
     ("get", "/v1/categories"): "CategoriesData",
     ("get", "/v1/public/beaches"): "PublicBeachListData",
@@ -917,6 +937,12 @@ async def test_client_never_sends_a_query_the_snapshot_does_not_declare() -> Non
             ),
         ),
         ("/v1/features/{feature_id}", lambda c: c.get_feature("f1")),
+        (
+            "/v1/features/{feature_id}/containing-areas",
+            lambda c: c.get_feature_containing_areas(
+                "f1", area_kinds=["national_park"], page_size=10
+            ),
+        ),
         (
             "/v1/features/batch",
             lambda c: c.get_features(["f1"], known_row_revisions={"f1": 3}),

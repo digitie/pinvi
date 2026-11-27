@@ -23,6 +23,7 @@ function card(id: string): FeatureDetailCard {
     homepage_url: null,
     enrichment: [],
     degraded_providers: [],
+    containing_areas: [],
     phone: null,
     business_hours: null,
     introduction: null,
