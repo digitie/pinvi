@@ -3,6 +3,7 @@
 - detail-card에 Map containing-areas를 싣고 칩으로 보인다(위험지역만 경고). `PINVI_MAP_CONTAINING_AREAS_ENABLED=false` 기본.
 - 다음: Map #1566 재적재 배포·확인(active 국립공원 23·면적비 0.9~1.1) **뒤에** prod env에서 플래그를 켠다. 순서가 바뀌면
   버퍼 경계(공식의 2~4.8배)로 틀린 "○○국립공원 안"이 보인다.
+
 ## 2026-11-27 (claude) — 등산 코스를 일정에 추가(Map ADR-128 `route` 요약)
 
 - 출처: 소유자 결정 — 숲길 구간을 코스로 묶은 Map(ADR-128)의 등산 코스를 PinVi에서 일정에 넣는다. 기본값: 코스
@@ -184,6 +185,7 @@
 - 대표 anchor id(`airkorea-station-5852754068ed`)의 forecast를 바로 읽고 404·빈 응답일 때만 `/resolve`(timeout 60초)로 찾는다. resource timeout 10→30초. 재시도는 일시 오류만 지수 backoff+`Jitter.PLUS_MINUS`로 3회, `WeatherRetentionGuardError`는 `Failure(allow_retries=False)`라 임계 미달·4xx·계약 위반은 바로 실패한다.
 - 시험: `apps/etl/tests/test_weather_retention_horizon.py`에 고정 id·404/빈 응답 fallback·`/resolve` 긴 timeout·빈 id·5xx 재시도 대상·4xx 즉시 실패·retry policy jitter·resource timeout·asset 직접 실행 9건 추가. ETL 92건 통과.
 - 배포: ETL 이미지(code-server)만. 배포 다음 KST 05:00 run이 SUCCESS인지, metadata `location_id`가 위 id인지 확인.
+
 ## 2026-11-24 (claude) — 예약 알림 planner: 할 일이 있을 때만 run
 
 - 출처: Map 저장소 `docs/reports/2026-11-23-collection-failure-audit.md` §1.2·§4 #12. n150 14일 PinVi run 19,006 중 16,451이 매분 planner run이었고, prod 동의 사용자는 0명(읽기 전용 조회)이라 전부 빈 run이었다. run launch는 그 기간 code-server fd 고갈·gRPC timeout 실패의 표면이기도 했다.
