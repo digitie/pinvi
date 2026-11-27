@@ -697,6 +697,10 @@ class Settings(BaseSettings):
     pinvi_jwt_secret_key: str = Field(default="pinvi-local-jwt-secret-change-me", min_length=32)
     pinvi_access_token_minutes: int = 10
     pinvi_refresh_token_days: int = 7
+    # "로그인 유지" 세션의 수명이자 모든 refresh 회전 계열(로그인 1회)의 절대 상한(일). 유지하지 않은
+    # 세션은 `pinvi_refresh_token_days` 미끄럼 만료가 먼저 걸리고, 어느 쪽도 이 상한을 넘지 못한다.
+    # 0110의 `user_sessions.absolute_expires_at` 기본값(365일)이 이 상한의 최댓값이다.
+    pinvi_remember_me_days: int = Field(default=365, ge=1, le=365)
     pinvi_admin_session_ttl: int = 3600
     pinvi_mcp_jwt_secret: str = Field(default="pinvi-local-mcp-secret-change-me", min_length=32)
     pinvi_mcp_token_default_days: int = 30

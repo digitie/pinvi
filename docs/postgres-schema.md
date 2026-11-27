@@ -118,16 +118,33 @@ CREATE TABLE app.user_sessions (
   session_token_hash  varchar(128) NOT NULL UNIQUE,
   expires_at          timestamptz NOT NULL,
   revoked_at          timestamptz,
+  -- 0110 로그인 유지: 회전 계열 / 유지 여부 / 계열 절대 만료 / 회전 폐기 시각
+  family_id           uuid NOT NULL DEFAULT gen_random_uuid(),
+  remember_me         boolean NOT NULL DEFAULT false,
+  absolute_expires_at timestamptz NOT NULL DEFAULT (now() + interval '365 days'),
+  rotated_at          timestamptz,
   user_agent          varchar(512),
   ip_address          inet,
   created_at          timestamptz NOT NULL DEFAULT now(),
-  updated_at          timestamptz NOT NULL DEFAULT now()
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ck_user_sessions_expires_within_absolute CHECK (expires_at <= absolute_expires_at)
 );
 
 CREATE INDEX user_sessions_active_idx
   ON app.user_sessions (user_id, expires_at)
   WHERE revoked_at IS NULL;
+CREATE INDEX ix_user_sessions_family_active
+  ON app.user_sessions (family_id)
+  WHERE revoked_at IS NULL;
 ```
+
+로그인 1회가 `family_id` 하나를 연다. refresh 회전은 새 row에 `family_id`·`remember_me`·
+`absolute_expires_at`을 그대로 잇고 옛 row에 `revoked_at`·`rotated_at`을 찍는다. 유지하지 않은 계열은
+`expires_at` = min(now + 7일, `absolute_expires_at`), 로그인 유지 계열은 `expires_at` =
+`absolute_expires_at`(로그인 + 365일). `rotated_at`이 찍힌 토큰이 60초 뒤 다시 오면 그 계열을 모두
+폐기한다(재사용 감지). `oauth_login_states.remember_me`·`oauth_mobile_exchanges.remember_me`(0110,
+`boolean NOT NULL DEFAULT false`)는 OAuth start의 선택을 callback·모바일 교환까지 서버 쪽에서 옮긴다.
+자세히는 `docs/api/auth.md` §3.5.
 
 `access_token_version`은 access JWT의 `token_version` claim과 비교한다. 비밀번호 재설정
 등 전체 세션 무효화 이벤트에서 증가하며, 이전 access JWT는 만료 시간 전이라도 거부된다.

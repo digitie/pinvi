@@ -12,7 +12,7 @@
 | 테이블                         | 용도                                                                        |
 | ------------------------------ | --------------------------------------------------------------------------- |
 | `app.users`                    | 계정 (`email` UNIQUE, `password_hash` Argon2id nullable for social-only)    |
-| `app.user_sessions`            | refresh 토큰 hash + IP/UA + 만료/폐기                                       |
+| `app.user_sessions`            | refresh 토큰 hash + IP/UA + 만료/폐기 + 회전 계열·로그인 유지·절대 만료     |
 | `app.user_email_verifications` | verify/reset 토큰 (해시만 저장)                                             |
 | `app.user_oauth_identities`    | provider + provider_user_id (Google `sub`, Naver `response.id`, Kakao `id`) |
 | `app.user_consents`            | 4 분리 동의 (`tos`/`privacy`/`lbs_tos`/`location_collection`/...)           |
@@ -125,8 +125,10 @@ Content-Type: application/json
 POST /auth/login
 Content-Type: application/json
 
-{ "email": "user@example.com", "password": "..." }
+{ "email": "user@example.com", "password": "...", "remember_me": true }
 ```
+
+- `remember_me`(선택, 기본 `false`): 로그인 화면의 "로그인 유지". 세션 수명은 §3.5.
 
 응답 200:
 
@@ -138,7 +140,7 @@ Content-Type: application/json
 }
 ```
 
-Set-Cookie 두 개.
+Set-Cookie 두 개. `pinvi_refresh` Max-Age는 발급된 refresh session 만료까지다(§3.5).
 
 에러:
 
@@ -160,9 +162,15 @@ Cookie: pinvi_refresh=<opaque>
 응답 200: 새 `pinvi_access` cookie + 새 `pinvi_refresh` cookie.
 
 - 서버: `app.user_sessions` row hash 일치 + `revoked_at IS NULL` + `expires_at > now()` →
-  기존 row lock 후 `revoked_at=now()` + 새 session row 발급(refresh rotation). 같은 refresh
+  기존 row lock 후 `revoked_at=now()`·`rotated_at=now()` + 새 session row 발급(refresh rotation).
+  새 row는 같은 `family_id`·`remember_me`·`absolute_expires_at`을 잇는다(§3.5). 같은 refresh
   token 동시 재사용은 첫 요청만 성공한다.
 - 폐기됨 / 만료됨 → `401 TOKEN_EXPIRED` (cookie 삭제)
+- 재사용 감지: 회전으로 폐기된 토큰이 `rotated_at`에서 60초(`REFRESH_REUSE_GRACE`)가 지난 뒤 다시
+  오면 탈취된 사본으로 보고 그 계열의 살아 있는 row를 모두 폐기하고 `users.access_token_version`을
+  올린다(`auth.refresh_reuse_detected` 경고 로그). 60초 안의 재사용(탭 두 개의 동시 갱신, 응답 유실
+  뒤 재시도)은 계열을 건드리지 않고 `401 TOKEN_EXPIRED`만 돌려준다. 다른 계열(다른 기기 로그인)은
+  영향이 없다.
 
 ### 3.3 `POST /auth/logout`
 
@@ -220,6 +228,39 @@ Cookie: pinvi_access=...
   },
 }
 ```
+
+### 3.5 로그인 유지(`remember_me`)
+
+로그인 1회가 refresh 회전 계열(`user_sessions.family_id`) 하나를 연다. access JWT 수명은 로그인
+유지와 무관하게 `PINVI_ACCESS_TOKEN_MINUTES`(기본 10분)다.
+
+| 구분                     | refresh session 만료                                           | `pinvi_refresh` cookie                 |
+| ------------------------ | -------------------------------------------------------------- | -------------------------------------- |
+| 유지 안 함(기본)         | 회전마다 now + `PINVI_REFRESH_TOKEN_DAYS`(7일) 미끄럼, 절대 만료로 자름 | Max-Age = 남은 만료(≤ 7일) — 변경 전과 같음 |
+| 로그인 유지              | 절대 만료(로그인 + `PINVI_REMEMBER_ME_DAYS`, 기본 365일) 고정   | Max-Age = 남은 만료(≤ 365일)           |
+
+- **절대 상한**: 모든 계열의 `absolute_expires_at` = 로그인 + 365일. 회전은 이 시각을 넘겨 연장하지
+  않는다 — 유지하지 않은 7일 미끄럼 세션도 1년이 지나면 다시 로그인해야 한다(변경 전에는 상한이 없었다).
+  DB CHECK `expires_at <= absolute_expires_at`.
+- **운영 권한 역할 제외**: `admin`/`operator`/`cpo` 역할 계정은 `remember_me=true`를 보내도 서버가
+  유지하지 않은 세션으로 발급한다(`docs/compliance/pipa.md` §6 Admin 세션). 역할 부여는 기존 세션을
+  모두 폐기하므로 일반 사용자 때 연 1년 세션이 권한 계정 세션으로 남지 않는다.
+- **폐기**: 로그아웃(그 계열 row), 비밀번호 재설정·관리자 강제 재설정·비활성화·삭제 예약·역할 변경·
+  관리자 세션 폐기(그 사용자 전체), 재사용 감지(그 계열). 로그인 유지 계열도 똑같이 즉시 끊긴다.
+- **cookie**: `HttpOnly`, `SameSite=Lax`, production에서 `Secure` — 변경 전과 같다. Max-Age만 서버
+  세션 만료에 맞춘다(cookie가 서버 세션보다 오래 남지 않는다).
+- **OAuth**: `POST /auth/oauth/{provider}/start`의 `remember_me`를 `oauth_login_states.remember_me`에
+  저장하고 callback은 소비한 state의 값만 쓴다(§6.2~6.3). 계정 연결(`/link`)은 지금 `pinvi_refresh`
+  세션의 `remember_me`를 서버에서 읽어 잇는다(§6.4).
+- **모바일**: `POST /mobile/auth/login` 본문 `remember_me`, `POST /mobile/auth/oauth/google/start`
+  본문 `{ "remember_me": bool }`(선택 — 본문 없는 이전 앱은 `false`). 모바일 OAuth는 login state →
+  `oauth_mobile_exchanges.remember_me` → 교환 시점 발급으로 서버 쪽에서만 옮긴다. 응답 `expires_at`이
+  refresh session 만료다.
+- **보존**: 세션 row는 폐기 또는 만료 + 30일 뒤 일일 PII 보존 job이 지운다(`docs/compliance/pipa.md`
+  §2). 유지 중인(폐기·만료 전) row는 지우지 않으므로 로그인 유지 row의 `user_agent`/`ip_address`는 최대
+  365일 + 30일 남는다.
+- 기존 row(0110 이전 발급): `remember_me=false`, `absolute_expires_at` = 마이그레이션 적용 시각 + 365일,
+  `family_id`는 row마다 새 값.
 
 ## 4. 프로필 완성
 
@@ -315,9 +356,12 @@ REST API key가 설정되어 있으면 `enabled: true`다.
 POST /auth/oauth/google/start
 Content-Type: application/json
 
-{ "return_to": "/trips", "mode": "login" }
+{ "return_to": "/trips", "mode": "login", "remember_me": true }
 ```
 
+- `remember_me`(선택, 기본 `false`): 로그인 화면의 "로그인 유지". `oauth_login_states.remember_me`에
+  저장되고 provider authorize URL에는 싣지 않는다. callback은 소비한 state의 값으로 세션 수명을
+  정한다(callback 쿼리 값은 무시 — §3.5).
 - `mode`: `login` 기본. `/start`의 `mode=link`는 `400 OAUTH_LINK_REQUIRES_AUTH`로
   거부하며, 기존 user 연결은 6.4의 `/link` endpoint를 사용한다.
 - `return_to`: Pinvi 내부 경로만 허용 (allowlist), `/`로 시작
@@ -348,7 +392,7 @@ GET /auth/oauth/google/callback?code=...&state=...
 
 응답:
 
-- 성공: 303 → `${return_to}` + Set-Cookie 두 개
+- 성공: 303 → `${return_to}` + Set-Cookie 두 개. 세션 수명은 state의 `remember_me`(§3.5).
 - 실패: 303 → `${PINVI_WEB_BASE_URL}/login?error=<code>&error_description=...&provider=<provider>`
   - `mode=link` state 소비 뒤의 실패는 `return_to`(기본 `/profile`)로 redirect한다.
   - 현재 구현: `OAUTH_ACCOUNT_LINK_REQUIRED` / `OAUTH_CALLBACK_INVALID` /
@@ -368,7 +412,8 @@ Cookie: pinvi_access=...
 ```
 
 응답 200: `{ "data": { "authorize_url": "..." } }`. 클라이언트가 top-level
-navigation.
+navigation. 연결 callback은 새 세션을 발급하므로, 요청의 `pinvi_refresh`가 그 사용자의 살아 있는
+"로그인 유지" 세션이면 state의 `remember_me`를 `true`로 둔다(클라이언트 값 아님, §3.5).
 
 ### 6.5 `DELETE /auth/oauth/{provider}`
 

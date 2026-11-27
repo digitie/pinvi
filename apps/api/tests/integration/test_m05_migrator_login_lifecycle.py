@@ -682,7 +682,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             "f",
             "t",
             "t",
-            "20261117_0109",  # 현재 head — 0109(KASI 해·달 출몰 표 은퇴)가 0108 뒤에 추가
+            "20261127_0110",  # 현재 head — 0110(로그인 유지 세션 계열)이 0109 뒤에 추가
         )
         canonical_fingerprint = role_catalog_fingerprint()
         assert sealed_role_topology_diagnostic() == (
@@ -856,7 +856,7 @@ def test_migrator_login_is_opened_only_for_migration_and_sealed_with_sessions(
             '--username="$PINVI_APP_DB_USER" '
             '--dbname="$POSTGRES_DB" --command="SELECT version_num FROM app.alembic_version"',
         )
-        assert runtime_version_select.stdout.strip() == "20261117_0109"  # 현재 head
+        assert runtime_version_select.stdout.strip() == "20261127_0110"  # 현재 head
         feature_acl = compose(
             "exec",
             "-T",

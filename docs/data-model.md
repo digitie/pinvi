@@ -117,6 +117,10 @@
 | `session_token_hash` | `varchar(128)` UNIQUE NOT NULL | refresh token SHA-256 hash                                                           |
 | `expires_at`         | `timestamptz` NOT NULL         |                                                                                      |
 | `revoked_at`         | `timestamptz`                  | nullable. refresh rotation/logout 시 기존 row 폐기. rotation은 기존 row lock 후 처리 |
+| `family_id`          | `uuid` NOT NULL                | 로그인 1회의 refresh 회전 계열. 회전 row가 잇는다(0110)                              |
+| `remember_me`        | `boolean` NOT NULL             | "로그인 유지" 계열(0110, 기본 false)                                                 |
+| `absolute_expires_at` | `timestamptz` NOT NULL        | 계열 절대 만료 = 로그인 + 365일. `expires_at` ≤ 이 값(CHECK, 0110)                   |
+| `rotated_at`         | `timestamptz`                  | 회전으로 폐기된 row만. 60초 뒤 재사용 → 계열 폐기(0110)                               |
 | `user_agent`         | `varchar(512)`                 |                                                                                      |
 | `ip_address`         | `inet`                         |                                                                                      |
 | `created_at`         | `timestamptz` NOT NULL         |                                                                                      |

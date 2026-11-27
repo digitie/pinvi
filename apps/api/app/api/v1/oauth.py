@@ -6,10 +6,10 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Literal, cast
+from typing import Annotated, Any, Literal, cast
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Cookie, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +29,11 @@ from app.schemas.oauth import (
     OAuthStartRequest,
     OAuthStartResponse,
 )
-from app.services.auth_session import IssuedAuthSession, issue_user_session
+from app.services.auth_session import (
+    IssuedAuthSession,
+    issue_user_session,
+    session_remember_me,
+)
 from app.services.oauth_google import (
     OAuthError,
     OAuthProviderName,
@@ -63,6 +67,7 @@ def _set_issue_cookies(response: RedirectResponse, issue: IssuedAuthSession) -> 
         response,
         access_token=issue.access_token,
         refresh_token=issue.refresh_token,
+        refresh_expires_at=issue.expires_at,
     )
 
 
@@ -174,7 +179,11 @@ async def oauth_start(
             detail={"code": "OAUTH_NOT_CONFIGURED", "message": f"{label} OAuth 미설정."},
         )
     state, nonce, code_verifier = await issue_login_state(
-        db, provider=provider, mode=body.mode, return_to=body.return_to
+        db,
+        provider=provider,
+        mode=body.mode,
+        return_to=body.return_to,
+        remember_me=body.remember_me,
     )
     url = build_authorize_url(
         provider=provider,
@@ -191,8 +200,12 @@ async def oauth_link(
     body: OAuthLinkRequest,
     current_user_id: CurrentUserId,
     db: DbSession,
+    pinvi_refresh: Annotated[str | None, Cookie(alias="pinvi_refresh")] = None,
 ) -> Envelope[OAuthStartResponse]:
-    """로그인된 사용자의 provider 연결 authorize URL 발급."""
+    """로그인된 사용자의 provider 연결 authorize URL 발급.
+
+    연결 callback은 새 세션을 발급하므로 지금 refresh session의 "로그인 유지"를 서버에서 읽어 state에 잇는다.
+    """
     label = provider_label(provider)
     if not provider_configured(provider):
         raise HTTPException(
@@ -214,6 +227,7 @@ async def oauth_link(
         mode="link",
         return_to=body.return_to,
         user_id=user_id,
+        remember_me=await session_remember_me(db, user_id=user_id, refresh_token=pinvi_refresh),
     )
     url = build_authorize_url(
         provider=provider,
@@ -296,7 +310,9 @@ async def oauth_callback(
         return _flow_error(exc)
 
     if is_mobile:
-        exchange_code = await mint_mobile_exchange(db, user_id=user_id)
+        exchange_code = await mint_mobile_exchange(
+            db, user_id=user_id, remember_me=login_state.remember_me
+        )
         return _mobile_redirect(params={"code": exchange_code})
 
     return_to = login_state.return_to_path or "/"
@@ -309,6 +325,8 @@ async def oauth_callback(
         user_id=user_id,
         user_agent=_request_user_agent(request),
         ip_address=_request_ip_address(request),
+        # 소비한 state의 값 — callback 쿼리는 provider·공격자가 만질 수 있어 쓰지 않는다.
+        remember_me=login_state.remember_me,
     )
     _set_issue_cookies(redirect, issue)
     return redirect

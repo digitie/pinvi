@@ -48,10 +48,14 @@ export const mobileAuthApi = (client: ApiClient) => ({
       body: JSON.stringify({ refresh_token: refreshToken }),
     }),
 
-  /** Google OAuth 시작 — authorize URL 발급(앱 딥링크로 callback). */
-  oauthGoogleStart: () =>
+  /**
+   * Google OAuth 시작 — authorize URL 발급(앱 딥링크로 callback). `remember_me`("로그인 유지")는
+   * 서버가 login state에 저장해 교환 시점 세션 수명을 정한다.
+   */
+  oauthGoogleStart: (options: { remember_me?: boolean } = {}) =>
     client.request('/mobile/auth/oauth/google/start', {
       method: 'POST',
+      body: JSON.stringify({ remember_me: options.remember_me === true }),
       schema: OAuthStartResponseSchema,
     }),
 

@@ -1309,7 +1309,10 @@ function AdminUserDetailPageSection2_2Part1({
               enableSorting: false,
               meta: { cellClassName: 'py-2 pr-3', headerClassName: 'py-2 pr-3 font-semibold' },
               cell: ({ row: { original: session } }) => (
-                <>{session.is_active ? 'active' : 'revoked'}</>
+                <>
+                  {session.is_active ? 'active' : 'revoked'}
+                  {session.remember_me ? ' · 로그인 유지' : ''}
+                </>
               ),
             },
             {

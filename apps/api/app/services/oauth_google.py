@@ -126,6 +126,13 @@ class ConsumedOAuthLoginState:
     return_to_path: str | None
     user_id: uuid.UUID | None
     code_verifier: str
+    remember_me: bool = False
+
+
+@dataclass(frozen=True)
+class ConsumedMobileExchange:
+    user_id: uuid.UUID
+    remember_me: bool
 
 
 def _hash(value: str) -> str:
@@ -200,8 +207,13 @@ async def issue_login_state(
     mode: str = "login",
     return_to: str = "/",
     user_id: uuid.UUID | None = None,
+    remember_me: bool = False,
 ) -> tuple[str, str, str]:
-    """state / nonce / PKCE verifier 반환 + hash만 DB 저장."""
+    """state / nonce / PKCE verifier 반환 + hash만 DB 저장.
+
+    `remember_me`("로그인 유지")도 이 row에 싣는다 — callback은 쿼리 값이 아니라 소비한 state의 값으로 세션
+    수명을 정한다. state 원문은 provider 왕복에만 실리고 DB에는 hash만 있어 값을 바꿔 칠 수 없다.
+    """
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(16)
     code_verifier = _derive_code_verifier(state)
@@ -213,6 +225,7 @@ async def issue_login_state(
         mode=mode,
         return_to_path=return_to,
         user_id=user_id,
+        remember_me=remember_me,
         expires_at=datetime.now(UTC) + timedelta(seconds=settings.pinvi_oauth_state_ttl_seconds),
     )
     db.add(row)
@@ -256,18 +269,25 @@ async def consume_login_state(db: AsyncSession, *, state: str) -> ConsumedOAuthL
         return_to_path=row.return_to_path,
         user_id=row.user_id,
         code_verifier=code_verifier,
+        remember_me=row.remember_me,
     )
 
 
 # ─────────────────────────────────────────────────────────────
 # 모바일 1회용 교환 코드 (callback → 앱 딥링크 → exchange)
 # ─────────────────────────────────────────────────────────────
-async def mint_mobile_exchange(db: AsyncSession, *, user_id: uuid.UUID) -> str:
-    """모바일 OAuth 성공 시 1회용 code 발급. plaintext code 반환, hash만 저장."""
+async def mint_mobile_exchange(
+    db: AsyncSession, *, user_id: uuid.UUID, remember_me: bool = False
+) -> str:
+    """모바일 OAuth 성공 시 1회용 code 발급. plaintext code 반환, hash만 저장.
+
+    `remember_me`는 callback이 소비한 login state의 값이다 — 교환 요청 본문으로 받지 않는다.
+    """
     code = secrets.token_urlsafe(32)
     row = OAuthMobileExchange(
         code_hash=_hash(code),
         user_id=user_id,
+        remember_me=remember_me,
         expires_at=datetime.now(UTC)
         + timedelta(seconds=settings.pinvi_mobile_oauth_exchange_ttl_seconds),
     )
@@ -276,8 +296,8 @@ async def mint_mobile_exchange(db: AsyncSession, *, user_id: uuid.UUID) -> str:
     return code
 
 
-async def consume_mobile_exchange(db: AsyncSession, *, code: str) -> uuid.UUID:
-    """모바일 exchange code 소비 → user_id. 1회용 + TTL을 원자적 조건부 UPDATE로 보장."""
+async def consume_mobile_exchange(db: AsyncSession, *, code: str) -> ConsumedMobileExchange:
+    """모바일 exchange code 소비 → user_id + 로그인 유지. 1회용 + TTL을 원자적 조건부 UPDATE로 보장."""
     now = datetime.now(UTC)
     code_hash = _hash(code)
     result = await db.execute(
@@ -288,13 +308,13 @@ async def consume_mobile_exchange(db: AsyncSession, *, code: str) -> uuid.UUID:
             OAuthMobileExchange.expires_at > now,
         )
         .values(consumed_at=now)
-        .returning(OAuthMobileExchange.user_id)
+        .returning(OAuthMobileExchange.user_id, OAuthMobileExchange.remember_me)
         .execution_options(synchronize_session=False)
     )
-    user_id = result.scalar_one_or_none()
-    if user_id is not None:
+    consumed = result.one_or_none()
+    if consumed is not None:
         await db.commit()
-        return user_id
+        return ConsumedMobileExchange(user_id=consumed.user_id, remember_me=consumed.remember_me)
     await db.rollback()
     row = await db.scalar(
         select(OAuthMobileExchange).where(OAuthMobileExchange.code_hash == code_hash)

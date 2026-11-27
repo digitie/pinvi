@@ -61,6 +61,8 @@ class OAuthStartRequest(BaseModel):
     # 255 = `oauth_login_states.return_to_path` varchar(255) — 넘으면 INSERT가 500으로 죽는다.
     return_to: str = Field(default="/", max_length=255, pattern=r"^/[^\s\\]*$")
     mode: Literal["login", "link"] = "login"
+    # "로그인 유지" — login state에 저장해 callback이 이 값으로 세션 수명을 정한다(callback 쿼리는 안 믿음).
+    remember_me: bool = False
 
     @field_validator("return_to")
     @classmethod

@@ -88,6 +88,11 @@ export const LOGIN_ID_PATTERN = /^[a-z][a-z0-9]{2,31}$/;
 export const LoginRequestSchema = z.object({
   email: z.union([z.string().email().max(320), z.string().regex(LOGIN_ID_PATTERN)]),
   password: z.string().min(1),
+  /**
+   * "로그인 유지" — true면 서버가 refresh session을 로그인부터 365일 유지한다(access는 그대로 10분).
+   * 운영 권한 역할(admin/operator/cpo)은 서버가 무시한다.
+   */
+  remember_me: z.boolean().optional(),
 });
 
 /** /auth/me 응답 user. */
@@ -147,6 +152,8 @@ export const OAuthStartRequestSchema = z.object({
     .regex(/^\/(?!\/)[^\s\\]*$/)
     .default('/'),
   mode: z.enum(['login', 'link']).default('login'),
+  /** "로그인 유지" — 서버가 login state에 저장해 callback이 세션 수명을 정한다. */
+  remember_me: z.boolean().optional(),
 });
 export const OAuthStartResponseSchema = z.object({
   authorize_url: z.string().url(),

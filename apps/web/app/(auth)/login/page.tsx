@@ -78,6 +78,8 @@ export default function LoginPage() {
   const hydrated = useHydrated();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // "로그인 유지" — 이메일 로그인과 소셜 로그인 모두에 적용한다(서버가 refresh 세션을 1년 유지).
+  const [rememberMe, setRememberMe] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -159,7 +161,7 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      await authApi(apiClient).login(result.data);
+      await authApi(apiClient).login({ ...result.data, remember_me: rememberMe });
       router.push(safeLoginReturnTo(new URLSearchParams(window.location.search).get('next')));
     } catch (err) {
       if (err instanceof ApiError) {
@@ -206,6 +208,7 @@ export default function LoginPage() {
       const result = await authApi(apiClient).startOAuth(provider, {
         return_to: safeLoginReturnTo(new URLSearchParams(window.location.search).get('next')),
         mode: 'login',
+        remember_me: rememberMe,
       });
       window.location.assign(result.authorize_url);
     } catch (err) {
@@ -261,6 +264,30 @@ export default function LoginPage() {
           error={fieldErrors.password}
           data-testid="login-password"
         />
+
+        {/* 소셜 로그인 버튼(폼 밖)도 같은 선택을 따른다. 라벨 전체가 클릭 영역(44px 행). */}
+        <div className="flex items-start gap-3">
+          <input
+            id="login-remember-me"
+            type="checkbox"
+            className="checkbox mt-3"
+            checked={rememberMe}
+            onChange={(event) => setRememberMe(event.target.checked)}
+            aria-describedby="login-remember-me-hint"
+            data-testid="login-remember-me"
+          />
+          <div className="flex-1">
+            <label
+              htmlFor="login-remember-me"
+              className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-ink"
+            >
+              로그인 유지
+            </label>
+            <p id="login-remember-me-hint" className="text-sm text-muted">
+              이 기기에서 1년 동안 로그인 상태를 유지합니다. 공용 기기에서는 사용하지 마세요.
+            </p>
+          </div>
+        </div>
 
         {error && (
           <p className="text-sm text-error-text" role="alert" data-testid="login-error">

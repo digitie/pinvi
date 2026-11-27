@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rbac import PRIVILEGED_ROLES
 from app.core.security import generate_opaque_token
 from app.models.oauth_identity import UserOAuthIdentity
 from app.models.session import UserSession
@@ -27,7 +28,6 @@ from app.services.email_service import enqueue_password_reset_email, enqueue_ver
 
 SIGNUP_VERIFICATION_TTL_HOURS = 24
 BLOCKED_AUTH_STATUSES = {"disabled", "pending_delete", "deleted"}
-PRIVILEGED_ROLES = {"admin", "operator", "cpo"}
 
 
 @dataclass(frozen=True)

@@ -19,6 +19,9 @@ from app.models.user import User
 
 Role = Literal["user", "admin", "operator", "cpo"]
 
+# 운영 권한 역할. 이 역할을 가진 계정은 lifecycle 액션 대상에서 빠지고, "로그인 유지"도 받지 않는다.
+PRIVILEGED_ROLES: frozenset[str] = frozenset({"admin", "operator", "cpo"})
+
 
 def require_role(*allowed: Role) -> Callable[[CurrentUserId, DbSession], Awaitable[User]]:
     """`require_role("admin")` / `require_role("admin", "operator")` 등 사용."""

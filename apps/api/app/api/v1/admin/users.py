@@ -201,6 +201,8 @@ def _to_session_record(row) -> AdminUserSessionRecord:  # type: ignore[no-untype
         user_agent=row.user_agent,
         ip_hash=sha256_hex(str(row.ip_address)) if row.ip_address else None,
         is_active=row.revoked_at is None and row.expires_at > datetime.now(UTC),
+        remember_me=row.remember_me,
+        absolute_expires_at=row.absolute_expires_at,
     )
 
 

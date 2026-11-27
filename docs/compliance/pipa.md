@@ -33,10 +33,15 @@
 | `residence_sigungu_code` (선택) | 프로필 완성 | `demographic_use`     | 동일                                  |
 | `lat`/`lng` (위치)              | API 호출 시 | `location_collection` | **6개월** (위치정보법)                |
 | `ip_hash`                       | 요청 시     | `tos`, `privacy`      | 6개월 (audit chain)                   |
-| `user_agent` (`user_sessions`)  | 로그인 시   | `tos`, `privacy`      | session 만료 + 30일                   |
+| `user_agent` (`user_sessions`)  | 로그인 시   | `tos`, `privacy`      | session 만료·폐기 + 30일 ¹            |
 | `provider_email` (OAuth)        | 소셜 가입   | `tos`, `privacy`      | 탈퇴 + 30일                           |
 | Telegram `chat_id`              | target 등록 | (사용자 선택)         | 해제 시 즉시                          |
 | Gemini `secret_ref`             | 키 등록     | (사용자 선택)         | 해제 시 vault에서 삭제                |
+
+¹ session 만료는 기본 7일 미끄럼(회전마다 연장), "로그인 유지"를 고른 세션은 로그인 + 365일이고
+어느 세션도 로그인 + 365일을 넘지 않는다(`docs/api/auth.md` §3.5). 따라서 `user_sessions`의
+`user_agent`·`ip_address`는 최대 365일 + 30일 남는다. 로그아웃·비밀번호 재설정·계정 비활성화·탈퇴
+요청은 즉시 폐기하므로 그 시점 + 30일에 지워진다.
 
 ### 2.2 보존 만료 자동 파기
 
@@ -45,7 +50,7 @@ Dagster job 일 1회:
 - 탈퇴 (`users.status='pending_delete'`) + 30일 경과 → PII 컬럼 NULL 또는
   `deleted+<uid>@deleted.pinvi.local`, 최종 `users.status='deleted'`
 - `location_access_log` 6개월 경과 → archive 이전 또는 hash 보존 삭제
-- `user_sessions` `revoked_at` + 30일 → hard delete
+- `user_sessions` `revoked_at` + 30일, 또는 폐기 없이 `expires_at` + 30일 → hard delete
 
 자세히는 `docs/data-model.md` §8 보존 정책.
 
@@ -168,6 +173,8 @@ ADR 필요 — Sprint 6 또는 v2.
 - 사유 입력 후에만 원본 reveal
 - Admin 로그인 2FA (v2 후보)
 - 세션 1시간 (admin 별도) — `PINVI_ADMIN_SESSION_TTL=3600`
+- "로그인 유지"(365일) 미적용 — `admin`/`operator`/`cpo` 역할 계정은 `remember_me`를 보내도 서버가
+  일반(7일 미끄럼) 세션으로 발급한다(`docs/api/auth.md` §3.5)
 - IP 화이트리스트 옵션
 
 ## 7. Privacy by Design 체크리스트 (PR 템플릿)

@@ -24,6 +24,7 @@ from app.schemas.envelope import Envelope
 from app.schemas.mobile import (
     MobileAuthResponse,
     MobileOAuthExchangeRequest,
+    MobileOAuthStartRequest,
     MobileRefreshRequest,
     MobileVWorldTokenResponse,
 )
@@ -188,7 +189,11 @@ async def mobile_login(
 
     user_agent, ip_address = _client_meta(request)
     issue = await issue_user_session(
-        db, user_id=user.user_id, user_agent=user_agent, ip_address=ip_address
+        db,
+        user_id=user.user_id,
+        user_agent=user_agent,
+        ip_address=ip_address,
+        remember_me=body.remember_me,
     )
     return _mobile_auth_response(user, issue)
 
@@ -250,7 +255,9 @@ async def mobile_logout(
 
 
 @router.post("/auth/oauth/google/start", response_model=Envelope[OAuthStartResponse])
-async def mobile_oauth_google_start(db: DbSession) -> Envelope[OAuthStartResponse]:
+async def mobile_oauth_google_start(
+    db: DbSession, body: MobileOAuthStartRequest | None = None
+) -> Envelope[OAuthStartResponse]:
     """모바일 Google OAuth 시작 — authorize URL 발급.
 
     웹 `/auth/oauth/google/start`와 같은 state/PKCE 발급을 쓰되 `return_to`를 앱 딥링크
@@ -264,7 +271,10 @@ async def mobile_oauth_google_start(db: DbSession) -> Envelope[OAuthStartRespons
             detail={"code": "OAUTH_NOT_CONFIGURED", "message": "Google OAuth 미설정."},
         )
     state, nonce, code_verifier = await issue_login_state(
-        db, mode="login", return_to=settings.pinvi_mobile_oauth_redirect
+        db,
+        mode="login",
+        return_to=settings.pinvi_mobile_oauth_redirect,
+        remember_me=body.remember_me if body is not None else False,
     )
     url = build_authorize_url(state=state, nonce=nonce, code_verifier=code_verifier)
     return Envelope.of(OAuthStartResponse(authorize_url=url))
@@ -276,14 +286,16 @@ async def mobile_oauth_exchange(
 ) -> Envelope[MobileAuthResponse]:
     """1회용 OAuth code → access/refresh 토큰. callback이 발급한 code를 토큰과 교환."""
     try:
-        user_id = await consume_mobile_exchange(db, code=body.code)
+        exchange = await consume_mobile_exchange(db, code=body.code)
     except OAuthStateInvalidError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
 
-    user = await db.scalar(select(User).where(User.user_id == user_id, User.deleted_at.is_(None)))
+    user = await db.scalar(
+        select(User).where(User.user_id == exchange.user_id, User.deleted_at.is_(None))
+    )
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -292,6 +304,10 @@ async def mobile_oauth_exchange(
 
     user_agent, ip_address = _client_meta(request)
     issue = await issue_user_session(
-        db, user_id=user.user_id, user_agent=user_agent, ip_address=ip_address
+        db,
+        user_id=user.user_id,
+        user_agent=user_agent,
+        ip_address=ip_address,
+        remember_me=exchange.remember_me,
     )
     return _mobile_auth_response(user, issue)

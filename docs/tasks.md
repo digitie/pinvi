@@ -8,6 +8,7 @@
 
 - [/] #636/#638 — PR688 일정 수동 전송·사용자 opt-in 일간/주간 예약의 최종 WSL UI·두 전문 적대리뷰·정확HEAD CI 후 일반 merge. 운영·실수신자 전송 없음.
 - [ ] #720 — Resend 발송 복구(소유자): Manager root `.env`에 `PINVI_RESEND_FROM_EMAIL`(Resend verified 도메인)·`PINVI_WEB_BASE_URL`(공개 origin)·(webhook을 쓰면) `PINVI_RESEND_WEBHOOK_SECRET` → Manager #648 설치 + PinVi #801 이미지를 한 번의 compose 재생성으로 적용 → 기동 로그 `pinvi.email.config_warning` 없음 → `/admin/emails`에서 failed 초대 7통 재발송·1통 수신 확인 뒤 #720 닫기.
+- [ ] 로그인 유지(1년) 배포(소유자) — PinVi API 이미지(0110 마이그레이션, 기동 시 자동 적용)·web 이미지를 release export로 배포 → `/login`에서 '로그인 유지' 로그인 후 `pinvi_refresh` Max-Age≈1년·관리자 세션 표 '· 로그인 유지' 확인. 새 env 없음. 모바일은 다음 앱 빌드.
 - [ ] T-TOURAPI-USECASE — #809 배포 뒤 소유자가 data.go.kr 15101578 활용사례 등록 + 운영계정 트래픽 증설 신청(화면 캡처: 지도 상세 카드 소개·출처·공공누리). 후속: ① 개인정보처리방침 외부 전송 목록에 "장소 대표 사진은 이용자 기기가 한국관광공사 이미지 서버(`tong.visitkorea.or.kr`)에서 직접 받는다(IP·User-Agent 전달, Referer 없음)" 추가(법무 검토), ② 웹 `useFeatureDetailCard`에 캐시(패널을 열 때마다 detail-card 재요청), ③ 웹 `PlaceInfoPanel` 기존 `LINK_CLASS`(`text-primary`) 대비 4.5:1 미달.
 - [ ] #637 — Weather201의 공식 지역별 발령/해제·행정구역 매핑 계약을 선병합하고 Pinvi 대표지역 특보 알림을 후속 구현한다.
 

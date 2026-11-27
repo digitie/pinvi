@@ -7,7 +7,16 @@ import { ApiError } from '@pinvi/api-client';
 import { validateForm } from '@pinvi/domain';
 import { useAuth } from '../../lib/auth';
 import { OAuthCancelledError, OAuthProviderError, loginWithGoogle } from '../../lib/oauth';
-import { Body, Button, ErrorBanner, Field, Heading, Muted, Screen } from '../../components/ui';
+import {
+  Body,
+  Button,
+  Checkbox,
+  ErrorBanner,
+  Field,
+  Heading,
+  Muted,
+  Screen,
+} from '../../components/ui';
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   OAUTH_ACCOUNT_LINK_REQUIRED:
@@ -44,12 +53,14 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // "로그인 유지" — 이메일 로그인과 Google 로그인 모두에 적용(서버가 refresh 세션을 365일 유지).
+  const [rememberMe, setRememberMe] = useState(false);
 
   const onGoogle = async () => {
     setError(null);
     setGoogleLoading(true);
     try {
-      const result = await loginWithGoogle();
+      const result = await loginWithGoogle({ rememberMe });
       await adoptSession(result);
       // 성공 시 상태 전환 → 그룹 가드가 홈으로 이동.
     } catch (err) {
@@ -69,7 +80,7 @@ export default function LoginScreen() {
     setError(null);
     setLoading(true);
     try {
-      await login(credentials);
+      await login({ ...credentials, remember_me: rememberMe });
       // 성공 시 상태 전환 → 그룹 가드가 홈으로 이동.
     } catch (err) {
       if (err instanceof ApiError) {
@@ -127,6 +138,12 @@ export default function LoginScreen() {
               void onSubmit();
             }}
             placeholder="비밀번호"
+          />
+          <Checkbox
+            checked={rememberMe}
+            onToggle={setRememberMe}
+            label="로그인 유지"
+            summary="이 기기에서 1년 동안 로그인 상태를 유지합니다. 공용 기기에서는 사용하지 마세요."
           />
           <Button
             label="로그인"

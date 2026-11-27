@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.models.user import User
 from app.services.oauth_google import (
+    ConsumedMobileExchange,
     GoogleClaims,
     OAuthStateInvalidError,
     consume_mobile_exchange,
@@ -227,8 +228,9 @@ async def test_mobile_exchange_concurrent_only_one_wins(client, session_factory)
         _consume(session_factory, code),
         return_exceptions=True,
     )
-    successes = [r for r in results if isinstance(r, uuid.UUID)]
+    successes = [r for r in results if isinstance(r, ConsumedMobileExchange)]
     failures = [r for r in results if isinstance(r, OAuthStateInvalidError)]
     assert len(successes) == 1
     assert len(failures) == 1
-    assert successes[0] == user_id
+    assert successes[0].user_id == user_id
+    assert successes[0].remember_me is False

@@ -27,8 +27,16 @@ export class OAuthProviderError extends Error {
   }
 }
 
-export async function loginWithGoogle(): Promise<MobileAuthResult> {
-  const { authorize_url } = await api.mobileAuth.oauthGoogleStart();
+/**
+ * `rememberMe`("로그인 유지")는 start 요청에만 싣는다 — 서버가 login state → 교환 코드로 옮겨 교환 시점
+ * 세션 수명(365일)을 정한다. 딥링크·교환 요청에는 싣지 않는다.
+ */
+export async function loginWithGoogle(
+  options: { rememberMe?: boolean } = {},
+): Promise<MobileAuthResult> {
+  const { authorize_url } = await api.mobileAuth.oauthGoogleStart({
+    remember_me: options.rememberMe === true,
+  });
 
   const result = await WebBrowser.openAuthSessionAsync(authorize_url, REDIRECT_URL);
   if (result.type !== 'success' || !result.url) {

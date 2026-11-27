@@ -81,6 +81,9 @@ class LoginRequest(BaseModel):
     # 필드 이름은 기존 계약(`email`)을 유지한다. 값은 이메일 또는 고정 로그인 ID다.
     email: str = Field(min_length=1, max_length=320)
     password: str = Field(min_length=1)
+    # "로그인 유지" — true면 refresh session을 로그인부터 `pinvi_remember_me_days`(365일) 유지한다.
+    # 운영 권한 역할(admin/operator/cpo)은 서버가 무시한다(`docs/api/auth.md` §3.5).
+    remember_me: bool = False
 
     @field_validator("email")
     @classmethod
