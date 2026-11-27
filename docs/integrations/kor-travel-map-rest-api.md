@@ -5,6 +5,13 @@
 > **상태(중대 변화)**: 2026-06-08 기준 **kor-travel-map이 운영급 HTTP API를 이미 구축했다.**
 > 더 이상 "목표/aspirational"이 아니라 **실재하는 계약**이다 — ADR-026/027(DEC-01=B)
 > 의 전제가 충족됨.
+> **2026-11-28 재vendor (service·admin/full, Map main 짝 맞춤)**: Map `c82af3a1b9a8e2329793c02d46f898549a9038e3`
+> service `c75e0c54f7052dbe69e5f0bbcbfdf68156551795b04dbc7440ad4ace528cde0c`, admin(full)
+> `324e1e749bd78d4d23dd19719172e09a83734d1b81fa78fefabc87eeecd75897`(user `bcc05c77…` 불변). Manager 회전 preflight의
+> admin digest 불일치 해소용 기계적 재vendor다. 바뀐 것은 additive뿐 — service `FeatureTripCard.route`(nullable
+> `RouteSummaryOut`, ADR-128), admin `/v1/features/{feature_id}/containing-areas`·`/v1/features/containing-areas`와
+> 상세·요약의 visitor_info 계열 스키마(`PlaceVisitorInfo`·`PlaceImage`·`PlaceFee`·`PetPolicy`·`AccessibilityNote`·`ContentLicense`).
+>
 > **2026-11-27 재vendor (service·admin/full, Map ADR-127 휴게소 먹거리)**: Map `c43bd2bb78833d8bb655abf3bc02cfbe6bc1a2f6`(#1568)
 > service `617e33b70f40089136050b599953d489782f21404a7c073830685d8b5cc9f5de`, admin(full)
 > `0440a3f633447d4516723051e60210c6d7c9e4d043ac167f0ec09c92d84675db`(user 불변). 바뀐 것은 transport 휴게소·주유소 상세의 nullable
