@@ -490,7 +490,9 @@ export function PlaceInfoPanel({
       ),
     });
   }
+  // 펼친 항목이 사라지면(소개 이미지가 깨진 경우) 펼침도 푼다 — 상태 값은 렌더 때 정규화한다.
   const current = sections.find((section) => section.key === openSection) ?? null;
+  const shownSection = current?.key ?? null;
 
   return (
     <aside
@@ -518,7 +520,7 @@ export function PlaceInfoPanel({
       </header>
       <SectionToggles
         sections={sections}
-        openSection={openSection}
+        openSection={shownSection}
         panelId={panelId}
         onToggle={setOpenSection}
       />

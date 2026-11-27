@@ -180,6 +180,9 @@ def test_disallowed_image_host_is_dropped() -> None:
         # 태그 이름이 아닌 꺾쇠 본문은 원문 그대로 둔다(본문 변경 금지).
         ("<A코스> 2시간, <B코스> 3시간 <Tip: 주차>", "<A코스> 2시간, <B코스> 3시간 <Tip: 주차>"),
         ("<K-POP 체험>", "<K-POP 체험>"),
+        ("<A 코스> 2시간, <B 코스>", "<A 코스> 2시간, <B 코스>"),
+        ("<I Love 서울> <Small 콘서트>", "<I Love 서울> <Small 콘서트>"),
+        ('<a href="https://x.example" target=_blank>링크</a>', "링크"),
         ('<P class="x">문단</P><BR/>끝', "문단\n끝"),
         ("<font color=red>빨강</font>", "빨강"),
         ("1 <2", "1 <2"),

@@ -54,7 +54,8 @@ _HTML_TAGS: Final = (
     "option|p|pre|s|script|section|select|small|source|span|strike|strong|style|sub|sup|svg|"
     "table|tbody|td|textarea|tfoot|th|thead|title|tr|u|ul|video"
 )
-_TAG_RE: Final = re.compile(rf"</?(?:{_HTML_TAGS})(?:\s[^<>]*)?/?>", re.IGNORECASE)
+_ATTR: Final = r"""\s+[A-Za-z_:][-\w:.]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?"""
+_TAG_RE: Final = re.compile(rf"</?(?:{_HTML_TAGS})(?:{_ATTR})*\s*/?>", re.IGNORECASE | re.ASCII)
 """알려진 HTML 태그 이름만 지운다. `<A코스>`·`<Tip: 주차>`·`a < b > c` 같은 본문 꺾쇠는 원문 그대로 둔다
 (본문을 바꾸지 않는다 — 화면은 텍스트로 이스케이프해 그린다)."""
 

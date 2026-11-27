@@ -4,10 +4,11 @@
 
 2026-11-11 공통 이관 checkpoint: 지도 source9a의 core1.0.1/web1.0.3/RN1.0.1과 Lightning CSS1.33.0+nativecss.fix.3 동일 tgz 실제 설치·lock/원장 SHA512 일치. 웹/모바일 타입·lint 및 Doctor482/45files 진단0. Android/iOS/Web export와 SDK58 N150375/1280px 로그인·글꼴 스모크PASS. 웹 unit493PASS/1FAIL은 최종 common LoginForm 자동완성 수정 pack 대기. 최종 common 정책·clean ci/build/e2e·독립2리뷰 미완료이며 push/배포 대기. 후속 N150 production buildPASS/E2E203PASS6FAIL(긴 공통Dialog)4SKIP, 별도 실제 canvas3casesPASS. ESLint도 전이까지10.14.0 하나로 정리했다. 상세는 docs/reports/common-unification-20261111.md.
 
-- [/] T-COMMON-20261111 — 원 A OCI/ENV source 동등성+validSHA 음성검사 수정, 원 B CI경로 green. 같은 final head 원 A/B closure·actual image CI 확인.  SDK4 latest/필수Doctor20·main476 bounded merge 뒤 fresh hosted export/smoke·web CI 확인.  C11 actual7종297파일·원장/lock/guard·unit527·type/Doctor0 검증. N150 새 production 전체browser209/0/기존flagSKIP4·canvas3·restore2 PASS. 소비자 독립2리뷰·정확 HEAD CI·merge·부모 go 및 이미지 배포. 근거: docs/reports/common-unification-20261111.md.
+- [/] T-COMMON-20261111 — 원 A OCI/ENV source 동등성+validSHA 음성검사 수정, 원 B CI경로 green. 같은 final head 원 A/B closure·actual image CI 확인. SDK4 latest/필수Doctor20·main476 bounded merge 뒤 fresh hosted export/smoke·web CI 확인. C11 actual7종297파일·원장/lock/guard·unit527·type/Doctor0 검증. N150 새 production 전체browser209/0/기존flagSKIP4·canvas3·restore2 PASS. 소비자 독립2리뷰·정확 HEAD CI·merge·부모 go 및 이미지 배포. 근거: docs/reports/common-unification-20261111.md.
 
 - [/] #636/#638 — PR688 일정 수동 전송·사용자 opt-in 일간/주간 예약의 최종 WSL UI·두 전문 적대리뷰·정확HEAD CI 후 일반 merge. 운영·실수신자 전송 없음.
 - [ ] #720 — Resend 발송 복구(소유자): Manager root `.env`에 `PINVI_RESEND_FROM_EMAIL`(Resend verified 도메인)·`PINVI_WEB_BASE_URL`(공개 origin)·(webhook을 쓰면) `PINVI_RESEND_WEBHOOK_SECRET` → Manager #648 설치 + PinVi #801 이미지를 한 번의 compose 재생성으로 적용 → 기동 로그 `pinvi.email.config_warning` 없음 → `/admin/emails`에서 failed 초대 7통 재발송·1통 수신 확인 뒤 #720 닫기.
+- [ ] T-TOURAPI-USECASE — #809 배포 뒤 소유자가 data.go.kr 15101578 활용사례 등록 + 운영계정 트래픽 증설 신청(화면 캡처: 지도 상세 카드 소개·출처·공공누리). 후속: ① 개인정보처리방침 외부 전송 목록에 "장소 대표 사진은 이용자 기기가 한국관광공사 이미지 서버(`tong.visitkorea.or.kr`)에서 직접 받는다(IP·User-Agent 전달, Referer 없음)" 추가(법무 검토), ② 웹 `useFeatureDetailCard`에 캐시(패널을 열 때마다 detail-card 재요청), ③ 웹 `PlaceInfoPanel` 기존 `LINK_CLASS`(`text-primary`) 대비 4.5:1 미달.
 - [ ] #637 — Weather201의 공식 지역별 발령/해제·행정구역 매핑 계약을 선병합하고 Pinvi 대표지역 특보 알림을 후속 구현한다.
 
 이 문서는 완료되지 않은 작업만 의존 순서대로 한 줄씩 나열한다. lane, 담당자 구분,
@@ -80,11 +81,11 @@ run-m05-isolated-e2e-once → activation attestation`이 재실행된 기록이 
   Map PR이 머지되기 전에는 Map 브랜치 `docs/read-performance-plan-20261117`에서 읽는다.
   - 소유자 결정(2026-11-18): 코드만으로 이득이 분명한 것만 지금 한다. 새 측정에 기대는 것은 조용한 측정 창 뒤로 미룬다.
   - [x] `04` — 503 `READ_TIMEOUT`·`POOL_BUSY`는 한 번만 보내고 회로에 실패 한 번(#777, `c0090296`).
-    운영 반영(PinVi 회전) 뒤에야 Map `T-READ-03`을 낸다.
+        운영 반영(PinVi 회전) 뒤에야 Map `T-READ-03`을 낸다.
   - [x] `01` ②(가) — transport·weather 상한 기본값 2 → 16을 **코드 기본값**으로 바꿨다(#777). 운영 Manager compose에는
-    이 두 env가 없어 코드 기본값이 그대로 쓰인다 — `T-READ-MGR-07`(Manager env 배선)은 필요 없다. `01` ③은 Map `T-READ-04` 뒤.
+        이 두 env가 없어 코드 기본값이 그대로 쓰인다 — `T-READ-MGR-07`(Manager env 배선)은 필요 없다. `01` ③은 Map `T-READ-04` 뒤.
   - [x] `05`의 분명한 낭비만 — rate-limit 판정 문장에 transaction-local `synchronous_commit = off`(문장 하나 유지).
-    사용자 조회(요청당 PK 한 번)·위치 감사 outbox(법정 확인자료, 좌표 선언 route만)는 낭비가 아니라 그대로. ①의 구간 histogram은 측정 창 뒤.
+        사용자 조회(요청당 PK 한 번)·위치 감사 outbox(법정 확인자료, 좌표 선언 route만)는 낭비가 아니라 그대로. ①의 구간 histogram은 측정 창 뒤.
   - [x] `07` — 통합 검색의 Kakao·Naver를 함께 기다린다.
   - [ ] `03`(여행 보기 날씨 병렬) — 미룸: 이득 상한 약 1.5초가 운영 수치에 달려 있고 세션 분리 위험이 중간이다(계획 ②의 문턱).
   - [ ] `02`(in-bounds 캐시) — 미룸: zoom 분포(`06`)가 채택을 정한다. `06`은 측정·분석이라 코드 작업이 아니다.
