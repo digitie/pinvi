@@ -1938,6 +1938,14 @@ test('여행 장소 마커는 원형 + 상자 없는 이름 라벨 + 현재 날�
     return { bg: style.backgroundColor, shadow: style.boxShadow, border: style.borderTopWidth };
   });
   expect(labelStyle).toEqual({ bg: 'rgba(0, 0, 0, 0)', shadow: 'none', border: '0px' });
+  // 원과 라벨 위치는 한 프레임에서 같이 잰다 — 따로 재면 그 사이 지도 카메라(fitBounds)가 움직여 어긋난다(CI flake).
+  const gap = await marker.evaluate((el) => {
+    const d = el.querySelector('[data-testid="circle-place-marker-dot"]')!.getBoundingClientRect();
+    const l = el.querySelector('[data-testid="circle-place-marker-label"]')!.getBoundingClientRect();
+    return l.left - d.right;
+  });
+  expect(gap).toBeGreaterThan(-1);
+
   // 핀 하나 여행은 flyTo(애니메이션)로 맞추므로 이 시점에도 마커가 움직이는 중일 수 있다. 원과 라벨을
   // 따로 boundingBox로 재면 그 사이 카메라가 옮긴 거리(수십 px)가 섞인다 — 같은 layout에서 함께 잰다.
   const labelLayout = await marker.evaluate((el) => {
