@@ -286,6 +286,8 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
         "feature_id": {"type": "string", "required": True, "nullable": False},
         "name": {"type": "string", "required": True, "nullable": False},
         "area_kind": {"type": "string", "required": True, "nullable": False},
+        # 표시 이름(`category_label`)으로 바꿔 싣는다 — 코드 자체는 PinVi 응답에 내보내지 않는다.
+        "category": {"type": "string", "required": True, "nullable": False},
     },
     # `services/notice_plan_highlights.py` `_CurationGroup`/`_CurationFeature`/`_CurationMembership`.
     "FeatureCurationGroupsData": {
