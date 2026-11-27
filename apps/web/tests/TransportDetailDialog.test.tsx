@@ -161,7 +161,7 @@ describe('TransportDetailDialog', () => {
     );
     const food = await screen.findByTestId('rest-area-food');
     expect(food).toHaveTextContent('안산휴게소(강릉방향) 먹거리');
-    expect(food).toHaveTextContent('소떡소떡대표4,500원');
+    expect(food).toHaveTextContent('소떡소떡 대표 4,500원');
     expect(food).toHaveTextContent('출처: 한국도로공사 · 기준일 2026-11-28');
   });
 

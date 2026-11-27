@@ -45,21 +45,30 @@ describe('RestAreaFoodSection', () => {
     expect(screen.getByTestId('rest-area-food-price-range').textContent).toBe(
       '가격대 3,000~16,000원 · 중앙 9,000원 (메뉴 62개)',
     );
+    expect(within(section).getByRole('heading', { name: '먹거리' }).id).toBeTruthy();
     const seasonal = screen.getByTestId('rest-area-food-seasonal');
     expect(seasonal.textContent).toContain('냉모밀');
     expect(seasonal.textContent).toContain('여름');
     expect(screen.getByTestId('rest-area-food-source').textContent).toBe(
-      '출처: 한국도로공사 · 기준일 2026-11-28',
+      '출처: 한국도로공사 · 기준일 2026-11-28 · 메뉴 갱신 2026-01-09',
     );
+    // 메뉴명·표시·가격은 공백으로 나뉘어 읽힌다.
+    expect(featured.textContent).toContain('어묵우동 대표 7,500원');
     expect(screen.queryByTestId('rest-area-food-paired')).toBeNull();
   });
 
   it('names the paired rest area on a highway fuel station', () => {
-    render(<RestAreaFoodSection food={{ ...FOOD, paired_distance_m: 54.6 }} />);
+    render(<RestAreaFoodSection food={{ ...FOOD, paired_distance_m: 54.6 }} paired />);
     expect(screen.getByRole('heading', { name: '행담도휴게소 먹거리' })).toBeTruthy();
     expect(screen.getByTestId('rest-area-food-paired').textContent).toBe(
       '이 주유소가 있는 휴게소 · 55m',
     );
+  });
+
+  it('names the rest area on a fuel station even without a distance', () => {
+    render(<RestAreaFoodSection food={FOOD} paired />);
+    expect(screen.getByRole('heading', { name: '행담도휴게소 먹거리' })).toBeTruthy();
+    expect(screen.getByTestId('rest-area-food-paired').textContent).toBe('이 주유소가 있는 휴게소');
   });
 
   it('renders nothing without menus', () => {
@@ -75,7 +84,7 @@ describe('RestAreaFoodSection', () => {
         food={{ ...FOOD, price_min: null, price_median: null, price_max: null, seasonal: [] }}
       />,
     );
-    expect(screen.queryByTestId('rest-area-food-price-range')).toBeNull();
+    expect(screen.getByTestId('rest-area-food-price-range').textContent).toBe('(메뉴 62개)');
     expect(screen.queryByTestId('rest-area-food-seasonal')).toBeNull();
   });
 });

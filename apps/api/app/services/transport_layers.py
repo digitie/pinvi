@@ -479,7 +479,16 @@ def _food(layer: TransportLayer, data: Mapping[str, Any]) -> RestAreaFood | None
     except ValidationError:
         logger.warning("map_transport_food_contract layer=%s", layer)
         return None
-    if isinstance(distance, int | float) and not isinstance(distance, bool):
+    if layer == "fuel_station":
+        # Map 계약상 필수 거리다. 없거나 이상하면 어느 휴게소의 먹거리인지 보증할 수 없어 버린다.
+        if (
+            not isinstance(distance, int | float)
+            or isinstance(distance, bool)
+            or not math.isfinite(distance)
+            or distance < 0
+        ):
+            logger.warning("map_transport_food_contract layer=%s field=distance_m", layer)
+            return None
         food = food.model_copy(update={"paired_distance_m": float(distance)})
     return food
 

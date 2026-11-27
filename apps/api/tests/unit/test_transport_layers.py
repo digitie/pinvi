@@ -162,6 +162,13 @@ async def test_detail_without_or_with_a_broken_food_block_keeps_the_detail() -> 
     plain = fx.detail_body("rest-areas", food=False)
     broken = fx.detail_body("fuel-stations")
     broken["data"]["rest_area_food"]["rest_area"]["menu_count"] = "many"
+    no_distance = fx.detail_body("fuel-stations")
+    no_distance["data"]["rest_area_food"]["distance_m"] = None
+    handler_nd, _ = _by_dataset({"fuel-stations": httpx.Response(200, json=no_distance)})
+    station_nd = await transport_layers.detail(
+        _client(handler_nd), "fuel_station", fx.FUEL_STATION_ID
+    )
+    assert station_nd.food is None
     handler, _ = _by_dataset(
         {
             "rest-areas": httpx.Response(200, json=plain),

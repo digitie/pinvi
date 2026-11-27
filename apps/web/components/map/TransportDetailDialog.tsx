@@ -426,7 +426,7 @@ function TransportDetailDialogView1({ viewModel }: { viewModel: TransportDetailD
       {item && (
         <div className="space-y-3" data-layer={item.layer}>
           <ItemBody item={item} nowMs={loaded?.receivedAt ?? 0} />
-          <RestAreaFoodSection food={loaded?.data.food} />
+          <RestAreaFoodSection food={loaded?.data.food} paired={item.layer === 'fuel_station'} />
           {(address || phone) && (
             <dl>
               {address && <Row label="주소">{address}</Row>}
