@@ -330,7 +330,7 @@ function NoticeFacts({
 /**
  * 구역 이름 → "○○ 안" 문구. 국립공원·위험지역은 종류어가 없으면 덧붙인다(“지리산” → “지리산 국립공원 안”).
  * 보호지역은 지정 종류가 제각각(도립공원·명승·천연기념물·습지보호지역…)이라 일괄 "보호지역"을 붙이지 않고
- * 서버가 준 지정 종류 이름을 곁에 둔다(“남한산성 · 도립·군립공원 안”). 모르는 종류는 이름만 쓴다.
+ * 서버가 준 지정 종류 이름을 괄호로 곁에 둔다(“남한산성(도립·군립공원) 안”). 모르는 종류는 이름만 쓴다.
  */
 function containingAreaLabel(area: ContainingArea): string {
   const name = area.name.trim();
@@ -342,7 +342,7 @@ function containingAreaLabel(area: ContainingArea): string {
   }
   const kind = area.category_label?.trim();
   if (area.area_kind === 'protected_area' && kind && !name.includes(kind)) {
-    return `${name} · ${kind} 안`;
+    return `${name}(${kind}) 안`;
   }
   return `${name} 안`;
 }

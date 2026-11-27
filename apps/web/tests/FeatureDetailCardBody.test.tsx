@@ -47,7 +47,7 @@ describe('FeatureDetailCardBody containing areas', () => {
     );
     const chips = screen.getAllByTestId('feature-detail-card-body-containing-area');
     expect(chips.map((chip) => chip.textContent)).toEqual([
-      '우이령 · 명승 안',
+      '우이령(명승) 안',
       '북한산 국립공원 안',
       // 지정 종류를 모르면 이름만 — 일괄 "보호지역"을 지어 붙이지 않는다.
       '남한산성 안',
