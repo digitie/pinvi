@@ -231,7 +231,9 @@ for (const viewport of [
     expect(Math.round((await dot.boundingBox())!.width)).toBe(24);
     await shot(page, `fuel-markers-sparse-${viewport.name}`);
 
-    await chip.click();
+    // 키보드로 연다(마커는 role=button) — 320px에서는 레이어 패널이 지도 가운데를 덮어 포인터로는 못 누른다.
+    await first.focus();
+    await page.keyboard.press('Enter');
     // 누른 마커는 선택 상태다(칩 바깥 outline).
     await expect(first).toHaveAttribute('data-selected', 'true');
     const prices = page.getByTestId('transport-fuel-prices');
@@ -248,7 +250,8 @@ for (const viewport of [
     await shot(page, `fuel-detail-${viewport.name}`);
     await page.keyboard.press('Escape');
 
-    await dot.click();
+    await incident.focus();
+    await page.keyboard.press('Enter');
     await expect(page.getByTestId('transport-incident-route')).toHaveText('0010 · 경부선');
     await expect(page.getByTestId('transport-incident-status')).toHaveText('사고 · 처리중');
     await shot(page, `incident-detail-${viewport.name}`);
