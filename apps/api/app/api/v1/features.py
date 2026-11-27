@@ -57,7 +57,6 @@ from app.schemas.envelope import Envelope
 from app.schemas.feature import (
     ContainingArea,
     Coord,
-    DetailCardBase,
     ExternalRef,
     ExternalRefProvider,
     FeatureCategory,
@@ -695,10 +694,15 @@ _CONTAINING_AREA_KINDS: tuple[str, ...] = ("national_park", "protected_area", "h
 # Map은 feature **대표점 한 점**으로 판정한다 — route·area의 대표점은 무게중심이라 "선·면이 공원 안"을
 # 뜻하지 않는다(공원을 두르는 둘레길의 무게중심은 공원 안). 점 feature 카드에만 붙인다.
 _CONTAINING_CARD_KINDS: frozenset[str] = frozenset({"place", "event"})
+# 선택 정보의 자기 예산(초) — 카드 전체 예산(2.5초)을 다 써서 뒤의 카카오·네이버 보강이 굶지 않게 한다.
+_CONTAINING_AREAS_BUDGET_SECONDS = 0.8
 
 
 async def _attach_containing_areas(
-    card: DetailCardBase, client: KorTravelMapClient, feature_id: str
+    card: FeatureDetailCard,
+    client: KorTravelMapClient,
+    feature_id: str,
+    labels: CategoryLabels = EMPTY_CATEGORY_LABELS,
 ) -> None:
     """카드에 "이 장소를 덮는 구역"을 붙인다. 선택 정보라 실패는 저하(`containing_areas`)로만 남긴다.
 
@@ -709,17 +713,31 @@ async def _attach_containing_areas(
     if not settings.pinvi_map_containing_areas_enabled or card.kind not in _CONTAINING_CARD_KINDS:
         return
     try:
-        rows = await client.get_feature_containing_areas(
-            feature_id, area_kinds=_CONTAINING_AREA_KINDS
-        )
+        # 이 timeout이 만료되면 여기서 TimeoutError — 바깥(카드 전체) 예산 만료는 취소로 와서 위로 전파된다.
+        async with asyncio.timeout(_CONTAINING_AREAS_BUDGET_SECONDS):
+            rows = await client.get_feature_containing_areas(
+                feature_id, area_kinds=_CONTAINING_AREA_KINDS
+            )
         areas: list[ContainingArea] = []
         for row in rows:
             try:
-                areas.append(ContainingArea.model_validate(row))
+                category = row.get("category")
+                areas.append(
+                    ContainingArea.model_validate(
+                        {
+                            "feature_id": row.get("feature_id"),
+                            "name": row.get("name"),
+                            "area_kind": row.get("area_kind"),
+                            "category_label": labels.label(
+                                category if isinstance(category, str) else None
+                            ),
+                        }
+                    )
+                )
             except ValidationError:
                 # 계약 밖 행 하나가 카드 전체를 저하시키지 않는다 — 그 행만 버린다.
                 continue
-    except KorTravelMapError as exc:
+    except (KorTravelMapError, TimeoutError) as exc:
         card.degraded_providers.append("containing_areas")
         log.warning("feature_detail_card.containing_areas_failed", failure_type=type(exc).__name__)
         return
@@ -766,7 +784,7 @@ async def get_feature_detail_card(
                             card.degraded_providers.append("category_labels")
                     stage = "containing_areas"
                     with _detail_card_stage(durations, stage):
-                        await _attach_containing_areas(card, client, feature_id)
+                        await _attach_containing_areas(card, client, feature_id, labels)
                     stage = "enrichment"
                     with _detail_card_stage(durations, stage):
                         if requested and isinstance(card, PlaceDetailCard) and card.name:
@@ -783,6 +801,13 @@ async def get_feature_detail_card(
                 if card is None:
                     card = build_detail_card(dto, EMPTY_CATEGORY_LABELS)
                     card.degraded_providers.append("category_labels")
+                # 카드 예산이 구역 단계에서 끝났으면 "구역 없음"이 아니라 "구하지 못함"이다.
+                if (
+                    stage == "containing_areas"
+                    and settings.pinvi_map_containing_areas_enabled
+                    and "containing_areas" not in card.degraded_providers
+                ):
+                    card.degraded_providers.append("containing_areas")
                 # 이미 받은 보강값은 보존하고 아직 끝나지 않은 요청만 저하로 표시한다.
                 if isinstance(card, PlaceDetailCard) and card.name:
                     completed = {row.provider for row in card.enrichment} | set(

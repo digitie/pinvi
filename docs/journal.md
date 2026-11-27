@@ -2,10 +2,13 @@
 
 - Map 새 공개 API `GET /v1/features/{id}/containing-areas`(Map PR #1567, 대표점 한 점을 덮는 공개 area, 작은 면 먼저)를
   client `get_feature_containing_areas`로 부르고 detail-card에 `containing_areas[{feature_id,name,area_kind}]`를 싣는다.
-  단계 `containing_areas`는 같은 2.5초 예산 안이고, 실패는 `degraded_providers=["containing_areas"]`로만 남는다(카드 유지).
-  계약 밖 행은 그 행만 버린다. place·event 카드에만 붙인다(route·area 대표점은 무게중심이라 "선·면이 공원 안"이 아니다).
-- 화면(`FeatureDetailCardBody`): 주소 아래 칩 — 국립공원·보호지역은 정보 칩(나무 아이콘), `hazard_zone`만 경고 스타일
-  (`role=alert`, error 토큰). 이름에 종류어가 없으면 "국립공원/보호지역/위험지역"을 덧붙인다. hazard_zone 데이터는 아직 0건이다.
+  단계 `containing_areas`는 카드 예산 안의 자기 예산 0.8초이고, 실패·예산 만료·404(Map에 경로 없음 — 배포 순서 실수)는
+  `degraded_providers=["containing_areas"]`로 남는다(카드 유지). 자기 회로·자리(`areas`)를 써서 연속 실패가 상세(`features`)
+  회로를 열지 않는다. 계약 밖 행은 그 행만 버린다. place·event 카드에만 붙인다(route·area 대표점은 무게중심이라 "선·면이 공원
+  안"이 아니다). 지정 종류는 Map category를 라벨 카탈로그로 이름만 싣는다(코드는 안 싣는다).
+- 화면(`FeatureDetailCardBody`): 주소 아래 칩 목록(`aria-label="이 장소가 속한 구역"`) — 국립공원은 "○○ 국립공원 안", 보호지역은
+  "○○ · 지정 종류 안"(종류를 모르면 이름만 — 일괄 "보호지역"을 지어 붙이지 않는다), `hazard_zone`만 경고 스타일(error 토큰,
+  sr-only "경고:" — 정적 속성이라 live region을 쓰지 않는다). hazard_zone 데이터는 아직 0건이다.
 - **플래그 `PINVI_MAP_CONTAINING_AREAS_ENABLED`(기본 false, compose 전달)**: Map 국립공원 경계 재적재(Map PR #1566 — 원천
   15017313이 공원경계 3 km 버퍼였다) **배포 뒤에만** 켠다. 그 전엔 버퍼 면이 은평·도봉 시가지까지 "북한산 안"이라 답한다.
 - Map user OpenAPI 재vendor(`17ac805d…`), M05 pair 계약 재생성. 시험: unit(client·플래그·저하·계약 밖 행·route/area 제외),

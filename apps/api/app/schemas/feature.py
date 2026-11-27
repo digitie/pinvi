@@ -221,6 +221,8 @@ class ContainingArea(BaseModel):
     feature_id: str = Field(min_length=1, max_length=200)
     name: str = Field(min_length=1, max_length=200)
     area_kind: str = Field(min_length=1, max_length=64)
+    # 지정 종류의 표시 이름(Map category 잎 이름 — 도립·군립공원·명승…). 모르면 null. 코드는 싣지 않는다.
+    category_label: str | None = Field(default=None, max_length=200)
 
 
 class DetailCardBase(BaseModel):

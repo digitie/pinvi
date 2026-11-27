@@ -14,7 +14,11 @@ import httpx
 import pytest
 
 from app.api.v1 import features as features_api
-from app.clients.kor_travel_map import KorTravelMapClient, KorTravelMapUnavailable
+from app.clients.kor_travel_map import (
+    KorTravelMapClient,
+    KorTravelMapFeatureNotFound,
+    KorTravelMapUnavailable,
+)
 from app.core.config import Settings
 from app.schemas.feature import PlaceDetailCard
 
@@ -84,13 +88,30 @@ async def test_client_sends_kinds_and_page_size_and_keeps_map_order() -> None:
     assert request.url.params["page_size"] == "5"
 
 
-async def test_client_maps_missing_feature_to_empty() -> None:
-    status_code = 404
-    rows = await _client(
-        lambda _r: httpx.Response(status_code, json={"detail": "x"})
-    ).get_feature_containing_areas("f1")
+async def test_client_raises_not_found_instead_of_hiding_it() -> None:
+    """상세를 막 읽은 뒤의 404는 대개 Map에 경로가 없다는 뜻이다 — 빈 목록으로 숨기지 않는다."""
+    with pytest.raises(KorTravelMapFeatureNotFound):
+        await _client(
+            lambda _r: httpx.Response(404, json={"detail": "x"})
+        ).get_feature_containing_areas("f1")
 
-    assert rows == []
+
+async def test_area_failures_do_not_open_the_core_features_circuit() -> None:
+    """선택 정보(containing-areas)의 연속 실패가 상세 조회(`features`) 회로를 열면 카드 전체가 503이 된다."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/containing-areas"):
+            return httpx.Response(500, json={"detail": "boom"})
+        return httpx.Response(
+            200,
+            json={"data": {"feature_id": "f1", "kind": "place", "name": "x"}, "meta": {}},
+        )
+
+    client = _client(handler)
+    for _ in range(6):
+        with pytest.raises(KorTravelMapUnavailable):
+            await client.get_feature_containing_areas("f1")
+    assert await client.get_feature("f1") is not None
 
 
 async def test_client_rejects_dot_segment_and_escapes_slash() -> None:
@@ -155,7 +176,22 @@ async def test_flag_on_attaches_areas_in_map_order(monkeypatch: pytest.MonkeyPat
         ("북한산 국립공원", "national_park"),
     ]
     dumped = card.model_dump()["containing_areas"][0]
-    assert set(dumped) == {"feature_id", "name", "area_kind"}
+    # 코드(category)는 싣지 않고 표시 이름만 — 라벨 카탈로그가 없으면 null.
+    assert set(dumped) == {"feature_id", "name", "area_kind", "category_label"}
+    assert dumped["category_label"] is None
+
+
+async def test_category_code_becomes_display_label(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.category_labels import CategoryLabels
+
+    _enable(monkeypatch, True)
+    client = _FakeClient(_AREAS)
+    card = _card()
+    labels = CategoryLabels(by_code={"01070300": "명승", "01020101": "국립공원"})
+
+    await features_api._attach_containing_areas(card, client, "f1", labels)  # type: ignore[arg-type]
+
+    assert [a.category_label for a in card.containing_areas] == ["명승", "국립공원"]
 
 
 async def test_out_of_contract_row_is_dropped_alone(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -191,3 +227,24 @@ async def test_route_and_area_cards_are_not_attached(monkeypatch: pytest.MonkeyP
         await features_api._attach_containing_areas(card, client, "r1")  # type: ignore[arg-type]
         assert card.containing_areas == []
     assert client.calls == []
+
+
+async def test_slow_map_is_cut_by_its_own_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """구역 조회는 자기 예산에서 끊는다 — 카드 전체 예산을 다 써서 보강을 굶기지 않는다."""
+    import asyncio
+
+    _enable(monkeypatch, True)
+    monkeypatch.setattr(features_api, "_CONTAINING_AREAS_BUDGET_SECONDS", 0.05)
+
+    class _Slow(_FakeClient):
+        async def get_feature_containing_areas(
+            self, feature_id: str, *, area_kinds: tuple[str, ...] = (), page_size: int = 10
+        ) -> list[dict[str, Any]]:
+            await asyncio.sleep(5)
+            return []
+
+    card = _card()
+    await features_api._attach_containing_areas(card, _Slow(_AREAS), "f1")  # type: ignore[arg-type]
+
+    assert card.containing_areas == []
+    assert card.degraded_providers == ["containing_areas"]

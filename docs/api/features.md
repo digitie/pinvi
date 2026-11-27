@@ -49,10 +49,11 @@ GET /features/{feature_id}/detail-card는 Map 상세·카탈로그·선택적 �
 
 ## 상세 카드의 "이 장소를 덮는 구역" (2026-11-27)
 
-detail-card의 `containing_areas[]`(`feature_id`·`name`·`area_kind`)는 Map
+detail-card의 `containing_areas[]`(`feature_id`·`name`·`area_kind`·`category_label`)는 Map
 `GET /v1/features/{id}/containing-areas`(`area_kind`=national_park·protected_area·hazard_zone, 작은 면 먼저)의 투영이다.
-place·event 카드에만 붙는다 — Map은 대표점 한 점으로 판정하므로 route·area 카드에는 의미가 없다. 같은 대기 예산의
-`containing_areas` 단계이고, 실패는 `degraded_providers`에 `containing_areas`로만 남는다. 플래그
+place·event 카드에만 붙는다 — Map은 대표점 한 점으로 판정하므로 route·area 카드에는 의미가 없다. 카드 예산 안의
+`containing_areas` 단계(자기 예산 0.8초, 자기 회로 `areas`)이고, 실패·예산 만료·404는 `degraded_providers`에
+`containing_areas`로만 남는다. 플래그
 `PINVI_MAP_CONTAINING_AREAS_ENABLED`(기본 false)가 꺼져 있으면 Map을 부르지 않고 빈 목록이다 — Map 국립공원 경계
 재적재 배포 뒤에 켠다. 화면은 `hazard_zone`만 경고 스타일이다.
 

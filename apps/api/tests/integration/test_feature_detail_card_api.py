@@ -608,10 +608,9 @@ async def test_detail_card_containing_areas_follow_the_flag(
         on = await client.get("/features/place:1/detail-card", cookies=auth_cookies(user_id))
         assert on.status_code == 200, on.text
         data = on.json()["data"]
-        assert data["containing_areas"] == [
-            {"feature_id": "a1", "name": "북한산 국립공원", "area_kind": "national_park"},
-            {"feature_id": "h1", "name": "낙석", "area_kind": "hazard_zone"},
-        ]
+        assert [
+            (row["feature_id"], row["name"], row["area_kind"]) for row in data["containing_areas"]
+        ] == [("a1", "북한산 국립공원", "national_park"), ("h1", "낙석", "hazard_zone")]
         assert data["degraded_providers"] == []
         assert fake.area_calls == ["place:1"]
     finally:

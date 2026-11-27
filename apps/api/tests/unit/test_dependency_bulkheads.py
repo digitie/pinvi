@@ -172,6 +172,8 @@ async def test_factories_take_caps_from_settings() -> None:
             "transport": 3,
             "festivals": 4,
             "weather": 2,
+            # 선택 정보(containing-areas)는 상세와 같은 크기의 별도 자리.
+            "areas": 11,
         }
         assert geo._slots._value == 5
         assert weather._slots._value == 6

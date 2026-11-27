@@ -163,6 +163,8 @@ export const ContainingAreaSchema = z.object({
   feature_id: z.string().min(1).max(200),
   name: z.string().min(1).max(200),
   area_kind: z.string().min(1).max(64),
+  /** 지정 종류 표시 이름(도립·군립공원·명승…). 모르면 null. */
+  category_label: z.string().max(200).nullable().default(null),
 });
 export type ContainingArea = z.infer<typeof ContainingAreaSchema>;
 

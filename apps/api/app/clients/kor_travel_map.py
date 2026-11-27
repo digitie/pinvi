@@ -50,10 +50,11 @@ KEEPALIVE_EXPIRY_SECONDS: float = 3.0
 #: 회로 범위. 한 표면의 실패가 다른 표면을 끊지 않는다(#702 — 전국 viewport timeout이 검색·상세·trip
 #: batch까지 120초 503으로 만들었다). weather 표면은 자체 회로(``kor_travel_map_weather``)만 쓴다.
 #: ``festivals``: 공개 월별 축제 목록 — 첫 조회 월의 느린 응답이 검색·상세를 끊지 않게(#714).
-CircuitScope = Literal["features", "viewport", "transport", "festivals"]
+#: `areas`는 상세 카드의 선택 정보(containing-areas) — 실패가 핵심 상세(`features`) 회로를 열지 않게 따로 둔다.
+CircuitScope = Literal["features", "viewport", "transport", "festivals", "areas"]
 #: 동시 호출 상한(bulkhead) 범위(#621). 회로 범위와 같고, 자체 회로를 가진 weather 표면만 더한다.
 #: 한 표면이 느려져 자리를 다 써도 다른 표면은 자기 자리로 Map에 닿는다.
-BulkheadScope = Literal["features", "viewport", "transport", "festivals", "weather"]
+BulkheadScope = Literal["features", "viewport", "transport", "festivals", "weather", "areas"]
 
 #: 공개 월별 축제 목록의 read 예산(초). Map이 처음 조회하는 월은 기본 5초를 넘었다(#714 운영 2026-11-08:
 #: 1·2월 5.9~6.2초 뒤 ReadTimeout, 직후 같은 월은 0.02~0.33초). 연결 예산은 기본값 그대로다.
@@ -439,6 +440,8 @@ class KorTravelMapClient:
             if limit < 1:
                 raise ValueError("surface_concurrency는 양수여야 합니다.")
             limits[scope] = limit
+        # 상세 카드의 선택 정보(containing-areas)는 상세(`features`)와 같은 크기의 **별도** 자리를 쓴다.
+        limits.setdefault("areas", limits["features"])
         self._bulkhead_limits = limits
         self._bulkheads: dict[BulkheadScope, asyncio.Semaphore] = {
             scope: asyncio.Semaphore(limit) for scope, limit in limits.items()
@@ -448,6 +451,7 @@ class KorTravelMapClient:
             "viewport": TransportCircuit(clock=clock),
             "transport": TransportCircuit(clock=clock),
             "festivals": TransportCircuit(clock=clock),
+            "areas": TransportCircuit(clock=clock),
         }
         self._clock = clock
         self._festivals_monthly_cache: dict[
@@ -775,9 +779,12 @@ class KorTravelMapClient:
         area_kinds: Sequence[str] = (),
         page_size: int = 10,
     ) -> list[dict[str, Any]]:
-        """feature 대표점을 덮는 공개 area(국립공원·보호지역·위험지역…). 404 → 빈 목록.
+        """feature 대표점을 덮는 공개 area(국립공원·보호지역·위험지역…).
 
-        Map `GET /v1/features/{feature_id}/containing-areas` — 작은 면 먼저(가장 구체적인 구역).
+        Map `GET /v1/features/{feature_id}/containing-areas` — 작은 면 먼저(가장 구체적인 구역). 선택 정보라
+        자기 회로·자리(`areas`)를 쓴다 — 실패가 상세 조회(`features`) 회로를 열면 안 된다. 404는 조용히 빈
+        목록으로 접지 않고 `KorTravelMapFeatureNotFound`로 올린다 — 상세를 막 읽은 뒤의 404는 대개 Map에 이
+        경로가 아직 없다는 뜻(배포 순서 실수)이라 호출자가 저하로 드러낸다.
         """
         segment = _path_segment(feature_id)
         if segment is None:
@@ -791,10 +798,9 @@ class KorTravelMapClient:
             f"/v1/features/{feature_id}/containing-areas",
             params=params,
             allow_public_api_key=True,
+            circuit="areas",
         )
-        if resp.status_code == status.HTTP_404_NOT_FOUND:
-            # 비공개·없는 feature — "덮는 구역 없음". 대표 좌표가 없는 feature는 Map이 200 + 빈 items를 준다.
-            return []
+        # 대표 좌표가 없는 feature는 Map이 200 + 빈 items를 준다.
         items = self._data(resp).get("items")
         return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
 
