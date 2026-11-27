@@ -15,10 +15,12 @@
   `VisitGuide`(원천 문장 표, 요금 `성인 2,000원 · 청소년 1,000원 · 어린이 무료` + 원문, 무장애·반려동물 펼침 배지 —
   아이콘·글자·`aria-expanded`). 지도 상세 카드(place·축제)와 여행 `PlaceInfoPanel`(`소개`·`이용 안내` 항목), 모바일
   `PlaceSheet`(같은 두 항목). 판정·문구는 `@pinvi/domain` `sourceIntroduction.ts`·`visitGuide.ts`.
-- 계약: Map user OpenAPI를 Map PR 브랜치 `claude/place-visitor-info` HEAD `5376ae06`(sha256 `6cfd4c8f…`, #1565 브랜치와 byte
-  동일)로 재vendor — f1788da9 대비 변경은 `visitor_info`와 그 schema 6개뿐. 게이트에 `visitor_info`·`PlaceVisitorInfo`·
-  `PlaceImage`·`ContentLicense`·`PlaceFee`·`AccessibilityNote`·`PetPolicy` 소비 필드를 고정, M05 pair 계약 user digest
-  재생성. **Map 머지 뒤 main 커밋으로 다시 vendor해야 한다**(contract-pin-consistency는 핀 커밋이 GitHub에 있어야 green).
+- 계약: Map user OpenAPI를 Map main `622dc703`(#1564 `aa5f0eb5` + #1565 머지, sha256 `bcc05c77…`)으로 재vendor — PinVi main
+  핀 `3010d7ed`(#811) 대비 `visitor_info`(축제 kind=event 포함)와 그 schema 6개, 함께 들어온 Map #1569의 route 요약
+  (`RouteSummaryOut`·`RouteEndpointOut`, `FeatureSummary`·`NearbyFeatureSummary`·`FeatureDetailResponse.route`)이 더해진 것뿐이다
+  (삭제·경로 변경 없음 — #811·#812·#813이 쓰는 필드는 그대로, 계약 게이트로 확인). 게이트에 `visitor_info`·`PlaceVisitorInfo`·
+  `PlaceImage`·`ContentLicense`·`PlaceFee`·`AccessibilityNote`·`PetPolicy` 소비 필드를 고정, M05 pair 계약 user digest 재생성.
+  service·admin 스냅샷은 main(#813 등)의 것을 그대로 둔다.
 - 시험(Docker, CI와 같은 명령): api `ruff check`·`ruff format --check`·`mypy --strict app`·unit 2,492 통과(새
   `test_visitor_info_projection.py` — 원천 4종·축제·라이선스 fail-closed·평면 키 대체·영업 정보), 실패 3건
   (`test_api_image_provenance`·`test_m05_legacy_rebaseline_receipt`·`test_m05_restore_drill`)은 같은 base에서도 나는 컨테이너
