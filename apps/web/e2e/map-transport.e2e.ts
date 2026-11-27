@@ -57,11 +57,11 @@ test('교통 정보가 켜져 있으면 레이어 토글이 보이고 적재 전
 
   await page.goto('/map');
 
-  // 2026-11-16: 교통 레이어는 경로·영역과 같은 패널의 체크박스다. 공항·휴게소는 없다.
+  // 2026-11-16: 교통 레이어는 지도 레이어 패널의 체크박스다. 공항·휴게소는 없다(경로·영역도 2026-11-27 제거).
   const controls = page.getByTestId('map-layer-controls');
   await expect(controls).toBeVisible();
   const labels = controls.getByRole('group', { name: '지도 레이어 표시' }).locator('label');
-  await expect(labels).toHaveText(['경로', '영역', '주유소', '교통 돌발']);
+  await expect(labels).toHaveText(['주유소', '교통 돌발']);
   await expect(page.getByTestId('transport-layer-toggle-airport')).toHaveCount(0);
   await expect(page.getByTestId('transport-layer-toggle-rest_area')).toHaveCount(0);
   const fuel = page.getByTestId('transport-layer-toggle-fuel_station');
@@ -81,8 +81,8 @@ test('교통 정보가 꺼져 있으면 지도 화면은 지금과 같다', asyn
   await page.goto('/map');
 
   await expect(page.getByTestId('feature-map')).toBeVisible();
-  // 경로·영역 체크박스는 그대로, 교통 체크박스만 없다.
-  await expect(page.getByTestId('geometry-route-toggle')).toBeVisible();
+  // 지도 레이어 패널은 교통 레이어만 담으므로 패널 자체가 없다.
+  await expect(page.getByTestId('map-layer-controls')).toHaveCount(0);
   await expect(page.getByTestId('transport-layer-toggle-fuel_station')).toHaveCount(0);
   await expect(page.getByTestId('transport-layer-toggle-highway_incident')).toHaveCount(0);
 });

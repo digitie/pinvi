@@ -244,7 +244,7 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | #632 | closed, no change (D7) | 비관리자 admin API 는 404 RESOURCE_NOT_FOUND 유지 | ADM-003/004 |
 | #633 | fixed (#657, D8 변경) | 여행 휴지통·복원 | TRIP-043 — 삭제 → 휴지통 → 복원(초안·장소 보존) |
 | #634 | done (#659) | Kakao/Naver pick 자동 feature 제안의 admin 삭제·dry-run | POI-014/015, ADM-031, D1 |
-| #635 | done (#665 + 리뷰 PR) | route·area kind 렌더링 | SRCH-023/024 scripted(기본 근처 point 설악산국립공원·북한산성), SRCH-028 데이터 blocked |
+| #635 | done (#665 + 리뷰 PR) | route·area kind 렌더링 | SRCH-023/024 scripted였다가 2026-11-27 레이어 제거로 blocked(SRCH-028도) |
 | #636 | done (#688) | '일정 정보 알람으로 보내기' | NTF-020(chat 필요)·NTF-027 scripted |
 | #637 | done (#689) | 기상 특보 Telegram 알림 | NTF-018 scripted(동의), NTF-030 manual(실제 발표) |
 | #638 | done (#688) | 일간/주간 브리프 예약 알림 | NTF-019·NTF-028(chat 필요) scripted, NTF-029 manual(예약 회차) |
@@ -271,7 +271,7 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | #684 | bug | 요청 한도 미들웨어가 핸들러 DB 오류를 503 "한도 저장소 사용 불가"로 바꿈 + 여행 조회 rise/set 동시 INSERT 경합 | TRIP-003 (2026-11-05 경합, 재실행 통과) |
 | #667 | done (#681) | 휴지통 30일 보존·첨부 객체 GC | TRIP-043(안내·복원 기한), TRIP-058(만료 = 삭제 + 30일), ADM-041(정리 확인창 취소만) |
 | #618·#623·#686 | done (#693) | 검사 격리·여행 지도 가림·선택 위치/offset | CORE-021, NEAR-006/024/025, CORE-025 — 운영 재실행으로 종료 |
-| kor-travel-map#1450 | data | 운영 Map area kind 0건(KNPS 국립공원 경계 미적재) | SRCH-028 (blocked) |
+| kor-travel-map#1450 | data | 운영 Map area kind 0건(KNPS 국립공원 경계 미적재) | SRCH-028 (적재 뒤 scripted, 2026-11-27 레이어 제거로 다시 blocked) |
 
 #624 는 prod 재확인(2026-11-03) 때 **500 INTERNAL_ERROR** 였고 #654 가 422 로 바꿨다. 리뷰 PR 이 다이얼로그에서
 요청 전에 종료일 필드로 안내하고 API 문구를 한국어('종료일은 시작일 이후여야 합니다.')로 맞췄다. 이 표의
@@ -404,19 +404,11 @@ scripts/n150-live-catalog.sh --head --area trs --project desktop --grep @p1
 - 데이터 공백(브랜드 호텔·역·터미널·좌표 없는 축제 등)은 시나리오에 넣지 않았다 —
   kor-travel-map 의 데이터 공백 이슈(label `e2e-catalog`)가 추적한다.
 
-## 경로·영역 fixture (#635)
+## 경로·영역 fixture (#635, 2026-11-27 제거)
 
-- SRCH-023은 설악산 경로와 교차하는 point의 검색어를
-  `PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY`로 받는다(기본 `설악산국립공원`).
-- SRCH-024는 북한산 경로 둘 이상과 교차하는 point의 검색어를
-  `PINVI_E2E_GEOMETRY_BUKHAN_ANCHOR_QUERY`로 받는다(기본 `북한산성`).
-- 기본값은 운영 Map 데이터로 확인했다(2026-11-05, 줌 15 화면에 대상 route 여럿). 검색 결과 중
-  anchor 이름을 담은 point feature 행으로 이동한다(같은 이름의 route 행은 고르지 않는다).
-- SRCH-028(area)은 설악산 국립공원 area와 교차하는 point의 검색어를
-  `PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY`로 받는다(기본 `설악산국립공원`). 운영 Map의 KNPS 국립공원
-  경계 21건은 kor-travel-map#1450으로 적재했다(2026-11-06).
-- 도형에 없는 coord를 만들지 않는다. point는 카메라 이동용 fixture다.
-- 운영 origin guard는 유지한다. 격리 WSL 실제 HTTP/WebGL 검증은 별도 fixture에서 실행하며 운영 통과로 기록하지 않는다.
+- 소유자 결정(2026-11-27)으로 지도의 경로·영역 레이어를 뺐다. SRCH-023/024/028은 blocked이고
+  `search-geometry.live.spec.ts`와 `PINVI_E2E_GEOMETRY_*_ANCHOR_QUERY` 전달(`n150-playwright-runner.sh`)도 지웠다.
+  기존 mode600 E2E env 파일에 그 키가 남아 있어도 더는 컨테이너로 전달하지 않는다(무해).
 
 ### #668 명령 확인 (ADM-042/043)
 

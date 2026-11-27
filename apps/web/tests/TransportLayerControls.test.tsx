@@ -2,10 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { HighwayIncidentItem, TransportLayer, TransportLayerResult } from '@pinvi/schemas';
 import { MapLayerControls } from '@/components/map/MapLayerControls';
-import type { FeatureGeometryState } from '@/lib/useFeatureGeometry';
 import type { TransportDetailTarget, TransportLayersState } from '@/lib/useTransportLayers';
 
-// 교통 레이어만 켠 지도 레이어 패널(경로·영역 없음).
+// 지도 레이어 패널(교통 레이어만 있다 — 경로·영역은 2026-11-27 제거).
 function TransportLayerControls({
   state,
   onOpenDetail,
@@ -17,7 +16,6 @@ function TransportLayerControls({
 }) {
   return (
     <MapLayerControls
-      geometry={null}
       transport={state}
       onOpenTransportDetail={onOpenDetail}
       collapseIncidents={collapseIncidents}
@@ -89,28 +87,13 @@ describe('TransportLayerControls', () => {
     expect(state.toggle).toHaveBeenCalledWith('fuel_station');
   });
 
-  it('공항·휴게소는 없고, 교통 레이어는 경로·영역과 같은 줄의 체크박스다', () => {
-    const geometry = {
-      kinds: [],
-      eligible: true,
-      loading: false,
-      error: null,
-      truncated: false,
-      features: [],
-      toggle: vi.fn(),
-      retry: vi.fn(),
-      select: vi.fn(),
-    } as unknown as FeatureGeometryState;
-    render(
-      <MapLayerControls
-        geometry={geometry}
-        transport={makeState({})}
-        onOpenTransportDetail={vi.fn()}
-      />,
-    );
+  it('공항·휴게소·경로·영역은 없고, 주유소·교통 돌발 체크박스만 있다', () => {
+    render(<MapLayerControls transport={makeState({})} onOpenTransportDetail={vi.fn()} />);
     const group = screen.getByRole('group', { name: '지도 레이어 표시' });
     const names = Array.from(group.querySelectorAll('label')).map((l) => l.textContent);
-    expect(names).toEqual(['경로', '영역', '주유소', '교통 돌발']);
+    expect(names).toEqual(['주유소', '교통 돌발']);
+    expect(screen.queryByRole('checkbox', { name: '경로' })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: '영역' })).toBeNull();
     expect(screen.queryByText('공항')).toBeNull();
     expect(screen.queryByText('휴게소')).toBeNull();
     expect(screen.queryByTestId('transport-layer-toggle-airport')).toBeNull();

@@ -12,20 +12,20 @@
  * No route mocking anywhere (#618 pitfall) — these only observe real requests.
  */
 import { expect, type Locator, type Page, type Response } from '@playwright/test';
-import { renderedMap, waitForCamera } from './geometry';
+import { renderedMap, waitForCamera } from './mapCamera';
 import { dismissFeaturePopup } from './live';
 import { runSearch, searchRows } from './search';
 import { coordinateFixtureIndex } from './searchFixture';
 
-/** 지도에서 켤 수 있는 교통 레이어(2026-11-16: 공항·휴게소 제거, 경로·영역과 같은 패널의 체크박스). */
+/** 지도에서 켤 수 있는 교통 레이어(2026-11-16: 공항·휴게소 제거, 지도 레이어 패널의 체크박스). */
 export const LAYERS = ['fuel_station', 'highway_incident'] as const;
 /** 지도에서 뺀 레이어 — API 계약(상세 경로)에는 남아 있다. */
 export const REMOVED_LAYERS = ['rest_area', 'airport'] as const;
 export type Layer = (typeof LAYERS)[number] | (typeof REMOVED_LAYERS)[number];
 /** 여행 지도 반경(서버 정책, `/transport/markers-near` radius_m). */
 export const NEAR_RADIUS_M = { fuel_station: 10_000, highway_incident: 20_000 } as const;
-/** 지도 레이어 패널의 체크박스 순서(경로·영역 + 교통). */
-export const PANEL_LABELS = ['경로', '영역', '주유소', '교통 돌발'];
+/** 지도 레이어 패널의 체크박스 순서(교통만 — 경로·영역은 2026-11-27 제거). */
+export const PANEL_LABELS = ['주유소', '교통 돌발'];
 
 /** TRANSPORT_LAYER_META — display order, label and min zoom (packages/domain/src/transport.ts). */
 export const LAYER_LABEL: Record<Layer, string> = {
@@ -65,7 +65,7 @@ export const STALE_TEXT = '오래된 정보';
 
 export const DEFAULT_EXPLORE_ZOOM = 12; // packages/domain/src/mapCenter.ts DEFAULT_MAP_ZOOM
 
-/** 지도 레이어 패널(경로·영역·주유소·교통 돌발 체크박스) — 예전 '교통 정보' 패널을 합쳤다. */
+/** 지도 레이어 패널(주유소·교통 돌발 체크박스) — 예전 '교통 정보' 패널을 합쳤다. */
 export const controls = (page: Page): Locator => page.getByTestId('map-layer-controls');
 export const layerGroup = (page: Page): Locator =>
   controls(page).getByRole('group', { name: '지도 레이어 표시' });

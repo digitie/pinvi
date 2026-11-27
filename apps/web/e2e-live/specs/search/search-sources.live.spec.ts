@@ -77,8 +77,8 @@ test.describe('SRCH sources by category family (/map)', () => {
     await familyCase(page, ti, 'SRCH-022', '카페', /카페|커피|디저트|베이커리/);
   });
 
-  // SRCH-023 (등산로 route kind) and SRCH-028 (국립공원 area kind) are `blocked`: PinVi in-bounds renders
-  // only place/event/notice/price kinds, so there is no UI to assert on. See catalog notes.
+  // SRCH-023/024 (등산로 route kind) and SRCH-028 (국립공원 area kind) are `blocked`: the route·area map
+  // layers were removed by owner decision (2026-11-27), so there is no UI to assert on. See catalog notes.
 
   test('SRCH-025 국가유산 소수서원', async ({ page }, ti) => {
     desktopOnly();

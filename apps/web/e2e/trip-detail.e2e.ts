@@ -1440,7 +1440,7 @@ test('교통 정보 컨트롤은 지도 장소 검색창을 덮지 않는다(데
 });
 
 // 2026-11-16 — 여행 지도의 주유소·교통 돌발은 화면 범위가 아니라 여행 장소 반경(주유소 10 km·교통 돌발
-// 20 km)이다. 체크박스는 경로·영역과 같은 패널이고 공항·휴게소는 없다.
+// 20 km)이다. 체크박스는 지도 레이어 패널에 있고 공항·휴게소·경로·영역은 없다.
 test('여행 지도 교통 레이어는 여행 장소 반경으로 조회하고 반경을 알린다', async ({ page }) => {
   await mockTripDetailRoutes(page);
   await mockTransportEnabled(page);
@@ -1474,7 +1474,7 @@ test('여행 지도 교통 레이어는 여행 장소 반경으로 조회하고 
   await expect(controls).toBeVisible();
   await expect(
     controls.getByRole('group', { name: '지도 레이어 표시' }).locator('label'),
-  ).toHaveText(['경로', '영역', '주유소', '교통 돌발']);
+  ).toHaveText(['주유소', '교통 돌발']);
   await expect(page.getByTestId('transport-layer-toggle-airport')).toHaveCount(0);
   await expect(page.getByTestId('transport-layer-toggle-rest_area')).toHaveCount(0);
 

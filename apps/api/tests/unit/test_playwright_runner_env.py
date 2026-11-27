@@ -1,4 +1,4 @@
-"""실제 runner의 Docker argv 구성에서 geometry anchor 환경을 잃지 않는다."""
+"""실제 runner의 Docker argv 구성은 허용 목록의 환경만 이름으로 전달한다(값은 argv에 없다)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 _RUNNER = Path(__file__).resolve().parents[4] / "scripts/n150-playwright-runner.sh"
-_ANCHORS = (
+_ALLOWED = ("PINVI_E2E_SEED_SUN_TRIP", "PINVI_E2E_SHOT_DIR")
+# 지도 경로·영역 레이어 제거(2026-11-27)로 live fixture anchor 키는 더는 전달하지 않는다.
+_RETIRED = (
     "PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY",
     "PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY",
     "PINVI_E2E_GEOMETRY_BUKHAN_ANCHOR_QUERY",
@@ -36,11 +38,16 @@ def _forwarded_arguments(values: dict[str, str]) -> list[str]:
     return [part.decode() for part in result.stdout.split(b"\x00") if part]
 
 
-@pytest.mark.parametrize("name", _ANCHORS)
-def test_geometry_anchor_is_forwarded_by_name_without_value_in_argv(name: str) -> None:
+@pytest.mark.parametrize("name", _ALLOWED)
+def test_allowed_env_is_forwarded_by_name_without_value_in_argv(name: str) -> None:
     value = "설악산 국립공원; literal $(keep_as_text)"
     assert _forwarded_arguments({name: value}) == ["--env", name]
 
 
-def test_unset_and_unknown_geometry_environment_are_not_forwarded() -> None:
-    assert _forwarded_arguments({"PINVI_E2E_GEOMETRY_UNKNOWN_SECRET": "do-not-forward"}) == []
+def test_unset_and_unknown_environment_are_not_forwarded() -> None:
+    assert _forwarded_arguments({"PINVI_E2E_UNKNOWN_SECRET": "do-not-forward"}) == []
+
+
+@pytest.mark.parametrize("name", _RETIRED)
+def test_retired_geometry_anchor_is_not_forwarded(name: str) -> None:
+    assert _forwarded_arguments({name: "설악산국립공원"}) == []

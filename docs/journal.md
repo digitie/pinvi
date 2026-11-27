@@ -1,3 +1,17 @@
+## 2026-11-27 (claude) — 지도 경로·영역 체크박스 제거
+
+- 소유자 결정: 지도 레이어 패널의 '경로'·'영역'(route·area 선·면 레이어, zoom 14 이상)은 쓰임이 적어 뺀다.
+  탐색 지도·여행 지도 둘 다. 모바일 앱에는 이 토글이 없었다.
+- 화면 진입점이 사라지면 레이어 코드 전체가 죽은 코드라 지웠다: `FeatureGeometryLayer.tsx`·`useFeatureGeometry.ts`·
+  `lib/featureGeometry.ts`와 그 시험. 지도 레이어 패널은 이제 교통 레이어(주유소·교통 돌발)만 담고, 교통 기능이 꺼져
+  있으면 패널 자체를 그리지 않는다. 여행 장소를 고르면 지도 feature 팝업을 닫는 동작은 그대로 두었다.
+- API·schemas·api-client의 in-bounds geometry 계약(`include_geometry`·`kinds`)은 그대로다(계약 시험 유지) — 뒤에
+  경로를 일정에 넣는 기능을 만들면 다시 쓸 수 있다.
+- live e2e: SRCH-023/024/028 blocked(`search-geometry.live.spec.ts` 삭제), NEAR-001/029 패널 라벨 [주유소, 교통 돌발],
+  `helpers/geometry.ts` → `helpers/mapCamera.ts`(카메라 helper만). runner의 `PINVI_E2E_GEOMETRY_*_ANCHOR_QUERY` 전달을
+  지우고 전달 시험을 일반 허용 목록 기준으로 바꿨다.
+- 시험: web lint·typecheck·react-doctor·vitest(Docker, CI와 같은 명령), runner env 단위 시험. Playwright e2e는 CI에서.
+
 ## 2026-11-25 (claude) — admin live 카탈로그 검사: 정확한 case 수 상수 대신 불변식
 
 - 출처: 2026-11-25 n150 운영 최종 e2e(admin live, 읽기 전용 구간)에서 `UI live case catalog` 검사만 실패 — 상수

@@ -4,9 +4,10 @@
 # (handoff 2026-10-26: fuel/rest/incident/airport). Explore map default = 서울시청, zoom 12.
 # 2026-11-16: 지도에서 공항·휴게소를 뺐고(NEAR-006·009 blocked), 교통 레이어는 경로·영역과 같은 패널의
 # 체크박스다. 여행 지도는 여행 장소 반경(주유소 10 km·교통 돌발 20 km, /transport/markers-near).
+# 2026-11-27: 쓰임이 적은 경로·영역 체크박스를 뺐다 — 패널은 주유소·교통 돌발 둘이다(교통 기능이 꺼지면 패널 없음).
 
 - id: NEAR-001
-  title: 탐색 지도 레이어 패널 — 체크박스 4개(경로·영역·주유소·교통 돌발) 순서·교통 초기 꺼짐·요청 없음
+  title: 탐색 지도 레이어 패널 — 체크박스 2개(주유소·교통 돌발) 순서·경로·영역 없음·교통 초기 꺼짐·요청 없음
   priority: P1
   tags: [desktop, mobile, nearby]
   preconditions:
@@ -17,7 +18,7 @@
     - 로그인 → '지도' → /map
     - /transport/status 응답 대기, 지도 레이어 패널(map-layer-controls) 표시 확인
   expected:
-    - role=group '지도 레이어 표시' 안 label 텍스트가 정확히 [경로, 영역, 주유소, 교통 돌발] 순, 모두 checkbox
+    - role=group '지도 레이어 표시' 안 label 텍스트가 정확히 [주유소, 교통 돌발] 순, 모두 checkbox, geometry-route/area-toggle 0개
     - 별도 '교통 정보' 제목 없음
     - 교통 체크박스 모두 꺼짐, 레이어 상태 줄·마커 legend 없음
     - 켜기 전 markers-in-bounds 요청 0건
@@ -512,7 +513,7 @@
     - 390 /trips/{id} → '주유소'·'교통 돌발' 켜기(markers-near) → 둘 다 끄기
   expected:
     - .maplibregl-ctrl-zoom-in 없음
-    - 패널 label [경로, 영역, 주유소, 교통 돌발], airport·rest_area 체크박스·legend 0개, 요청 layers에 없음
+    - 패널 label [주유소, 교통 돌발], airport·rest_area 체크박스·legend 0개, 요청 layers에 없음
     - 켜면 상태 줄 정상, 끄면 체크 해제·상태 줄·legend 사라짐
   cleanup:
     - afterAll 여행 삭제
