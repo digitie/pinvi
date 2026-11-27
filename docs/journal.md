@@ -30,7 +30,7 @@
   로그아웃(방금 회전된 토큰 포함)·비활성화·비밀번호 재설정 폐기·폐기 계열 재생 무변경·전체 폐기/진행 중 회전 직렬화·
   OAuth state 저장/승계/쿼리 위조 무시·link가 세션을 열지 않음·모바일 로그인/OAuth 교환(빈 JSON 본문 포함)),
   기존 auth/oauth/mobile/admin/retention 시험, web `loginRememberMe.test.tsx`.
-- 배포: API(0110 마이그레이션 — `api-entrypoint`가 기동 시 적용)·web 이미지. 모바일은 다음 앱 빌드부터 체크박스가
+- 배포: API(0110 마이그레이션 — `api-entrypoint`가 기동 시 적용, `lock_timeout` 5초를 넘기면 그 기동이 실패하므로 컨테이너가 다시 뜨지 않으면 운영자가 API를 재기동)·web 이미지. 모바일은 다음 앱 빌드부터 체크박스가
   보인다(이전 빌드는 본문 없이 호출 → 유지 안 함).
 ## 2026-11-27 (claude) — 주유소·교통 돌발: transport 공개 유가 화면과 같은 표시, 장소 layer와 겹침 제거
 
