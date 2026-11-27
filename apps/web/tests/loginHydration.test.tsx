@@ -39,6 +39,10 @@ describe('로그인 제출 버튼', () => {
     const button = html.match(/<button[^>]*data-testid="login-submit"[^>]*>/)?.[0] ?? '';
     expect(button).not.toBe('');
     expect(button).toMatch(/\sdisabled(=""|\s|>)/);
+    // "로그인 유지"도 하이드레이션 전 클릭이 state에 남지 않으므로 비활성으로 둔다.
+    const remember = html.match(/<input[^>]*data-testid="login-remember-me"[^>]*>/)?.[0] ?? '';
+    expect(remember).not.toBe('');
+    expect(remember).toMatch(/\sdisabled(=""|\s|>)/);
   });
 
   it('하이드레이션 뒤에는 활성이고, 불일치 오류가 없다', async () => {

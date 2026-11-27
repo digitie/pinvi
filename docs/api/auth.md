@@ -166,11 +166,16 @@ Cookie: pinvi_refresh=<opaque>
   새 row는 같은 `family_id`·`remember_me`·`absolute_expires_at`을 잇는다(§3.5). 같은 refresh
   token 동시 재사용은 첫 요청만 성공한다.
 - 폐기됨 / 만료됨 → `401 TOKEN_EXPIRED` (cookie 삭제)
-- 재사용 감지: 회전으로 폐기된 토큰이 `rotated_at`에서 60초(`REFRESH_REUSE_GRACE`)가 지난 뒤 다시
-  오면 탈취된 사본으로 보고 그 계열의 살아 있는 row를 모두 폐기하고 `users.access_token_version`을
-  올린다(`auth.refresh_reuse_detected` 경고 로그). 60초 안의 재사용(탭 두 개의 동시 갱신, 응답 유실
-  뒤 재시도)은 계열을 건드리지 않고 `401 TOKEN_EXPIRED`만 돌려준다. 다른 계열(다른 기기 로그인)은
-  영향이 없다.
+- 재사용 감지: 회전으로 폐기된 토큰이 `rotated_at`에서 15초(`REFRESH_REUSE_GRACE`)가 지난 뒤, 또는
+  15초 안이라도 그 계열이 그 뒤 다시 회전한 다음에 오면 탈취된 사본으로 보고 그 계열의 살아 있는 row를
+  모두 폐기하고 `users.access_token_version`을 올린다(`auth.refresh_reuse_detected` 경고 로그). 다른
+  계열(다른 기기 로그인)의 refresh session은 살아 있고 access JWT만 한 번 갱신된다. 이미 폐기된 계열의
+  옛 토큰은 아무것도 바꾸지 않는다(되풀이해 다른 기기 access를 끊지 못한다). 15초 안의 단순 재사용(탭 두
+  개의 동시 갱신)은 계열을 건드리지 않고 `401 TOKEN_EXPIRED`만 돌려준다. 회전 응답을 받지 못한 기기(앱
+  suspend·타임아웃)는 다음 갱신에서 옛 토큰을 내므로 그 기기는 다시 로그인해야 한다 — 변경 전과 같다.
+- 직렬화: 회전·로그아웃·재사용 계열 폐기·사용자 전체 폐기(비밀번호 재설정·비활성화 등)·관리자 세션 폐기는
+  `app.users` row를 `FOR NO KEY UPDATE`로 먼저 잠근다(락 순서 users → user_sessions). 폐기가 진행 중인
+  회전이 막 만든 새 row를 놓치지 않는다.
 
 ### 3.3 `POST /auth/logout`
 
@@ -245,13 +250,14 @@ Cookie: pinvi_access=...
 - **운영 권한 역할 제외**: `admin`/`operator`/`cpo` 역할 계정은 `remember_me=true`를 보내도 서버가
   유지하지 않은 세션으로 발급한다(`docs/compliance/pipa.md` §6 Admin 세션). 역할 부여는 기존 세션을
   모두 폐기하므로 일반 사용자 때 연 1년 세션이 권한 계정 세션으로 남지 않는다.
-- **폐기**: 로그아웃(그 계열 row), 비밀번호 재설정·관리자 강제 재설정·비활성화·삭제 예약·역할 변경·
-  관리자 세션 폐기(그 사용자 전체), 재사용 감지(그 계열). 로그인 유지 계열도 똑같이 즉시 끊긴다.
+- **폐기**: 로그아웃·관리자 개별 세션 폐기·재사용 감지(그 계열 전체), 비밀번호 재설정·관리자 강제
+  재설정·비활성화·삭제 예약·역할 변경·관리자 전체 세션 폐기(그 사용자 전체). 로그인 유지 계열도 똑같이
+  즉시 끊긴다.
 - **cookie**: `HttpOnly`, `SameSite=Lax`, production에서 `Secure` — 변경 전과 같다. Max-Age만 서버
   세션 만료에 맞춘다(cookie가 서버 세션보다 오래 남지 않는다).
 - **OAuth**: `POST /auth/oauth/{provider}/start`의 `remember_me`를 `oauth_login_states.remember_me`에
-  저장하고 callback은 소비한 state의 값만 쓴다(§6.2~6.3). 계정 연결(`/link`)은 지금 `pinvi_refresh`
-  세션의 `remember_me`를 서버에서 읽어 잇는다(§6.4).
+  저장하고 callback은 소비한 state의 값만 쓴다(§6.2~6.3). 계정 연결(`/link`) callback은 새 세션을
+  발급하지 않는다(§6.4) — 연결할 때마다 절대 만료가 다시 시작되지 않는다.
 - **모바일**: `POST /mobile/auth/login` 본문 `remember_me`, `POST /mobile/auth/oauth/google/start`
   본문 `{ "remember_me": bool }`(선택 — 본문 없는 이전 앱은 `false`). 모바일 OAuth는 login state →
   `oauth_mobile_exchanges.remember_me` → 교환 시점 발급으로 서버 쪽에서만 옮긴다. 응답 `expires_at`이
@@ -259,8 +265,13 @@ Cookie: pinvi_access=...
 - **보존**: 세션 row는 폐기 또는 만료 + 30일 뒤 일일 PII 보존 job이 지운다(`docs/compliance/pipa.md`
   §2). 유지 중인(폐기·만료 전) row는 지우지 않으므로 로그인 유지 row의 `user_agent`/`ip_address`는 최대
   365일 + 30일 남는다.
-- 기존 row(0110 이전 발급): `remember_me=false`, `absolute_expires_at` = 마이그레이션 적용 시각 + 365일,
-  `family_id`는 row마다 새 값.
+- 기존 row(0110 이전 발급): `remember_me=false`, `absolute_expires_at` = 그 row의 `created_at`(마지막
+  회전) + 365일, `family_id`는 row마다 새 값. 지금 로그인한 사용자는 로그아웃되지 않는다.
+- 권한 역할 계정이 일반 `/login`에서 체크해도 응답은 같다(서버가 조용히 일반 세션으로 발급). 관리자 사용자
+  상세의 세션 표가 실제 적용 여부("· 로그인 유지")를 보여 준다.
+- **롤백 주의**: 0110을 둔 채 API 코드만 이전 버전으로 되돌리면 그동안의 회전이 기본값 row(`remember_me=false`,
+  새 `family_id`)를 만들어 로그인 유지가 7일 세션으로 풀리고 재사용 감지가 끊긴다. 다시 전진하면 새 로그인부터
+  정상이다.
 
 ## 4. 프로필 완성
 
@@ -412,8 +423,10 @@ Cookie: pinvi_access=...
 ```
 
 응답 200: `{ "data": { "authorize_url": "..." } }`. 클라이언트가 top-level
-navigation. 연결 callback은 새 세션을 발급하므로, 요청의 `pinvi_refresh`가 그 사용자의 살아 있는
-"로그인 유지" 세션이면 state의 `remember_me`를 `true`로 둔다(클라이언트 값 아님, §3.5).
+navigation. 연결 callback은 성공하면 `return_to`로 303만 하고 **세션 cookie를 새로 발급하지 않는다** —
+지금 세션이 그대로 이어진다. (변경 전에는 새 세션을 발급했는데, 그러면 로그인 유지의 절대 만료가 연결마다
+다시 시작되고, state가 브라우저에 묶여 있지 않아 다른 브라우저에서 열린 callback이 그 브라우저를 연결한
+사용자로 로그인시켰다.)
 
 ### 6.5 `DELETE /auth/oauth/{provider}`
 

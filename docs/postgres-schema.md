@@ -141,8 +141,8 @@ CREATE INDEX ix_user_sessions_family_active
 로그인 1회가 `family_id` 하나를 연다. refresh 회전은 새 row에 `family_id`·`remember_me`·
 `absolute_expires_at`을 그대로 잇고 옛 row에 `revoked_at`·`rotated_at`을 찍는다. 유지하지 않은 계열은
 `expires_at` = min(now + 7일, `absolute_expires_at`), 로그인 유지 계열은 `expires_at` =
-`absolute_expires_at`(로그인 + 365일). `rotated_at`이 찍힌 토큰이 60초 뒤 다시 오면 그 계열을 모두
-폐기한다(재사용 감지). `oauth_login_states.remember_me`·`oauth_mobile_exchanges.remember_me`(0110,
+`absolute_expires_at`(로그인 + 365일). `rotated_at`이 찍힌 토큰이 15초 뒤(또는 계열이 다시 회전한 뒤)
+다시 오면 그 계열을 모두 폐기한다(재사용 감지). `oauth_login_states.remember_me`·`oauth_mobile_exchanges.remember_me`(0110,
 `boolean NOT NULL DEFAULT false`)는 OAuth start의 선택을 callback·모바일 교환까지 서버 쪽에서 옮긴다.
 자세히는 `docs/api/auth.md` §3.5.
 

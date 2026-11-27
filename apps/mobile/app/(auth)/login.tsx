@@ -143,7 +143,7 @@ export default function LoginScreen() {
             checked={rememberMe}
             onToggle={setRememberMe}
             label="로그인 유지"
-            summary="이 기기에서 1년 동안 로그인 상태를 유지합니다. 공용 기기에서는 사용하지 마세요."
+            summary="켜면 이 기기에서 1년 동안 로그인 상태를 유지합니다. 끄면 마지막 사용 후 7일까지 유지됩니다."
           />
           <Button
             label="로그인"

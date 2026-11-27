@@ -6,6 +6,7 @@ access JWT는 둘 다 10분이다. 모든 계열은 로그인 + 365일을 넘겨
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 import uuid
@@ -13,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from app.core.config import settings
 from app.core.security import hash_password
@@ -21,7 +22,15 @@ from app.models.oauth_identity import OAuthLoginState, OAuthMobileExchange
 from app.models.session import UserSession
 from app.models.user import User
 from app.services.admin_users import disable_user
-from app.services.auth_session import REFRESH_REUSE_GRACE, hash_session_token
+from app.services.auth_session import (
+    REFRESH_REUSE_GRACE,
+    RefreshTokenExpiredError,
+    RefreshTokenInvalidError,
+    hash_session_token,
+    lock_user_sessions,
+    refresh_user_session,
+    revoke_active_user_sessions,
+)
 from app.services.oauth_google import GoogleClaims, issue_login_state
 
 pytestmark = pytest.mark.asyncio
@@ -81,6 +90,15 @@ async def _session_for(session_factory, refresh_token: str) -> UserSession:  # t
 
 def _assert_close(actual: datetime, expected: datetime, *, seconds: int = 60) -> None:
     assert abs((actual - expected).total_seconds()) <= seconds, (actual, expected)
+
+
+async def _rotate(session_factory, refresh_token: str) -> str:  # type: ignore[no-untyped-def]
+    async with session_factory() as db:
+        try:
+            await refresh_user_session(db, refresh_token=refresh_token)
+        except (RefreshTokenExpiredError, RefreshTokenInvalidError) as exc:
+            return exc.code
+        return "OK"
 
 
 def _claims(*, sub: str, email: str) -> GoogleClaims:
@@ -382,34 +400,187 @@ async def test_oauth_callback_ignores_forged_remember_query(
     assert row.remember_me is False
 
 
-async def test_oauth_link_inherits_current_session_remember_choice(
+async def test_oauth_link_callback_keeps_current_session_and_opens_no_family(
     client, session_factory, monkeypatch
 ) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr(settings, "pinvi_google_oauth_client_id", "test-client")
-    monkeypatch.setattr(settings, "pinvi_google_oauth_client_secret", "test-secret")
-    _user_id, email = await _seed_user(session_factory)
-    login = await _login(client, email, remember_me=True)
+    """계정 연결은 새 회전 계열을 열지 않는다.
 
-    resp = await client.post(
-        "/auth/oauth/google/link",
-        json={"return_to": "/profile"},
-        cookies={
-            "pinvi_access": login.cookies["pinvi_access"],
-            "pinvi_refresh": login.cookies["pinvi_refresh"],
-        },
+    절대 만료가 연결마다 다시 시작되지 않고, 브라우저에 묶이지 않은 state로 연 callback이 그 브라우저를
+    연결한 사용자로 로그인시키지도 않는다.
+    """
+    user_id, email = await _seed_user(session_factory)
+    refresh_token = (await _login(client, email, remember_me=True)).cookies["pinvi_refresh"]
+    async with session_factory() as db:
+        state, _nonce, _verifier = await issue_login_state(
+            db, mode="link", return_to="/profile", user_id=user_id
+        )
+
+    async def fake_exchange(**_kwargs) -> GoogleClaims:  # type: ignore[no-untyped-def]
+        return _claims(sub="link-no-session", email=email)
+
+    monkeypatch.setattr("app.api.v1.oauth.exchange_code_for_claims", fake_exchange)
+
+    resp = await client.get(
+        f"/auth/oauth/google/callback?code=test-code&state={state}", follow_redirects=False
     )
 
-    assert resp.status_code == 200, resp.text
-    state = parse_qs(urlparse(resp.json()["data"]["authorize_url"]).query)["state"][0]
+    assert resp.status_code == 303
+    assert resp.headers["location"].endswith("/profile")
+    assert resp.headers.get_list("set-cookie") == []
     async with session_factory() as db:
-        row = await db.scalar(
-            select(OAuthLoginState).where(
-                OAuthLoginState.state_hash == hashlib.sha256(state.encode()).hexdigest()
+        families = (
+            await db.scalars(
+                select(UserSession.family_id).where(UserSession.user_id == user_id).distinct()
+            )
+        ).all()
+    assert len(families) == 1
+    assert (await _session_for(session_factory, refresh_token)).revoked_at is None
+
+
+async def test_reuse_within_grace_after_family_moved_on_revokes_family(
+    client, session_factory
+) -> None:  # type: ignore[no-untyped-def]
+    """유예 안이라도 계열이 그 뒤 다시 회전했으면 정상 경합이 아니다(탈취 사본) — 계열을 폐기한다."""
+    _user_id, email = await _seed_user(session_factory)
+    first = (await _login(client, email, remember_me=True)).cookies["pinvi_refresh"]
+    second = (await client.post("/auth/refresh", cookies={"pinvi_refresh": first})).cookies[
+        "pinvi_refresh"
+    ]
+    client.cookies.clear()
+    third = (await client.post("/auth/refresh", cookies={"pinvi_refresh": second})).cookies[
+        "pinvi_refresh"
+    ]
+    client.cookies.clear()
+
+    replay = await client.post("/auth/refresh", cookies={"pinvi_refresh": first})
+
+    assert replay.status_code == 401
+    assert (await _session_for(session_factory, third)).revoked_at is not None
+
+
+async def test_replaying_token_of_revoked_family_does_not_bump_access_version(
+    client, session_factory
+) -> None:  # type: ignore[no-untyped-def]
+    user_id, email = await _seed_user(session_factory)
+    old = (await _login(client, email, remember_me=True)).cookies["pinvi_refresh"]
+    current = (await client.post("/auth/refresh", cookies={"pinvi_refresh": old})).cookies[
+        "pinvi_refresh"
+    ]
+    client.cookies.clear()
+    logout = await client.post("/auth/logout", cookies={"pinvi_refresh": current})
+    assert logout.status_code == 204
+    client.cookies.clear()
+    async with session_factory() as db:
+        await db.execute(
+            update(UserSession)
+            .where(UserSession.session_token_hash == hash_session_token(old))
+            .values(rotated_at=datetime.now(UTC) - REFRESH_REUSE_GRACE - timedelta(seconds=5))
+        )
+        await db.commit()
+        version_before = await db.scalar(
+            select(User.access_token_version).where(User.user_id == user_id)
+        )
+
+    for _ in range(3):
+        replay = await client.post("/auth/refresh", cookies={"pinvi_refresh": old})
+        assert replay.status_code == 401
+
+    async with session_factory() as db:
+        version_after = await db.scalar(
+            select(User.access_token_version).where(User.user_id == user_id)
+        )
+    assert version_after == version_before
+
+
+async def test_logout_with_just_rotated_token_revokes_its_successor(
+    client, session_factory
+) -> None:  # type: ignore[no-untyped-def]
+    """로그아웃과 갱신이 엇갈려 로그아웃이 방금 회전된 토큰을 들고 와도 그 로그인(계열)은 끊긴다."""
+    _user_id, email = await _seed_user(session_factory)
+    other = (await _login(client, email, remember_me=True)).cookies["pinvi_refresh"]
+    old = (await _login(client, email, remember_me=True)).cookies["pinvi_refresh"]
+    successor = (await client.post("/auth/refresh", cookies={"pinvi_refresh": old})).cookies[
+        "pinvi_refresh"
+    ]
+    client.cookies.clear()
+
+    out = await client.post("/auth/logout", cookies={"pinvi_refresh": old})
+
+    assert out.status_code == 204
+    assert (await _session_for(session_factory, successor)).revoked_at is not None
+    assert (await _session_for(session_factory, other)).revoked_at is None
+
+
+async def test_rotation_waits_for_concurrent_revoke_all(client, session_factory) -> None:  # type: ignore[no-untyped-def]
+    """비밀번호 재설정·비활성화의 전체 폐기가 진행 중이면 회전은 끝날 때까지 기다렸다가 401이 된다.
+
+    직렬화가 없으면 폐기 UPDATE가 못 본 새 row(회전 결과)가 살아남아 1년 세션이 이어진다.
+    """
+    user_id, email = await _seed_user(session_factory)
+    refresh_token = (await _login(client, email, remember_me=True)).cookies["pinvi_refresh"]
+
+    holder = session_factory()
+    try:
+        await revoke_active_user_sessions(holder, user_id=user_id)  # 락을 쥔 채 아직 commit 전
+        rotation = asyncio.create_task(_rotate(session_factory, refresh_token))
+        await asyncio.sleep(0.5)
+        assert not rotation.done()
+        await holder.commit()
+    finally:
+        await holder.close()
+
+    assert await rotation == "TOKEN_EXPIRED"
+    async with session_factory() as db:
+        active = await db.scalar(
+            select(func.count())
+            .select_from(UserSession)
+            .where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
+        )
+    assert active == 0
+
+
+async def test_reuse_revoke_sees_rotation_committed_while_waiting(client, session_factory) -> None:  # type: ignore[no-untyped-def]
+    """재사용 감지의 계열 폐기는 그 사이 끝난 회전이 만든 row까지 폐기한다(보안 리뷰 major)."""
+    user_id, email = await _seed_user(session_factory)
+    stolen = (await _login(client, email, remember_me=True)).cookies["pinvi_refresh"]
+    current = (await client.post("/auth/refresh", cookies={"pinvi_refresh": stolen})).cookies[
+        "pinvi_refresh"
+    ]
+    client.cookies.clear()
+    family_id = (await _session_for(session_factory, current)).family_id
+    async with session_factory() as db:
+        await db.execute(
+            update(UserSession)
+            .where(UserSession.session_token_hash == hash_session_token(stolen))
+            .values(rotated_at=datetime.now(UTC) - REFRESH_REUSE_GRACE - timedelta(seconds=5))
+        )
+        await db.commit()
+
+    # 진행 중인 회전을 흉내 낸다: 사용자 락을 쥐고 같은 계열에 새 row를 넣은 채 아직 commit하지 않았다.
+    in_flight = session_factory()
+    try:
+        await lock_user_sessions(in_flight, user_id=user_id)
+        in_flight.add(
+            UserSession(
+                user_id=user_id,
+                session_token_hash=hash_session_token("in-flight-successor"),
+                family_id=family_id,
+                remember_me=True,
+                expires_at=datetime.now(UTC) + timedelta(days=300),
+                absolute_expires_at=datetime.now(UTC) + timedelta(days=300),
             )
         )
-        assert row is not None
-        assert row.mode == "link"
-        assert row.remember_me is True
+        await in_flight.flush()
+        replay = asyncio.create_task(_rotate(session_factory, stolen))
+        await asyncio.sleep(0.5)
+        assert not replay.done()
+        await in_flight.commit()
+    finally:
+        await in_flight.close()
+
+    assert await replay == "TOKEN_EXPIRED"
+    assert (await _session_for(session_factory, "in-flight-successor")).revoked_at is not None
+    assert (await _session_for(session_factory, current)).revoked_at is not None
 
 
 async def test_mobile_login_with_remember_returns_one_year_refresh(client, session_factory) -> None:  # type: ignore[no-untyped-def]
@@ -428,19 +599,25 @@ async def test_mobile_login_with_remember_returns_one_year_refresh(client, sessi
     assert row.remember_me is True
 
 
-@pytest.mark.parametrize("body", [None, {"remember_me": False}, {"remember_me": True}])
+@pytest.mark.parametrize(
+    "body", [None, "empty-json", {"remember_me": False}, {"remember_me": True}]
+)
 async def test_mobile_oauth_carries_remember_through_exchange(
-    client, session_factory, monkeypatch, body: dict[str, bool] | None
+    client, session_factory, monkeypatch, body: dict[str, bool] | str | None
 ) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(settings, "pinvi_google_oauth_client_id", "test-client")
     monkeypatch.setattr(settings, "pinvi_google_oauth_client_secret", "test-secret")
-    expected = bool(body and body["remember_me"])
+    expected = isinstance(body, dict) and body["remember_me"]
 
-    start = (
-        await client.post("/mobile/auth/oauth/google/start")
-        if body is None
-        else await client.post("/mobile/auth/oauth/google/start", json=body)
-    )
+    if body is None:
+        start = await client.post("/mobile/auth/oauth/google/start")
+    elif body == "empty-json":
+        # 이전 앱 빌드: 본문 없이 JSON Content-Type만 붙여 보낸다.
+        start = await client.post(
+            "/mobile/auth/oauth/google/start", headers={"Content-Type": "application/json"}
+        )
+    else:
+        start = await client.post("/mobile/auth/oauth/google/start", json=body)
     assert start.status_code == 200, start.text
     state = parse_qs(urlparse(start.json()["data"]["authorize_url"]).query)["state"][0]
 

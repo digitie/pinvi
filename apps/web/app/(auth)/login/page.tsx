@@ -73,6 +73,47 @@ function useHydrated(): boolean {
   );
 }
 
+/**
+ * "로그인 유지" — 라벨 전체가 클릭 영역(44px 행), 설명은 `aria-describedby`. 하이드레이션 전에는 비활성 —
+ * 그 전 클릭은 DOM만 바꾸고 React state(제출 본문)에는 남지 않는다(제출 버튼과 같은 이유).
+ */
+function RememberMeField({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <input
+        id="login-remember-me"
+        type="checkbox"
+        className="checkbox mt-3"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        aria-describedby="login-remember-me-hint"
+        data-testid="login-remember-me"
+      />
+      <div className="flex-1">
+        <label
+          htmlFor="login-remember-me"
+          className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-ink"
+        >
+          로그인 유지
+        </label>
+        <p id="login-remember-me-hint" className="text-sm text-muted">
+          켜면 이 기기에서 1년 동안 로그인 상태를 유지합니다. 끄면 마지막 사용 후 7일까지 유지됩니다.
+          공용 기기에서는 사용 후 로그아웃하세요.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const hydrated = useHydrated();
@@ -265,29 +306,8 @@ export default function LoginPage() {
           data-testid="login-password"
         />
 
-        {/* 소셜 로그인 버튼(폼 밖)도 같은 선택을 따른다. 라벨 전체가 클릭 영역(44px 행). */}
-        <div className="flex items-start gap-3">
-          <input
-            id="login-remember-me"
-            type="checkbox"
-            className="checkbox mt-3"
-            checked={rememberMe}
-            onChange={(event) => setRememberMe(event.target.checked)}
-            aria-describedby="login-remember-me-hint"
-            data-testid="login-remember-me"
-          />
-          <div className="flex-1">
-            <label
-              htmlFor="login-remember-me"
-              className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-ink"
-            >
-              로그인 유지
-            </label>
-            <p id="login-remember-me-hint" className="text-sm text-muted">
-              이 기기에서 1년 동안 로그인 상태를 유지합니다. 공용 기기에서는 사용하지 마세요.
-            </p>
-          </div>
-        </div>
+        {/* 소셜 로그인 버튼(폼 밖)도 같은 선택을 따른다. */}
+        <RememberMeField checked={rememberMe} onChange={setRememberMe} disabled={!hydrated} />
 
         {error && (
           <p className="text-sm text-error-text" role="alert" data-testid="login-error">

@@ -23,7 +23,7 @@ from app.services.admin_users import (
     AdminUserRoleTransitionError,
     normalize_roles,
 )
-from app.services.auth_session import revoke_active_user_sessions
+from app.services.auth_session import lock_user_sessions, revoke_active_user_sessions
 from app.services.email_service import enqueue_password_reset_email, enqueue_verification_email
 
 SIGNUP_VERIFICATION_TTL_HOURS = 24
@@ -111,6 +111,8 @@ async def revoke_user_session_by_id(
     session_id: uuid.UUID,
 ) -> AdminUserLifecycleResult:
     user = await _get_user(db, user_id=user_id)
+    # 진행 중인 refresh 회전과 직렬화한다(락 순서 users → user_sessions, `auth_session` 모듈 docstring).
+    await lock_user_sessions(db, user_id=user_id)
     session = await db.scalar(
         select(UserSession).where(
             UserSession.user_id == user_id,
@@ -127,9 +129,19 @@ async def revoke_user_session_by_id(
     }
     revoked_ids: list[uuid.UUID] = []
     if session.revoked_at is None:
-        session.revoked_at = datetime.now(UTC)
+        # 그 로그인(회전 계열)을 통째로 끊는다 — 살아 있는 row는 보통 이 row 하나다.
+        revoked = await db.execute(
+            update(UserSession)
+            .where(
+                UserSession.family_id == session.family_id,
+                UserSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=datetime.now(UTC))
+            .returning(UserSession.session_id)
+            .execution_options(synchronize_session="fetch")
+        )
+        revoked_ids.extend(revoked.scalars().all())
         user.access_token_version = (user.access_token_version or 0) + 1
-        revoked_ids.append(session.session_id)
     after_state = {
         "session_id": str(session.session_id),
         "revoked_at": _dt(session.revoked_at),

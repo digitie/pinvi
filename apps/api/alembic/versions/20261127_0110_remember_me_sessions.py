@@ -9,10 +9,18 @@
 - `oauth_login_states.remember_me`·`oauth_mobile_exchanges.remember_me`: OAuth start에서 고른 값을 callback·
   모바일 교환까지 서버 쪽에 싣는다(callback 쿼리 값은 믿지 않는다).
 
-기존 row: `family_id`는 row마다 새 uuid, `remember_me`는 false, `absolute_expires_at`은 적용 시각 + 365일이다
-(로그인 시각을 모르므로 가장 긴 정책 값으로 시작한다 — 7일 미끄럼 만료는 그대로 먼저 걸린다).
+기존 row: `family_id`는 row마다 새 uuid, `remember_me`는 false, `absolute_expires_at`은 그 row의 `created_at`
+(= 마지막 회전 시각) + 365일이다. 로그인 시각을 모르므로 정책 최댓값으로 시작하고, 적용 시각 하나로 몰지 않아
+1년 뒤 기존 사용자가 한꺼번에 다시 로그인하지 않게 한다. 7일 미끄럼 만료는 그대로 먼저 걸리므로 지금 로그인한
+사용자는 로그아웃되지 않는다.
 
-forward-safe: 새 컬럼은 모두 기본값이 있어 이전 코드(0109)의 INSERT도 그대로 성공한다.
+잠금: `user_sessions`는 살아 있는 세션 + 폐기/만료 30일 이내 row뿐이라 작다. `gen_random_uuid()` 기본값(volatile)과
+backfill UPDATE가 표를 다시 쓰는 동안 ACCESS EXCLUSIVE를 쥐므로, 긴 트랜잭션 뒤에 줄 서서 로그인·갱신을 막지 않게
+`lock_timeout`을 5초로 둔다(초과하면 migration이 실패하고 API 기동이 재시도한다).
+
+forward-safe: 새 컬럼은 모두 기본값이 있어 이전 코드(0109)의 INSERT도 그대로 성공한다. 단 0110을 둔 채 코드만
+0109로 되돌리면 그동안의 회전이 기본값 row를 만들어 로그인 유지가 7일 세션으로 풀리고 재사용 감지가 끊긴다
+(`docs/api/auth.md` §3.5).
 """
 
 from collections.abc import Sequence
@@ -44,6 +52,7 @@ def _boundary(check: str) -> None:
 
 
 def upgrade() -> None:
+    op.execute("SET LOCAL lock_timeout = '5s'")
     op.add_column(
         "user_sessions",
         sa.Column(
@@ -74,6 +83,10 @@ def upgrade() -> None:
         "user_sessions",
         sa.Column("rotated_at", sa.DateTime(timezone=True)),
         schema="app",
+    )
+    op.execute(
+        "UPDATE app.user_sessions "
+        "SET absolute_expires_at = GREATEST(created_at + interval '365 days', expires_at)"
     )
     op.create_check_constraint(
         op.f("ck_user_sessions_expires_within_absolute"),

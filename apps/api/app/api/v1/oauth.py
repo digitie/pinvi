@@ -6,10 +6,10 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any, Literal, cast
+from typing import Any, Literal, cast
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Cookie, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,11 +29,7 @@ from app.schemas.oauth import (
     OAuthStartRequest,
     OAuthStartResponse,
 )
-from app.services.auth_session import (
-    IssuedAuthSession,
-    issue_user_session,
-    session_remember_me,
-)
+from app.services.auth_session import IssuedAuthSession, issue_user_session
 from app.services.oauth_google import (
     OAuthError,
     OAuthProviderName,
@@ -200,12 +196,8 @@ async def oauth_link(
     body: OAuthLinkRequest,
     current_user_id: CurrentUserId,
     db: DbSession,
-    pinvi_refresh: Annotated[str | None, Cookie(alias="pinvi_refresh")] = None,
 ) -> Envelope[OAuthStartResponse]:
-    """로그인된 사용자의 provider 연결 authorize URL 발급.
-
-    연결 callback은 새 세션을 발급하므로 지금 refresh session의 "로그인 유지"를 서버에서 읽어 state에 잇는다.
-    """
+    """로그인된 사용자의 provider 연결 authorize URL 발급. 연결 callback은 새 세션을 발급하지 않는다."""
     label = provider_label(provider)
     if not provider_configured(provider):
         raise HTTPException(
@@ -227,7 +219,6 @@ async def oauth_link(
         mode="link",
         return_to=body.return_to,
         user_id=user_id,
-        remember_me=await session_remember_me(db, user_id=user_id, refresh_token=pinvi_refresh),
     )
     url = build_authorize_url(
         provider=provider,
@@ -294,15 +285,16 @@ async def oauth_callback(
     except OAuthError as exc:
         return _flow_error(exc)
 
+    link_user_id = login_state.user_id if login_state.mode == "link" else None
     try:
-        if login_state.mode == "link" and login_state.user_id is not None:
+        if link_user_id is not None:
             await link_oauth_to_user(
                 db,
                 provider=provider,
-                user_id=login_state.user_id,
+                user_id=link_user_id,
                 claims=claims,
             )
-            user_id = login_state.user_id
+            user_id = link_user_id
         else:
             result = await resolve_oauth_login(db, provider=provider, claims=claims)
             user_id = result.user.user_id
@@ -320,6 +312,11 @@ async def oauth_callback(
         url=f"{settings.pinvi_web_base_url}{return_to}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
+    if link_user_id is not None:
+        # 계정 연결은 이미 로그인한 사용자의 일이다 — 지금 세션을 그대로 두고 새 세션(새 회전 계열)을 열지
+        # 않는다. 열면 로그인 유지의 절대 만료(로그인 + 365일)가 연결할 때마다 다시 시작되고, state가 브라우저에
+        # 묶여 있지 않아 다른 브라우저가 연 callback이 그 브라우저를 연결한 사용자로 로그인시킨다.
+        return redirect
     issue = await issue_user_session(
         db,
         user_id=user_id,

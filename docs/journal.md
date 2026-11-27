@@ -5,24 +5,30 @@
   회전마다 새 row가 now + 7일을 받아 **절대 상한 없는 미끄럼**이었다. 회전된 토큰 재사용은 401만(계열 폐기 없음).
 - 0110: `user_sessions.family_id`(로그인 1회의 회전 계열)·`remember_me`·`absolute_expires_at`(로그인 + 365일,
   CHECK `expires_at <= absolute_expires_at`)·`rotated_at`, `oauth_login_states.remember_me`·
-  `oauth_mobile_exchanges.remember_me`. 기존 row는 remember=false, absolute = 적용 시각 + 365일.
+  `oauth_mobile_exchanges.remember_me`. 기존 row는 remember=false, absolute = 그 row `created_at` + 365일
+  (1년 뒤 한꺼번에 재로그인하지 않게). `lock_timeout` 5초.
 - 세션: 유지 안 함 = 7일 미끄럼(종전과 같음) + 새 절대 상한 365일. 유지 = refresh 만료가 절대 만료(로그인 + 365일)로
   고정. access 10분은 그대로. `pinvi_refresh` Max-Age는 서버 세션 만료까지(유지 365일/유지 안 함 7일), cookie 속성
   (HttpOnly·SameSite=Lax·prod Secure) 불변. 설정 `PINVI_REMEMBER_ME_DAYS`(기본 365, 1~365) — 기본값으로 충분해
   Manager compose 배선이 필요 없다.
 - 운영 권한 역할(admin/operator/cpo)은 `remember_me`를 무시한다(pipa §6 Admin 세션 정책). 역할 부여는 이미 세션을
   모두 폐기한다. `PRIVILEGED_ROLES`를 `app/core/rbac.py`로 올려 lifecycle 서비스와 같이 쓴다.
-- 재사용 감지(신규): 회전으로 폐기된 토큰이 60초 유예 뒤 다시 오면 계열 전체 폐기 + `access_token_version` +1 +
-  `auth.refresh_reuse_detected` 경고. 유예 안(두 탭 동시 갱신·응답 유실 재시도)은 종전처럼 401만.
-- OAuth: start 본문 `remember_me` → state row → callback은 소비한 state 값만 사용(callback 쿼리 무시). `/link`는
-  요청의 `pinvi_refresh`가 그 사용자의 살아 있는 유지 세션인지 서버에서 읽어 잇는다. 모바일 Google start는 선택 본문
-  `{remember_me}`(이전 앱은 본문 없음 → false) → state → 교환 코드 row → 교환 시점 발급.
+- 재사용 감지(신규): 회전으로 폐기된 토큰이 15초 유예 뒤(또는 계열이 그 뒤 다시 회전한 뒤) 다시 오면 계열 전체
+  폐기 + `access_token_version` +1 + `auth.refresh_reuse_detected` 경고. 이미 폐기된 계열이면 아무것도 바꾸지 않는다.
+  유예 안의 단순 재사용(두 탭 동시 갱신)은 종전처럼 401만.
+- 직렬화(보안 리뷰 major): 회전·로그아웃·재사용 계열 폐기·전체 폐기·관리자 세션 폐기가 `app.users` row
+  `FOR NO KEY UPDATE`를 먼저 잡는다(`lock_user_sessions`, 락 순서 users → user_sessions). 폐기 UPDATE가 진행 중인
+  회전의 새 row를 놓쳐 1년 세션이 살아남는 경합을 없앴다. 로그아웃·관리자 개별 폐기는 그 계열 전체를 끊는다.
+- OAuth: start 본문 `remember_me` → state row → callback은 소비한 state 값만 사용(callback 쿼리 무시). 계정 연결
+  callback은 새 세션을 발급하지 않는다(절대 만료 재시작·브라우저에 묶이지 않은 state의 login CSRF 차단). 모바일
+  Google start는 선택 본문 `{remember_me}`(이전 앱은 본문 없음 → false) → state → 교환 코드 row → 교환 시점 발급.
 - UI: 웹 `/login` 체크박스 "로그인 유지"(라벨·설명 `aria-describedby`, 44px 행, 기본 해제, 소셜 버튼도 같은 값),
   모바일 로그인 `Checkbox`. 관리자 사용자 상세 세션 표 상태에 "· 로그인 유지". 관리자 로그인 폼은 보내지 않는다.
 - 보존: PII 보존 job은 폐기/만료 + 30일 row만 지워 유지 중인 row와 충돌하지 않는다. pipa §2·개인정보 처리방침 §7에
   최대 365일 + 30일을 적었다.
 - 시험: integration `test_auth_remember_me.py`(수명·cookie Max-Age·회전 승계·절대 상한·권한 역할·재사용 감지/유예·
-  로그아웃·비활성화·비밀번호 재설정 폐기·OAuth state 저장/승계/쿼리 위조 무시·link 승계·모바일 로그인/OAuth 교환),
+  로그아웃(방금 회전된 토큰 포함)·비활성화·비밀번호 재설정 폐기·폐기 계열 재생 무변경·전체 폐기/진행 중 회전 직렬화·
+  OAuth state 저장/승계/쿼리 위조 무시·link가 세션을 열지 않음·모바일 로그인/OAuth 교환(빈 JSON 본문 포함)),
   기존 auth/oauth/mobile/admin/retention 시험, web `loginRememberMe.test.tsx`.
 - 배포: API(0110 마이그레이션 — `api-entrypoint`가 기동 시 적용)·web 이미지. 모바일은 다음 앱 빌드부터 체크박스가
   보인다(이전 빌드는 본문 없이 호출 → 유지 안 함).

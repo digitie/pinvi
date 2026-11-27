@@ -9,6 +9,10 @@
 - 유지한 계열(`remember_me`): refresh 만료 = 절대 만료. 7일 동안 안 써도 끊기지 않는다.
 - 운영 권한 역할(admin/operator/cpo)은 로그인 유지를 받지 않는다(`PRIVILEGED_ROLES`).
 - 회전된 토큰이 유예(`REFRESH_REUSE_GRACE`) 뒤 다시 오면 탈취로 보고 계열 전체를 폐기한다.
+- 한 사용자의 회전·재사용 계열 폐기·전체 폐기(비밀번호 재설정·비활성화 등)·로그아웃은 `app.users` row lock
+  (`FOR NO KEY UPDATE`)으로 직렬화한다(`lock_user_sessions`). 폐기 UPDATE가 진행 중인 회전이 막 INSERT한 새 row를
+  못 보고 놓치는 경합을 없앤다 — 락을 얻은 뒤 실행한 문장은 앞 트랜잭션이 커밋한 row를 모두 본다(READ COMMITTED).
+  락 순서는 늘 users row → user_sessions row다(비밀번호 재설정·비활성화·bootstrap도 users row를 먼저 잡는다).
 """
 
 from __future__ import annotations
@@ -37,9 +41,21 @@ from app.models.user import User
 
 log = get_logger("auth_session")
 
-# 같은 refresh token의 거의 동시 재사용(탭 두 개가 함께 갱신, 응답 유실 뒤 재시도)은 공격이 아니다 — 이 유예
-# 안의 재사용은 지금처럼 401만 돌려주고, 유예가 지난 재사용만 계열 전체를 폐기한다.
-REFRESH_REUSE_GRACE = timedelta(seconds=60)
+# 같은 refresh token의 거의 동시 재사용(탭 두 개가 함께 갱신)은 공격이 아니다 — 이 유예 안의 재사용은 지금처럼
+# 401만 돌려준다. 유예가 지났거나, 유예 안이라도 계열이 그 뒤 다시 회전했으면(정상 경합으로는 생기지 않는다) 계열
+# 전체를 폐기한다. 짧게 둔다: 탈취 사본을 먼저 쓴 공격자가 유예 뒤에 숨는 창이 이 길이다.
+REFRESH_REUSE_GRACE = timedelta(seconds=15)
+
+
+async def lock_user_sessions(db: AsyncSession, *, user_id: uuid.UUID) -> None:
+    """그 사용자의 세션 변경을 트랜잭션 끝까지 직렬화한다 — `app.users` row `FOR NO KEY UPDATE`.
+
+    user_sessions INSERT의 FK 검사(`FOR KEY SHARE`)와는 충돌하지 않는다. 이미 같은 트랜잭션이 그 row를
+    UPDATE했으면 다시 잡아도 바로 통과한다.
+    """
+    await db.execute(
+        select(User.user_id).where(User.user_id == user_id).with_for_update(key_share=True)
+    )
 
 
 class AuthSessionError(Exception):
@@ -169,10 +185,32 @@ async def issue_user_session(
     return issue
 
 
+async def _is_reuse(db: AsyncSession, *, session: UserSession, now: datetime) -> bool:
+    """회전으로 폐기된 토큰의 재사용이 탈취 신호인지 — 유예가 지났거나 계열이 그 뒤 다시 회전했다."""
+    if session.rotated_at is None:
+        return False  # 로그아웃·관리자 폐기·만료로 끊긴 토큰 — 계열을 건드리지 않는다.
+    if now - session.rotated_at > REFRESH_REUSE_GRACE:
+        return True
+    rotated_again = await db.scalar(
+        select(UserSession.session_id)
+        .where(
+            UserSession.family_id == session.family_id,
+            UserSession.rotated_at > session.rotated_at,
+        )
+        .limit(1)
+    )
+    return rotated_again is not None
+
+
 async def _revoke_family_after_reuse(
     db: AsyncSession, *, session: UserSession, now: datetime
 ) -> None:
-    """회전된 토큰의 늦은 재사용 — 계열의 살아 있는 row를 모두 폐기하고 access JWT도 끊는다."""
+    """회전된 토큰의 재사용 — 계열의 살아 있는 row를 모두 폐기하고 access JWT도 끊는다.
+
+    호출자가 `lock_user_sessions`를 쥐고 있어 진행 중이던 회전의 새 row까지 이 UPDATE가 본다. 이미 폐기된
+    계열(살아 있는 row 0)이면 아무것도 바꾸지 않는다 — 보존 기간 안의 옛 토큰을 되풀이해 다른 기기 access를 계속
+    끊는 일을 막는다.
+    """
     revoked = await db.execute(
         update(UserSession)
         .where(UserSession.family_id == session.family_id, UserSession.revoked_at.is_(None))
@@ -180,6 +218,9 @@ async def _revoke_family_after_reuse(
         .returning(UserSession.session_id)
     )
     revoked_count = len(revoked.all())
+    if revoked_count == 0:
+        await db.commit()
+        return
     await db.execute(
         update(User)
         .where(User.user_id == session.user_id)
@@ -203,17 +244,26 @@ async def refresh_user_session(
     user_agent: str | None = None,
     ip_address: str | None = None,
 ) -> RefreshedAuthSession:
+    token_hash = hash_session_token(refresh_token)
+    # 락 순서: users row → session row(모듈 docstring). 그래서 소유자를 잠그지 않고 먼저 읽는다.
+    owner_id = await db.scalar(
+        select(UserSession.user_id).where(UserSession.session_token_hash == token_hash)
+    )
+    if owner_id is None:
+        raise RefreshTokenInvalidError("refresh token을 찾을 수 없습니다.")
+    await lock_user_sessions(db, user_id=owner_id)
     now = utc_now()
     session = await db.scalar(
-        select(UserSession)
-        .where(UserSession.session_token_hash == hash_session_token(refresh_token))
-        .with_for_update()
+        select(UserSession).where(UserSession.session_token_hash == token_hash).with_for_update()
     )
     if session is None:
+        await db.rollback()
         raise RefreshTokenInvalidError("refresh token을 찾을 수 없습니다.")
     if session.revoked_at is not None:
-        if session.rotated_at is not None and now - session.rotated_at > REFRESH_REUSE_GRACE:
+        if await _is_reuse(db, session=session, now=now):
             await _revoke_family_after_reuse(db, session=session, now=now)
+        else:
+            await db.rollback()
         raise RefreshTokenExpiredError("refresh token이 폐기되었습니다.")
     if session.expires_at <= now:
         session.revoked_at = now
@@ -249,33 +299,14 @@ async def refresh_user_session(
     return RefreshedAuthSession(user=user, issue=issue)
 
 
-async def session_remember_me(
-    db: AsyncSession, *, user_id: uuid.UUID, refresh_token: str | None
-) -> bool:
-    """그 사용자의 살아 있는 refresh session이 "로그인 유지" 계열인지.
-
-    계정 연결(OAuth link) callback이 새 세션을 발급할 때 지금 세션의 선택을 잇는 데 쓴다 — 클라이언트 값이
-    아니라 서버에 있는 세션에서 읽는다.
-    """
-    if not refresh_token:
-        return False
-    remember_me = await db.scalar(
-        select(UserSession.remember_me).where(
-            UserSession.session_token_hash == hash_session_token(refresh_token),
-            UserSession.user_id == user_id,
-            UserSession.revoked_at.is_(None),
-            UserSession.expires_at > utc_now(),
-        )
-    )
-    return bool(remember_me)
-
-
 async def revoke_active_user_sessions(
     db: AsyncSession,
     *,
     user_id: uuid.UUID,
     revoked_at: datetime | None = None,
 ) -> None:
+    """그 사용자의 살아 있는 세션 전부 폐기(호출자가 commit). 진행 중인 회전과 직렬화한다."""
+    await lock_user_sessions(db, user_id=user_id)
     now = revoked_at or utc_now()
     await db.execute(
         update(UserSession)
@@ -306,7 +337,7 @@ async def revoke_user_session(
     refresh_token: str | None,
     access_token: str | None = None,
 ) -> None:
-    """로그아웃 — refresh session을 폐기하고 그 사용자의 access JWT도 무효로 만든다(#672).
+    """로그아웃 — 그 refresh session의 회전 계열을 폐기하고 그 사용자의 access JWT도 무효로 만든다(#672).
 
     access JWT는 stateless라 refresh session 폐기만으로는 만료(기본 10분)까지 살아 있다 — 로그아웃
     응답의 cookie 삭제가 반영되기 전에 나간 요청이나 cookie 밖으로 복사된 토큰이 `/auth/me` 200을
@@ -315,17 +346,25 @@ async def revoke_user_session(
     """
     user_ids: set[uuid.UUID] = set()
     if refresh_token:
-        session_user_id = await db.scalar(
-            update(UserSession)
-            .where(
-                UserSession.session_token_hash == hash_session_token(refresh_token),
-                UserSession.revoked_at.is_(None),
+        owner = (
+            await db.execute(
+                select(UserSession.user_id, UserSession.family_id).where(
+                    UserSession.session_token_hash == hash_session_token(refresh_token)
+                )
             )
-            .values(revoked_at=utc_now())
-            .returning(UserSession.user_id)
-        )
-        if session_user_id is not None:
-            user_ids.add(session_user_id)
+        ).one_or_none()
+        if owner is not None:
+            # 이 기기의 로그인(회전 계열)을 통째로 끊는다. 진행 중인 회전과 직렬화하므로, 로그아웃 직전에 같은
+            # 토큰이 회전됐어도 그 회전이 만든 후속 row까지 폐기된다.
+            await lock_user_sessions(db, user_id=owner.user_id)
+            revoked = await db.execute(
+                update(UserSession)
+                .where(UserSession.family_id == owner.family_id, UserSession.revoked_at.is_(None))
+                .values(revoked_at=utc_now())
+                .returning(UserSession.session_id)
+            )
+            if revoked.first() is not None:
+                user_ids.add(owner.user_id)
     access_user_id = _access_token_subject(access_token)
     if access_user_id is not None:
         user_ids.add(access_user_id)
