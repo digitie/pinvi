@@ -3,7 +3,8 @@ import {
   applyPoiMove,
   evenRanks,
   isNoopPoiMove,
-  poiRowDropTarget,
+  poiInsertTarget,
+  poiPositionAfterMove,
   poiStepMoveTarget,
   type PoiDayOrder,
 } from './poiRank';
@@ -15,10 +16,23 @@ const days: PoiDayOrder[] = [
 ];
 
 describe('장소 이동 자리', () => {
-  it('행 위쪽 절반은 그 행 앞, 아래쪽 절반은 다음 행 앞(마지막이면 맨 끝)', () => {
-    expect(poiRowDropTarget(days[0]!, 1, 'before')).toEqual({ dayIndex: 1, beforePoiId: 'b' });
-    expect(poiRowDropTarget(days[0]!, 1, 'after')).toEqual({ dayIndex: 1, beforePoiId: 'c' });
-    expect(poiRowDropTarget(days[0]!, 2, 'after')).toEqual({ dayIndex: 1, beforePoiId: null });
+  it('n번째 틈은 n번째 장소 앞, 목록 길이면 맨 끝', () => {
+    expect(poiInsertTarget(days[0]!, 0)).toEqual({ dayIndex: 1, beforePoiId: 'a' });
+    expect(poiInsertTarget(days[0]!, 2)).toEqual({ dayIndex: 1, beforePoiId: 'c' });
+    expect(poiInsertTarget(days[0]!, 3)).toEqual({ dayIndex: 1, beforePoiId: null });
+    expect(poiInsertTarget(days[1]!, 0)).toEqual({ dayIndex: 2, beforePoiId: null });
+  });
+
+  it('옮긴 뒤 위치(1부터)', () => {
+    expect(poiPositionAfterMove(days, 'c', { dayIndex: 3, beforePoiId: 'd' })).toEqual({
+      dayIndex: 3,
+      position: 1,
+    });
+    expect(poiPositionAfterMove(days, 'a', { dayIndex: 1, beforePoiId: null })).toEqual({
+      dayIndex: 1,
+      position: 3,
+    });
+    expect(poiPositionAfterMove(days, 'a', { dayIndex: 9, beforePoiId: null })).toBeNull();
   });
 
   it('같은 일자에서 자기 앞·바로 다음 앞은 제자리, 다른 일자는 항상 이동', () => {

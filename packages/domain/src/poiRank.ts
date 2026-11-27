@@ -86,16 +86,23 @@ export function isNoopPoiMove(poiId: string, fromDay: PoiDayOrder, target: PoiMo
 }
 
 /**
- * 행 하나 위에 놓을 때의 자리 — 행 위쪽 절반이면 그 행 앞, 아래쪽 절반이면 다음 행 앞(마지막이면 맨 끝).
+ * 목록의 `insertIndex`번째 틈(0 = 첫 장소 앞, 길이 = 맨 끝)에 놓을 때의 자리.
  */
-export function poiRowDropTarget(
-  day: PoiDayOrder,
-  rowIndex: number,
-  placement: 'before' | 'after',
-): PoiMoveTarget {
-  const beforePoiId =
-    placement === 'before' ? (day.poiIds[rowIndex] ?? null) : (day.poiIds[rowIndex + 1] ?? null);
-  return { dayIndex: day.dayIndex, beforePoiId };
+export function poiInsertTarget(day: PoiDayOrder, insertIndex: number): PoiMoveTarget {
+  return { dayIndex: day.dayIndex, beforePoiId: day.poiIds[insertIndex] ?? null };
+}
+
+/**
+ * 옮긴 뒤 그 장소가 몇 일자 몇 번째인가(1부터) — 화면 낭독기 안내용. 찾지 못하면 null.
+ */
+export function poiPositionAfterMove(
+  days: PoiDayOrder[],
+  poiId: string,
+  target: PoiMoveTarget,
+): { dayIndex: number; position: number } | null {
+  const day = applyPoiMove(days, poiId, target).find((d) => d.dayIndex === target.dayIndex);
+  const index = day?.poiIds.indexOf(poiId) ?? -1;
+  return day && index >= 0 ? { dayIndex: day.dayIndex, position: index + 1 } : null;
 }
 
 /**

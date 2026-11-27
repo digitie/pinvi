@@ -1103,7 +1103,7 @@
   notes: "2026-11-27 소유자 요청. 배포 뒤에만 통과한다."
 
 - id: TRIP-074
-  title: 손잡이에서 아래 화살표 — 마지막 장소가 다음 일자 맨 앞으로, 위 화살표로 되돌아온다
+  title: 장소 줄에서 Alt+아래 화살표 — 마지막 장소가 다음 일자 맨 앞으로, Alt+위로 되돌아온다
   priority: P2
   tags: [desktop, mutating, search, poi, a11y]
   preconditions:
@@ -1111,10 +1111,10 @@
     - "data: Map has 불국사·석굴암·첨성대 features"
   data_sources: [map:heritage, geo]
   steps:
-    - "1박2일 경주 → 1일차 불국사·석굴암, 2일차 첨성대 → 석굴암 '장소 옮기기' 손잡이에 초점 → ArrowDown → ArrowUp"
+    - "1박2일 경주 → 1일차 불국사·석굴암, 2일차 첨성대 → 석굴암 장소 줄 버튼에 초점 → Alt+ArrowDown → Alt+ArrowUp"
   expected:
-    - "ArrowDown: move 200, 2일차 선택·순서 [석굴암, 첨성대], 초점은 석굴암 손잡이"
-    - "ArrowUp: move 200, 1일차 선택·순서 [불국사, 석굴암], 초점 유지"
+    - "Alt+ArrowDown: move 200, 2일차 선택·순서 [석굴암, 첨성대], 초점은 석굴암 줄"
+    - "Alt+ArrowUp: move 200, 1일차 선택·순서 [불국사, 석굴암], 초점 유지"
   cleanup:
     - "afterEach deleteTrip(id)"
   automation: scripted

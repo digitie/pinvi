@@ -2308,7 +2308,7 @@ test.describe('장소를 다른 일자로 옮기기', () => {
     expect(bodies[1]).toEqual({ day_index: 2, before_poi_id: snapshotPoiId });
   });
 
-  test('손잡이에서 아래 화살표 — 마지막 장소가 다음 일자 맨 앞으로 가고 초점이 따라간다', async ({
+  test('장소 줄에서 Alt+아래 화살표 — 마지막 장소가 다음 일자 맨 앞으로 가고 초점이 따라간다', async ({
     page,
   }) => {
     let view = viewWith([
@@ -2332,10 +2332,10 @@ test.describe('장소를 다른 일자로 옮기기', () => {
     const rows = page.getByTestId('trip-poi-list').locator('> li');
     await expect(rows).toHaveCount(2);
 
-    const grip = rows.nth(1).getByRole('button', { name: '장소 옮기기' });
-    await expect(grip).toHaveAccessibleDescription(/위·아래 화살표로 한 칸씩/);
-    await grip.focus();
-    await page.keyboard.press('ArrowDown');
+    const rowButton = rows.nth(1).locator('button[aria-current]');
+    await expect(rowButton).toHaveAccessibleDescription(/1일차 2번째\..*위·아래 화살표로 한 칸씩/);
+    await rowButton.focus();
+    await page.keyboard.press('Alt+ArrowDown');
     await expect.poll(() => bodies.length).toBe(1);
     expect(bodies[0]).toEqual({ day_index: 2, before_poi_id: snapshotPoiId });
     await expect(page.getByRole('tab', { name: '2일차', exact: true })).toHaveAttribute(
@@ -2343,6 +2343,88 @@ test.describe('장소를 다른 일자로 옮기기', () => {
       'true',
     );
     await expect(rows.first()).toContainText('광안리 해변');
-    await expect(rows.first().getByRole('button', { name: '장소 옮기기' })).toBeFocused();
+    await expect(rows.first().locator('button[aria-current]')).toBeFocused();
+  });
+
+  test('실제 마우스로 끌어 행 사이 여백에 놓으면 그 틈으로 간다(일자 맨 끝으로 튀지 않는다)', async ({
+    page,
+  }) => {
+    const yongkungsa = {
+      ...gwangalli,
+      poi_id: brokenPoiId,
+      title: '해동용궁사',
+      sort_order: '008c',
+    };
+    const view = viewWith([
+      day(1, '2026-07-01', [haeundae, gwangalli, yongkungsa]),
+      day(2, '2026-07-02', [gamcheon]),
+    ]);
+    const bodies: Record<string, unknown>[] = [];
+    await mockMove(page, (_movedId, body) => {
+      bodies.push(body);
+      return { poi: poiResponse(haeundae, 1, '006', 2), from_day_index: 1, changed: [] };
+    });
+    await mockTripDetailRoutes(page, () => view);
+    await page.goto(`/trips/${tripId}`);
+    const rows = page.getByTestId('trip-poi-list').locator('> li');
+    await expect(rows).toHaveCount(3);
+
+    const grip = rows.first().locator('[title="끌어서 순서 변경"]');
+    const from = (await grip.boundingBox())!;
+    const second = (await rows.nth(1).boundingBox())!;
+    const third = (await rows.nth(2).boundingBox())!;
+    // 둘째·셋째 행 사이 여백(행에 속하지 않는 margin) 한가운데.
+    const gapY = (second.y + second.height + third.y) / 2;
+    expect(third.y - (second.y + second.height)).toBeGreaterThan(2);
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(from.x + from.width / 2, gapY, { steps: 12 });
+    await expect(rows.nth(2)).toHaveAttribute('data-drop-indicator', 'before');
+    await page.mouse.up();
+    await expect.poll(() => bodies.length).toBe(1);
+    expect(bodies[0]).toEqual({ day_index: 1, before_poi_id: brokenPoiId });
+  });
+
+  test('키보드 이동이 409로 실패하면 초점이 그 장소 줄로 돌아오고 실패를 알린다', async ({
+    page,
+  }) => {
+    const view = viewWith([
+      day(1, '2026-07-01', [haeundae, gwangalli]),
+      day(2, '2026-07-02', [gamcheon]),
+    ]);
+    let calls = 0;
+    await page.route(
+      /.*\/trips\/[0-9a-f-]{36}\/pois\/[0-9a-f-]{36}\/move$/,
+      async (route, request) => {
+        if (!isFetch(request.resourceType()) || request.method() !== 'POST') {
+          return route.fallback();
+        }
+        calls += 1;
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: { code: 'VERSION_CONFLICT', message: '동시 편집 충돌 — 다시 불러와 주세요.' },
+          }),
+        });
+      },
+    );
+    await mockTripDetailRoutes(page, () => view);
+    await page.goto(`/trips/${tripId}`);
+    const rows = page.getByTestId('trip-poi-list').locator('> li');
+    await expect(rows).toHaveCount(2);
+
+    await rows.first().locator('button[aria-current]').focus();
+    await page.keyboard.press('Alt+ArrowDown');
+    await expect.poll(() => calls).toBe(1);
+    await expect(page.getByTestId('poi-mutation-error')).toContainText('동시 편집 충돌');
+    await expect(page.getByTestId('trip-poi-move-status')).toHaveText(
+      "'해운대 해수욕장'을(를) 옮기지 못했습니다.",
+    );
+    await expect(rows.first().locator('button[aria-current]')).toBeFocused();
+    await expect(page.getByRole('tab', { name: '1일차', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 });

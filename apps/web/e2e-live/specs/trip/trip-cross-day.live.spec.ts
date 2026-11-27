@@ -4,7 +4,7 @@
  * crosses day boundaries. Every move is one `POST /trips/{id}/pois/{poi_id}/move`.
  *
  * Selectors: TripDetail.tsx (`trip-day-row` article + `data-drop-target`, tab '{N}일차' with 'N곳'),
- * TripPoiList.tsx (`trip-poi-list > li`, grip button '장소 옮기기' + `data-poi-grip`).
+ * TripPoiList.tsx (`trip-poi-list > li`, row button `button[aria-current]` with Alt+ArrowUp/Down).
  * Write-included (creates and deletes its own `[e2e]` trip) — run only against a non-production stack.
  */
 import { expect, test } from '@playwright/test';
@@ -98,7 +98,7 @@ test('[TRIP-073] 빈 일자에도 끌어 놓을 수 있다 — 그 일자의 첫
   await shot(page, 'TRIP-073', 'empty-day');
 });
 
-test('[TRIP-074] 손잡이에서 아래 화살표 — 마지막 장소가 다음 일자 맨 앞으로, 위 화살표로 되돌아온다', async ({ page }) => {
+test('[TRIP-074] 장소 줄에서 Alt+아래 화살표 — 마지막 장소가 다음 일자 맨 앞으로, Alt+위로 되돌아온다', async ({ page }) => {
   const { id } = await createTrip(page, { title: e2eTitle('키보드이동'), start: isoDate(12), end: isoDate(13), region: '경주' });
   created.push(id);
   await gotoTrip(page, id);
@@ -108,22 +108,21 @@ test('[TRIP-074] 손잡이에서 아래 화살표 — 마지막 장소가 다음
   const c = await searchAndAddPlace(page, 2, '첨성대', preferFeature);
 
   await selectDay(page, '1일차');
-  const grip = poiRows(page).nth(1).getByRole('button', { name: '장소 옮기기' });
-  await grip.focus();
+  await poiRows(page).nth(1).locator('button[aria-current]').focus();
   const down = waitForRequest(page, MOVE);
-  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Alt+ArrowDown');
   expect((await down).status()).toBe(200);
 
-  // 다음 일자가 펼쳐지고 옮긴 장소가 맨 앞, 초점은 그 장소의 손잡이에 남는다.
+  // 다음 일자가 펼쳐지고 옮긴 장소가 맨 앞, 초점은 그 장소 줄에 남는다.
   await expect(dayTab(page, '2일차')).toHaveAttribute('aria-selected', 'true');
   await expect.poll(async () => short(await poiTitles(page))).toEqual(short([b, c]));
-  await expect(poiRows(page).first().getByRole('button', { name: '장소 옮기기' })).toBeFocused();
+  await expect(poiRows(page).first().locator('button[aria-current]')).toBeFocused();
   await shot(page, 'TRIP-074', 'keyboard-next-day');
 
   const up = waitForRequest(page, MOVE);
-  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Alt+ArrowUp');
   expect((await up).status()).toBe(200);
   await expect(dayTab(page, '1일차')).toHaveAttribute('aria-selected', 'true');
   await expect.poll(async () => short(await poiTitles(page))).toEqual(short([a, b]));
-  await expect(poiRows(page).nth(1).getByRole('button', { name: '장소 옮기기' })).toBeFocused();
+  await expect(poiRows(page).nth(1).locator('button[aria-current]')).toBeFocused();
 });

@@ -119,7 +119,10 @@ export const PoiResponseSchema = z.object({
 });
 export type PoiResponse = z.infer<typeof PoiResponseSchema>;
 
-/** 이동 응답 — `changed`는 정렬 위치·일자가 바뀐 장소 전부(옮긴 장소 포함). 그대로면 빈 목록. */
+/**
+ * 이동 응답 — `changed`는 정렬 키·일자가 바뀐 장소 전부. 옮겼으면 옮긴 장소는 언제나 들어 있고 보통은 그
+ * 하나뿐이다. 순서가 그대로인 이동이면 빈 목록.
+ */
 export const PoiMoveResponseSchema = z.object({
   poi: PoiResponseSchema,
   from_day_index: z.number().int(),

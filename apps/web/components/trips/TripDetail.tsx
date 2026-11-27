@@ -40,7 +40,7 @@ import {
 } from '@/lib/tripDateLabels';
 import { type PendingCreatedPoi, withCreatedPois } from '@/lib/tripViewCreatedPoi';
 import { useMobileWebLayout } from '@/lib/useMobileWebLayout';
-import { dropPlacement, usePoiDrag, type PoiDrag, type PoiDragSource } from '@/lib/usePoiDrag';
+import { rowInsertIndex, usePoiDrag, type PoiDrag, type PoiDragSource } from '@/lib/usePoiDrag';
 import { placeWeatherCards } from '@pinvi/domain';
 import {
   ApiError,
@@ -59,7 +59,8 @@ import {
   extractCoord,
   isNoopPoiMove,
   paletteHex,
-  poiRowDropTarget,
+  poiInsertTarget,
+  poiPositionAfterMove,
   poiStepMoveTarget,
   tripDaysToMapPoints,
   type PoiDayOrder,
@@ -98,7 +99,10 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type DragEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+
+/** 장소 옮기기 결과 — 옮김 / 요청 없음(제자리·장소 없음) / 요청 실패. */
+type PoiMoveOutcome = 'moved' | 'noop' | 'failed';
 
 const STATUS_LABEL: Record<TripStatus, string> = {
   draft: '초안',
@@ -1030,14 +1034,14 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
 
   // 장소 하나 옮기기 — 같은 일자 안 순서 변경과 다른 일자로의 이동이 같은 요청이다(`POST …/pois/{id}/move`).
   // 위치는 서버가 최신 순서에 기준 장소(beforePoiId)로 정하고, version이 다르면 409 → 다시 불러온다.
-  // 결과: 실제로 옮겼으면 true(제자리 드롭·실패는 false).
-  const handleMovePoi = (source: PoiDragSource, target: PoiMoveTarget): Promise<boolean> => {
-    if (!view) return Promise.resolve(false);
+  // 결과: 옮겼으면 'moved', 제자리 드롭이거나 장소를 못 찾으면 'noop'(요청 없음), 요청이 실패하면 'failed'.
+  const handleMovePoi = (source: PoiDragSource, target: PoiMoveTarget): Promise<PoiMoveOutcome> => {
+    if (!view) return Promise.resolve('noop');
     const fromDay = view.days.find((day) => day.pois.some((p) => p.poi_id === source.poiId));
     const poi = fromDay?.pois.find((p) => p.poi_id === source.poiId);
-    if (!fromDay || !poi) return Promise.resolve(false);
+    if (!fromDay || !poi) return Promise.resolve('noop');
     const fromOrder = { dayIndex: fromDay.day_index, poiIds: fromDay.pois.map((p) => p.poi_id) };
-    if (isNoopPoiMove(poi.poi_id, fromOrder, target)) return Promise.resolve(false);
+    if (isNoopPoiMove(poi.poi_id, fromOrder, target)) return Promise.resolve('noop');
     const toDay = view.days.find((day) => day.day_index === target.dayIndex);
     return runMutation(() =>
       poiApi(apiClient).move(tripId, poi.poi_id, poi.version, {
@@ -1048,9 +1052,9 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
       if (ok && target.dayIndex !== fromDay.day_index) {
         // 접힌 일자로 옮기면 목록에서 사라지므로 어디로 갔는지 알린다(role=status).
         const dayLabel = toDay?.title ?? `${target.dayIndex}일차`;
-        setAddNotice(`'${poi.title ?? '장소'}'을(를) ${dayLabel}로 옮겼어요.`);
+        setAddNotice(`'${poi.title ?? poi.feature_id ?? '장소'}'을(를) ${dayLabel}로 옮겼어요.`);
       }
-      return ok;
+      return ok ? 'moved' : 'failed';
     });
   };
 
@@ -2200,36 +2204,66 @@ async function refreshTripWeather(
  */
 function useTripPlanPoiMoves(viewModel: TripDetailView2Model) {
   const { busy, handleMovePoi, handleSelectDay, selectedDayIndex, view } = viewModel;
-  const drag = usePoiDrag((source, target) => void handleMovePoi(source, target));
+  const dayOrders = view.days.map((day) => ({
+    dayIndex: day.day_index,
+    poiIds: day.pois.map((p) => p.poi_id),
+  }));
+  // 끌어 놓기·키보드 이동 결과를 늘 있는 live region 하나로 알린다(접힌 일자로 간 안내 문단은 새로 생겨
+  // 읽히지 않을 수 있다 — 리뷰).
+  const [moveAnnouncement, setMoveAnnouncement] = useState('');
+  const announce = (source: PoiDragSource, target: PoiMoveTarget, outcome: PoiMoveOutcome) => {
+    if (outcome === 'noop') return;
+    const poi = view.days.flatMap((day) => day.pois).find((p) => p.poi_id === source.poiId);
+    const title = poi?.title ?? poi?.feature_id ?? '장소';
+    const position = poiPositionAfterMove(dayOrders, source.poiId, target);
+    const toDay = view.days.find((day) => day.day_index === target.dayIndex);
+    if (outcome === 'failed') {
+      setMoveAnnouncement(`'${title}'을(를) 옮기지 못했습니다.`);
+    } else if (position) {
+      const dayLabel = toDay?.title ?? `${position.dayIndex}일차`;
+      setMoveAnnouncement(`'${title}' — ${dayLabel} ${position.position}번째로 옮겼습니다.`);
+    }
+  };
+  const moveAndAnnounce = (source: PoiDragSource, target: PoiMoveTarget) =>
+    handleMovePoi(source, target).then((outcome) => {
+      announce(source, target, outcome);
+      return outcome;
+    });
+  const drag = usePoiDrag((source, target) => void moveAndAnnounce(source, target));
   const dndEnabled = !busy;
   const gripHintId = useId();
-  // 이동 중(busy)에는 손잡이가 사라졌다가 재조회 뒤 다시 그려지므로, 그 뒤 렌더에서 초점을 준다.
+  // 키보드 한 칸 이동 뒤 초점을 그 장소 줄로 돌려준다 — 다른 일자로 가면 줄이 다른 목록에 새로 그려져
+  // 초점이 body로 떨어지기 때문이다. 사용자가 그 사이 다른 곳(검색창 등)에 초점을 두었으면 빼앗지 않고,
+  // 한 번 시도한 뒤에는 잊는다(나중 재조회가 초점을 가져가지 않게).
   const pendingGripFocus = useRef<string | null>(null);
   const [gripFocusRequest, setGripFocusRequest] = useState(0);
   useEffect(() => {
     const poiId = pendingGripFocus.current;
     if (poiId == null || busy) return;
-    const grip = document.querySelector<HTMLElement>(`[data-poi-grip="${CSS.escape(poiId)}"]`);
-    if (!grip) return;
-    grip.focus();
     pendingGripFocus.current = null;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    document.querySelector<HTMLElement>(`[data-poi-grip="${CSS.escape(poiId)}"]`)?.focus();
   }, [gripFocusRequest, busy, view, selectedDayIndex]);
-  const dayOrders = view.days.map((day) => ({
-    dayIndex: day.day_index,
-    poiIds: day.pois.map((p) => p.poi_id),
-  }));
   const handleStepMove = (poiId: string, direction: 'up' | 'down') => {
     const target = poiStepMoveTarget(dayOrders, poiId, direction);
     const from = dayOrders.find((day) => day.poiIds.includes(poiId));
-    if (!target || !from) return;
-    void handleMovePoi({ poiId, dayIndex: from.dayIndex }, target).then((ok) => {
-      if (!ok) return;
-      if (target.dayIndex !== from.dayIndex) handleSelectDay(target.dayIndex);
+    if (!from) return;
+    if (!target) {
+      setMoveAnnouncement(
+        direction === 'up' ? '첫 일자의 첫 장소입니다.' : '마지막 일자의 마지막 장소입니다.',
+      );
+      return;
+    }
+    void moveAndAnnounce({ poiId, dayIndex: from.dayIndex }, target).then((outcome) => {
+      if (outcome === 'moved' && target.dayIndex !== from.dayIndex) {
+        handleSelectDay(target.dayIndex);
+      }
       pendingGripFocus.current = poiId;
       setGripFocusRequest((value) => value + 1);
     });
   };
-  return { drag, dndEnabled, dayOrders, gripHintId, handleStepMove };
+  return { drag, dndEnabled, dayOrders, gripHintId, handleStepMove, moveAnnouncement };
 }
 
 /**
@@ -2256,8 +2290,20 @@ function CollapsedDayPreview({
   const dropBefore = dropHere
     ? day.pois.find((p) => p.poi_id === drag.target?.beforePoiId)
     : undefined;
+  // 미리보기 줄 사이 여백도 가까운 틈으로 읽는다. 마지막 미리보기 줄보다 아래("외 N곳" 등)는 맨 끝.
+  const previewTarget = (event: DragEvent<HTMLDivElement>) => {
+    const rows = event.currentTarget.querySelectorAll('[data-testid="trip-day-preview-poi"]');
+    const index = rowInsertIndex(rows, event.clientY);
+    return index < rows.length
+      ? poiInsertTarget(dayOrder, index)
+      : poiInsertTarget(dayOrder, dayOrder.poiIds.length);
+  };
   return (
-    <div className="space-y-1 px-3 pb-2">
+    <div
+      className="space-y-1 px-3 pb-2"
+      onDragOver={dndEnabled ? (event) => drag.over(previewTarget(event), event) : undefined}
+      onDrop={dndEnabled ? (event) => drag.drop(previewTarget(event), event) : undefined}
+    >
       {day.pois.slice(0, 4).map((poi, index) => (
         <button
           key={poi.poi_id}
@@ -2270,21 +2316,11 @@ function CollapsedDayPreview({
               ? (event) => drag.start({ poiId: poi.poi_id, dayIndex: day.day_index }, event)
               : undefined
           }
-          onDragOver={
-            dndEnabled
-              ? (event) => drag.over(poiRowDropTarget(dayOrder, index, dropPlacement(event)), event)
-              : undefined
-          }
-          onDrop={
-            dndEnabled
-              ? (event) => drag.drop(poiRowDropTarget(dayOrder, index, dropPlacement(event)), event)
-              : undefined
-          }
           onDragEnd={dndEnabled ? () => drag.end() : undefined}
           className={
             'flex w-full items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-surface-soft' +
             (dropBefore?.poi_id === poi.poi_id
-              ? ' shadow-[inset_0_2px_0_0_var(--color-primary)]'
+              ? ' relative before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-primary'
               : '') +
             (drag.source?.poiId === poi.poi_id ? ' opacity-50' : '')
           }
@@ -2348,7 +2384,7 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
     visibleDayIndexes,
     visibleLayerCount,
   } = viewModel;
-  const { drag, dndEnabled, dayOrders, gripHintId, handleStepMove } =
+  const { drag, dndEnabled, dayOrders, gripHintId, handleStepMove, moveAnnouncement } =
     useTripPlanPoiMoves(viewModel);
   return (
     <div
@@ -2372,10 +2408,13 @@ function TripPlanPanel({ viewModel }: { viewModel: TripDetailView2Model }) {
         aria-label="일자 목록"
         data-testid="trip-layer-list"
       >
-        {/* 장소 행 손잡이('장소 옮기기')의 설명 — 패널에 한 번만 둔다(aria-describedby). */}
+        {/* 장소 줄 버튼의 옮기기 설명 — 패널에 한 번만 둔다(aria-describedby). */}
         <p id={gripHintId} className="sr-only">
-          끌어서 같은 일자나 다른 일자로 옮깁니다. 위·아래 화살표로 한 칸씩 옮기고, 첫 장소와 마지막
-          장소는 이전·다음 일자로 넘어갑니다.
+          Alt와 위·아래 화살표로 한 칸씩 옮기고, 첫 장소와 마지막 장소는 이전·다음 일자로
+          넘어갑니다. 끌어서 같은 일자나 다른 일자로 옮길 수도 있습니다.
+        </p>
+        <p role="status" aria-live="polite" className="sr-only" data-testid="trip-poi-move-status">
+          {moveAnnouncement}
         </p>
         {view.days.length > 0 && (
           <div

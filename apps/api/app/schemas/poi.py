@@ -112,7 +112,8 @@ class PoiResponse(BaseModel):
 class PoiMoveResponse(BaseModel):
     """`POST /trips/{trip_id}/pois/{poi_id}/move` 응답.
 
-    `changed`는 정렬 위치·일자가 바뀐 장소 전부(옮긴 장소 포함, 도착 일자 순서)다. 순서가 그대로인
+    `changed`는 정렬 키·일자가 바뀐 장소 전부(도착 일자 순서)다. 옮겼으면 옮긴 장소는 언제나 들어 있고
+    보통은 그 하나뿐이다(이웃 키 사이에 자리가 없을 때만 도착 일자를 다시 매겨 늘어난다). 순서가 그대로인
     이동이면 빈 목록이고 `poi.version`도 그대로다.
     """
 

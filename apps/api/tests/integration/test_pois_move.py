@@ -73,7 +73,7 @@ def _ids(*pois: dict[str, Any]) -> list[str]:
     return [p["attachment_id"] for p in pois]
 
 
-async def test_move_to_another_day_before_anchor_renumbers_target_day(
+async def test_move_to_another_day_before_anchor_writes_only_the_moved_row(
     client, verified_user, auth_cookies, monkeypatch
 ) -> None:
     from app.api.v1 import pois as pois_router
@@ -96,20 +96,21 @@ async def test_move_to_another_day_before_anchor_renumbers_target_day(
     assert data["poi"]["attachment_id"] == p["a"]["attachment_id"]
     assert data["poi"]["day_index"] == 2
     assert data["poi"]["version"] == 2
-    # 도착 일자는 균등 키(웹 evenRanks와 같은 형식)로 다시 매기고, 키가 바뀐 행만 쓴다.
-    assert [c["sort_order"] for c in data["changed"]] == ["002s", "005k", "008c"]
-    assert {c["attachment_id"] for c in data["changed"]} == set(_ids(p["c"], p["a"], p["d"]))
-    assert all(c["version"] == 2 for c in data["changed"])
+    # 이웃 키(c=a0, d=a1) 사이의 새 키로 옮긴 장소 한 행만 쓴다 — 다른 장소의 version은 그대로.
+    assert data["poi"]["sort_order"] == "a0i"
+    assert _ids(*data["changed"]) == _ids(p["a"])
 
     orders = await _day_orders(client, cookies, trip_id)
     assert orders[1] == _ids(p["b"])
     assert orders[2] == _ids(p["c"], p["a"], p["d"])
     assert orders[3] == []
 
-    # 출발 일자(1일차)의 남은 장소는 손대지 않는다.
+    # 출발 일자(1일차)의 남은 장소와 도착 일자의 이웃은 손대지 않는다.
     detail = await client.get(f"/trips/{trip_id}", cookies=cookies)
-    b_row = detail.json()["data"]["days"][0]["pois"][0]
-    assert b_row["sort_order"] == "a1" and b_row["version"] == 1
+    rows = {p["poi_id"]: p for day in detail.json()["data"]["days"] for p in day["pois"]}
+    for key, rank in (("b", "a1"), ("c", "a0"), ("d", "a1")):
+        row = rows[p[key]["attachment_id"]]
+        assert (row["sort_order"], row["version"]) == (rank, 1), key
 
     moved_events = [
         e for e in events if e["event_type"].startswith("poi.") and e["event_type"] != "poi.created"
@@ -121,7 +122,74 @@ async def test_move_to_another_day_before_anchor_renumbers_target_day(
     assert payload["poi_id"] == p["a"]["attachment_id"]
     assert payload["from_day_index"] == 1 and payload["to_day_index"] == 2
     assert payload["before_poi_id"] == p["d"]["attachment_id"]
-    assert [m["day_index"] for m in payload["moves"]] == [2, 2, 2]
+    assert payload["moves"] == [
+        {
+            "poi_id": p["a"]["attachment_id"],
+            "day_index": 2,
+            "new_sort_order": "a0i",
+            "version": 2,
+        }
+    ]
+
+
+async def test_move_renumbers_target_day_only_when_neighbours_leave_no_gap(
+    client, verified_user, auth_cookies
+) -> None:
+    """클라이언트 키 `p`와 `p0` 사이에는 키가 없다 — 그때만 도착 일자를 균등 키로 다시 매긴다."""
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip_id = await _make_trip(client, cookies, days=2)
+    x = await _add_poi(client, cookies, trip_id, sort_order="p", feature_id=None, day_index=2)
+    y = await _add_poi(client, cookies, trip_id, sort_order="p0", feature_id=None, day_index=2)
+    z = await _add_poi(client, cookies, trip_id, sort_order="a0", feature_id=None)
+
+    resp = await _move(client, cookies, trip_id, z, day_index=2, before=y)
+    assert resp.status_code == 200, resp.text
+    changed = resp.json()["data"]["changed"]
+    assert [(c["attachment_id"], c["sort_order"]) for c in changed] == [
+        (x["attachment_id"], "002s"),
+        (z["attachment_id"], "005k"),
+        (y["attachment_id"], "008c"),
+    ]
+    assert all(c["version"] == 2 for c in changed)
+    assert (await _day_orders(client, cookies, trip_id))[2] == _ids(x, z, y)
+
+
+async def test_cross_day_move_carries_poi_comments(
+    client, verified_user, auth_cookies, session_factory
+) -> None:
+    from sqlalchemy import select
+
+    from app.models.comment import TripComment
+
+    user_id, _ = verified_user
+    cookies = auth_cookies(user_id)
+    trip_id = await _make_trip(client, cookies)
+    p = await _seed(client, cookies, trip_id)
+    async with session_factory() as db:
+        db.add(
+            TripComment(
+                trip_id=uuid.UUID(trip_id),
+                author_user_id=uuid.UUID(user_id),
+                body="이 장소 메모",
+                target_type="poi",
+                target_id=uuid.UUID(p["a"]["attachment_id"]),
+                day_index=1,
+            )
+        )
+        await db.commit()
+
+    resp = await _move(client, cookies, trip_id, p["a"], day_index=3)
+    assert resp.status_code == 200, resp.text
+    async with session_factory() as db:
+        days = (
+            await db.scalars(
+                select(TripComment.day_index).where(
+                    TripComment.target_id == uuid.UUID(p["a"]["attachment_id"])
+                )
+            )
+        ).all()
+    assert days == [3]
 
 
 async def test_move_into_empty_day_and_append_to_end(client, verified_user, auth_cookies) -> None:
@@ -169,12 +237,11 @@ async def test_same_day_move_and_noop_keeps_versions(
     moved = await _move(client, cookies, trip_id, c, day_index=1, before=a)
     assert moved.status_code == 200, moved.text
     assert (await _day_orders(client, cookies, trip_id))[1] == _ids(c, a, b)
+    # 옮긴 c 한 행만 쓴다 — a·b는 version 1 그대로라 그 version으로 다시 옮길 수 있다.
+    assert _ids(*moved.json()["data"]["changed"]) == _ids(c)
 
     # 두 번째 이동도 새 키 위에서 충돌 없이(#652 회귀 방지).
-    a_now = next(
-        x for x in moved.json()["data"]["changed"] if x["attachment_id"] == a["attachment_id"]
-    )
-    to_end = await _move(client, cookies, trip_id, a_now, day_index=1)
+    to_end = await _move(client, cookies, trip_id, a, day_index=1)
     assert to_end.status_code == 200, to_end.text
     assert (await _day_orders(client, cookies, trip_id))[1] == _ids(c, b, a)
 
@@ -219,6 +286,14 @@ async def test_move_rejects_stale_version_and_bad_targets(
         cookies=cookies,
     )
     assert unknown.status_code == 404, unknown.text
+
+    # 다른 여행의 장소는 옮길 수도, 기준 장소가 될 수도 없다.
+    other_trip = await _make_trip(client, cookies, days=2)
+    foreign = await _add_poi(client, cookies, other_trip, sort_order="a0", feature_id=None)
+    foreign_move = await _move(client, cookies, trip_id, foreign, day_index=1)
+    assert foreign_move.status_code == 404, foreign_move.text
+    foreign_anchor = await _move(client, cookies, trip_id, p["a"], day_index=2, before=foreign)
+    assert foreign_anchor.status_code == 409, foreign_anchor.text
 
     deleted = await client.delete(
         f"/trips/{trip_id}/pois/{p['b']['attachment_id']}", cookies=cookies
@@ -270,7 +345,7 @@ async def test_move_permissions_viewer_denied_editor_allowed_outsider_hidden(
     viewer = await _move(client, auth_cookies(viewer_id), trip_id, p["a"], day_index=2)
     assert viewer.status_code == 403, viewer.text
     outsider = await _move(client, auth_cookies(outsider_id), trip_id, p["a"], day_index=2)
-    assert outsider.status_code in (403, 404), outsider.text
+    assert outsider.status_code == 403, outsider.text
     assert (await _day_orders(client, owner, trip_id))[1] == _ids(p["a"], p["b"])
 
     editor = await _move(client, auth_cookies(editor_id), trip_id, p["a"], day_index=2)
