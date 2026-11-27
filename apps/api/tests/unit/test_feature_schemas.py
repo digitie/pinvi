@@ -273,6 +273,7 @@ class TestPublicStatusFieldRemoved:
             "marker_icon",
             "distance_m",
             "geometry",
+            "route",
         }
 
     def test_detail_field_set_is_exact(self) -> None:
@@ -291,6 +292,7 @@ class TestPublicStatusFieldRemoved:
             "marker_icon",
             "urls",
             "detail",
+            "route",
             "updated_at",
         }
 

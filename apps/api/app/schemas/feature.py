@@ -16,6 +16,7 @@ Pinvi는 응답 셰입을 소유하되 **kor_travel_map 실계약 field 명/의�
 
 from __future__ import annotations
 
+import math
 import uuid
 from datetime import date as Date
 from datetime import datetime
@@ -72,6 +73,59 @@ class BBox(BaseModel):
         return (self.lng_min, self.lat_min, self.lng_max, self.lat_max)
 
 
+class RouteEndpoint(BaseModel):
+    """route 출발·도착 지점 (kor_travel_map `RouteEndpointOut`)."""
+
+    lon: float = Field(ge=-180.0, le=180.0)
+    lat: float = Field(ge=-90.0, le=90.0)
+    name: str | None = None
+
+
+class RouteSummary(BaseModel):
+    """`kind=route` 요약 (kor_travel_map `RouteSummaryOut`, Map ADR-128).
+
+    등산 코스(`hiking_course`)는 feature 좌표가 곧 `start`다 — 일정 POI 좌표·날씨·일출몰은 그
+    좌표(출발점)를 쓴다. `duration_basis='estimated'`이면 화면에 "추정"을 표시한다.
+    """
+
+    route_type: str
+    length_m: float | None = Field(default=None, ge=0)
+    duration_minutes: int | None = Field(default=None, ge=0)
+    duration_basis: Literal["source", "estimated"] | None = None
+    difficulty: str | None = None
+    shape: Literal["path", "loop", "network"] | None = None
+    start: RouteEndpoint | None = None
+    end: RouteEndpoint | None = None
+
+    @classmethod
+    def from_kor_travel_map(cls, raw: object) -> RouteSummary | None:
+        """Map 응답의 `route`. 필드 하나가 계약을 어기면 **그 필드만** 비운다(웹 zod `.catch`와 같은 규칙).
+
+        `route_type`이 없거나 문자열이 아니면 요약 전체가 None — 요약 하나 때문에 항목을 버리지 않는다.
+        Map이 `shape`·`duration_basis`에 값을 더해도(additive) 거리·소요시간은 살아남는다.
+        """
+        if not isinstance(raw, dict) or not isinstance(raw.get("route_type"), str):
+            return None
+        cleaned: dict[str, Any] = {"route_type": raw["route_type"]}
+        for name in ("length_m", "duration_minutes", "duration_basis", "difficulty", "shape"):
+            value = raw.get(name)
+            if name == "duration_minutes" and isinstance(value, float) and math.isfinite(value):
+                value = round(value)
+            cleaned[name] = value
+        for name in ("start", "end"):
+            cleaned[name] = raw.get(name)
+        for name in list(cleaned):
+            if name == "route_type":
+                continue
+            try:
+                cls.__pydantic_validator__.validate_assignment(
+                    cls.model_construct(route_type=cleaned["route_type"]), name, cleaned[name]
+                )
+            except ValueError:
+                cleaned[name] = None
+        return cls.model_validate(cleaned)
+
+
 class FeatureSummary(BaseModel):
     """마커/목록 표시용 (in-bounds items / nearby / search 응답).
 
@@ -94,6 +148,7 @@ class FeatureSummary(BaseModel):
     # `tests/unit/test_feature_schemas.py`의 필드 집합 등호 게이트가 맡는다.
     distance_m: float | None = None  # nearby 응답에만
     geometry: dict[str, Any] | None = None  # include_geometry로 받은 route/area GeoJSON
+    route: RouteSummary | None = None  # kind=route 요약(Map ADR-128)
 
 
 class FeatureCluster(BaseModel):
@@ -136,6 +191,7 @@ class FeatureDetail(BaseModel):
     marker_icon: str = Field(default="marker", max_length=64)
     urls: dict[str, Any] = Field(default_factory=dict)  # homepage/sns/review 등
     detail: dict[str, Any] = Field(default_factory=dict)  # kind별 PlaceDetail 등
+    route: RouteSummary | None = None  # kind=route 요약(Map ADR-128)
     updated_at: datetime
 
 

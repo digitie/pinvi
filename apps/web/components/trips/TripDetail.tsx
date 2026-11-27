@@ -65,6 +65,7 @@ import type {
   PlaceSearchResult,
   PoiResponse,
   PoiUpdate,
+  RouteSummary,
   TripDayUpdate,
   TripStatus,
   TripUpdate,
@@ -881,6 +882,9 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
     marker_color: string | null;
     marker_icon: string | null;
     kind?: string | null;
+    // 경로(등산 코스 등) 요약 — 일정 항목의 "등산 코스 · 4.2 km · 약 2시간 30분" 줄(Map ADR-128).
+    // coord는 Map이 준 feature 좌표 = 코스 출발점이다(날씨·일출몰도 그 좌표를 쓴다).
+    route?: RouteSummary | null;
   }): Promise<boolean> => {
     if (selectedDay == null) return Promise.resolve(false);
     setAddNotice(null);
@@ -901,6 +905,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
           marker_icon: input.marker_icon,
           category: input.category,
           ...(input.kind != null ? { kind: input.kind } : {}),
+          ...(input.route != null ? { route: input.route } : {}),
         },
         currency: 'KRW',
       }),
@@ -928,6 +933,7 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
       marker_color: feature.marker_color,
       marker_icon: feature.marker_icon,
       kind: feature.kind,
+      route: feature.route ?? null,
     });
   };
 
@@ -964,6 +970,8 @@ function useTripDetailModel({ tripId }: TripDetailProps) {
       category: providerSourced ? null : (result.category ?? null),
       marker_color: providerSourced ? null : (result.marker_color ?? null),
       marker_icon: providerSourced ? null : (result.marker_icon ?? null),
+      kind: providerSourced ? null : result.kind,
+      route: providerSourced ? null : result.route,
     }).then((ok) => {
       // external_ref로 저장된 경우에만 서버가 상세 정보를 best-effort로 요청한다.
       if (ok && externalRef) {
@@ -1997,7 +2005,10 @@ function TripDetailView2Part3({ viewModel }: { viewModel: TripDetailView2Model }
   return (
     <div className="shrink-0 border-b border-hairline bg-canvas px-3 pb-2">
       {/* 시트 손잡이 줄 — 제목은 위 작업 헤더가 이미 보여 주므로 여기서는 기간과 펼치기·닫기만 둔다. */}
-      <div className="flex items-center justify-between gap-2" data-testid="trip-panel-sheet-header">
+      <div
+        className="flex items-center justify-between gap-2"
+        data-testid="trip-panel-sheet-header"
+      >
         <span
           aria-hidden="true"
           className="absolute left-1/2 top-1.5 h-1 w-9 -translate-x-1/2 rounded-full bg-hairline"

@@ -18,6 +18,7 @@ export * from './poiDetail';
 export * from './placeDetails';
 export * from './placeWeather';
 export * from './poiRank';
+export * from './routeSummary';
 export * from './shareLink';
 export * from './shareUrl';
 export * from './sourceIntroduction';

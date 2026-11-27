@@ -35,6 +35,7 @@ from app.core.config import Settings, settings
 from app.db import session as db_session
 from app.middleware.api_call_logging import ApiCallLoggingClient, api_call_event_hooks
 from app.middleware.resilience_runtime import outbound_resilience_lifespan
+from app.schemas.feature import RouteSummary
 
 logger = logging.getLogger(__name__)
 
@@ -186,9 +187,11 @@ class FeatureTripCard:
     address: dict[str, Any]
     marker_icon: str | None
     marker_color: str | None
+    # kind=route 요약(Map ADR-128, additive). 일정 항목의 거리·소요시간 줄이 쓴다.
+    route: dict[str, Any] | None = None
 
     def as_snapshot(self) -> dict[str, Any]:
-        return {
+        snapshot = {
             "feature_id": self.feature_id,
             "kind": self.kind,
             "name": self.name,
@@ -202,6 +205,9 @@ class FeatureTripCard:
             "marker_icon": self.marker_icon,
             "marker_color": self.marker_color,
         }
+        if self.route is not None:
+            snapshot["route"] = dict(self.route)
+        return snapshot
 
 
 @dataclass(frozen=True)
@@ -272,6 +278,10 @@ _BATCH_DATA_FIELDS = frozenset({"items"})
 _WARNED_ADDITIVE: set[tuple[str, frozenset[str]]] = set()
 
 
+#: 있으면 읽는 trip_card 키(Map ADR-128 `route`). 없어도 계약 위반이 아니다.
+_TRIP_CARD_OPTIONAL_FIELDS = frozenset({"route"})
+
+
 def _note_additive_fields(raw: Mapping[str, Any], known: frozenset[str], *, what: str) -> None:
     """내부 소비자는 정확한 셰입을 핀하지 않는다 — 모르는(더해진) 키는 무시하고 로그로만 남긴다.
 
@@ -295,7 +305,7 @@ def _decode_feature_trip_card(raw: object, feature_id: str) -> FeatureTripCard:
         raise KorTravelMapContractError("feature batch found item의 trip_card가 객체가 아닙니다.")
     if not _TRIP_CARD_FIELDS <= set(raw):
         raise KorTravelMapContractError("feature batch trip_card 필드 집합이 올바르지 않습니다.")
-    _note_additive_fields(raw, _TRIP_CARD_FIELDS, what="trip_card")
+    _note_additive_fields(raw, _TRIP_CARD_FIELDS | _TRIP_CARD_OPTIONAL_FIELDS, what="trip_card")
     if raw["feature_id"] != feature_id:
         raise KorTravelMapContractError("feature batch item과 trip_card feature_id가 다릅니다.")
     if not all(isinstance(raw[field], str) for field in ("kind", "name", "category")):
@@ -327,7 +337,14 @@ def _decode_feature_trip_card(raw: object, feature_id: str) -> FeatureTripCard:
         address=dict(raw["address"]),
         marker_icon=raw["marker_icon"],
         marker_color=raw["marker_color"],
+        route=_decode_trip_card_route(raw.get("route")),
     )
+
+
+def _decode_trip_card_route(raw: object) -> dict[str, Any] | None:
+    """trip_card의 additive ``route``(Map ADR-128). 계약에 안 맞으면 버린다 — 카드는 살린다."""
+    summary = RouteSummary.from_kor_travel_map(raw)
+    return summary.model_dump(mode="json") if summary is not None else None
 
 
 def _decode_feature_batch_item(raw: object) -> FeatureBatchItem:

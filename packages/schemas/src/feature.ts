@@ -63,6 +63,31 @@ export const FeatureGeometrySchema = z.discriminatedUnion('type', [
 ]);
 export type FeatureGeometry = z.infer<typeof FeatureGeometrySchema>;
 
+/** route 출발·도착 지점 (kor_travel_map `RouteEndpointOut`). */
+export const RouteEndpointSchema = z.object({
+  lon: z.number().finite().min(-180).max(180),
+  lat: z.number().finite().min(-90).max(90),
+  name: z.string().nullable().optional(),
+});
+export type RouteEndpoint = z.infer<typeof RouteEndpointSchema>;
+
+/**
+ * `kind=route` 요약 (kor_travel_map `RouteSummaryOut`, Map ADR-128).
+ * 등산 코스(`hiking_course`)는 feature 좌표(`coord`)가 곧 `start`다 — 일정에 넣을 때 그 좌표를 쓴다.
+ * `duration_basis='estimated'`이면 화면에 "추정"을 표시한다.
+ */
+export const RouteSummarySchema = z.object({
+  route_type: z.string(),
+  length_m: z.number().nonnegative().nullable().optional().catch(null),
+  duration_minutes: z.number().int().nonnegative().nullable().optional().catch(null),
+  duration_basis: z.enum(['source', 'estimated']).nullable().optional().catch(null),
+  difficulty: z.string().nullable().optional().catch(null),
+  shape: z.enum(['path', 'loop', 'network']).nullable().optional().catch(null),
+  start: RouteEndpointSchema.nullable().optional().catch(null),
+  end: RouteEndpointSchema.nullable().optional().catch(null),
+});
+export type RouteSummary = z.infer<typeof RouteSummarySchema>;
+
 export const FeatureSummarySchema = z.object({
   feature_id: FeatureIdSchema,
   kind: FeatureKindSchema,
@@ -76,6 +101,8 @@ export const FeatureSummarySchema = z.object({
   distance_m: z.number().nullable().optional(),
   // 도형 하나가 계약을 어기면 그 도형만 비운다 — 응답 전체(다른 경로·영역)를 버리지 않는다.
   geometry: FeatureGeometrySchema.nullable().optional().catch(null),
+  // 요약이 계약을 어기면 요약만 비운다 — 목록 항목 자체는 살린다.
+  route: RouteSummarySchema.nullable().optional().catch(null),
 });
 export type FeatureSummary = z.infer<typeof FeatureSummarySchema>;
 
@@ -114,6 +141,7 @@ export const FeatureDetailSchema = z.object({
   marker_icon: z.string().max(64),
   urls: z.record(z.string(), z.unknown()),
   detail: z.record(z.string(), z.unknown()),
+  route: RouteSummarySchema.nullable().optional().catch(null),
   updated_at: Iso8601Schema,
 });
 export type FeatureDetail = z.infer<typeof FeatureDetailSchema>;

@@ -51,6 +51,7 @@ import {
   featureResolutionNotice,
   pointsBounds,
   resolveMarkerStyle,
+  routeSummaryLine,
   type TripMapPoint,
 } from '@pinvi/domain';
 
@@ -950,6 +951,8 @@ function TripMapViewView0Part2({ viewModel }: { viewModel: TripMapViewView0Model
   const { selectedFeature, setSelectedFeature, setDetailFeatureId, canAddFeature, onAddFeature } =
     viewModel;
   if (selectedFeature == null || selectedFeature.coord == null) return null;
+  const selectedRouteLine =
+    selectedFeature.kind === 'route' ? routeSummaryLine(selectedFeature.route) : null;
   return (
     <Popup
       lngLat={[selectedFeature.coord.lon, selectedFeature.coord.lat]}
@@ -963,6 +966,11 @@ function TripMapViewView0Part2({ viewModel }: { viewModel: TripMapViewView0Model
             <p className="truncate text-sm font-semibold text-ink">{selectedFeature.name}</p>
             {selectedFeature.category_label && (
               <p className="text-xs text-muted">{selectedFeature.category_label}</p>
+            )}
+            {selectedRouteLine && (
+              <p className="text-xs text-muted" data-testid="trip-map-route-summary">
+                {selectedRouteLine}
+              </p>
             )}
           </div>
           <button

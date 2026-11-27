@@ -5,7 +5,13 @@ import { TripAttachmentsDisclosure } from '@/components/trips/TripAttachments';
 import { PoiRiseSetLine } from '@/components/trips/TripDayHeader';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 import { PoiWeatherBadge } from '@/components/weather/WeatherBadge';
-import { arrayMove, featureResolutionNotice, formatKstTime, paletteHex } from '@pinvi/domain';
+import {
+  arrayMove,
+  featureResolutionNotice,
+  formatKstTime,
+  paletteHex,
+  routeSummaryLine,
+} from '@pinvi/domain';
 import type {
   PoiUpdate,
   TripViewPoi,
@@ -132,6 +138,8 @@ export function TripPoiList({
         const selected = poi.poi_id === selectedPoiId;
         const editing = poi.poi_id === editingPoiId;
         const resolutionNotice = featureResolutionNotice(poi.feature_resolution_state);
+        // 경로(등산 코스 등)는 거리·소요시간을 한 줄로 보인다(Map ADR-128 `route` 요약).
+        const routeLine = poi.feature.kind === 'route' ? routeSummaryLine(poi.feature.route) : null;
         return (
           <li
             key={poi.poi_id}
@@ -206,6 +214,14 @@ export function TripPoiList({
                             />
                           )}
                         </span>
+                        {routeLine && (
+                          <span
+                            className="mt-1 block text-xs text-muted"
+                            data-testid="trip-poi-route-summary"
+                          >
+                            {routeLine}
+                          </span>
+                        )}
                         {(arrival || departure) && (
                           <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                             {arrival && <span>{arrival} 도착</span>}

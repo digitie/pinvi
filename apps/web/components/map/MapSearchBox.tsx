@@ -4,6 +4,7 @@ import { isAbortError } from '@/lib/abort';
 import { apiClient } from '@/lib/api';
 import { searchResultCategory } from '@/lib/searchResultCategory';
 import { ApiError, geoApi } from '@pinvi/api-client';
+import { routeSummaryLine } from '@pinvi/domain';
 import type { PlaceSearchResult } from '@pinvi/schemas';
 import { Bookmark, ExternalLink, Loader2, MapPin, Search } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -151,6 +152,9 @@ export function MapSearchBox({
         <ul className="mt-1 max-h-64 overflow-auto rounded-sm border border-hairline bg-canvas shadow-card">
           {results.map((result, index) => {
             const meta = SOURCE_META[result.source];
+            // 등산 코스 등 경로는 거리·소요시간 줄을 더한다(Map ADR-128). 이름이 같은 코스를 가르도록
+            // 주소(출발점 역지오)는 그 아래 줄에 그대로 둔다.
+            const routeLine = result.kind === 'route' ? routeSummaryLine(result.route) : null;
             const secondary =
               result.road_address ?? result.address ?? searchResultCategory(result) ?? null;
             const isExternal = result.source === 'kakao' || result.source === 'naver';
@@ -184,6 +188,14 @@ export function MapSearchBox({
                     {!result.coord && (
                       <span className="block text-xs text-muted">
                         {canOpenDetail ? '상세 보기' : '위치 정보 없음'}
+                      </span>
+                    )}
+                    {routeLine && (
+                      <span
+                        className="block text-xs text-muted"
+                        data-testid="map-search-result-route-summary"
+                      >
+                        {routeLine}
                       </span>
                     )}
                     {secondary && (
