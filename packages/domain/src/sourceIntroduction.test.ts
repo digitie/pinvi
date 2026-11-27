@@ -111,6 +111,7 @@ describe('sourceIntroduction', () => {
       homepage_url: null,
       enrichment: [],
       degraded_providers: [],
+      containing_areas: [],
     };
     const event = {
       ...base,

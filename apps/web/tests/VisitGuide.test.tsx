@@ -196,6 +196,7 @@ describe('FeatureDetailCardBody — 이용 안내', () => {
       homepage_url: null,
       enrichment: [],
       degraded_providers: [],
+      containing_areas: [],
       phone: null,
       business_hours: null,
       introduction: null,
