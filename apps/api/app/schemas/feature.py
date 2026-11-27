@@ -211,6 +211,18 @@ class ExternalEnrichment(BaseModel):
     external_id: str | None = None
 
 
+class ContainingArea(BaseModel):
+    """feature 대표점을 덮는 Map 공개 area 1건(국립공원·보호지역·위험지역 …).
+
+    Map `GET /v1/features/{id}/containing-areas` 투영. `area_kind`가 `hazard_zone`이면 화면은
+    경고 스타일로 그린다. 작은 면(가장 구체적인 구역) 먼저.
+    """
+
+    feature_id: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
+    area_kind: str = Field(min_length=1, max_length=64)
+
+
 class DetailCardBase(BaseModel):
     """kind별 detail-card 공통 필드(일반 사용자 노출용). 원본 detail/urls dict는 노출하지 않는다."""
 
@@ -226,6 +238,8 @@ class DetailCardBase(BaseModel):
     # 옵트인 enrichment 결과. degraded_providers는 외부 provider와 category_labels 저하를 표시한다.
     enrichment: list[ExternalEnrichment] = Field(default_factory=list)
     degraded_providers: list[str] = Field(default_factory=list)
+    # 이 장소를 덮는 국립공원·보호지역·위험지역(`pinvi_map_containing_areas_enabled` 켜졌을 때만).
+    containing_areas: list[ContainingArea] = Field(default_factory=list)
 
 
 KoglType = Literal[1, 3]

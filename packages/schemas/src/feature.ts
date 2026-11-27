@@ -158,6 +158,14 @@ export const ExternalEnrichmentSchema = z.object({
 });
 export type ExternalEnrichment = z.infer<typeof ExternalEnrichmentSchema>;
 
+/** 장소를 덮는 Map 공개 구역 1건(국립공원·보호지역·위험지역). 작은 면 먼저. */
+export const ContainingAreaSchema = z.object({
+  feature_id: z.string().min(1).max(200),
+  name: z.string().min(1).max(200),
+  area_kind: z.string().min(1).max(64),
+});
+export type ContainingArea = z.infer<typeof ContainingAreaSchema>;
+
 // kind별 detail-card 공통 필드(일반 사용자 노출용). 원본 detail/urls dict는 노출하지 않는다.
 const detailCardBase = {
   feature_id: z.string().min(1).max(200),
@@ -171,6 +179,7 @@ const detailCardBase = {
   homepage_url: z.string().nullable().default(null),
   enrichment: z.array(ExternalEnrichmentSchema).default([]),
   degraded_providers: z.array(z.string()).default([]),
+  containing_areas: z.array(ContainingAreaSchema).default([]),
 };
 
 /** 공공누리 유형 — TourAPI 이미지는 제1유형(출처표시)·제3유형(출처표시+변경금지)만 온다. */

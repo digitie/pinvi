@@ -1,8 +1,17 @@
 'use client';
 
 import { withOccurrenceKeys } from '@/lib/occurrenceKeys';
-import type { ExternalEnrichment, FeatureDetailCard } from '@pinvi/schemas';
-import { AlertTriangle, Clock, ExternalLink, Globe, Loader2, MapPin, Phone } from 'lucide-react';
+import type { ContainingArea, ExternalEnrichment, FeatureDetailCard } from '@pinvi/schemas';
+import {
+  AlertTriangle,
+  Clock,
+  ExternalLink,
+  Globe,
+  Loader2,
+  MapPin,
+  Phone,
+  Trees,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { SourceIntroduction } from '@/components/map/SourceIntroduction';
 
@@ -151,6 +160,10 @@ function FeatureDetailCardBodyView0Part0({
         <Row icon={<MapPin className="h-4 w-4" />} testId={`${testId}-address`}>
           {card.address_line}
         </Row>
+      )}
+      {/* 옛 캐시·mock 카드에는 필드가 없을 수 있다(스키마 기본값은 파싱 때만 채워진다). */}
+      {(card.containing_areas ?? []).length > 0 && (
+        <ContainingAreas areas={card.containing_areas} testId={testId} />
       )}
 
       {card.kind === 'place' && <PlaceFacts card={card} testId={testId} />}
@@ -312,5 +325,51 @@ function NoticeFacts({
         </p>
       )}
     </>
+  );
+}
+
+/** 구역 이름 → "○○ 안" 문구. 이름에 이미 종류어가 있으면 덧붙이지 않는다(“북한산 국립공원 안”). */
+function containingAreaLabel(area: ContainingArea): string {
+  const name = area.name.trim();
+  if (area.area_kind === 'national_park') {
+    return name.includes('국립공원') ? `${name} 안` : `${name} 국립공원 안`;
+  }
+  if (area.area_kind === 'hazard_zone') {
+    return name.includes('위험') ? `${name} 안` : `${name} 위험지역 안`;
+  }
+  return /보호(지역|구역)/.test(name) ? `${name} 안` : `${name} 보호지역 안`;
+}
+
+/**
+ * 이 장소를 덮는 국립공원·보호지역(Map containing-areas, 작은 면 먼저). 위험지역(`hazard_zone`)만
+ * 경고 스타일이다 — 국립공원·보호지역은 정보일 뿐 경고가 아니다.
+ */
+function ContainingAreas({ areas, testId }: { areas: ContainingArea[]; testId: string }) {
+  return (
+    <ul className="flex flex-wrap gap-1.5" data-testid={`${testId}-containing-areas`}>
+      {withOccurrenceKeys(areas, (area) => area.feature_id).map(({ item: area, key }) => {
+        const hazard = area.area_kind === 'hazard_zone';
+        return (
+          <li
+            key={key}
+            data-testid={`${testId}-containing-area`}
+            data-area-kind={area.area_kind}
+            className={
+              hazard
+                ? 'inline-flex items-center gap-1 rounded-sm border border-error-text bg-error-bg px-2 py-1 text-xs font-semibold text-error-text'
+                : 'inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface-soft px-2 py-1 text-xs text-body'
+            }
+            {...(hazard ? { role: 'alert' } : {})}
+          >
+            {hazard ? (
+              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+            ) : (
+              <Trees className="h-3 w-3" aria-hidden="true" />
+            )}
+            {containingAreaLabel(area)}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

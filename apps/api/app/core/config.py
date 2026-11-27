@@ -846,6 +846,10 @@ class Settings(BaseSettings):
     # `/v1/service/weather/*`(service token 필요, Map ADR-114 W7)로 읽는다. off(기본)면 지금처럼
     # kor-travel-weather를 직접 부르고 Map weather 표면은 부르지 않는다. 특보는 켜도 weather 직접 경로다.
     pinvi_kor_travel_map_weather_enabled: bool = False
+    # 장소 상세 카드의 "○○국립공원 안 / ○○ 보호지역 안" — Map `GET /v1/features/{id}/containing-areas`.
+    # off(기본)면 Map을 부르지 않고 빈 목록이다. Map이 국립공원 경계를 재적재(3 km 버퍼 → 실제 경계,
+    # 2026-11-27)한 **뒤에** 켠다 — 그 전엔 버퍼 면이 은평·도봉 시가지까지 "북한산 안"으로 답한다.
+    pinvi_map_containing_areas_enabled: bool = False
     # Map weather 호출 한 번의 read·connect 상한과 카드·marker 요청 하나의 전체 예산(초). Map이 죽었을 때 빨리
     # 실패하도록 Map 공용 timeout(5초)보다 짧다. trip view는 기존 view 예산(10초)을 그대로 쓴다.
     pinvi_kor_travel_map_weather_timeout_seconds: float = Field(

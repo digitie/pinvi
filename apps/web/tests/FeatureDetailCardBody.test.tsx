@@ -17,11 +17,76 @@ function placeCard(over: Partial<Extract<FeatureDetailCard, { kind: 'place' }>> 
     homepage_url: 'https://sb.example',
     enrichment: [],
     degraded_providers: [],
+    containing_areas: [],
     phone: '051-000-0000',
     business_hours: '09:00-22:00',
     ...over,
   } as Extract<FeatureDetailCard, { kind: 'place' }>;
 }
+
+describe('FeatureDetailCardBody containing areas', () => {
+  it('국립공원·보호지역을 작은 면 순서대로 정보 칩으로 보여 준다', () => {
+    render(
+      <FeatureDetailCardBody
+        card={placeCard({
+          containing_areas: [
+            { feature_id: 'a2', name: '우이령', area_kind: 'protected_area' },
+            { feature_id: 'a1', name: '북한산 국립공원', area_kind: 'national_park' },
+            { feature_id: 'a3', name: '갯벌 습지보호지역', area_kind: 'protected_area' },
+          ],
+        })}
+      />,
+    );
+    const chips = screen.getAllByTestId('feature-detail-card-body-containing-area');
+    expect(chips.map((chip) => chip.textContent)).toEqual([
+      '우이령 보호지역 안',
+      '북한산 국립공원 안',
+      '갯벌 습지보호지역 안',
+    ]);
+    // 정보일 뿐 경고가 아니다.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('국립공원 이름에 종류어가 없으면 덧붙인다', () => {
+    render(
+      <FeatureDetailCardBody
+        card={placeCard({
+          containing_areas: [{ feature_id: 'a1', name: '지리산', area_kind: 'national_park' }],
+        })}
+      />,
+    );
+    expect(screen.getByTestId('feature-detail-card-body-containing-area')).toHaveTextContent(
+      '지리산 국립공원 안',
+    );
+  });
+
+  it('위험지역만 경고 스타일(role=alert)로 그린다', () => {
+    render(
+      <FeatureDetailCardBody
+        card={placeCard({
+          containing_areas: [
+            { feature_id: 'h1', name: '낙석', area_kind: 'hazard_zone' },
+            { feature_id: 'a1', name: '설악산 국립공원', area_kind: 'national_park' },
+          ],
+        })}
+      />,
+    );
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('낙석 위험지역 안');
+    expect(alert).toHaveAttribute('data-area-kind', 'hazard_zone');
+    expect(alert.className).toContain('text-error-text');
+  });
+
+  it('구역이 없거나 필드가 없는 옛 카드면 아무것도 그리지 않는다', () => {
+    const legacy = placeCard();
+    delete (legacy as Partial<typeof legacy>).containing_areas;
+    const { unmount } = render(<FeatureDetailCardBody card={legacy} />);
+    expect(screen.queryByTestId('feature-detail-card-body-containing-areas')).toBeNull();
+    unmount();
+    render(<FeatureDetailCardBody card={placeCard({ containing_areas: [] })} />);
+    expect(screen.queryByTestId('feature-detail-card-body-containing-areas')).toBeNull();
+  });
+});
 
 describe('FeatureDetailCardBody', () => {
   it('초기 카드에서도 부분 정보 안내를 표시한다', () => {
@@ -133,6 +198,7 @@ describe('FeatureDetailCardBody', () => {
       homepage_url: null,
       enrichment: [],
       degraded_providers: [],
+      containing_areas: [],
       unit: '원/L',
       items: [{ name: '휘발유', price: '1650' }],
     } as Extract<FeatureDetailCard, { kind: 'price' }>;
@@ -158,4 +224,3 @@ describe('FeatureDetailCardBody', () => {
     );
   });
 });
-

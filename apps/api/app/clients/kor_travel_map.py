@@ -768,6 +768,36 @@ class KorTravelMapClient:
             return None
         return self._data(resp)
 
+    async def get_feature_containing_areas(
+        self,
+        feature_id: str,
+        *,
+        area_kinds: Sequence[str] = (),
+        page_size: int = 10,
+    ) -> list[dict[str, Any]]:
+        """feature 대표점을 덮는 공개 area(국립공원·보호지역·위험지역…). 404 → 빈 목록.
+
+        Map `GET /v1/features/{feature_id}/containing-areas` — 작은 면 먼저(가장 구체적인 구역).
+        """
+        segment = _path_segment(feature_id)
+        if segment is None:
+            return []
+        feature_id = segment
+        params: dict[str, Any] = {"page_size": page_size}
+        if area_kinds:
+            params["area_kind"] = list(area_kinds)
+        resp = await self._send(
+            "GET",
+            f"/v1/features/{feature_id}/containing-areas",
+            params=params,
+            allow_public_api_key=True,
+        )
+        if resp.status_code == status.HTTP_404_NOT_FOUND:
+            # 비공개·없는 feature — "덮는 구역 없음". 대표 좌표가 없는 feature는 Map이 200 + 빈 items를 준다.
+            return []
+        items = self._data(resp).get("items")
+        return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
     async def get_features(
         self,
         feature_ids: Sequence[str],

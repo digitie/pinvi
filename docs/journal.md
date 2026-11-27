@@ -1,3 +1,15 @@
+## 2026-11-27 (claude) — 장소 상세 "○○국립공원 안 / ○○ 보호지역 안"(플래그, 기본 꺼짐)
+
+- Map 새 공개 API `GET /v1/features/{id}/containing-areas`(Map PR #1567, 대표점 한 점을 덮는 공개 area, 작은 면 먼저)를
+  client `get_feature_containing_areas`로 부르고 detail-card에 `containing_areas[{feature_id,name,area_kind}]`를 싣는다.
+  단계 `containing_areas`는 같은 2.5초 예산 안이고, 실패는 `degraded_providers=["containing_areas"]`로만 남는다(카드 유지).
+  계약 밖 행은 그 행만 버린다. place·event 카드에만 붙인다(route·area 대표점은 무게중심이라 "선·면이 공원 안"이 아니다).
+- 화면(`FeatureDetailCardBody`): 주소 아래 칩 — 국립공원·보호지역은 정보 칩(나무 아이콘), `hazard_zone`만 경고 스타일
+  (`role=alert`, error 토큰). 이름에 종류어가 없으면 "국립공원/보호지역/위험지역"을 덧붙인다. hazard_zone 데이터는 아직 0건이다.
+- **플래그 `PINVI_MAP_CONTAINING_AREAS_ENABLED`(기본 false, compose 전달)**: Map 국립공원 경계 재적재(Map PR #1566 — 원천
+  15017313이 공원경계 3 km 버퍼였다) **배포 뒤에만** 켠다. 그 전엔 버퍼 면이 은평·도봉 시가지까지 "북한산 안"이라 답한다.
+- Map user OpenAPI 재vendor(`17ac805d…`), M05 pair 계약 재생성. 시험: unit(client·플래그·저하·계약 밖 행·route/area 제외),
+  통합(detail-card 플래그 on/off), 계약 게이트(경로·query·필드), web vitest(칩·경고·옛 카드).
 ## 2026-11-27 (claude) — 등산 코스를 일정에 추가(Map ADR-128 `route` 요약)
 
 - 출처: 소유자 결정 — 숲길 구간을 코스로 묶은 Map(ADR-128)의 등산 코스를 PinVi에서 일정에 넣는다. 기본값: 코스

@@ -1,3 +1,8 @@
+## 2026-11-27 (claude) — 장소 상세 "○○국립공원 안" (플래그 기본 꺼짐)
+
+- detail-card에 Map containing-areas를 싣고 칩으로 보인다(위험지역만 경고). `PINVI_MAP_CONTAINING_AREAS_ENABLED=false` 기본.
+- 다음: Map #1566 재적재 배포·확인(active 국립공원 23·면적비 0.9~1.1) **뒤에** prod env에서 플래그를 켠다. 순서가 바뀌면
+  버퍼 경계(공식의 2~4.8배)로 틀린 "○○국립공원 안"이 보인다.
 ## 2026-11-27 (claude) — 등산 코스를 일정에 추가(Map ADR-128 `route` 요약)
 
 - 출처: 소유자 결정 — 숲길 구간을 코스로 묶은 Map(ADR-128)의 등산 코스를 PinVi에서 일정에 넣는다. 기본값: 코스

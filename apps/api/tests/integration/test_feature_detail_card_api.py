@@ -566,3 +566,53 @@ async def test_parallel_enrichment_uses_remaining_whole_card_budget(
         assert cancelled.is_set()
     finally:
         _clear()
+
+
+class _FakeMapClientWithAreas(_FakeMapClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.area_calls: list[str] = []
+
+    async def get_feature_containing_areas(
+        self, feature_id: str, *, area_kinds: Any = (), page_size: int = 10
+    ) -> list[dict[str, Any]]:
+        self.area_calls.append(feature_id)
+        return [
+            {"feature_id": "a1", "name": "북한산 국립공원", "area_kind": "national_park"},
+            {"feature_id": "h1", "name": "낙석", "area_kind": "hazard_zone"},
+        ]
+
+
+async def test_detail_card_containing_areas_follow_the_flag(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """플래그가 꺼져 있으면 Map을 부르지 않고, 켜면 카드에 구역이 실린다(Map 재적재 뒤에만 켠다)."""
+    from app.api.v1 import features as features_api
+
+    user_id, _ = verified_user
+    fake = _FakeMapClientWithAreas()
+    app.dependency_overrides[get_kor_travel_map_client] = lambda: fake
+    app.dependency_overrides[get_kakao_local_client] = lambda: None
+    app.dependency_overrides[get_naver_local_client] = lambda: None
+    try:
+        monkeypatch.setattr(features_api.settings, "pinvi_map_containing_areas_enabled", False)
+        off = await client.get("/features/place:1/detail-card", cookies=auth_cookies(user_id))
+        assert off.status_code == 200, off.text
+        assert off.json()["data"]["containing_areas"] == []
+        assert fake.area_calls == []
+
+        monkeypatch.setattr(features_api.settings, "pinvi_map_containing_areas_enabled", True)
+        on = await client.get("/features/place:1/detail-card", cookies=auth_cookies(user_id))
+        assert on.status_code == 200, on.text
+        data = on.json()["data"]
+        assert data["containing_areas"] == [
+            {"feature_id": "a1", "name": "북한산 국립공원", "area_kind": "national_park"},
+            {"feature_id": "h1", "name": "낙석", "area_kind": "hazard_zone"},
+        ]
+        assert data["degraded_providers"] == []
+        assert fake.area_calls == ["place:1"]
+    finally:
+        _clear()

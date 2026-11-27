@@ -22,6 +22,7 @@ from typing import Annotated, Any, cast
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.kakao_local import KakaoLocalClient, KakaoLocalClientDep
 from app.clients.kor_travel_map import (
     KorTravelMapBadRequest,
+    KorTravelMapClient,
+    KorTravelMapError,
     KorTravelMapFeatureNotFound,
     KorTravelMapHttpClientDep,
     KorTravelMapRateLimited,
@@ -52,7 +55,9 @@ from app.middleware.location_audit import declare_location_audit
 from app.models.feature_suggestion import FeatureSuggestion
 from app.schemas.envelope import Envelope
 from app.schemas.feature import (
+    ContainingArea,
     Coord,
+    DetailCardBase,
     ExternalRef,
     ExternalRefProvider,
     FeatureCategory,
@@ -686,6 +691,41 @@ async def _enrich_place_card(
         card.enrichment.sort(key=lambda row: order[row.provider])
 
 
+_CONTAINING_AREA_KINDS: tuple[str, ...] = ("national_park", "protected_area", "hazard_zone")
+# Map은 feature **대표점 한 점**으로 판정한다 — route·area의 대표점은 무게중심이라 "선·면이 공원 안"을
+# 뜻하지 않는다(공원을 두르는 둘레길의 무게중심은 공원 안). 점 feature 카드에만 붙인다.
+_CONTAINING_CARD_KINDS: frozenset[str] = frozenset({"place", "event"})
+
+
+async def _attach_containing_areas(
+    card: DetailCardBase, client: KorTravelMapClient, feature_id: str
+) -> None:
+    """카드에 "이 장소를 덮는 구역"을 붙인다. 선택 정보라 실패는 저하(`containing_areas`)로만 남긴다.
+
+    플래그(`pinvi_map_containing_areas_enabled`)가 꺼져 있으면 Map을 부르지 않는다 — Map 국립공원
+    경계 재적재 전에는 3 km 버퍼 면이 답이라 틀린 "○○국립공원 안"을 보여 주게 된다.
+    예산·호출자 취소(CancelledError/TimeoutError)는 그대로 전파해 상위 부분 카드 처리를 탄다.
+    """
+    if not settings.pinvi_map_containing_areas_enabled or card.kind not in _CONTAINING_CARD_KINDS:
+        return
+    try:
+        rows = await client.get_feature_containing_areas(
+            feature_id, area_kinds=_CONTAINING_AREA_KINDS
+        )
+        areas: list[ContainingArea] = []
+        for row in rows:
+            try:
+                areas.append(ContainingArea.model_validate(row))
+            except ValidationError:
+                # 계약 밖 행 하나가 카드 전체를 저하시키지 않는다 — 그 행만 버린다.
+                continue
+    except KorTravelMapError as exc:
+        card.degraded_providers.append("containing_areas")
+        log.warning("feature_detail_card.containing_areas_failed", failure_type=type(exc).__name__)
+        return
+    card.containing_areas = areas
+
+
 @router.get("/{feature_id}/detail-card", response_model=Envelope[FeatureDetailCard])
 async def get_feature_detail_card(
     feature_id: Annotated[str, Path(min_length=1, max_length=200)],
@@ -724,6 +764,9 @@ async def get_feature_detail_card(
                         category = dto["category"]
                         if len(category) == 8 and category.isascii() and category.isdigit():
                             card.degraded_providers.append("category_labels")
+                    stage = "containing_areas"
+                    with _detail_card_stage(durations, stage):
+                        await _attach_containing_areas(card, client, feature_id)
                     stage = "enrichment"
                     with _detail_card_stage(durations, stage):
                         if requested and isinstance(card, PlaceDetailCard) and card.name:
