@@ -1,3 +1,12 @@
+## 2026-11-27 (claude) — Expo 58.1.0 정렬(expo-doctor 외부 drift)
+
+- 출처: 2026-11-26 Expo가 SDK 58 기대 버전을 올려(`expo` ~58.1.0, `expo-dev-client` ~58.0.22, `expo-location` ~58.0.23,
+  `expo-router` ~58.0.33) 코드 변경 없이 모든 PR의 required `mobile-doctor`가 실패했다(#803·#806·#807).
+- root·mobile `package.json` 정확 핀과 `scripts/check-mobile-styling.mjs` 고정값을 같은 값으로 올리고 lockfile을 다시 만들었다(expo 계열
+  전이 의존성만 바뀜, 쓰지 않게 된 6개 패키지 제거). 앱 코드 변경 없음.
+- 시험(WSL Docker): `npm ci`, expo-doctor 20/20, mobile typecheck·lint·test·check:dependencies·doctor·export:web, 전체 typecheck.
+- 배포: 모바일 다음 앱 빌드. 서버 이미지 영향 없음.
+
 ## 2026-11-27 (claude) — 지도 경로·영역 체크박스 제거
 
 - 소유자 결정: 지도 레이어 패널의 '경로'·'영역'(route·area 선·면 레이어, zoom 14 이상)은 쓰임이 적어 뺀다.
