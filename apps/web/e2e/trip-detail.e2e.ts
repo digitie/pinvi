@@ -328,7 +328,13 @@ async function mockTripDetailRoutes(
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
-        data: { kind: 'place', feature_id: featureId, name: featureId, introduction: null },
+        data: {
+          kind: 'place',
+          feature_id: featureId,
+          name: featureId,
+          introduction: null,
+          visit_guide: null,
+        },
       }),
     });
   });
@@ -1949,9 +1955,7 @@ test('여행 장소 마커는 원형 + 상자 없는 이름 라벨 + 현재 날�
       .getBoundingClientRect();
     return {
       gap: labelRect.left - dotRect.right,
-      centerDy: Math.abs(
-        labelRect.top + labelRect.height / 2 - (dotRect.top + dotRect.height / 2),
-      ),
+      centerDy: Math.abs(labelRect.top + labelRect.height / 2 - (dotRect.top + dotRect.height / 2)),
     };
   });
   // CirclePlaceMarker는 원과 라벨 사이 4px 간격, 세로 가운데 정렬이다.

@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { SourceIntroduction } from '@/components/map/SourceIntroduction';
+import { VisitGuide } from '@/components/map/VisitGuide';
+import { cardIntroduction, cardVisitGuide, visitGuideHasContent } from '@pinvi/domain';
 
 /**
  * Feature 상세 detail-card 본문(TDR, ADR-056, F5). kind별 일반 사용자 노출 필드만 렌더하고, 옵트인
@@ -130,6 +132,9 @@ function FeatureDetailCardBodyView0Part0({
   viewModel: FeatureDetailCardBodyView0Model;
 }) {
   const { testId, card } = viewModel;
+  const introduction = cardIntroduction(card);
+  const guide = cardVisitGuide(card);
+  const visitGuide = visitGuideHasContent(guide) ? guide : null;
   return (
     <div
       className="space-y-3"
@@ -152,9 +157,9 @@ function FeatureDetailCardBodyView0Part0({
           {card.category_label}
         </p>
       )}
-      {/* 출처 소개(TourAPI 대표 이미지·소개문·출처/공공누리 표시) — 값이 없으면 블록이 없다. */}
-      {card.kind === 'place' && card.introduction && (
-        <SourceIntroduction introduction={card.introduction} testId={`${testId}-introduction`} />
+      {/* 출처 소개(원본 이미지·소개문·출처/공공누리 표시) — place·축제(event)만, 값이 없으면 블록이 없다. */}
+      {introduction && (
+        <SourceIntroduction introduction={introduction} testId={`${testId}-introduction`} />
       )}
       {card.address_line && (
         <Row icon={<MapPin className="h-4 w-4" />} testId={`${testId}-address`}>
@@ -170,6 +175,18 @@ function FeatureDetailCardBodyView0Part0({
       {card.kind === 'event' && <EventFacts card={card} testId={testId} />}
 
       {card.kind === 'notice' && <NoticeFacts card={card} testId={testId} />}
+
+      {/* 이용 안내(이용시간·휴무·요금·주차·무장애·반려동물) — 출처 문장 그대로, 값이 없으면 블록이 없다. */}
+      {visitGuide && (
+        <section
+          aria-label="이용 안내"
+          className="border-t border-hairline pt-3"
+          data-testid={`${testId}-visit-guide-section`}
+        >
+          <h3 className="mb-1.5 text-xs font-semibold text-ink">이용 안내</h3>
+          <VisitGuide guide={visitGuide} testId={`${testId}-visit-guide`} />
+        </section>
+      )}
 
       {card.kind === 'price' && card.items.length > 0 && (
         <FeatureDetailCardBodyView0Part0Part0 viewModel={viewModel} />

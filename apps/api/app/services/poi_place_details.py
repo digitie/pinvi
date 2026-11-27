@@ -9,8 +9,10 @@
 - 장소를 지우면(`services.poi.soft_delete_poi`) 행도 지운다. 영구 삭제는 FK CASCADE다.
 
 출처: kor-travel-map feature 상세(공공데이터)만 저장한다. Map place detail의 `business_hours`(Google
-Places 호환 `FeatureOpeningHours` — `weekday_text`/`periods`/`special_days`), 출처 원문 영업시간
-문자열(`facility_info.operating_time` 등), `phones[]`, `urls.homepage`를 읽는다. Kakao/Naver Local은
+Places 호환 `FeatureOpeningHours` — `weekday_text`/`periods`/`special_days`), Map 최상위 `visitor_info`
+(ADR-125)의 `usage_hours`/`rest_days` 원문, 옛 출처 원문 영업시간 문자열(`facility_info.operating_time` 등),
+`phones[]`, `urls.homepage`를 읽는다(우선순위: 구조화 → `visitor_info` → 옛 평면 키). 저장된 행은 캐시라
+`visitor_info`가 새로 생겨도 "다시 읽어오기" 전까지는 예전 값을 보인다. Kakao/Naver Local은
 응답 저장이 금지(ADR-054, 상세 카드의 라이브 표시로만 쓴다)이고, Google Places Details는 콘텐츠 캐시
 금지와 비 Google 지도 위 표시 금지 약관 때문에 쓰지 않는다.
 """
@@ -32,6 +34,7 @@ from app.services.feature_detail import _clean, _homepage, _phone, _pick
 from app.services.opening_hours import DISPLAY_ORDER as _DISPLAY_ORDER
 from app.services.opening_hours import WEEKDAYS as _WEEKDAYS
 from app.services.opening_hours import hours_from_structured as _hours_from_structured
+from app.services.source_introduction import guide_text, visitor_info_of
 
 MAP_SOURCE = "kor_travel_map"
 REFRESH_INTERVAL = timedelta(seconds=60)
@@ -119,13 +122,23 @@ def extract_place_details(dto: dict[str, Any], *, today: date) -> ExtractedPlace
             closed_dates = _upcoming_closed_dates(structured, today)
             if hours_lines:
                 break
+    # Map `visitor_info`(ADR-125)의 이용시간·휴무 원문 — 구조화 영업시간이 없을 때 옛 평면 키보다 먼저 쓴다.
+    visitor = visitor_info_of(dto) or {}
     if not hours_lines:
-        text = _pick(facility, *_HOURS_TEXT_KEYS) or _pick(detail, *_HOURS_TEXT_KEYS)
+        text = (
+            guide_text(visitor.get("usage_hours"))
+            or _pick(facility, *_HOURS_TEXT_KEYS)
+            or _pick(detail, *_HOURS_TEXT_KEYS)
+        )
         if text:
             hours_lines = [text]
 
     closed_parts: list[str] = []
-    closed_text = _pick(facility, *_CLOSED_TEXT_KEYS) or _pick(detail, *_CLOSED_TEXT_KEYS)
+    closed_text = (
+        guide_text(visitor.get("rest_days"))
+        or _pick(facility, *_CLOSED_TEXT_KEYS)
+        or _pick(detail, *_CLOSED_TEXT_KEYS)
+    )
     if closed_text:
         closed_parts.append(closed_text)
     elif closed_weekdays:

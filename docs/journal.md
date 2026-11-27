@@ -1,3 +1,33 @@
+## 2026-11-27 (claude) — 장소 상세 출처 소개 일반화 + 이용 안내(Map visitor_info, ADR-125)
+
+- 목표: Map ADR-125(PR #1564·#1565)가 공개 `GET /v1/features/{id}`에 최상위 `visitor_info`(`PlaceVisitorInfo`)를 더했다 —
+  TourAPI(관광지·문화시설·레포츠·축제)·국가유산 설명문·박물관/미술관·휴양림 표준데이터의 이용시간·휴무·주차·요금·소개·이미지
+  (이미지마다 공공누리 유형)·무장애·반려동물. #809의 TourAPI 전용 소개를 이 계약으로 일반화하고 이용 안내를 새로 보인다.
+- API: `PlaceDetailCard`·`EventDetailCard`에 `introduction`(일반화)·`visit_guide`(신규). `SourceIntroduction`은 원천 4종
+  (`provider`)·`reference_date`·이미지 최대 10장이고, 공공누리 표시는 이미지마다(`kogl_type` 0~4·`license_label`·
+  `license_url`) — 최상위 `kogl_type`/`license_*`는 없앴다. 출처 문구는 원천별 PinVi 고정값, 모르는 원천은 통째로 뺀다.
+  이미지 라이선스는 fail-closed(유형·변경/상업 허용 값 모순·미상이면 뺌), 상업적 이용금지(제2·4유형)는 상업성 판단 전까지
+  뺀다. 이미지 허용 호스트는 TourAPI `*.visitkorea.or.kr`뿐(국가유산 이미지·옛 `image_url` 안 보임). `visitor_info`가 없는
+  옛 Map 응답이면 #809 평면 키로 대신한다.
+- 영업 정보: `poi_place_details.extract_place_details`가 구조화 영업시간이 없을 때 `visitor_info.usage_hours`·`rest_days`를
+  옛 평면 키보다 먼저 읽는다. 저장 행은 캐시라 "다시 읽어오기" 전에는 예전 값이다.
+- 화면: 웹 `SourceIntroduction`(1장 = 전체 폭, 여러 장 = 가로 갤러리, 이미지마다 공공누리 링크, 출처 + 기준일)·새
+  `VisitGuide`(원천 문장 표, 요금 `성인 2,000원 · 청소년 1,000원 · 어린이 무료` + 원문, 무장애·반려동물 펼침 배지 —
+  아이콘·글자·`aria-expanded`). 지도 상세 카드(place·축제)와 여행 `PlaceInfoPanel`(`소개`·`이용 안내` 항목), 모바일
+  `PlaceSheet`(같은 두 항목). 판정·문구는 `@pinvi/domain` `sourceIntroduction.ts`·`visitGuide.ts`.
+- 계약: Map user OpenAPI를 Map PR 브랜치 `claude/place-visitor-info` HEAD `5376ae06`(sha256 `6cfd4c8f…`, #1565 브랜치와 byte
+  동일)로 재vendor — f1788da9 대비 변경은 `visitor_info`와 그 schema 6개뿐. 게이트에 `visitor_info`·`PlaceVisitorInfo`·
+  `PlaceImage`·`ContentLicense`·`PlaceFee`·`AccessibilityNote`·`PetPolicy` 소비 필드를 고정, M05 pair 계약 user digest
+  재생성. **Map 머지 뒤 main 커밋으로 다시 vendor해야 한다**(contract-pin-consistency는 핀 커밋이 GitHub에 있어야 green).
+- 시험(Docker, CI와 같은 명령): api `ruff check`·`ruff format --check`·`mypy --strict app`·unit 2,492 통과(새
+  `test_visitor_info_projection.py` — 원천 4종·축제·라이선스 fail-closed·평면 키 대체·영업 정보), 실패 3건
+  (`test_api_image_provenance`·`test_m05_legacy_rebaseline_receipt`·`test_m05_restore_drill`)은 같은 base에서도 나는 컨테이너
+  환경 문제(root·git 미가용)이고 `test_m05_activation_receipt`는 worktree git 포인터 때문에 수집 불가로 뺐다. schemas·domain
+  typecheck·vitest(새 `visitGuide.test.ts`), web lint·typecheck·vitest 670(새 `VisitGuide.test.tsx`, 갤러리·이미지별 공공누리·
+  배지), mobile lint·typecheck·vitest 49(`TripDetailScreen` 이용 안내 항목). Playwright는 돌리지 않았다(mocked e2e
+  `trip-detail`의 detail-card mock에 `visit_guide: null`만 더함).
+- 후속: `docs/tasks.md` T-VISITOR-INFO(Map main 재vendor, 제2·4유형 표시 판단, 개인정보처리방침 문구).
+
 ## 2026-11-27 (claude) — 장소 상세 "○○국립공원 안 / ○○ 보호지역 안"(플래그, 기본 꺼짐)
 
 - Map 새 공개 API `GET /v1/features/{id}/containing-areas`(Map PR #1567, 대표점 한 점을 덮는 공개 area, 작은 면 먼저)를

@@ -50,8 +50,8 @@ from app.schemas.public import (
 )
 
 _SNAPSHOT = Path(__file__).resolve().parent.parent / "contract" / "kor-travel-map-openapi-user.json"
-_UPSTREAM_COMMIT = "3010d7ed81fe2cc07681bb93e9e063a6a34a4ae4"
-_SNAPSHOT_SHA256 = "17ac805d0eb48b20379a07f55a0487d371a12fdf4690ba4dd4146e19a484f22f"
+_UPSTREAM_COMMIT = "622dc70359bbbdcd9839cc809ddcb1f9e7590956"
+_SNAPSHOT_SHA256 = "bcc05c775483b1da60a5275cf93fba317658f0209469c1b54330d1b92b49b63a"
 
 # service profile 스냅샷 — byte-핀·재추출 절차는 cache-target 계약 테스트
 # (`test_kor_travel_map_cache_target_contract.py`)가 소유하고 본 파일은 읽기만 한다.
@@ -380,6 +380,116 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
             "required": True,
             "nullable": False,
         },
+        # Map ADR-125 방문 안내 — `services/source_introduction.py`가 출처 소개·이용 안내로,
+        # `services/poi_place_details.py`가 이용시간·휴무 원문으로 읽는다.
+        "visitor_info": {
+            "type": "object",
+            "ref": "PlaceVisitorInfo",
+            "required": False,
+            "nullable": True,
+        },
+    },
+    # `services/source_introduction.py`가 읽는 방문 안내 필드(Map ADR-125). 모르는 enum 값은
+    # 소비 쪽에서 버리지만, 지금 아는 값이 줄거나 이름이 바뀌면 화면에서 조용히 사라지므로 고정한다.
+    "PlaceVisitorInfo": {
+        "source": {
+            "type": "string",
+            "enum": {"tourapi", "krheritage", "datagokr_museum", "krforest_recreation_forest"},
+            "required": True,
+            "nullable": False,
+        },
+        "reference_date": {
+            "type": "string",
+            "format": "date",
+            "required": False,
+            "nullable": True,
+        },
+        "description": {"type": "string", "required": False, "nullable": True},
+        "usage_hours": {"type": "string", "required": False, "nullable": True},
+        "rest_days": {"type": "string", "required": False, "nullable": True},
+        "parking": {"type": "string", "required": False, "nullable": True},
+        "parking_fee": {"type": "string", "required": False, "nullable": True},
+        "fee_text": {"type": "string", "required": False, "nullable": True},
+        "discount": {"type": "string", "required": False, "nullable": True},
+        "reservation": {"type": "string", "required": False, "nullable": True},
+        "inquiry": {"type": "string", "required": False, "nullable": True},
+        "transport": {"type": "string", "required": False, "nullable": True},
+        "facilities": {"type": "string", "required": False, "nullable": True},
+        "capacity": {"type": "string", "required": False, "nullable": True},
+        "pet_note": {"type": "string", "required": False, "nullable": True},
+        "accommodation_available": {"type": "boolean", "required": False, "nullable": True},
+        "fees": {
+            "type": "array",
+            "items_ref": "PlaceFee",
+            "max_items": 3,
+            "required": False,
+            "nullable": False,
+        },
+        "images": {
+            "type": "array",
+            "items_ref": "PlaceImage",
+            "required": False,
+            "nullable": False,
+        },
+        "accessibility": {
+            "type": "array",
+            "items_ref": "AccessibilityNote",
+            "required": False,
+            "nullable": False,
+        },
+        "pet_policy": {
+            "type": "object",
+            "ref": "PetPolicy",
+            "required": False,
+            "nullable": True,
+        },
+    },
+    "PlaceImage": {
+        "url": {"type": "string", "required": True, "nullable": False},
+        "caption": {"type": "string", "required": False, "nullable": True},
+        "license": {
+            "type": "object",
+            "ref": "ContentLicense",
+            "required": True,
+            "nullable": False,
+        },
+    },
+    "ContentLicense": {
+        "kogl_type": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4,
+            "required": True,
+            "nullable": False,
+        },
+        "derivatives_allowed": {"type": "boolean", "required": True, "nullable": False},
+        "commercial_allowed": {"type": "boolean", "required": True, "nullable": False},
+    },
+    "PlaceFee": {
+        "audience": {
+            "type": "string",
+            "enum": {"adult", "youth", "child"},
+            "required": True,
+            "nullable": False,
+        },
+        "amount_krw": {"type": "integer", "required": True, "nullable": False},
+    },
+    "AccessibilityNote": {
+        "group": {
+            "type": "string",
+            "enum": {"physical", "visual", "hearing", "infant_family"},
+            "required": True,
+            "nullable": False,
+        },
+        "facility": {"type": "string", "required": True, "nullable": False},
+        "label": {"type": "string", "required": True, "nullable": False},
+        "text": {"type": "string", "required": True, "nullable": False},
+    },
+    "PetPolicy": {
+        "companion_type": {"type": "string", "required": False, "nullable": True},
+        "allowed_pets": {"type": "string", "required": False, "nullable": True},
+        "requirements": {"type": "string", "required": False, "nullable": True},
+        "notes": {"type": "string", "required": False, "nullable": True},
     },
     "CategorySummary": {
         "code": {"type": "string", "required": True, "nullable": False},

@@ -101,7 +101,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function placeCard(introduction: unknown) {
+function placeCard(introduction: unknown, visitGuide: unknown = null) {
   return {
     kind: 'place',
     feature_id: 'f_hahoe',
@@ -119,6 +119,7 @@ function placeCard(introduction: unknown) {
     phone: null,
     business_hours: null,
     introduction,
+    visit_guide: visitGuide,
   };
 }
 
@@ -141,12 +142,17 @@ describe('PlaceInfoPanel', () => {
       provider: 'tourapi',
       attribution: '한국관광공사',
       overview,
+      reference_date: null,
       images: [
-        { url: INTRO_IMAGE, alt: '하회마을 대표 사진', kogl_type: 1, no_derivatives: false },
+        {
+          url: INTRO_IMAGE,
+          alt: '하회마을 대표 사진',
+          kogl_type: 1,
+          no_derivatives: false,
+          license_label: '공공누리 제1유형: 출처표시',
+          license_url: 'https://www.kogl.or.kr/info/licenseType1.do',
+        },
       ],
-      kogl_type: 1,
-      license_label: '공공누리 제1유형: 출처표시',
-      license_url: 'https://www.kogl.or.kr/info/licenseType1.do',
     };
   }
 
@@ -220,6 +226,59 @@ describe('PlaceInfoPanel', () => {
       await features.detailCard.mock.results[0]?.value?.catch(() => undefined);
     });
     expect(screen.queryByTestId('place-info-about-toggle')).toBeNull();
+    expect(screen.queryByTestId('place-info-guide-toggle')).toBeNull();
+  });
+
+  it('이용 안내가 있으면 소개 뒤·지도 앱 앞에 이용 안내 항목을 두고 무장애 배지를 펼친다', async () => {
+    api.placeDetails.mockResolvedValue(details());
+    features.detailCard.mockResolvedValue(
+      placeCard(hahoeIntro('소개'), {
+        provider: 'tourapi',
+        attribution: '한국관광공사',
+        reference_date: null,
+        usage_hours: '09:00~18:00',
+        rest_days: null,
+        parking: '가능',
+        parking_fee: null,
+        fees: [{ audience: 'adult', amount_krw: 5000 }],
+        fee_text: null,
+        discount: null,
+        reservation: null,
+        inquiry: null,
+        transport: null,
+        facilities: null,
+        capacity: null,
+        accommodation_available: null,
+        pet_note: null,
+        accessibility: [
+          { group: 'physical', facility: 'parking', label: '주차', text: '장애인 주차 2면' },
+        ],
+        pet_policy: null,
+      }),
+    );
+    renderPanel();
+    const toggle = await screen.findByTestId('place-info-guide-toggle');
+    const keys = within(screen.getByTestId('place-info-sections'))
+      .getAllByRole('button')
+      .map((button) => button.getAttribute('data-testid'));
+    expect(keys.slice(-3)).toEqual([
+      'place-info-about-toggle',
+      'place-info-guide-toggle',
+      'place-info-maps-toggle',
+    ]);
+    expect(toggle).toHaveTextContent('이용 안내');
+    fireEvent.click(toggle);
+    const section = screen.getByTestId('place-info-guide');
+    expect(within(section).getByTestId('place-info-visit-guide-fees')).toHaveTextContent(
+      '성인 5,000원',
+    );
+    fireEvent.click(within(section).getByTestId('place-info-visit-guide-accessibility-toggle'));
+    expect(within(section).getByTestId('place-info-visit-guide-accessibility')).toHaveTextContent(
+      '주차: 장애인 주차 2면',
+    );
+    expect(within(section).getByTestId('place-info-visit-guide-attribution')).toHaveTextContent(
+      '출처: 한국관광공사',
+    );
   });
 
   it('shows a brief summary and keeps every section collapsed by default', async () => {

@@ -29,5 +29,6 @@ export * from './tripFeatureResolution';
 export * from './tripMapPoints';
 export * from './tripPermissions';
 export * from './upload';
+export * from './visitGuide';
 export * from './transport';
 export * from './weatherNow';

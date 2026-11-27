@@ -184,30 +184,106 @@ const detailCardBase = {
   containing_areas: z.array(ContainingAreaSchema).default([]),
 };
 
-/** 공공누리 유형 — TourAPI 이미지는 제1유형(출처표시)·제3유형(출처표시+변경금지)만 온다. */
-export const KoglTypeSchema = z.union([z.literal(1), z.literal(3)]);
+/** 공공누리 유형 0~4 — 3·4유형은 변경금지, 2·4유형은 상업적 이용금지(kogl.or.kr licenseType{N}). */
+export const KoglTypeSchema = z.union([
+  z.literal(0),
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+]);
 export type KoglType = z.infer<typeof KoglTypeSchema>;
 
-/** 출처 원본 이미지 1장 — 원본 URL 그대로(서버 가공·썸네일 없음). no_derivatives면 크롭 금지. */
+/** 출처 소개·이용 안내를 만든 원천(Map `PlaceVisitorInfo.source`, ADR-125). */
+export const IntroductionProviderSchema = z.enum([
+  'tourapi',
+  'krheritage',
+  'datagokr_museum',
+  'krforest_recreation_forest',
+]);
+export type IntroductionProvider = z.infer<typeof IntroductionProviderSchema>;
+
+/**
+ * 출처 원본 이미지 1장 — 원본 URL 그대로(서버 가공·썸네일 없음). 공공누리 표시는 이미지마다 다르다.
+ * no_derivatives(제3·4유형)면 크롭·필터 없이 원본 비율로만 그린다.
+ */
 export const SourceImageSchema = z.object({
   url: z.string().max(2048),
   alt: z.string().max(200),
   kogl_type: KoglTypeSchema,
   no_derivatives: z.boolean(),
+  license_label: z.string().max(100),
+  license_url: z.string().max(200),
 });
 export type SourceImage = z.infer<typeof SourceImageSchema>;
 
-/** 출처 장소 소개(TourAPI — 한국관광공사). overview는 평문(줄바꿈 보존)이며 텍스트로만 그린다. */
+/** 출처 장소 소개 — 소개문(평문, 줄바꿈 보존, 텍스트로만 그린다)·원본 이미지 갤러리·출처 표시. */
 export const SourceIntroductionSchema = z.object({
-  provider: z.literal('tourapi'),
+  provider: IntroductionProviderSchema,
   attribution: z.string().max(100),
+  reference_date: z.string().nullable().default(null),
   overview: z.string().max(20000).nullable().default(null),
-  images: z.array(SourceImageSchema).max(3).default([]),
-  kogl_type: KoglTypeSchema.nullable().default(null),
-  license_label: z.string().max(100).nullable().default(null),
-  license_url: z.string().max(200).nullable().default(null),
+  images: z.array(SourceImageSchema).max(10).default([]),
 });
 export type SourceIntroduction = z.infer<typeof SourceIntroductionSchema>;
+
+export const FeeAudienceSchema = z.enum(['adult', 'youth', 'child']);
+export type FeeAudience = z.infer<typeof FeeAudienceSchema>;
+export const AccessibilityGroupSchema = z.enum(['physical', 'visual', 'hearing', 'infant_family']);
+export type AccessibilityGroup = z.infer<typeof AccessibilityGroupSchema>;
+
+/** 구조화 요금 1건 — 0원은 무료. */
+export const VisitFeeSchema = z.object({
+  audience: FeeAudienceSchema,
+  amount_krw: z.number().int().min(0).max(10_000_000),
+});
+export type VisitFee = z.infer<typeof VisitFeeSchema>;
+
+/** 무장애 안내 1항목 — label은 시설 한글 이름, text는 원천 문장 그대로. */
+export const AccessibilityItemSchema = z.object({
+  group: AccessibilityGroupSchema,
+  facility: z.string().max(64),
+  label: z.string().max(2000),
+  text: z.string().max(2000),
+});
+export type AccessibilityItem = z.infer<typeof AccessibilityItemSchema>;
+
+export const VisitPetPolicySchema = z.object({
+  companion_type: z.string().nullable().default(null),
+  allowed_pets: z.string().nullable().default(null),
+  requirements: z.string().nullable().default(null),
+  notes: z.string().nullable().default(null),
+});
+export type VisitPetPolicy = z.infer<typeof VisitPetPolicySchema>;
+
+const guideText = z.string().max(2000).nullable().default(null);
+
+/**
+ * 이용 안내(Map visitor_info 투영) — 이용시간·휴무·주차·요금·무장애·반려동물. 문장은 원천 문장 그대로의
+ * 평문이며 텍스트로만 그린다. 배지는 accessibility 비지 않음·pet_policy 있음으로만 판단한다.
+ */
+export const VisitGuideSchema = z.object({
+  provider: IntroductionProviderSchema,
+  attribution: z.string().max(100),
+  reference_date: z.string().nullable().default(null),
+  usage_hours: guideText,
+  rest_days: guideText,
+  parking: guideText,
+  parking_fee: guideText,
+  fees: z.array(VisitFeeSchema).max(3).default([]),
+  fee_text: guideText,
+  discount: guideText,
+  reservation: guideText,
+  inquiry: guideText,
+  transport: guideText,
+  facilities: guideText,
+  capacity: guideText,
+  accommodation_available: z.boolean().nullable().default(null),
+  pet_note: guideText,
+  accessibility: z.array(AccessibilityItemSchema).max(40).default([]),
+  pet_policy: VisitPetPolicySchema.nullable().default(null),
+});
+export type VisitGuide = z.infer<typeof VisitGuideSchema>;
 
 export const PlaceDetailCardSchema = z.object({
   ...detailCardBase,
@@ -215,6 +291,7 @@ export const PlaceDetailCardSchema = z.object({
   phone: z.string().nullable().default(null),
   business_hours: z.string().nullable().default(null),
   introduction: SourceIntroductionSchema.nullable().default(null),
+  visit_guide: VisitGuideSchema.nullable().default(null),
 });
 export const EventDetailCardSchema = z.object({
   ...detailCardBase,
@@ -222,6 +299,8 @@ export const EventDetailCardSchema = z.object({
   start_date: z.string().nullable().default(null),
   end_date: z.string().nullable().default(null),
   venue: z.string().nullable().default(null),
+  introduction: SourceIntroductionSchema.nullable().default(null),
+  visit_guide: VisitGuideSchema.nullable().default(null),
 });
 export const NoticeDetailCardSchema = z.object({
   ...detailCardBase,
