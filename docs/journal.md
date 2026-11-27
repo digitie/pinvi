@@ -10,10 +10,12 @@
 - `trip-detail.e2e.ts` "여행 장소 마커는 원형 + 상자 없는 이름 라벨 …"(VWorld canvas step): 핀 하나 여행은
   `TripMapView.fitToPoints`가 `flyTo`(애니메이션, #619부터)로 맞추는데, 시험이 원과 라벨을 따로 `boundingBox`로 재
   그 사이(~0.6 s) 카메라가 옮긴 거리(수십 px)가 섞였다(trace: 같은 시험 안에서 마커 translate 459→404 px 이동).
-  원·라벨을 한 `evaluate`에서 같은 layout으로 함께 재 "라벨 왼쪽 ≥ 원 오른쪽 - 1"을 본다. #805(경로·영역 레이어
-  삭제)·`mapFitPadding`은 카메라 코드를 바꾸지 않았고, #805 이전부터 있던 경쟁이 타이밍에 따라 드러난 것이다.
+  원·라벨을 한 `evaluate`에서 같은 layout으로 함께 재 간격(≥ 3 px, 설계 4 px)과 세로 가운데 정렬을 본다.
+  #805와의 관계: #805는 카메라·`mapFitPadding`을 바꾸지 않았고 마커 최종 위치도 같다(전후 모두 `translate(399px, 281px)`).
+  다만 geometry 레이어가 빠져 페이지가 가벼워지면서 마커가 ~2 s 일찍 보이게 돼(flyTo 끝나기 ~1.3 s 전) 원래부터 있던
+  측정 경쟁이 드러났다(#805 직전 `b83644db` 15/15 통과, main 15회 중 6회 실패).
 - 시험: WSL Docker `mcr.microsoft.com/playwright:v1.65.0-noble` + node 26.13.1, CI와 같은 config. 수정 전 main에서
-  trip-detail 15회 중 6회 실패 재현, 수정 뒤 두 시험 반복 전부 통과.
+  trip-detail 15회 중 6회 실패 재현, 수정 뒤 `admin-button-states.e2e.ts` 전체 + 마커 시험 `--repeat-each 15` 90/90 통과.
 
 ## 2026-11-27 (claude) — 장소 상세에 TourAPI 소개문·대표 사진·출처/공공누리 표시
 
