@@ -66,8 +66,9 @@ test.describe('NEAR transport detail dialog', () => {
     const prices = page.getByTestId('transport-fuel-prices');
     await expect(prices).toBeVisible();
     const priceText = (await prices.textContent()) ?? '';
-    // Either real rows ("휘발유 1,650원" / "판매 안 함") or the explicit empty state.
-    expect(/(원|판매 안 함)/.test(priceText) || priceText.includes('가격 정보가 없습니다')).toBe(true);
+    // Either sold-product rows ("휘발유 1,650원/L") or the explicit empty state. Unsold products never render.
+    expect(/원\/L/.test(priceText) || priceText.includes('등록된 유효 유가가 없습니다')).toBe(true);
+    expect(priceText).not.toContain('판매 안 함');
     await expect(detailFooter(page).getByTestId('transport-detail-freshness')).toContainText(FRESHNESS_RE);
     await expect(detailFooter(page)).toContainText(SOURCE_CAPTION);
     await expect(detailDialog(page).getByRole('button', { name: '일정에 추가' })).toHaveCount(0);

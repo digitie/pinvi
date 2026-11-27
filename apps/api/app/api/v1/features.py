@@ -76,6 +76,7 @@ from app.services.category_labels import (
 )
 from app.services.feature_detail import best_match_enrichment, build_detail_card
 from app.services.feature_request import find_active_suggestion_by_external_ref
+from app.services.transport_place_overlap import without_transport_layer_features
 from app.services.weather_card import build_feature_weather_card
 
 router = APIRouter(prefix="/features", tags=["features"])
@@ -451,11 +452,15 @@ async def features_in_bounds(
             include_geometry=include_geometry,
         )
     labels = await get_category_labels(client)
-    items = [
-        _summary_from_kor_travel_map(x, labels)
-        for x in data.get("items", [])
-        if isinstance(x, dict)
-    ]
+    # 주유소·교통 돌발은 transport 레이어가 그린다 — 장소 layer에서 빼 토글을 따르고 중복을 없앤다.
+    items = without_transport_layer_features(
+        [
+            _summary_from_kor_travel_map(x, labels)
+            for x in data.get("items", [])
+            if isinstance(x, dict)
+        ],
+        requested_category=category,
+    )
     clusters = [
         _cluster_from_kor_travel_map(x) for x in data.get("clusters", []) if isinstance(x, dict)
     ]
@@ -502,11 +507,14 @@ async def features_nearby(
         )
     labels = await get_category_labels(client)
     return Envelope.of(
-        [
-            _summary_from_kor_travel_map(x, labels)
-            for x in data.get("items", [])
-            if isinstance(x, dict)
-        ]
+        without_transport_layer_features(
+            [
+                _summary_from_kor_travel_map(x, labels)
+                for x in data.get("items", [])
+                if isinstance(x, dict)
+            ],
+            requested_category=category,
+        )
     )
 
 

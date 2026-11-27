@@ -69,6 +69,8 @@ export const FuelStationItemSchema = z.object({
   layer: z.literal('fuel_station'),
   name: z.string(),
   address: TransportAddressSchema,
+  /** 오피넷 상표 코드(SKE·GSC·HDO·SOL…). 로고 선택에 쓴다 — 이름보다 우선한다. */
+  brand_code: optionalText,
   brand_name: optionalText,
   phone: optionalText,
   is_self: optionalBool,
@@ -78,6 +80,8 @@ export const FuelStationItemSchema = z.object({
   has_maintenance: optionalBool,
   lpg_available: optionalBool,
   prices: z.array(FuelPriceSchema),
+  /** transport가 이 주유소(기준정보)를 원천에서 마지막으로 본 시각 — "기준정보 반영". */
+  source_last_seen_at: Iso8601Schema.nullable().optional(),
 });
 export type FuelStationItem = z.infer<typeof FuelStationItemSchema>;
 
@@ -112,6 +116,8 @@ export const HighwayIncidentItemSchema = z.object({
   message: optionalText,
   incident_type: optionalText,
   process_status: optionalText,
+  /** 고속도로 노선 번호("0010"). transport처럼 "0010 · 경부선"으로 보인다. */
+  route_no: optionalText,
   route_name: optionalText,
   direction: optionalText,
   point_name: optionalText,

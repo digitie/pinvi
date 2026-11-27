@@ -1,3 +1,23 @@
+## 2026-11-27 (claude) — 주유소·교통 돌발: transport 공개 유가 화면과 같은 표시, 장소 layer와 겹침 제거
+
+- 출처: 소유자 요청 "주유소 정보는 transport의 fuel 참고해서 동일한 스타일, 취급하지 않는 유종은 표시하지 말 것" + 후속 "주유소 마커가
+  너무 크고 모양이 별로", "토글을 끄면 주유소가 일반 장소로도 보이지 않게, 켜면 중복 없이", "도로 돌발도 마찬가지".
+- 기준: kor-travel-transport origin/main `/public/fuel`(`journey-controls.tsx` PlaceDetails·`transport-map.tsx` MapMarker·
+  `fuel-brand-icon`·`lib/fuel-brands`·`lib/place-marker-style`). 규칙은 `@pinvi/domain` `fuelStation.ts`(웹·모바일 공용).
+- 상세(웹 `TransportDetailDialog` → 공용 `FuelStationInfo`, 모바일 `TransportItemCard`): 판매 유종만(가격 null·0·음수·NaN 행 없음 —
+  "판매 안 함"·"-" 없음), transport 이름·순서(휘발유·고급유·등유·경유·LPG), `1,689원/L`, 7일 넘은 값 "오래됨", 상표 로고(오피넷
+  원본 GIF를 transport에서 바이트 그대로 복사, `public/fuel-brands/README.md`), 편의시설(셀프·24시간·세차·정비·편의점), 데이터 출처
+  (기준정보 반영·제공기관 공시). 휴게소 주유소·가격 추이도 같은 판매 규칙. 교통 돌발 상세는 노선 배지("0010 · 경부선") → 유형·처리
+  상태 → 내용 순서.
+- 마커: 주유소 = 로고 칩(46×30) + 흰 가격 라벨("휘 1,650", 판매 유종만), 교통 돌발 = 24px 원 배지(예전 MakiMarker 핀 대체).
+  화면 22,000px²당 1곳(6~60) 예산을 넘을 때만 묶는다(transport `clusterAtScale`).
+- 계약: PinVi `FuelStationItem`에 Map이 이미 주던 `brand_code`·`source_last_seen_at`, `HighwayIncidentItem`에 `route_no`를 더했다
+  (additive, nullable — 계약 게이트가 vendored Map OpenAPI와 대조). 디자인 토큰 `warning-text`·`warning-bg` 추가(admin-warning과 같은 값).
+- 장소 layer 제외(ADR-076 보강 D6): `/features/in-bounds`·`/features/nearby`가 주유소 장소(카테고리 `0602` 계층)와 krex 교통
+  notice(`99000000`+`roadblock`)를 서버에서 뺀다. 주유소 계층을 `category`로 명시한 요청·통합 검색·여행 POI는 그대로. Map 서버 클러스터
+  개수는 포함(Map에 제외 필터 없음 — 후속 후보).
+- 보이지 않는 것(Map이 싣지 않음, 지어내지 않음): 품질인증·전산보고, 시군구 등급·평균 대비, 30일 그래프. 모바일 지도 마커 모양은 그대로.
+
 ## 2026-11-27 (claude) — web e2e 두 건 흔들림 원인 수정(main red 복구)
 
 - 출처: `web` workflow가 main `929b4243`(#805)에서 빨강. 실패는 두 시험이고 둘 다 앱 회귀가 아니라 시험의 측정 경쟁이다.

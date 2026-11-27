@@ -103,6 +103,12 @@ Cookie: pinvi_access=...
 
 kor-travel-map 호출: `GET /v1/features/in-bounds` (평면 `lon`/`lat`, `cluster_key`, `max_items`).
 
+**transport 레이어 항목 제외(2026-11-27, ADR-076 D6)**: 주유소 장소(카테고리 `0602` 계층 = Map `TRANSPORT_FUEL`)와
+Map krex 교통 notice(`99000000` + `marker_icon=roadblock`)는 `items`에서 뺀다. 지도에서 이 둘은 transport 레이어
+("주유소"·"교통 돌발" 토글)만 그린다 — 토글을 끄면 보이지 않고, 켜면 한 번만 보인다. `category`로 주유소 계층을 명시해
+고르면 그대로 돌려준다. Map 서버 클러스터(`clusters[]`) 개수는 Map이 세므로 이 항목을 포함한다(Map에 제외 필터가 없다).
+통합 검색(`GET /search`)과 여행 장소(POI)는 사용자가 고른 것이라 거르지 않는다.
+
 Rate limit: 분당 60회 per user. 클라이언트 측 디바운스 250ms + AbortController 권장.
 
 ### 2.2 `GET /features/{feature_id}`
@@ -228,6 +234,8 @@ Cookie: pinvi_access=...
 
 kor-travel-map 호출: `GET /v1/features/nearby`. 기준 feature(등록된 POI cache target)가
 있으면 `GET /v1/features/nearby/by-target`를 우선한다(admin flow 등록 필요 — 후순위).
+
+주유소 장소·교통 notice는 in-bounds와 같은 규칙으로 뺀다(위 §2.1 "transport 레이어 항목 제외").
 
 ### 2.5 `POST /features/requests`
 

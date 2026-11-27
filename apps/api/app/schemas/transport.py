@@ -98,6 +98,8 @@ class FuelStationItem(_TransportItem):
     layer: Literal["fuel_station"] = "fuel_station"
     name: str
     address: TransportAddress
+    #: 오피넷 상표 코드(SKE·GSC·HDO·SOL…). 클라이언트 로고 선택용 — 이름보다 우선한다.
+    brand_code: str | None = None
     brand_name: str | None = None
     phone: str | None = None
     is_self: bool | None = None
@@ -107,6 +109,8 @@ class FuelStationItem(_TransportItem):
     has_maintenance: bool | None = None
     lpg_available: bool | None = None
     prices: list[FuelPrice]
+    #: transport가 이 주유소(기준정보)를 원천에서 마지막으로 본 시각("기준정보 반영").
+    source_last_seen_at: AwareDatetime | None = None
 
 
 class RestAreaItem(_TransportItem):
@@ -128,6 +132,8 @@ class HighwayIncidentItem(_TransportItem):
     message: str | None = None
     incident_type: str | None = None
     process_status: str | None = None
+    #: 고속도로 노선 번호("0010").
+    route_no: str | None = None
     route_name: str | None = None
     direction: str | None = None
     point_name: str | None = None

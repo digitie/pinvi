@@ -1,13 +1,26 @@
 'use client';
 
 import { FeatureDetailModal } from '@/components/map/FeatureDetailModal';
+import {
+  FuelBrandLine,
+  FuelDataSource,
+  FuelFacilities,
+  FuelPriceList,
+} from '@/components/map/FuelStationInfo';
 import { isAbortError } from '@/lib/abort';
 import { apiClient } from '@/lib/api';
 import type { TransportDetailTarget } from '@/lib/useTransportLayers';
 import { ApiError, transportApi } from '@pinvi/api-client';
 import {
-  formatFuelPrice,
+  FUEL_PRODUCT_CODE_BY_KEY,
+  fuelBrand,
+  fuelDateTime,
   fuelProductLabel,
+  fuelStationFacilities,
+  fuelStationPriceRows,
+  formatFuelPrice,
+  isFuelPriceSold,
+  restAreaFuelPriceRows,
   transportFreshnessAgeSeconds,
   transportFreshnessLabel,
   transportItemTitle,
@@ -115,28 +128,46 @@ function FuelHistory({ featureId }: { featureId: string }) {
       </p>
     );
   }
-  const byProduct = new Map<string, typeof history.items>();
-  // 응답 순서에 기대지 않는다 — 최근 것부터 자른다.
-  const sorted = [...history.items].sort(
-    (a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at),
+  // 판매하지 않던 날(가격 null·0)은 점으로 그리지 않는다 — 현재가와 같은 규칙.
+  const sold = history.items.filter((point): point is typeof point & { price: number } =>
+    isFuelPriceSold(point.price),
   );
+  if (sold.length === 0) {
+    return (
+      <p
+        className="text-sm text-muted"
+        data-testid="transport-price-history-unavailable"
+        data-reason=""
+      >
+        가격 추이는 아직 제공되지 않습니다.
+      </p>
+    );
+  }
+  const byProduct = new Map<string, typeof sold>();
+  // 응답 순서에 기대지 않는다 — 최근 것부터 자른다.
+  const sorted = [...sold].sort((a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at));
   for (const point of sorted) {
     const list = byProduct.get(point.product_key) ?? [];
     list.push(point);
     byProduct.set(point.product_key, list);
   }
+  const products = [...byProduct.entries()].sort(([a], [b]) => {
+    const ca = FUEL_PRODUCT_CODE_BY_KEY[a] ?? a;
+    const cb = FUEL_PRODUCT_CODE_BY_KEY[b] ?? b;
+    return ca === cb ? 0 : ca < cb ? -1 : 1;
+  });
   return (
     <div className="space-y-2" data-testid="transport-price-history">
-      {[...byProduct.entries()].map(([key, points]) => (
+      {products.map(([key, points]) => (
         <div key={key}>
           <p className="text-sm font-semibold text-ink">
             {fuelProductLabel(key, points[0]?.product_name)}
           </p>
           <ul className="text-sm">
             {points.slice(0, HISTORY_ROWS_PER_PRODUCT).map((point) => (
-              <li key={point.observed_at} className="flex justify-between text-body">
+              <li key={point.observed_at} className="flex justify-between gap-3 text-body">
                 <span className="text-muted">{kstText(point.observed_at)}</span>
-                <span>{formatFuelPrice(point.price)}</span>
+                <span className="tabular-nums">{formatFuelPrice(point.price)}</span>
               </li>
             ))}
           </ul>
@@ -147,38 +178,18 @@ function FuelHistory({ featureId }: { featureId: string }) {
   );
 }
 
-function FuelStationBody({ item }: { item: FuelStationItem }) {
+/** transport `collectionSourceLabel`의 주유소·유가 문구 + 원천 기관. */
+const FUEL_SOURCE = '전국 주유소·유가 정보 · 한국석유공사 오피넷';
+const REST_AREA_FUEL_SOURCE = '고속도로 휴게소 유가 정보 · 한국도로공사';
+
+function FuelStationBody({ item, nowMs }: { item: FuelStationItem; nowMs: number }) {
   const [showHistory, setShowHistory] = useState(false);
-  const extras = [
-    item.is_self ? '셀프' : null,
-    item.is_24h ? '24시간' : null,
-    item.has_carwash ? '세차' : null,
-    item.has_cvs ? '편의점' : null,
-    item.has_maintenance ? '정비' : null,
-    item.lpg_available ? 'LPG' : null,
-  ].filter((x): x is string => x != null);
+  const rows = fuelStationPriceRows(item.prices, nowMs);
   return (
     <>
-      <div className="rounded-sm border border-hairline p-2" data-testid="transport-fuel-prices">
-        {item.prices.length === 0 ? (
-          <p className="text-sm text-muted">가격 정보가 없습니다.</p>
-        ) : (
-          <ul className="text-sm">
-            {item.prices.map((price) => (
-              <li key={price.product_key} className="flex justify-between py-0.5">
-                <span className="text-body">
-                  {fuelProductLabel(price.product_key, price.product_name)}
-                </span>
-                <span className="font-semibold text-ink">{formatFuelPrice(price.price)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <dl>
-        {item.brand_name && <Row label="상표">{item.brand_name}</Row>}
-        {extras.length > 0 && <Row label="편의">{extras.join(' · ')}</Row>}
-      </dl>
+      <FuelBrandLine brand={fuelBrand(item.brand_code, item.brand_name)} />
+      <FuelPriceList rows={rows} />
+      <FuelFacilities facilities={fuelStationFacilities(item)} />
       <div>
         {showHistory ? (
           <FuelHistory featureId={item.feature_id} />
@@ -193,6 +204,7 @@ function FuelStationBody({ item }: { item: FuelStationItem }) {
           </button>
         )}
       </div>
+      <FuelDataSource source={FUEL_SOURCE} baseUpdatedAt={item.source_last_seen_at} rows={rows} />
     </>
   );
 }
@@ -206,13 +218,13 @@ function ItemBody(...args: Parameters<typeof useItemBodyModel>) {
   return null;
 }
 
-function useItemBodyModel({ item }: { item: TransportItem }) {
+function useItemBodyModel({ item, nowMs }: { item: TransportItem; nowMs: number }) {
   switch (item.layer) {
     case 'fuel_station':
-      return { renderBranch: 'render0' as const, item };
+      return { renderBranch: 'render0' as const, item, nowMs };
     case 'rest_area': {
       const prices = item.fuel_prices;
-      return { renderBranch: 'render1' as const, item, prices };
+      return { renderBranch: 'render1' as const, item, prices, nowMs };
     }
     case 'highway_incident':
       return { renderBranch: 'render2' as const, item };
@@ -223,37 +235,21 @@ function useItemBodyModel({ item }: { item: TransportItem }) {
 
 type ItemBodyView0Model = Extract<ReturnType<typeof useItemBodyModel>, { renderBranch: 'render0' }>;
 function ItemBodyView0({ viewModel }: { viewModel: ItemBodyView0Model }) {
-  const { item } = viewModel;
-  return <FuelStationBody item={item} />;
+  const { item, nowMs } = viewModel;
+  return <FuelStationBody item={item} nowMs={nowMs} />;
 }
 
 type ItemBodyView1Model = Extract<ReturnType<typeof useItemBodyModel>, { renderBranch: 'render1' }>;
 function ItemBodyView1({ viewModel }: { viewModel: ItemBodyView1Model }) {
-  const { item, prices } = viewModel;
+  const { item, prices, nowMs } = viewModel;
+  const rows = restAreaFuelPriceRows(prices, nowMs);
   return (
     <>
       {prices && (
-        <div className="rounded-sm border border-hairline p-2" data-testid="transport-fuel-prices">
-          <ul className="text-sm">
-            <li className="flex justify-between py-0.5">
-              <span className="text-body">휘발유</span>
-              <span className="font-semibold text-ink">
-                {formatFuelPrice(prices.gasoline_price)}
-              </span>
-            </li>
-            <li className="flex justify-between py-0.5">
-              <span className="text-body">경유</span>
-              <span className="font-semibold text-ink">{formatFuelPrice(prices.diesel_price)}</span>
-            </li>
-            {prices.lpg_price != null && (
-              <li className="flex justify-between py-0.5">
-                <span className="text-body">LPG</span>
-                <span className="font-semibold text-ink">{formatFuelPrice(prices.lpg_price)}</span>
-              </li>
-            )}
-          </ul>
-          {prices.oil_company && <p className="text-xs text-muted">{prices.oil_company}</p>}
-        </div>
+        <>
+          <FuelBrandLine brand={fuelBrand(null, prices.oil_company)} />
+          <FuelPriceList rows={rows} />
+        </>
       )}
       <dl>
         {item.route_name && (
@@ -266,28 +262,58 @@ function ItemBodyView1({ viewModel }: { viewModel: ItemBodyView1Model }) {
         {yesNo(item.has_lpg_station) && <Row label="LPG 충전">{yesNo(item.has_lpg_station)}</Row>}
         {yesNo(item.has_ev_charger) && <Row label="전기차 충전">{yesNo(item.has_ev_charger)}</Row>}
       </dl>
+      {prices && <FuelDataSource source={REST_AREA_FUEL_SOURCE} baseUpdatedAt={null} rows={rows} />}
     </>
   );
+}
+
+/** transport `highwayRouteLabel` — "0010 · 경부선". 노선 번호만 있으면 "0010번 고속도로". */
+function highwayRouteLabel(
+  routeNo: string | null | undefined,
+  routeName: string | null | undefined,
+) {
+  const name = routeName?.trim();
+  const no = routeNo?.trim();
+  if (name) return no ? `${no} · ${name}` : name;
+  return no ? `${no}번 고속도로` : null;
 }
 
 type ItemBodyView2Model = Extract<ReturnType<typeof useItemBodyModel>, { renderBranch: 'render2' }>;
 function ItemBodyView2({ viewModel }: { viewModel: ItemBodyView2Model }) {
   const { item } = viewModel;
+  // transport 도로 돌발 상세와 같은 순서: 노선 배지 → "유형 · 처리 상태" → 내용 → (위치·방향·정체·발생) → 출처.
+  const route = highwayRouteLabel(item.route_no, item.route_name);
+  const status = [item.incident_type, item.process_status].filter(Boolean).join(' · ');
+  const occurred = fuelDateTime(item.occurred_at);
   return (
-    <dl>
-      {item.incident_type && <Row label="유형">{item.incident_type}</Row>}
-      {item.process_status && <Row label="처리 상태">{item.process_status}</Row>}
-      {item.route_name && (
-        <Row label="노선">
-          {item.route_name}
-          {item.direction ? ` (${item.direction} 방향)` : ''}
-        </Row>
+    <>
+      {route && (
+        <p className="flex flex-wrap gap-2" data-testid="transport-incident-route">
+          <span className="rounded-full bg-surface-strong px-2 py-0.5 text-xs font-semibold text-body">
+            {route}
+          </span>
+        </p>
       )}
-      {item.point_name && <Row label="위치">{item.point_name}</Row>}
-      {item.congestion_length != null && <Row label="정체">{item.congestion_length} km</Row>}
-      {kstText(item.occurred_at) && <Row label="발생">{kstText(item.occurred_at)}</Row>}
-      {item.message && <Row label="내용">{item.message}</Row>}
-    </dl>
+      {status && (
+        <p className="text-sm font-semibold text-ink" data-testid="transport-incident-status">
+          {status}
+        </p>
+      )}
+      {item.message && (
+        <p
+          className="text-sm text-body [overflow-wrap:anywhere]"
+          data-testid="transport-incident-message"
+        >
+          {item.message}
+        </p>
+      )}
+      <dl>
+        {item.point_name && <Row label="위치">{item.point_name}</Row>}
+        {item.direction && <Row label="방향">{item.direction} 방향</Row>}
+        {item.congestion_length != null && <Row label="정체">{item.congestion_length} km</Row>}
+        {occurred && <Row label="발생">{occurred}</Row>}
+      </dl>
+    </>
   );
 }
 
@@ -401,7 +427,7 @@ function TransportDetailDialogView1({ viewModel }: { viewModel: TransportDetailD
     >
       {item && (
         <div className="space-y-3" data-layer={item.layer}>
-          <ItemBody item={item} />
+          <ItemBody item={item} nowMs={loaded?.receivedAt ?? 0} />
           {(address || phone) && (
             <dl>
               {address && <Row label="주소">{address}</Row>}

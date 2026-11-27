@@ -168,6 +168,17 @@ async def test_detail_history_and_not_found(
     assert detail.status_code == 200, detail.text
     assert detail.json()["data"]["item"]["layer"] == "rest_area"
 
+    # 주유소 상세는 transport식 표시(상표 로고·기준정보 반영)에 쓰는 Map 필드를 그대로 전한다.
+    fuel = await _get(
+        client, auth_cookies, verified_user, f"/transport/fuel-stations/{fx.FUEL_STATION_ID}"
+    )
+    assert fuel.status_code == 200, fuel.text
+    fuel_item = fuel.json()["data"]["item"]
+    assert fuel_item["brand_code"] == "SKE"
+    assert fuel_item["source_last_seen_at"] is not None
+    # 판매하지 않는 유종(price null)은 계약대로 그대로 오고, 숨기는 것은 표시 규칙이다.
+    assert [p["price"] for p in fuel_item["prices"]] == [1689.0, None]
+
     history = await _get(
         client,
         auth_cookies,
