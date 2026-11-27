@@ -313,6 +313,14 @@ iOS 앱 스킴(`nmap://`, `kakaomap://`) 뒤 화면이 그대로면 1.5초 뒤 �
 `kogl_type`·`license_label`·`license_url`(최상위)은 **deprecated**다 — #809 클라이언트(이미 깔린 앱) 호환용으로 첫
 이미지의 값을 그대로 담는다(이미지가 없으면 `null`). 새 화면은 `images[]`의 값을 이미지마다 쓴다.
 
+이 호환은 부분적이다. #809 클라이언트는 응답 전체를 엄격한 zod 스키마로 검증하므로(`@pinvi/api-client`
+`RESPONSE_SHAPE_INVALID`), 다음 경우 **상세 카드 전체**가 실패한다: `provider`가 `tourapi`가 아님(국가유산·박물관·
+휴양림), 이미지가 3장 초과, 이미지 `kogl_type`이 1·3 밖. 실패하지 않는 TourAPI 카드에서도 #809 화면은 최상위 값(첫
+이미지의 공공누리 표시) 하나만 모든 사진 아래에 단다. 확인한 배포 범위(2026-11-28): 웹은 API와 함께 배포되어 새 번들로
+바뀐다. 모바일은 `apps/mobile/package.json`·`app.json` 버전 0.1.0, `eas.json`의 빌드 프로필은 `development`·`preview`가
+`distribution: internal`이고 스토어 제출(`submit`) 설정이 없다 — 공개 출시본이 없고 #809(2026-11-27 머지)는 내부
+빌드에만 들어갔다. 그래서 위 한계를 받아들인다(공개 출시 전에는 새 빌드로 바꾼다).
+
 #809 대비 계약 변경: `provider`가 `tourapi` 하나에서 원천 4종으로 넓어졌고(클라이언트 스키마는 문자열로 받고 아는
 값만 보인다), `reference_date`가 생겼고, 이미지 최대 1장 → 10장, 공공누리 표시가 이미지마다(`images[].license_*`)로
 옮겨졌다. 클라이언트 zod는 `introduction`·`visit_guide` 블록 하나가 모양이 어긋나도 그 블록만 `null`로 두고 카드
@@ -342,14 +350,16 @@ infant_family, `facility` 코드, `label` 시설 한글 이름, `text` 원문), 
   쪽은 저장하지 않고 같은 detail-card를 읽는다.
 - 이미지는 서버가 내려받거나 줄이지 않는다. 화면은 원본 URL을 크롭·필터 없이 원본 비율(`object-contain`, RN
   `resizeMode="contain"`)로 그리고, 누르면 원본을 새 창으로 연다. 여러 장이면 가로 갤러리(웹 `overflow-x-auto`, RN
-  가로 `FlatList` — 화면 근처 2~3장만 그린다), 웹은 lazy loading. 갤러리 레이아웃은 처음 받은 장수로 정해 한 장이
+  가로 `FlatList` — 화면 근처 2~3장만 그린다, `removeClippedSubviews`는 쓰지 않는다), 웹은 lazy loading. 갤러리 레이아웃은 처음 받은 장수로 정해 한 장이
   깨져도 틀이 바뀌지 않는다. 공공누리 표시는 이미지마다 그 아래에 붙고, 불러오지 못한 이미지는 틀과 표시를 함께 뺀다.
 - 소개문·이용 안내 문장은 텍스트로만 그린다(`dangerouslySetInnerHTML` 없음, 웹 `whitespace-pre-line`). 소개문은 4줄·140자를
   넘으면 접고 `소개 더 보기`로 펼친다.
 - 요금은 `성인 2,000원 · 청소년 1,000원 · 어린이 무료`로 적고 `fee_text` 원문을 그 아래 둔다. `fee_text`가 있으면 0원이
   조건부일 수 있어 `무료`로 해석하지 않고 `0원`으로 적는다.
 - 여행 장소 정보 패널·장소 시트는 영업 정보 항목이 이미 보이는 이용시간·휴무를 이용 안내에서 뺀다(같은 원문이 두 번
-  보이지 않게, `omitShownHours`). 지도 상세 카드는 영업 정보 항목이 없으므로 다 보인다.
+  보이지 않게, `omitShownHours`). 저장된 영업 정보의 그 필드 출처(`sources`)가 이 이용 안내의 원천과 같을 때만 뺀다 —
+  구조화 영업시간(Map)이나 다른 원천·옛 캐시 값이면 내용이 다를 수 있어 둘 다 보인다. 지도 상세 카드는 영업 정보 항목이
+  없으므로 다 보인다.
 - 배지 `무장애 안내`(`accessibility`가 비지 않을 때)와 `반려동물 동반`(`pet_policy`가 있을 때)은 아이콘·글자·펼침 표시가
   있는 버튼(`aria-expanded`, 펼쳤을 때만 `aria-controls`, 44px; 모바일은 펼침 기호 없이 글자만 읽힌다)이다 — 색만으로 뜻을 전하지 않는다. 무장애는 분류별로 `label: text`.
   `pet_note` 한 줄은 배지가 아니라 표 줄 `반려동물`이다(원문을 해석하지 않는다).
@@ -363,6 +373,8 @@ infant_family, `facility` 코드, `label` 시설 한글 이름, `text` 원문), 
 `rest_days` 원문을 옛 평면 키(`usetime`·`restdate` 등)보다 먼저 읽는다(원문 한 줄 그대로 — 여러 줄이면 줄바꿈 포함).
 아는 원천(`source`)일 때만 읽고, 그 값을 쓴 필드는 `sources`에 실제 원천(`tourapi` 등)을 남겨 화면이
 `출처: 한국관광공사`처럼 정확히 보인다(`@pinvi/domain` `placeDetails.ts` `SOURCE_LABELS`). 구조화 영업시간을 썼으면 휴무도
-구조화 값(쉬는 요일·특별 휴무)을 `visitor_info.rest_days` 원문보다 앞세운다.
+구조화 값(쉬는 요일·특별 휴무)을 `visitor_info.rest_days` 원문보다 앞세운다. `visitor_info`가 없어 옛 평면 키
+(`facility_info.usetime`·`restdate` 등)로 떨어져도 TourAPI 행(`tourapi_content_id`가 있음)이면 출처를 `tourapi`로 남긴다.
+출처 표시 문구는 소개 블록과 같다(`krheritage` → `국가유산청, www.khs.go.kr`).
 저장된 행은 캐시라 Map이 `visitor_info`를 새로 줘도 그 장소에서 **"다시 읽어오기"를 누르기 전까지 예전 값**을 보인다
 (일괄 재수집 없음).

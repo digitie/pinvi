@@ -132,24 +132,33 @@ def extract_place_details(dto: dict[str, Any], *, today: date) -> ExtractedPlace
     visitor_source = visitor_info_source(info)
     visitor = info if info is not None and visitor_source is not None else {}
     origins: dict[str, str] = {}
+    # 옛 평면 키(`facility_info.usetime`·`restdate` 등)도 TourAPI 행(`tourapi_content_id`)이면 원천은
+    # 한국관광공사다 — 출처를 `tourapi`로 남긴다.
+    facility_origin = (
+        "tourapi"
+        if isinstance(facility, dict) and _clean(facility.get("tourapi_content_id"))
+        else None
+    )
     if not hours_lines:
         visitor_hours = guide_text(visitor.get("usage_hours"))
-        text = (
-            visitor_hours or _pick(facility, *_HOURS_TEXT_KEYS) or _pick(detail, *_HOURS_TEXT_KEYS)
-        )
+        facility_hours = None if visitor_hours else _pick(facility, *_HOURS_TEXT_KEYS)
+        text = visitor_hours or facility_hours or _pick(detail, *_HOURS_TEXT_KEYS)
         if text:
             hours_lines = [text]
         if visitor_hours and visitor_source:
             origins["opening_hours"] = visitor_source
+        elif facility_hours and facility_origin:
+            origins["opening_hours"] = facility_origin
 
     closed_parts: list[str] = []
     # 구조화 영업시간을 썼으면 휴무도 그 구조화 값(쉬는 요일·특별 휴무)을 원문 문장보다 앞세운다.
     visitor_rest = None if structured_used else guide_text(visitor.get("rest_days"))
-    closed_text = (
-        visitor_rest or _pick(facility, *_CLOSED_TEXT_KEYS) or _pick(detail, *_CLOSED_TEXT_KEYS)
-    )
+    facility_rest = None if visitor_rest else _pick(facility, *_CLOSED_TEXT_KEYS)
+    closed_text = visitor_rest or facility_rest or _pick(detail, *_CLOSED_TEXT_KEYS)
     if visitor_rest and visitor_source:
         origins["closed_days"] = visitor_source
+    elif facility_rest and facility_origin:
+        origins["closed_days"] = facility_origin
     if closed_text:
         closed_parts.append(closed_text)
     elif closed_weekdays:

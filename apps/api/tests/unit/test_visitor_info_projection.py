@@ -468,6 +468,23 @@ def test_place_details_structured_closed_days_beat_visitor_rest_text() -> None:
     assert extracted.sources()["closed_days"] == "kor_travel_map"
 
 
+def test_place_details_legacy_tourapi_keys_record_tourapi_origin() -> None:
+    """visitor_info 없는 옛 Map 응답이라도 TourAPI 행의 평면 키 값은 한국관광공사가 원천이다."""
+    dto = _dto(
+        None,
+        detail={
+            "facility_info": {
+                "tourapi_content_id": "1",
+                "usetime": "09:00~18:00",
+                "restdate": "연중무휴",
+            }
+        },
+    )
+    del dto["visitor_info"]
+    extracted = extract_place_details(dto, today=_TODAY)
+    assert extracted.sources() == {"opening_hours": "tourapi", "closed_days": "tourapi"}
+
+
 def test_place_details_fall_back_to_flat_keys_without_visitor_info() -> None:
     dto = _dto(None, detail={"facility_info": {"usetime": "10:00~17:00", "restdate": "월요일"}})
     extracted = extract_place_details(dto, today=_TODAY)

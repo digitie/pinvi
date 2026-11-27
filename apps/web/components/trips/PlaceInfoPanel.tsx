@@ -489,7 +489,7 @@ export function PlaceInfoPanel({
     });
   }
   // 영업 정보 항목이 이미 보이는 이용시간·휴무는 이용 안내에서 뺀다(같은 원문이 두 번 보이지 않게).
-  const guideOmit = omitShownHours(details);
+  const guideOmit = omitShownHours(details, visitGuide?.provider);
   if (visitGuideHasContent(visitGuide, { omit: guideOmit })) {
     // 이용 안내(이용시간·휴무·요금·주차·무장애·반려동물)도 값이 있을 때만, 소개 뒤·지도 앱 앞에 붙는다.
     sections.push({

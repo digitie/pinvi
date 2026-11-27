@@ -7,6 +7,7 @@ import {
   petPolicyLines,
   sourceAttributionLine,
   visitGuideRows,
+  withDisplayKeys,
   type VisitGuideOmittable,
 } from '@pinvi/domain';
 import type { VisitGuide as VisitGuideData } from '@pinvi/schemas';
@@ -85,8 +86,8 @@ export function VisitGuide({ guide, testId, omit }: VisitGuideProps) {
           {rows.map((row) => (
             <div key={row.key} data-testid={`${testId}-${row.key}`}>
               <dt className="text-xs font-semibold text-muted">{row.label}</dt>
-              {row.lines.map((line, index) => (
-                <dd key={index} className="whitespace-pre-line break-words text-body">
+              {withDisplayKeys(row.lines, (line) => line).map(({ item: line, key }) => (
+                <dd key={key} className="whitespace-pre-line break-words text-body">
                   {line}
                 </dd>
               ))}
@@ -130,14 +131,13 @@ export function VisitGuide({ guide, testId, omit }: VisitGuideProps) {
             <section key={view.group} aria-label={view.label}>
               <h4 className="text-xs font-semibold text-muted">{view.label}</h4>
               <ul className="space-y-0.5">
-                {view.items.map((item, index) => (
-                  <li
-                    key={`${item.facility}-${index}`}
-                    className="whitespace-pre-line break-words text-body"
-                  >
-                    <span className="font-semibold text-ink">{item.label}</span>: {item.text}
-                  </li>
-                ))}
+                {withDisplayKeys(view.items, (note) => `${note.facility}|${note.text}`).map(
+                  ({ item, key }) => (
+                    <li key={key} className="whitespace-pre-line break-words text-body">
+                      <span className="font-semibold text-ink">{item.label}</span>: {item.text}
+                    </li>
+                  ),
+                )}
               </ul>
             </section>
           ))}

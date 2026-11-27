@@ -119,12 +119,31 @@ describe('visitGuide', () => {
 
   it('영업 정보 항목이 이미 보이는 이용시간·휴무는 뺀다', () => {
     const g = guide({ usage_hours: '09:00~18:00', rest_days: '월요일' });
-    const omit = omitShownHours({ opening_hours: ['09:00~18:00'], closed_days: '월요일' });
+    const stored = {
+      opening_hours: ['09:00~18:00'],
+      closed_days: '월요일',
+      sources: { opening_hours: 'tourapi', closed_days: 'tourapi' },
+    };
+    const omit = omitShownHours(stored, 'tourapi');
     expect(omit).toEqual(['usage_hours', 'rest_days']);
     expect(visitGuideRows(g, { omit })).toEqual([]);
     expect(visitGuideHasContent(g, { omit })).toBe(false);
-    expect(omitShownHours({ opening_hours: [], closed_days: null })).toEqual([]);
-    expect(omitShownHours(null)).toEqual([]);
+    expect(
+      omitShownHours({ opening_hours: [], closed_days: null, sources: {} }, 'tourapi'),
+    ).toEqual([]);
+    expect(omitShownHours(null, 'tourapi')).toEqual([]);
+  });
+
+  it('저장된 영업 정보의 출처가 이용 안내 원천과 다르면 빼지 않는다', () => {
+    // 구조화 영업시간(Map)·옛 캐시 값은 이용 안내 원문과 다를 수 있어 둘 다 보인다.
+    const stored = {
+      opening_hours: ['월요일: 09:00~18:00'],
+      closed_days: '매주 화요일',
+      sources: { opening_hours: 'kor_travel_map', closed_days: 'tourapi' },
+    };
+    expect(omitShownHours(stored, 'tourapi')).toEqual(['rest_days']);
+    expect(omitShownHours(stored, 'datagokr_museum')).toEqual([]);
+    expect(omitShownHours(stored, null)).toEqual([]);
   });
 
   it('출처뿐이면 내용이 없다', () => {

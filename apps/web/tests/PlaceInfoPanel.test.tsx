@@ -230,7 +230,10 @@ describe('PlaceInfoPanel', () => {
   });
 
   it('이용 안내가 있으면 소개 뒤·지도 앱 앞에 이용 안내 항목을 두고 무장애 배지를 펼친다', async () => {
-    api.placeDetails.mockResolvedValue(details());
+    // 저장된 영업시간이 이 이용 안내와 같은 원천(tourapi)에서 왔다 — 이용 안내에서는 겹치지 않게 뺀다.
+    api.placeDetails.mockResolvedValue(
+      details({ sources: { opening_hours: 'tourapi', phone: 'kor_travel_map' } }),
+    );
     features.detailCard.mockResolvedValue(
       placeCard(hahoeIntro('소개'), {
         provider: 'tourapi',
@@ -272,7 +275,7 @@ describe('PlaceInfoPanel', () => {
     expect(within(section).getByTestId('place-info-visit-guide-fees')).toHaveTextContent(
       '성인 5,000원',
     );
-    // 영업 정보 항목이 이미 이용시간을 보이므로 이용 안내에서는 뺀다(같은 원문이 두 번 보이지 않게).
+    // 영업 정보 항목이 같은 원천의 이용시간을 이미 보이므로 이용 안내에서는 뺀다(같은 원문이 두 번 보이지 않게).
     expect(within(section).queryByTestId('place-info-visit-guide-usage_hours')).toBeNull();
     expect(within(section).getByTestId('place-info-visit-guide-parking')).toHaveTextContent('가능');
     fireEvent.click(within(section).getByTestId('place-info-visit-guide-accessibility-toggle'));
@@ -281,6 +284,38 @@ describe('PlaceInfoPanel', () => {
     );
     expect(within(section).getByTestId('place-info-visit-guide-attribution')).toHaveTextContent(
       '출처: 한국관광공사',
+    );
+  });
+
+  it('저장된 영업시간의 출처가 다르면(구조화 값 등) 이용 안내의 이용시간도 함께 보인다', async () => {
+    api.placeDetails.mockResolvedValue(details());
+    features.detailCard.mockResolvedValue(
+      placeCard(null, {
+        provider: 'tourapi',
+        attribution: '한국관광공사',
+        reference_date: null,
+        usage_hours: '09:00~18:00(입장마감 17:00)',
+        rest_days: null,
+        parking: null,
+        parking_fee: null,
+        fees: [],
+        fee_text: null,
+        discount: null,
+        reservation: null,
+        inquiry: null,
+        transport: null,
+        facilities: null,
+        capacity: null,
+        accommodation_available: null,
+        pet_note: null,
+        accessibility: [],
+        pet_policy: null,
+      }),
+    );
+    renderPanel();
+    fireEvent.click(await screen.findByTestId('place-info-guide-toggle'));
+    expect(screen.getByTestId('place-info-visit-guide-usage_hours')).toHaveTextContent(
+      '입장마감 17:00',
     );
   });
 

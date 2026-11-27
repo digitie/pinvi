@@ -7,6 +7,7 @@ import {
   petPolicyLines,
   sourceAttributionLine,
   visitGuideRows,
+  withDisplayKeys,
   type VisitGuideOmittable,
 } from '@pinvi/domain';
 import type { VisitGuide as VisitGuideData } from '@pinvi/schemas';
@@ -69,8 +70,8 @@ export function VisitGuide({
       {rows.map((row) => (
         <View key={row.key} className="gap-0.5" testID={`place-sheet-visit-guide-${row.key}`}>
           <Text className="text-xs font-semibold text-muted">{row.label}</Text>
-          {row.lines.map((line, index) => (
-            <Text key={index} className="text-sm text-body">
+          {withDisplayKeys(row.lines, (line) => line).map(({ item: line, key }) => (
+            <Text key={key} className="text-sm text-body">
               {line}
             </Text>
           ))}
@@ -103,11 +104,13 @@ export function VisitGuide({
               <Text accessibilityRole="header" className="text-xs font-semibold text-muted">
                 {view.label}
               </Text>
-              {view.items.map((item, index) => (
-                <Text key={`${item.facility}-${index}`} className="text-sm text-body">
-                  {item.label}: {item.text}
-                </Text>
-              ))}
+              {withDisplayKeys(view.items, (note) => `${note.facility}|${note.text}`).map(
+                ({ item, key }) => (
+                  <Text key={key} className="text-sm text-body">
+                    {item.label}: {item.text}
+                  </Text>
+                ),
+              )}
             </View>
           ))}
         </View>

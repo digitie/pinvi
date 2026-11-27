@@ -184,7 +184,10 @@ const detailCardBase = {
   containing_areas: z.array(ContainingAreaSchema).default([]),
 };
 
-/** 공공누리 유형 0~4 — 3·4유형은 변경금지, 2·4유형은 상업적 이용금지(kogl.or.kr licenseType{N}). */
+/**
+ * 공공누리 유형 0~4 — 3·4유형은 변경금지, 2·4유형은 상업적 이용금지(kogl.or.kr licenseType{N}).
+ * 표시용, 응답 파싱에는 쓰지 않음 — 응답은 문자열/정수로 받는다(아래 관용 규칙).
+ */
 export const KoglTypeSchema = z.union([
   z.literal(0),
   z.literal(1),
@@ -194,7 +197,10 @@ export const KoglTypeSchema = z.union([
 ]);
 export type KoglType = z.infer<typeof KoglTypeSchema>;
 
-/** 출처 소개·이용 안내를 만든 원천(Map `PlaceVisitorInfo.source`, ADR-126). */
+/**
+ * 출처 소개·이용 안내를 만든 원천(Map `PlaceVisitorInfo.source`, ADR-126).
+ * 표시용, 응답 파싱에는 쓰지 않음 — 응답은 문자열/정수로 받는다(아래 관용 규칙).
+ */
 export const IntroductionProviderSchema = z.enum([
   'tourapi',
   'krheritage',
@@ -239,8 +245,10 @@ export const SourceIntroductionSchema = z.object({
 });
 export type SourceIntroduction = z.infer<typeof SourceIntroductionSchema>;
 
+/** 요금 대상 — 표시용, 응답 파싱에는 쓰지 않음 — 응답은 문자열/정수로 받는다(아래 관용 규칙). */
 export const FeeAudienceSchema = z.enum(['adult', 'youth', 'child']);
 export type FeeAudience = z.infer<typeof FeeAudienceSchema>;
+/** 무장애 분류 — 표시용, 응답 파싱에는 쓰지 않음 — 응답은 문자열/정수로 받는다(아래 관용 규칙). */
 export const AccessibilityGroupSchema = z.enum(['physical', 'visual', 'hearing', 'infant_family']);
 export type AccessibilityGroup = z.infer<typeof AccessibilityGroupSchema>;
 

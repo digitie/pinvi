@@ -33,6 +33,23 @@ const ACCESSIBILITY_ORDER: AccessibilityGroup[] = [
 ];
 const FEE_ORDER: FeeAudience[] = ['adult', 'youth', 'child'];
 
+/**
+ * 식별자가 없는 표시 목록의 React key — 같은 내용이 반복돼도 구분하고, 내용이 같으면 재정렬해도 key가 유지된다
+ * (배열 index를 key로 쓰지 않는다).
+ */
+export function withDisplayKeys<T>(
+  items: readonly T[],
+  identify: (item: T) => string,
+): { item: T; key: string }[] {
+  const occurrences = new Map<string, number>();
+  return items.map((item) => {
+    const identity = identify(item);
+    const occurrence = occurrences.get(identity) ?? 0;
+    occurrences.set(identity, occurrence + 1);
+    return { item, key: JSON.stringify([identity, occurrence]) };
+  });
+}
+
 /** 1234567 → "1,234,567" (런타임 Intl 차이에 기대지 않는다). */
 function groupThousands(amount: number): string {
   return String(Math.trunc(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -163,14 +180,26 @@ export function visitGuideHasContent(
 
 /**
  * 장소 정보 패널·시트의 영업 정보 항목이 이미 보이는 줄 — 이용 안내에서 겹치지 않게 뺀다.
+ * 저장된 영업 정보의 그 필드 출처(`sources`)가 이 이용 안내의 원천과 같을 때만 뺀다 — 출처가 다르면(구조화
+ * 영업시간·옛 값·다른 원천) 서로 다른 내용일 수 있어 둘 다 보인다.
  * (지도 상세 카드는 영업 정보 항목이 없으므로 빼지 않는다.)
  */
 export function omitShownHours(
-  details: { opening_hours: readonly string[]; closed_days: string | null } | null | undefined,
+  details:
+    | {
+        opening_hours: readonly string[];
+        closed_days: string | null;
+        sources: Readonly<Record<string, string>>;
+      }
+    | null
+    | undefined,
+  provider: string | null | undefined,
 ): VisitGuideOmittable[] {
-  if (!details) return [];
+  if (!details || !provider) return [];
   const omit: VisitGuideOmittable[] = [];
-  if (details.opening_hours.length > 0) omit.push('usage_hours');
-  if (details.closed_days) omit.push('rest_days');
+  if (details.opening_hours.length > 0 && details.sources.opening_hours === provider) {
+    omit.push('usage_hours');
+  }
+  if (details.closed_days && details.sources.closed_days === provider) omit.push('rest_days');
   return omit;
 }

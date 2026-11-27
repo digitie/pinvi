@@ -1,5 +1,13 @@
-import { useState } from 'react';
-import { FlatList, Image, Linking, Pressable, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import {
+  FlatList,
+  Image,
+  Linking,
+  Pressable,
+  Text,
+  View,
+  type ListRenderItemInfo,
+} from 'react-native';
 import {
   introductionNeedsCollapse,
   isIntroductionImageUrl,
@@ -68,6 +76,84 @@ function GallerySeparator() {
   return <View style={{ width: 8 }} />;
 }
 
+const GALLERY_ITEM_STRIDE = GALLERY_ITEM_WIDTH + 8;
+
+function galleryItemLayout(_data: ArrayLike<SourceImage> | null | undefined, index: number) {
+  return { length: GALLERY_ITEM_STRIDE, offset: GALLERY_ITEM_STRIDE * index, index };
+}
+
+function imageKey(image: SourceImage): string {
+  return image.url;
+}
+
+/** 여러 장 — 화면 가까이 있는 사진만 그린다(가상화). 보이지 않는 사진까지 미리 받지 않는다. */
+function Gallery({
+  provider,
+  images,
+  onImageError,
+}: {
+  provider: string;
+  images: SourceImage[];
+  onImageError: (url: string) => void;
+}) {
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<SourceImage>) => (
+      <OriginalImage
+        provider={provider}
+        image={item}
+        width={GALLERY_ITEM_WIDTH}
+        onError={() => onImageError(item.url)}
+      />
+    ),
+    [provider, onImageError],
+  );
+  return (
+    <FlatList
+      horizontal
+      data={images}
+      keyExtractor={imageKey}
+      initialNumToRender={2}
+      maxToRenderPerBatch={2}
+      windowSize={3}
+      getItemLayout={galleryItemLayout}
+      ItemSeparatorComponent={GallerySeparator}
+      accessibilityLabel={`사진 ${images.length}장`}
+      testID="place-sheet-introduction-gallery"
+      renderItem={renderItem}
+    />
+  );
+}
+
+/** 소개문 — 텍스트로만 그리고, 길면 접어 두고 "더 보기"로 펼친다. */
+function Overview({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const collapsible = introductionNeedsCollapse(text);
+  return (
+    <View>
+      <Text
+        className="text-sm text-body"
+        numberOfLines={collapsible && !expanded ? 4 : undefined}
+        testID="place-sheet-introduction-overview"
+      >
+        {text}
+      </Text>
+      {collapsible ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          onPress={() => setExpanded((value) => !value)}
+          className="min-h-11 justify-center"
+          testID="place-sheet-introduction-overview-toggle"
+        >
+          <Text className="text-xs font-semibold text-ink underline">
+            {expanded ? '소개 접기' : '소개 더 보기'}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 /**
  * 출처 장소 소개: 원본 이미지(여러 장이면 가로 갤러리) · 소개문(길면 접기) · 출처(+ 기준일).
  * 깨진 이미지 기록은 시트가 가진다(항목 존재와 내용을 같은 기준으로 판정 — `introductionHasContent`).
@@ -81,75 +167,26 @@ export function SourceIntroduction({
   failedImageUrls: ReadonlySet<string>;
   onImageError: (url: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const { overview } = introduction;
+  const { overview, provider } = introduction;
   const images = visibleIntroductionImages(introduction, failedImageUrls);
   if (!overview && images.length === 0) return null;
   // 레이아웃은 처음 받은(허용된) 장수로 정한다 — 갤러리에서 한 장이 깨져 1장이 남아도 틀이 바뀌지 않게.
   const gallery = visibleIntroductionImages(introduction, NO_FAILED).length > 1;
-  const collapsible = overview ? introductionNeedsCollapse(overview) : false;
+  const single = !gallery ? images[0] : undefined;
   return (
     <View className="gap-2" testID="place-sheet-introduction">
-      {!gallery && images.length === 1 ? (
+      {single ? (
         <OriginalImage
-          provider={introduction.provider}
-          image={images[0]!}
+          provider={provider}
+          image={single}
           width="100%"
-          onError={() => onImageError(images[0]!.url)}
+          onError={() => onImageError(single.url)}
         />
       ) : null}
       {gallery && images.length > 0 ? (
-        // 화면 가까이 있는 사진만 그린다(가상화) — 보이지 않는 사진까지 미리 받지 않는다.
-        <FlatList
-          horizontal
-          data={images}
-          keyExtractor={(image) => image.url}
-          initialNumToRender={2}
-          maxToRenderPerBatch={2}
-          windowSize={3}
-          removeClippedSubviews
-          getItemLayout={(_data, index) => ({
-            length: GALLERY_ITEM_WIDTH + 8,
-            offset: (GALLERY_ITEM_WIDTH + 8) * index,
-            index,
-          })}
-          ItemSeparatorComponent={GallerySeparator}
-          accessibilityLabel={`사진 ${images.length}장`}
-          testID="place-sheet-introduction-gallery"
-          renderItem={({ item }) => (
-            <OriginalImage
-              provider={introduction.provider}
-              image={item}
-              width={GALLERY_ITEM_WIDTH}
-              onError={() => onImageError(item.url)}
-            />
-          )}
-        />
+        <Gallery provider={provider} images={images} onImageError={onImageError} />
       ) : null}
-      {overview ? (
-        <View>
-          <Text
-            className="text-sm text-body"
-            numberOfLines={collapsible && !expanded ? 4 : undefined}
-            testID="place-sheet-introduction-overview"
-          >
-            {overview}
-          </Text>
-          {collapsible ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ expanded }}
-              onPress={() => setExpanded((value) => !value)}
-              className="min-h-11 justify-center"
-              testID="place-sheet-introduction-overview-toggle"
-            >
-              <Text className="text-xs font-semibold text-ink underline">
-                {expanded ? '소개 접기' : '소개 더 보기'}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
+      {overview ? <Overview text={overview} /> : null}
       <Text className="text-xs text-muted" testID="place-sheet-introduction-attribution">
         {sourceAttributionLine(introduction)}
       </Text>
