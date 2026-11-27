@@ -79,8 +79,9 @@
   --color-admin-success-tint: #e6f4ea; /* = success-bg */
   --color-admin-danger: #c13515; /* = error-text. tint 위 4.85 */
   --color-admin-danger-tint: #fdecea; /* = error-bg */
-  --color-admin-warning: #8a5300; /* tint 위 5.76 (흰 배경 6.33) */
-  --color-admin-warning-tint: #fdf3e3;
+  /* 사용자 표면 warning 토큰(@pinvi/design-tokens warning-text/-bg)의 별칭 — 값은 한 곳에서만. tint 위 5.76 (흰 배경 6.33) */
+  --color-admin-warning: var(--color-warning-text);
+  --color-admin-warning-tint: var(--color-warning-bg);
   --color-admin-info: #1c5fbd; /* tint 위 5.35 (흰 배경 6.14) */
   --color-admin-info-tint: #e8f0fc;
 
@@ -203,6 +204,63 @@ body {
   .checkbox:checked {
     /* stroke %23ffffff = 토큰 on-primary(#ffffff). data URI 안에서는 var()를 못 써 값 리터럴로 둔다. */
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");
+  }
+
+  /* 교통 레이어 지도 마커(주유소·교통 돌발) — kor-travel-transport 유가 지도(= Map 가격 마커)와 같은 모양
+     (2026-11-27, `components/map/TransportMarkers.tsx`). 지도 캔버스 위 작은 마커라 transport/Map 마커와 같은
+     칩 radius 4px·라벨 6px·마커 그림자를 쓴다 — DESIGN.md radius·그림자 2티어의 **마커 예외**이며 카드·대화상자
+     같은 사용자 표면에는 쓰지 않는다. 색·글자는 토큰이다. */
+  .transport-map-marker:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 4px;
+  }
+  @media (pointer: coarse) {
+    /* 24px 원·46×30 칩을 손가락으로 누를 수 있게 44px 투명 표적을 깐다(DESIGN.md 44px). */
+    .transport-map-marker::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 44px;
+      height: 44px;
+      transform: translate(-50%, -50%);
+      border-radius: 9999px;
+    }
+  }
+  .fuel-marker-chip {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    border: 1px solid var(--color-hairline);
+    border-radius: 4px;
+    background: var(--color-canvas);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  }
+  .transport-map-marker[data-selected='true'] .fuel-marker-chip {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  .fuel-marker-price {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 4px);
+    min-width: 58px;
+    transform: translateY(-50%);
+    padding: 3px 6px;
+    border: 1px solid var(--marker-color, var(--color-hairline));
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--color-canvas) 96%, transparent);
+    color: var(--color-ink);
+    /* transport는 11px — DESIGN.md 최소 단계(text-xs 12px)로 올린다. */
+    font-size: var(--text-xs);
+    font-weight: 700;
+    line-height: 1.18;
+    white-space: pre;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.24);
   }
 }
 

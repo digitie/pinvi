@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { HighwayIncidentItem, TransportLayer, TransportLayerResult } from '@pinvi/schemas';
 import {
   dedupeTransportNearPoints,
-  formatFuelPrice,
-  fuelProductLabel,
   parseTransportMarkerId,
   requestableTransportLayers,
   sortIncidentsByRecency,
@@ -62,20 +60,6 @@ describe('transport freshness', () => {
     expect(transportFreshnessLabel(3599)).toBe('59분 전 갱신');
     expect(transportFreshnessLabel(3600)).toBe('1시간 전 갱신');
     expect(transportFreshnessLabel(86_400 * 2 + 5)).toBe('2일 전 갱신');
-  });
-});
-
-describe('fuel price', () => {
-  it('가격과 판매 안 함', () => {
-    expect(formatFuelPrice(1689)).toBe('1,689원');
-    expect(formatFuelPrice(1688.6)).toBe('1,689원');
-    expect(formatFuelPrice(null)).toBe('판매 안 함');
-  });
-
-  it('유종 이름', () => {
-    expect(fuelProductLabel('diesel', null)).toBe('경유');
-    expect(fuelProductLabel('diesel', '자동차용경유')).toBe('자동차용경유');
-    expect(fuelProductLabel('hydrogen')).toBe('hydrogen');
   });
 });
 

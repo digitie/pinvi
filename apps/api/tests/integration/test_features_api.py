@@ -7,7 +7,7 @@ items/clusters, found/missing, metrics)을 반환한다.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -162,7 +162,8 @@ async def test_in_bounds_maps_kor_travel_map_shape(
     assert data["clusters"][0]["coord"] == {"lon": 127.04, "lat": 37.52}
     # client 가 min_lon/.../max_items 로 호출됐는지 (구 limit/bbox tuple 폐기)
     assert fake.calls["in_bounds"]["min_lon"] == 129.0
-    assert fake.calls["in_bounds"]["max_items"] == 500
+    # transport 레이어 몫(주유소·교통 notice)을 거른 뒤에도 limit을 채우도록 여유분(1/5, 최소 20)을 더 청한다.
+    assert fake.calls["in_bounds"]["max_items"] == 600
 
 
 async def test_nearby_uses_lon_lat_and_distance(
@@ -190,7 +191,7 @@ async def test_nearby_uses_lon_lat_and_distance(
     assert body[0]["distance_m"] == 123.4
     assert "status" not in body[0]
     assert fake.calls["nearby"]["lon"] == 129.118
-    assert fake.calls["nearby"]["page_size"] == 100
+    assert fake.calls["nearby"]["page_size"] == 120
 
 
 async def test_nearby_rejects_legacy_lng_query(
@@ -432,6 +433,7 @@ async def test_point_request_keeps_wide_bbox_and_large_limit(
     finally:
         _clear()
     assert response.status_code == 200, response.text
+    # 여유분을 더해도 Map 상한(2000)을 넘지 않는다.
     assert fake.calls["in_bounds"]["max_items"] == 2000
 
 
@@ -457,3 +459,117 @@ async def test_geometry_item_count_is_clamped(
         _clear()
     assert response.status_code == 200, response.text
     assert fake.calls["in_bounds"]["max_items"] == expected
+
+
+class _TransportOverlapClient(_FakeKorTravelMapClient):
+    """Map PG에 남은 주유소 장소·교통 notice가 섞인 응답."""
+
+    _ITEMS: ClassVar[list[dict[str, Any]]] = [
+        {
+            "feature_id": "f_beach",
+            "kind": "place",
+            "name": "광안리 해수욕장",
+            "category": "01070100",
+            "lon": 129.118,
+            "lat": 35.155,
+            "marker_color": "P-07",
+            "marker_icon": "swimming",
+        },
+        {
+            "feature_id": "f_fuel",
+            "kind": "place",
+            "name": "광안 셀프주유소",
+            "category": "06020000",
+            "lon": 129.119,
+            "lat": 35.156,
+            "marker_color": "P-08",
+            "marker_icon": "fuel",
+            "distance_m": 50.0,
+        },
+        {
+            "feature_id": "f_incident",
+            "kind": "notice",
+            "name": "경부선 사고",
+            "category": "99000000",
+            "lon": 129.12,
+            "lat": 35.157,
+            "marker_color": "P-13",
+            "marker_icon": "roadblock",
+        },
+    ]
+
+    async def features_in_bounds(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls["in_bounds"] = kwargs
+        return {"items": list(self._ITEMS), "clusters": [], "cluster_unit": "individual"}
+
+    async def features_nearby(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls["nearby"] = kwargs
+        return {"items": list(self._ITEMS), "next_cursor": None}
+
+
+async def test_in_bounds_leaves_fuel_stations_and_incidents_to_transport_layer(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    user_id, _email = verified_user
+    fake = _TransportOverlapClient()
+    _override(fake)
+    try:
+        resp = await client.get(
+            "/features/in-bounds?bbox=129.0,35.0,129.2,35.2&zoom=15",
+            cookies=auth_cookies(user_id),
+        )
+        explicit = await client.get(
+            "/features/in-bounds?bbox=129.0,35.0,129.2,35.2&zoom=15&category=06020000",
+            cookies=auth_cookies(user_id),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    # 주유소 장소·교통 notice는 transport 레이어 토글을 따른다 — 장소 layer에는 없다(켜도 중복 없음).
+    assert [i["feature_id"] for i in resp.json()["data"]["items"]] == ["f_beach"]
+    # 주유소 카테고리를 명시해 고르면 그대로 돌려준다.
+    assert explicit.status_code == 200, explicit.text
+    assert "f_fuel" in [i["feature_id"] for i in explicit.json()["data"]["items"]]
+
+
+async def test_nearby_leaves_fuel_stations_to_transport_layer(
+    client: Any,
+    verified_user: tuple[str, str],
+    auth_cookies: Any,
+    grant_location_consent: Any,
+) -> None:
+    user_id, _email = verified_user
+    await grant_location_consent(user_id)
+    fake = _TransportOverlapClient()
+    _override(fake)
+    try:
+        resp = await client.get(
+            "/features/nearby?lon=129.118&lat=35.155&radius_m=5000",
+            cookies=auth_cookies(user_id),
+        )
+    finally:
+        _clear()
+
+    assert resp.status_code == 200, resp.text
+    assert [i["feature_id"] for i in resp.json()["data"]] == ["f_beach"]
+
+
+async def test_in_bounds_trims_to_limit_after_filtering_and_flags_truncation(
+    client: Any, verified_user: tuple[str, str], auth_cookies: Any
+) -> None:
+    fake = _TransportOverlapClient()
+    _override(fake)
+    try:
+        resp = await client.get(
+            "/features/in-bounds?bbox=129.0,35.0,129.2,35.2&zoom=15&limit=1&category=06020000",
+            cookies=auth_cookies(verified_user[0]),
+        )
+    finally:
+        _clear()
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    # Map에는 여유분(1 + 20)을 청했고, 응답은 호출자의 limit으로 자르고 잘렸음을 알린다.
+    assert fake.calls["in_bounds"]["max_items"] == 21
+    assert len(data["items"]) == 1
+    assert data["truncated"] is True

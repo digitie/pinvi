@@ -82,6 +82,26 @@
 
 `feature_id`는 Map `make_feature_id` 값이다 — POI의 `feature_id`(Map PG UUID)가 아니므로 `/features/{id}`·POI 추가에 쓰지 않는다.
 
+주유소 항목은 Map이 주는 `brand_code`(오피넷 상표 코드 — 로고 선택용, 이름보다 우선)와 `source_last_seen_at`(기준정보 반영
+시각)을 그대로 전하고(2026-11-27 추가, 둘 다 nullable), 교통 돌발은 `route_no`(노선 번호)를 전한다.
+`prices[]`는 계약대로 `price: null`(지금 판매하지 않음) 행을 포함한다 — 숨기는 것은 표시 규칙이다.
+
+### 표시 규칙(웹·모바일 공용, `@pinvi/domain` `fuelStation.ts`)
+
+kor-travel-transport 공개 유가 화면(`/public/fuel`)과 같은 정보·모양이다.
+
+- 취급하지 않는 유종(가격 null·0·음수·NaN)은 행을 만들지 않는다 — "판매 안 함"·"-"도 없다. 하나도 없으면 "등록된 유효 유가가
+  없습니다." 한 줄. 가격 추이도 같은 규칙으로 점을 뺀다.
+- 유종 이름·순서: 휘발유·고급유·등유·경유·LPG(오피넷 코드 오름차순 = transport 행 순서). 가격 `1,689원/L`.
+- 관측 시각(transport `observed_at`과 같은 규칙: `provider_updated_at`이 있으면 그것, 없으면 `collected_at`)이 7일보다 오래면
+  "오래됨" — 오늘 다시 수집했어도 공시가가 7일 넘게 그대로면 붙는다. 편의시설은 셀프·24시간·세차·정비·편의점 순서로 `true`인 것만.
+- 상표: `brand_code`(없으면 이름 별칭)로 오피넷 원본 로고(`apps/web/public/fuel-brands/`). 자가상표·모르는 코드는 주유기 아이콘.
+- 데이터 출처(접힘): 원천, 기준정보 반영, 유종별 제공기관 공시 시각.
+- 지도 마커: 주유소는 상표 로고 칩 + 흰 가격 라벨("휘 1,650", 판매 유종만), 교통 돌발은 24px 원 배지. 화면 22,000px²당 1곳(6~60곳)
+  예산을 넘을 때만 줌 14까지 묶고, 줌 10 이하는 늘 묶는다(transport `clusterAtScale`, 근사: 창 크기·받은 항목 수로 센다).
+- transport에 있지만 Map이 싣지 않아 보이지 않는 것: 품질인증·전산보고 표시, 시군구 가격 등급·평균 대비, 30일 그래프(PinVi는
+  최근 7행 목록).
+
 ## 가격 추이 — `GET /transport/fuel-stations/{feature_id}/price-history`
 
 | query         | 설명                                                   |

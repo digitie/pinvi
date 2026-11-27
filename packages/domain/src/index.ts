@@ -7,6 +7,7 @@ export * from './distance';
 export * from './errorMessage';
 export * from './featureRequest';
 export * from './formValidation';
+export * from './fuelStation';
 export * from './locationConsent';
 export * from './mapCenter';
 export * from './mapLinks';

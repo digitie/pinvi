@@ -9,6 +9,10 @@ import type {
   TransportStatusResponse,
 } from '@pinvi/schemas';
 import {
+  fuelBrand,
+  fuelMarkerPriceLines,
+  fuelMarkerPriceSpeech,
+  fuelStationPriceRows,
   requestableTransportLayers,
   TRANSPORT_LAYER_META,
   TRANSPORT_NEAR_MAX_POINTS,
@@ -18,6 +22,7 @@ import {
   transportNearPointsKey,
   withUnavailableTransportLayers,
 } from '@pinvi/domain';
+import type { FuelBrand } from '@pinvi/domain';
 import type { MapLibreMap } from '@/components/map/vworldPrimitives';
 import { apiClient } from '@/lib/api';
 import { isAbortError } from '@/lib/abort';
@@ -39,6 +44,12 @@ export type TransportMapPoint = {
   icon: string;
   color: string;
   markerColor: string;
+  /** 주유소만 — 상표(원천이 주지 않으면 null). */
+  brand?: FuelBrand | null;
+  /** 주유소만 — 마커 가격 라벨 행("휘 1,650"). 판매 중인 유종이 없으면 빈 배열. */
+  priceLines?: string[];
+  /** 주유소만 — 화면 낭독기용 가격 문구. */
+  priceSpeech?: string;
 };
 
 export type TransportDetailTarget = {
@@ -52,6 +63,16 @@ type Fetched = {
   /** 응답을 받은 시각 — 신선도는 Map `age_seconds` + 이후 경과로 센다(ADR-076). */
   receivedAt: number;
 };
+
+function fuelMarkerExtras(item: Extract<TransportItem, { layer: 'fuel_station' }>) {
+  // 마커 라벨은 가격만 쓴다 — "오래됨" 판정이 없으므로 기준 시각은 의미가 없다.
+  const rows = fuelStationPriceRows(item.prices, 0);
+  return {
+    brand: fuelBrand(item.brand_code, item.brand_name),
+    priceLines: fuelMarkerPriceLines(rows),
+    priceSpeech: fuelMarkerPriceSpeech(rows),
+  };
+}
 
 function toPoints(results: readonly TransportLayerResult[]): TransportMapPoint[] {
   return results.flatMap((result) =>
@@ -74,6 +95,7 @@ function toPoints(results: readonly TransportLayerResult[]): TransportMapPoint[]
               icon: style.icon,
               color: style.hex,
               markerColor: style.color,
+              ...(item.layer === 'fuel_station' ? fuelMarkerExtras(item) : {}),
             },
           ];
         }),

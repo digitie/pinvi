@@ -243,7 +243,13 @@ test('탐색 지도 장소 마커는 여행 지도와 같은 원형 + 상자 없
     return { bg: style.backgroundColor, shadow: style.boxShadow, border: style.borderTopWidth };
   });
   expect(labelStyle).toEqual({ bg: 'rgba(0, 0, 0, 0)', shadow: 'none', border: '0px' });
-  expect((await label.boundingBox())!.x).toBeGreaterThan(dotBox.x + dotBox.width - 1);
+  // 원과 라벨 위치는 한 프레임에서 같이 잰다(따로 재면 그 사이 카메라가 움직일 수 있다).
+  const gap = await marker.evaluate((el) => {
+    const d = el.querySelector('[data-testid="circle-place-marker-dot"]')!.getBoundingClientRect();
+    const l = el.querySelector('[data-testid="circle-place-marker-label"]')!.getBoundingClientRect();
+    return l.left - d.right;
+  });
+  expect(gap).toBeGreaterThan(-1);
   // 장소별 날씨는 받지 않으므로 날씨 아이콘은 없다.
   await expect(marker.getByTestId('place-weather-glyph')).toHaveCount(0);
   // 라벨을 눌러도 장소가 선택되고 데스크톱 popup이 뜬다.

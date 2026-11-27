@@ -76,6 +76,10 @@ from app.services.category_labels import (
 )
 from app.services.feature_detail import best_match_enrichment, build_detail_card
 from app.services.feature_request import find_active_suggestion_by_external_ref
+from app.services.transport_place_overlap import (
+    overfetch_limit,
+    without_transport_layer_features,
+)
 from app.services.weather_card import build_feature_weather_card
 
 router = APIRouter(prefix="/features", tags=["features"])
@@ -107,6 +111,9 @@ _DEFAULT_INBOUNDS_KINDS: list[FeatureKind] = ["place", "event", "notice", "price
 # Map은 도형을 bbox로 자르지 않으므로 범위와 건수를 서버에서 직접 묶는다.
 GEOMETRY_MAX_SPAN_DEG = 1.0
 GEOMETRY_MAX_ITEMS = 200
+# Map `/v1/features/in-bounds` max_items·`/v1/features/nearby` page_size 상한(vendored user OpenAPI).
+MAP_IN_BOUNDS_MAX_ITEMS = 2000
+MAP_NEARBY_MAX_PAGE_SIZE = 500
 _DEFAULT_NEARBY_KINDS: list[FeatureKind] = ["place"]
 
 
@@ -437,6 +444,12 @@ async def features_in_bounds(
     # 도형 건수는 잘라서 묶는다(기본 limit 500을 거절하지 않는다).
     # 넘친 건은 Map의 truncated로 드러난다.
     max_items = min(limit, GEOMETRY_MAX_ITEMS) if include_geometry else limit
+    # 점 요청은 transport 레이어 몫을 거른 뒤에도 limit을 채우도록 여유분을 더 청한다(도형 요청은 그대로).
+    upstream_items = (
+        max_items
+        if include_geometry
+        else overfetch_limit(max_items, ceiling=MAP_IN_BOUNDS_MAX_ITEMS)
+    )
     with _map_kor_travel_map_errors():
         data = await client.features_in_bounds(
             min_lon=bbox_obj.lng_min,
@@ -447,15 +460,21 @@ async def features_in_bounds(
             category=category,
             zoom=zoom,
             cluster_unit=cluster_unit,
-            max_items=max_items,
+            max_items=upstream_items,
             include_geometry=include_geometry,
         )
     labels = await get_category_labels(client)
-    items = [
-        _summary_from_kor_travel_map(x, labels)
-        for x in data.get("items", [])
-        if isinstance(x, dict)
-    ]
+    # 주유소·교통 돌발은 transport 레이어가 그린다 — 장소 layer에서 빼 토글을 따르고 중복을 없앤다.
+    items = without_transport_layer_features(
+        [
+            _summary_from_kor_travel_map(x, labels)
+            for x in data.get("items", [])
+            if isinstance(x, dict)
+        ],
+        requested_category=category,
+    )
+    trimmed = len(items) > max_items
+    items = items[:max_items]
     clusters = [
         _cluster_from_kor_travel_map(x) for x in data.get("clusters", []) if isinstance(x, dict)
     ]
@@ -464,7 +483,7 @@ async def features_in_bounds(
             items=items,
             clusters=clusters,
             cluster_unit=data.get("cluster_unit"),
-            truncated=bool(data.get("truncated", False)),
+            truncated=bool(data.get("truncated", False)) or trimmed,
             zoom=zoom,
             bbox=bbox_obj,
         )
@@ -498,15 +517,18 @@ async def features_nearby(
             radius_m=radius_m,
             kinds=[str(k) for k in (kinds or _DEFAULT_NEARBY_KINDS)],
             category=category,
-            page_size=limit,
+            page_size=overfetch_limit(limit, ceiling=MAP_NEARBY_MAX_PAGE_SIZE),
         )
     labels = await get_category_labels(client)
     return Envelope.of(
-        [
-            _summary_from_kor_travel_map(x, labels)
-            for x in data.get("items", [])
-            if isinstance(x, dict)
-        ]
+        without_transport_layer_features(
+            [
+                _summary_from_kor_travel_map(x, labels)
+                for x in data.get("items", [])
+                if isinstance(x, dict)
+            ],
+            requested_category=category,
+        )[:limit]
     )
 
 

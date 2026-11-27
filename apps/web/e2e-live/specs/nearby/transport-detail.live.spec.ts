@@ -66,8 +66,9 @@ test.describe('NEAR transport detail dialog', () => {
     const prices = page.getByTestId('transport-fuel-prices');
     await expect(prices).toBeVisible();
     const priceText = (await prices.textContent()) ?? '';
-    // Either real rows ("휘발유 1,650원" / "판매 안 함") or the explicit empty state.
-    expect(/(원|판매 안 함)/.test(priceText) || priceText.includes('가격 정보가 없습니다')).toBe(true);
+    // Either sold-product rows ("휘발유 1,650원/L") or the explicit empty state. Unsold products never render.
+    expect(/원\/L/.test(priceText) || priceText.includes('등록된 유효 유가가 없습니다')).toBe(true);
+    expect(priceText).not.toContain('판매 안 함');
     await expect(detailFooter(page).getByTestId('transport-detail-freshness')).toContainText(FRESHNESS_RE);
     await expect(detailFooter(page)).toContainText(SOURCE_CAPTION);
     await expect(detailDialog(page).getByRole('button', { name: '일정에 추가' })).toHaveCount(0);
@@ -91,8 +92,12 @@ test.describe('NEAR transport detail dialog', () => {
     const hres = await history;
     expect(new URL(hres.url()).searchParams.get('days')).toBe('30');
     expect(hres.ok(), 'history is 200 (unavailable is not an error per docs/api/transport.md)').toBe(true);
-    const body = (await hres.json()) as { data: { status: 'available' | 'unavailable'; reason: string | null; items: unknown[] } };
-    if (body.data.status === 'available' && body.data.items.length > 0) {
+    const body = (await hres.json()) as { data: { status: 'available' | 'unavailable'; reason: string | null; items: { price: number | null }[] } };
+    // 판매한 날(가격 > 0)이 없는 추이는 "표시할 판매 가격이 없습니다"로 따로 보인다(미판매 점은 그리지 않는다).
+    const sold = body.data.items.filter((p) => typeof p.price === 'number' && p.price > 0);
+    if (body.data.status === 'available' && body.data.items.length > 0 && sold.length === 0) {
+      await expect(page.getByTestId('transport-price-history-empty')).toBeVisible();
+    } else if (body.data.status === 'available' && body.data.items.length > 0) {
       const table = page.getByTestId('transport-price-history');
       await expect(table).toBeVisible();
       await expect(table).toContainText(/원/);
@@ -125,13 +130,15 @@ test.describe('NEAR transport detail dialog', () => {
     await expect(detailDialog(page)).toContainText('교통 돌발');
     expect(rowText).toContain(String(item.title));
     const body = detailBody(page);
+    // 2026-11-27 transport식 순서: 노선 배지 → "유형 · 처리 상태" → 내용 → 위치·발생 행.
+    if (item.route_name || item.route_no) await expect(body.getByTestId('transport-incident-route')).toBeVisible();
+    for (const key of ['incident_type', 'process_status'] as const) {
+      if (item[key]) await expect(body.getByTestId('transport-incident-status')).toContainText(String(item[key]));
+    }
+    if (item.message) await expect(body.getByTestId('transport-incident-message')).toBeVisible();
     for (const [key, label] of [
-      ['incident_type', '유형'],
-      ['process_status', '처리 상태'],
-      ['route_name', '노선'],
       ['point_name', '위치'],
       ['occurred_at', '발생'],
-      ['message', '내용'],
     ] as const) {
       if (item[key]) await expect(body.locator('dt', { hasText: label }).first()).toBeVisible();
     }

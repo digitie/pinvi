@@ -167,26 +167,7 @@ export function transportFreshnessLabel(ageSeconds: number): string {
   return `${Math.floor(hours / 24)}일 전 갱신`;
 }
 
-const FUEL_PRODUCT_LABEL: Record<string, string> = {
-  gasoline: '휘발유',
-  premium_gasoline: '고급휘발유',
-  diesel: '경유',
-  kerosene: '등유',
-  lpg: 'LPG',
-};
-
-/** 유종 이름. Map이 준 이름을 우선하고, 없으면 표준 키로, 그것도 모르면 키 그대로. */
-export function fuelProductLabel(productKey: string, productName?: string | null): string {
-  const name = productName?.trim();
-  if (name) return name;
-  return FUEL_PRODUCT_LABEL[productKey] ?? productKey;
-}
-
-/** 원/L 가격. `null`은 지금 판매하지 않는다는 뜻이다. */
-export function formatFuelPrice(price: number | null | undefined): string {
-  if (price == null || !Number.isFinite(price)) return '판매 안 함';
-  return `${Math.round(price).toLocaleString('ko-KR')}원`;
-}
+// 유종 이름·가격 문구·판매 판정은 `fuelStation.ts`가 소유한다(transport 공개 유가 화면 기준).
 
 const MARKER_PREFIX = 'transport:';
 

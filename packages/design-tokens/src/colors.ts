@@ -40,6 +40,8 @@ export const colors = {
   'error-bg': '#fdecea',
   'success-text': '#1b873f',
   'success-bg': '#e6f4ea',
+  'warning-text': '#8a5300', // 주의(오래된 값 등) — warning-bg 위 5.76:1, 흰 배경 6.33:1
+  'warning-bg': '#fdf3e3',
   'legal-link': '#428bff',
 
   // 스크림

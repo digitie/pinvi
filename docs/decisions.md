@@ -3973,6 +3973,19 @@ ADR-048은 geo v2 `key`를 서버 VWorld key와 같은 값으로 쓰고 geo의 `
   플래그를 넘겨야 한다 — 지금 운영 pinvi-api에는 Map service token이 없다.
 - 서버 캐시는 두지 않는다(Map이 Valkey에서 읽고, 캐시는 신선도 문구를 거짓으로 만든다). weather의 Map 경유 전환은 Map 2단계 뒤 별도.
 
+### 보강 D6 (2026-11-27) — 장소 layer와 겹치지 않는다, 표시는 transport 공개 화면을 따른다
+
+- 소유자 요청: "주유소"·"교통 돌발" 토글을 끄면 그 항목이 일반 장소 마커·주변 목록에도 없어야 하고, 켜면 한 번만 보여야 한다.
+  Map PG에 남은 주유소 장소(카테고리 `0602` 계층)·krex 교통 notice(`99000000`+`roadblock`)를 `/features/in-bounds`·
+  `/features/nearby`가 **서버에서** 뺀다(`app/services/transport_place_overlap.py`). Map에는 제외 필터가 없어 PinVi가 거른다.
+  주유소 계층을 `category`로 명시한 요청, 통합 검색, 여행 장소(POI)는 거르지 않는다(사용자의 명시적 선택). Map 서버 클러스터 개수는
+  이 항목을 포함한다 — 정확히 하려면 Map in-bounds에 제외 필터가 필요하다(후속). 거른 몫은 Map에 여유분을 더 청해 채운다.
+- 여행 지도의 transport 레이어는 여행 장소 반경(주유소 10 km)만 그리므로, 화면 안이라도 반경 밖 주유소는 이제 보이지 않는다
+  (전에는 일반 장소 마커로 보였다). 여행 지도는 여행 장소 주변을 보는 화면이라 의도한 결과로 받아들인다. 탐색 지도도 transport 조회
+  상한(웹 200·모바일 100)을 넘는 밀집 화면에서는 상한 밖 주유소가 보이지 않는다(상한 문구 "일부만 표시 — 확대하세요"가 알린다).
+- 주유소·교통 돌발 상세와 지도 마커는 kor-travel-transport 공개 유가 화면과 같은 정보·모양으로 그린다(규칙은 `docs/api/transport.md`
+  "표시 규칙"). 취급하지 않는 유종은 그리지 않는다. 원천이 주지 않는 값(품질인증 등)은 만들지 않는다.
+
 ## ADR-077: weather 관측·예보는 kor-travel-map weather 상태 표면으로 읽는다(플래그), 특보만 kor-travel-weather 직접
 
 - **상태**: accepted (구현 PR, 플래그 기본 off — 운영 활성화는 Map weather 적재·Manager 배선 뒤)

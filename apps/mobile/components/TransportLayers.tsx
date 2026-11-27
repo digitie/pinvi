@@ -7,7 +7,9 @@ import type { TransportItem, TransportLayer, TransportLayerResult } from '@pinvi
 import {
   TRANSPORT_LAYER_META,
   formatFuelPrice,
-  fuelProductLabel,
+  fuelBrand,
+  fuelStationFacilities,
+  fuelStationPriceRows,
   paletteHex,
   parseTransportMarkerId,
   requestableTransportLayers,
@@ -16,6 +18,8 @@ import {
   transportItemTitle,
   transportLayerLabel,
   transportMarkerId,
+  restAreaFuelPriceRows,
+  type FuelPriceRow,
 } from '@pinvi/domain';
 import { apiClient } from '../lib/api';
 import { Body, Card, Muted, Subheading } from './ui';
@@ -140,20 +144,29 @@ export function TransportChips({ state }: { state: MobileTransportState }) {
   );
 }
 
-function pricesOf(item: TransportItem): { label: string; value: string }[] {
+/**
+ * 카드의 주유소 정보 — 웹 교통 상세와 같은 규칙(`@pinvi/domain` fuelStation): 판매 중인 유종만, `1,689원/L`,
+ * 7일 넘은 값은 "오래됨", 상표 이름, 편의시설.
+ */
+function fuelInfoOf(
+  item: TransportItem,
+  nowMs: number,
+): { brand: string | null; rows: FuelPriceRow[]; facilities: string[] } {
   if (item.layer === 'fuel_station') {
-    return item.prices.map((p) => ({
-      label: fuelProductLabel(p.product_key, p.product_name),
-      value: formatFuelPrice(p.price),
-    }));
+    return {
+      brand: fuelBrand(item.brand_code, item.brand_name)?.name ?? null,
+      rows: fuelStationPriceRows(item.prices, nowMs),
+      facilities: fuelStationFacilities(item),
+    };
   }
   if (item.layer === 'rest_area' && item.fuel_prices) {
-    return [
-      { label: '휘발유', value: formatFuelPrice(item.fuel_prices.gasoline_price) },
-      { label: '경유', value: formatFuelPrice(item.fuel_prices.diesel_price) },
-    ];
+    return {
+      brand: fuelBrand(null, item.fuel_prices.oil_company)?.name ?? null,
+      rows: restAreaFuelPriceRows(item.fuel_prices, nowMs),
+      facilities: [],
+    };
   }
-  return [];
+  return { brand: null, rows: [], facilities: [] };
 }
 
 function subtitleOf(item: TransportItem): string | null {
@@ -183,7 +196,7 @@ export function TransportItemCard({
   const freshness = result?.freshness;
   // 카드를 연 시각 — react-query 캐시에서 꺼낸 결과도 받은 뒤 흐른 시간을 더해 센다.
   const [openedAt] = useState(() => Date.now());
-  const prices = pricesOf(item);
+  const fuel = fuelInfoOf(item, openedAt);
   const subtitle = subtitleOf(item);
   return (
     <Card className="gap-1">
@@ -201,12 +214,34 @@ export function TransportItemCard({
         </Pressable>
       </View>
       {subtitle ? <Body>{subtitle}</Body> : null}
-      {prices.map((p) => (
-        <View key={p.label} className="flex-row justify-between">
-          <Body>{p.label}</Body>
-          <Body className="font-semibold">{p.value}</Body>
+      {/* 굵기는 weight가 아니라 정적 글꼴 family로(Body의 font-pinvi-regular 위에 weight만 얹으면 기기에서 굵지 않다). */}
+      {fuel.brand ? (
+        <Text className="text-sm font-pinvi-semibold text-ink">{fuel.brand}</Text>
+      ) : null}
+      {fuel.rows.map((row) => (
+        <View
+          key={row.key}
+          className="flex-row items-center justify-between gap-2 border-b border-hairline py-1"
+          testID={`transport-fuel-price-${row.key}`}
+          accessible
+          accessibilityLabel={`${row.label} ${formatFuelPrice(row.price)}${row.old ? ', 오래됨' : ''}`}
+        >
+          <Body>{row.label}</Body>
+          <View className="flex-row items-center gap-2">
+            {row.old ? (
+              // iOS Text는 배경을 둥글게 자르지 않는다 — View가 모양을 갖는다.
+              <View className="overflow-hidden rounded-full bg-warning-bg px-2 py-0.5">
+                <Text className="text-xs font-pinvi-semibold text-warning-text">오래됨</Text>
+              </View>
+            ) : null}
+            <Text className="text-sm font-pinvi-bold text-ink">{formatFuelPrice(row.price)}</Text>
+          </View>
         </View>
       ))}
+      {item.layer === 'fuel_station' && fuel.rows.length === 0 ? (
+        <Muted>등록된 유효 유가가 없습니다.</Muted>
+      ) : null}
+      {fuel.facilities.length > 0 ? <Muted>편의시설 · {fuel.facilities.join(' · ')}</Muted> : null}
       {freshness && state.receivedAt ? (
         <Muted>
           {transportFreshnessLabel(
