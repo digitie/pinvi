@@ -66,6 +66,8 @@ const server = vi.hoisted(() => ({
   transportEnabled: true,
   // 장소별 현재 날씨 — 기본은 빈 카드(날씨 모름).
   weather: null as null | ((path: string) => unknown),
+  // 경포대 TourAPI 소개문 — null이면 이미지만 있는 소개.
+  introOverview: '경포대는 강릉시 저동에 있는 누각이다.' as string | null,
   // 저장된 영업 정보 — 경포대만 전화가 있다.
   placeDetails: (path: string): unknown => ({
     opening_hours: ['매일 09:00~18:00'],
@@ -220,7 +222,7 @@ function detailCard(path: string) {
       ? {
           provider: 'tourapi',
           attribution: '한국관광공사',
-          overview: '경포대는 강릉시 저동에 있는 누각이다.',
+          overview: server.introOverview,
           images: [
             {
               url: 'https://tong.visitkorea.or.kr/cms/resource/b.jpg',
@@ -266,6 +268,7 @@ beforeEach(() => {
   server.paths = [];
   server.transportEnabled = true;
   server.weather = null;
+  server.introOverview = '경포대는 강릉시 저동에 있는 누각이다.';
   auth.userId = 'user-owner';
   poiWeatherStore.reset();
 });
@@ -451,6 +454,17 @@ describe('모바일 여행 상세 지도', () => {
     const sheet = await screen.findByTestId('place-sheet');
     const toggle = await within(sheet).findByTestId('place-sheet-about-toggle');
     expect(toggle.textContent).toBe('소개');
+    // 늦게 생겨도 앞 항목 버튼은 밀리지 않는다 — 고정 항목 뒤(지도 앱 앞).
+    const order = within(sheet)
+      .getAllByTestId(/^place-sheet-[a-z]+-toggle$/)
+      .map((node) => node.getAttribute('data-testid'));
+    expect(order).toEqual([
+      'place-sheet-hours-toggle',
+      'place-sheet-memo-toggle',
+      'place-sheet-links-toggle',
+      'place-sheet-about-toggle',
+      'place-sheet-maps-toggle',
+    ]);
     fireEvent.click(toggle);
     const intro = await within(sheet).findByTestId('place-sheet-introduction');
     expect(within(intro).getByTestId('place-sheet-introduction-overview').textContent).toContain(
@@ -472,8 +486,15 @@ describe('모바일 여행 상세 지도', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'marker 오죽헌' }));
     const sheet = await screen.findByTestId('place-sheet');
     await waitFor(() =>
-      expect(server.paths.some((p) => p.endsWith('/detail-card') && p.includes('poi-'))).toBe(true),
+      expect(server.paths.some((p) => p.endsWith('/detail-card') && p.includes('poi-c'))).toBe(
+        true,
+      ),
     );
+    // 응답(react-query)이 처리될 때까지 기다린 뒤 확인한다 — 늦게 나타나는 회귀를 잡는다.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(within(sheet).getByTestId('place-sheet-hours-toggle')).toBeTruthy();
     expect(within(sheet).queryByTestId('place-sheet-about-toggle')).toBeNull();
   });
 

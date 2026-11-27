@@ -48,8 +48,23 @@ _KOGL_URL: Final[dict[int, str]] = {
     3: "https://www.kogl.or.kr/info/licenseType3.do",
 }
 
-_TAG_RE: Final = re.compile(r"</?[A-Za-z][^<>]*>")
-"""태그 꼴만 지운다 — `a < b > c` 같은 본문 부등호는 남긴다(화면은 텍스트로 이스케이프해 그린다)."""
+_HTML_TAGS: Final = (
+    "a|abbr|b|big|blockquote|body|br|button|center|code|col|colgroup|dd|del|div|dl|dt|em|embed|"
+    "font|form|h[1-6]|head|hr|html|i|iframe|img|input|ins|label|li|link|meta|noscript|object|ol|"
+    "option|p|pre|s|script|section|select|small|source|span|strike|strong|style|sub|sup|svg|"
+    "table|tbody|td|textarea|tfoot|th|thead|title|tr|u|ul|video"
+)
+_TAG_RE: Final = re.compile(rf"</?(?:{_HTML_TAGS})(?:\s[^<>]*)?/?>", re.IGNORECASE)
+"""알려진 HTML 태그 이름만 지운다. `<A코스>`·`<Tip: 주차>`·`a < b > c` 같은 본문 꺾쇠는 원문 그대로 둔다
+(본문을 바꾸지 않는다 — 화면은 텍스트로 이스케이프해 그린다)."""
+
+_KOGL_BY_VALUE: Final[dict[str, KoglType]] = {
+    # Map `providers/visitkorea_attractions.py` `_KOGL_LICENSE` 값과 원천 코드만 정확히 맞춘다.
+    "type1": 1,
+    "type3": 3,
+    "공공누리 제1유형(출처표시)": 1,
+    "공공누리 제3유형(출처표시·변경금지)": 3,
+}
 _BR_RE: Final = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _SPACE_RE: Final = re.compile("[ \t\u00a0\u3000]+")
 
@@ -62,16 +77,18 @@ def _text(value: Any) -> str | None:
 
 
 def kogl_type(license_value: Any) -> KoglType | None:
-    """Map `license` 값(유형 이름 또는 원천 코드) → 공공누리 유형. 모르는 값은 None."""
+    """Map `license` 값(유형 이름 또는 원천 코드) → 공공누리 유형. 정확히 아는 값만, 나머지는 None."""
     text = _text(license_value)
     if text is None:
         return None
-    compact = text.replace(" ", "").lower()
-    if "제1유형" in compact or compact == "type1":
-        return 1
-    if "제3유형" in compact or compact == "type3":
-        return 3
-    return None
+    return _KOGL_BY_VALUE.get(text.lower())
+
+
+def _drop_control(text: str) -> str:
+    """제어·서식 문자(Cc/Cf — 양방향 제어 문자 포함)를 줄바꿈·탭(뒤에서 공백이 된다) 말고 지운다."""
+    return "".join(
+        ch for ch in text if ch in "\n\t" or unicodedata.category(ch) not in ("Cc", "Cf")
+    )
 
 
 def plain_overview(value: Any) -> str | None:
@@ -80,10 +97,7 @@ def plain_overview(value: Any) -> str | None:
     if text is None:
         return None
     text = _TAG_RE.sub("", _BR_RE.sub("\n", text))
-    # 제어·서식 문자(Cc/Cf — 양방향 제어 문자 포함)는 줄바꿈·탭(아래에서 공백이 된다) 말고 모두 지운다.
-    text = "".join(
-        ch for ch in text if ch in "\n\t" or unicodedata.category(ch) not in ("Cc", "Cf")
-    )
+    text = _drop_control(text)
     lines = [_SPACE_RE.sub(" ", line).strip() for line in text.replace("\r", "").split("\n")]
     paragraphs: list[str] = []
     blank = False
@@ -127,14 +141,13 @@ def tourapi_introduction(detail: Any, *, name: str) -> SourceIntroduction | None
     facility = detail.get("facility_info")
     if not isinstance(facility, dict) or _text(facility.get("tourapi_content_id")) is None:
         return None
-    # 출처 표시는 Map이 남긴 값을 따르되, TourAPI 행은 늘 한국관광공사다.
-    attribution = _text(facility.get("attribution")) or TOURAPI_ATTRIBUTION
     overview = plain_overview(facility.get("overview"))
     license_type = kogl_type(facility.get("license"))
     images: list[SourceImage] = []
     image_url = tourapi_image_url(facility.get("image_url"))
     if image_url is not None and license_type is not None:
-        alt = (name.strip() or "장소")[: _ALT_MAX - 10] + " 대표 사진"
+        base = " ".join(_drop_control(name).split()) or "장소"
+        alt = base[: _ALT_MAX - 10] + " 대표 사진"
         images.append(
             SourceImage(
                 url=image_url,
@@ -146,7 +159,8 @@ def tourapi_introduction(detail: Any, *, name: str) -> SourceIntroduction | None
     if overview is None and not images:
         return None
     return SourceIntroduction(
-        attribution=attribution[:100],
+        # TourAPI 행의 출처는 늘 한국관광공사다 — Map 값으로 바꿔 달지 않는다(이용약관 필수 표시).
+        attribution=TOURAPI_ATTRIBUTION,
         overview=overview,
         images=images,
         # 공공누리 표시는 이미지에 걸린 유형이다 — 이미지를 싣지 않으면 유형도 싣지 않는다.

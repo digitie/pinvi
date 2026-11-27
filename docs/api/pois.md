@@ -280,21 +280,24 @@ iOS 앱 스킴(`nmap://`, `kakaomap://`) 뒤 화면이 그대로면 1.5초 뒤 �
 국문 관광정보 서비스(KorService2, data.go.kr 15101578)에서 적재한 관광지·문화시설·레포츠 feature의
 `detail.facility_info`(`tourapi_content_id`가 있는 행만)를 투영한다(`app/services/source_introduction.py`).
 
-| 필드                                          | 뜻                                                                                                                                          |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provider`                                    | `tourapi`                                                                                                                                   |
-| `attribution`                                 | 출처 표시 문구 — `한국관광공사`                                                                                                             |
-| `overview`                                    | `detailCommon2` 소개문. 서버가 태그 꼴·제어 문자를 걷어 낸 평문(줄바꿈 보존). 20,000자를 넘으면 자르지 않고 싣지 않는다(제3유형 변경금지).  |
-| `images[]`                                    | 대표 이미지 원본 URL(`firstimage`, 최대 1장). `*.visitkorea.or.kr` https만, `http`는 같은 주소 https로. 공공누리 유형을 모르면 싣지 않는다. |
-| `images[].no_derivatives`                     | 제3유형(변경금지)이면 `true`                                                                                                                |
-| `kogl_type` / `license_label` / `license_url` | 이미지의 공공누리 유형(1·3), 표시 문구, kogl.or.kr 유형 설명 링크. 이미지가 없으면 `null`                                                   |
+| 필드                                          | 뜻                                                                                                                                                                                     |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`                                    | `tourapi`                                                                                                                                                                              |
+| `attribution`                                 | 출처 표시 문구 — `한국관광공사`                                                                                                                                                        |
+| `overview`                                    | `detailCommon2` 소개문. 서버가 알려진 HTML 태그·제어 문자를 걷어 낸 평문(줄바꿈 보존, `<A코스>` 같은 본문 꺾쇠는 그대로). 20,000자를 넘으면 자르지 않고 싣지 않는다(제3유형 변경금지). |
+| `images[]`                                    | 대표 이미지 원본 URL(`firstimage`, 최대 1장). `*.visitkorea.or.kr` https만, `http`는 같은 주소 https로. 공공누리 유형(Map 라벨·`Type1`/`Type3` 정확히 일치)을 모르면 싣지 않는다.      |
+| `images[].no_derivatives`                     | 제3유형(변경금지)이면 `true`                                                                                                                                                           |
+| `kogl_type` / `license_label` / `license_url` | 이미지의 공공누리 유형(1·3), 표시 문구, kogl.or.kr 유형 설명 링크. 이미지가 없으면 `null`                                                                                              |
 
 화면 규칙(웹 `components/map/SourceIntroduction.tsx`, 모바일 `components/SourceIntroduction.tsx`):
 
-- 지도 상세 카드는 주소 위에, 여행 장소 정보 패널(웹 `PlaceInfoPanel`)·장소 시트(모바일 `PlaceSheet`)는 맨 앞
-  `소개` 항목으로 둔다. 소개문·이미지가 둘 다 없으면 블록·항목을 만들지 않는다. 여행 장소 쪽은 저장하지 않고
+- 지도 상세 카드는 주소 위에, 여행 장소 정보 패널(웹 `PlaceInfoPanel`)·장소 시트(모바일 `PlaceSheet`)는 고정 항목 뒤·지도 앱 앞의
+  `소개` 항목으로 둔다(응답이 늦게 와도 앞 버튼이 밀리지 않게). 소개문·보이는 이미지가 둘 다 없으면(이미지가 깨진 경우 포함) 블록·항목을 만들지 않는다. 여행 장소 쪽은 저장하지 않고
   같은 detail-card를 읽는다(`trip_poi_place_details` 변경 없음).
 - 이미지는 서버가 내려받거나 줄이지 않는다. 화면은 원본 URL을 크롭·필터 없이 원본 비율(`object-contain`,
   RN `resizeMode="contain"`)로 그리고, 누르면 원본을 새 창으로 연다. 불러오지 못하면 틀과 공공누리 표시를 함께 뺀다.
 - 소개문은 텍스트로만 그린다(`dangerouslySetInnerHTML` 없음). 4줄·140자를 넘으면 접고 `소개 더 보기`로 펼친다.
 - 출처 줄 `출처: 한국관광공사`는 소개문·이미지 중 하나라도 보이면 늘 붙는다. 이미지가 보이면 공공누리 유형 링크도 붙는다.
+- 이미지 URL(`*.visitkorea.or.kr` https)과 공공누리 링크(`https://www.kogl.or.kr/`)는 화면도 `@pinvi/domain`
+  `sourceIntroduction.ts`로 한 번 더 거른다(서버 검증과 이중). 이미지 틀은 고정 높이(웹 `h-56`, 모바일 180)이고
+  모서리를 깎지 않는다.

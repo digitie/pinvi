@@ -14,6 +14,7 @@ import {
 import { useMinuteNow, usePoiWeather } from '@/lib/usePoiWeather';
 import {
   activeAlerts,
+  introductionHasContent,
   hasAnyPlaceDetail,
   placeDetailsSourceLine,
   telHref,
@@ -406,6 +407,8 @@ export function PlaceInfoPanel({
   // 출처 소개(TourAPI 소개문·대표 이미지)는 지도 상세 카드와 같은 서버 투영을 읽는다 — 저장하지 않는다.
   const { card: featureCard } = useFeatureDetailCard(poi.feature_id);
   const introduction = featureCard?.kind === 'place' ? featureCard.introduction : null;
+  // 깨진 이미지는 패널이 기억한다 — 항목을 접었다 펴도 다시 받지 않고, 항목 존재와 내용이 같은 기준을 쓴다.
+  const [failedImageUrls, setFailedImageUrls] = useState<ReadonlySet<string>>(() => new Set());
 
   const sections: SectionDef[] = [
     {
@@ -456,13 +459,21 @@ export function PlaceInfoPanel({
       content: <LinksContent userUrl={poi.user_url} website={details?.website ?? null} />,
     },
   ];
-  if (introduction) {
-    // 보여 줄 소개가 있을 때만 항목을 만든다(빈 항목 없음). 장소를 처음 보는 사람에게 가장 앞에 둔다.
-    sections.unshift({
+  if (introductionHasContent(introduction, failedImageUrls)) {
+    // 보여 줄 소개가 있을 때만 항목을 만든다(빈 항목 없음). 응답이 늦게 와도 앞 항목 버튼이 밀리지 않게
+    // 고정 항목 뒤(지도 앱 앞)에 붙는다. 이미지가 깨져 내용이 사라지면 항목도 사라진다(펼침도 풀린다).
+    sections.push({
       key: 'about',
       title: '소개',
       icon: <Info className="h-4 w-4" />,
-      content: <SourceIntroduction introduction={introduction} testId="place-info-introduction" />,
+      content: (
+        <SourceIntroduction
+          introduction={introduction}
+          testId="place-info-introduction"
+          failedImageUrls={failedImageUrls}
+          onImageError={(url) => setFailedImageUrls((prev) => new Set(prev).add(url))}
+        />
+      ),
     });
   }
   if (mapLinks.length > 0) {

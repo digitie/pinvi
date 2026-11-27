@@ -40,7 +40,7 @@ def _detail(**over: Any) -> dict[str, Any]:
 
 
 def test_type3_image_overview_and_attribution() -> None:
-    intro = tourapi_introduction(_detail(), name="산막이옛길")
+    intro = tourapi_introduction(_detail(), name="산막이\u202e옛길\n")
     assert intro is not None
     assert intro.provider == "tourapi"
     assert intro.attribution == "한국관광공사"
@@ -68,7 +68,11 @@ def test_type1_image_allows_derivatives_flag_false() -> None:
 def test_raw_type_codes_are_understood() -> None:
     assert kogl_type("Type1") == 1
     assert kogl_type("Type3") == 3
-    assert kogl_type("공공누리 제 3 유형") == 3
+    assert kogl_type("type3") == 3
+    assert kogl_type("공공누리 제1유형(출처표시)") == 1
+    # 정확히 아는 값만 — 비슷한 문구·여러 유형이 섞인 문구는 조건을 단정할 수 없어 None이다.
+    assert kogl_type("공공누리 제 3 유형") is None
+    assert kogl_type("공공누리 제1유형 … 제3유형") is None
     assert kogl_type("Type2") is None
     assert kogl_type("") is None
     assert kogl_type(None) is None
@@ -120,10 +124,18 @@ def test_non_tourapi_rows_are_ignored(detail: Any) -> None:
     assert tourapi_introduction(detail, name="x") is None
 
 
-def test_missing_attribution_falls_back_to_kto() -> None:
-    intro = tourapi_introduction(_detail(attribution=None), name="x")
+@pytest.mark.parametrize("value", [None, "", "다른 기관"])
+def test_attribution_is_always_kto(value: str | None) -> None:
+    """TourAPI 행의 출처는 Map 값과 상관없이 늘 한국관광공사다(이용약관 필수 표시)."""
+    intro = tourapi_introduction(_detail(attribution=value), name="x")
     assert intro is not None
     assert intro.attribution == "한국관광공사"
+
+
+def test_alt_drops_control_characters() -> None:
+    intro = tourapi_introduction(_detail(), name="산막이\u202e옛길\n")
+    assert intro is not None
+    assert intro.images[0].alt == "산막이옛길 대표 사진"
 
 
 @pytest.mark.parametrize(
@@ -165,6 +177,11 @@ def test_disallowed_image_host_is_dropped() -> None:
         ('<img src=x onerror="alert(1)">사진', "사진"),
         # 태그 꼴이 아닌 부등호는 본문이라 남긴다(화면이 텍스트로 이스케이프한다).
         ("a < b > c", "a < b > c"),
+        # 태그 이름이 아닌 꺾쇠 본문은 원문 그대로 둔다(본문 변경 금지).
+        ("<A코스> 2시간, <B코스> 3시간 <Tip: 주차>", "<A코스> 2시간, <B코스> 3시간 <Tip: 주차>"),
+        ("<K-POP 체험>", "<K-POP 체험>"),
+        ('<P class="x">문단</P><BR/>끝', "문단\n끝"),
+        ("<font color=red>빨강</font>", "빨강"),
         ("1 <2", "1 <2"),
         ("  여러   칸\t공백  ", "여러 칸 공백"),
         ("줄1\n\n\n\n줄2", "줄1\n\n줄2"),
@@ -187,7 +204,7 @@ def test_overlong_overview_is_omitted_not_truncated() -> None:
 
 
 def test_long_name_alt_fits_schema() -> None:
-    intro = tourapi_introduction(_detail(), name="가" * 500)
+    intro = tourapi_introduction(_detail(), name="산막이\u202e옛길\n")
     assert intro is not None
     assert len(intro.images[0].alt) <= 200
 

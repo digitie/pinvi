@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { FeatureDetailCard, SourceIntroduction as Intro } from '@pinvi/schemas';
 import { FeatureDetailCardBody } from '@/components/map/FeatureDetailCardBody';
 import { SourceIntroduction } from '@/components/map/SourceIntroduction';
@@ -106,6 +106,37 @@ describe('SourceIntroduction', () => {
     render(<SourceIntroduction introduction={intro({ overview: null })} testId={T} />);
     fireEvent.error(screen.getByTestId(`${T}-image`));
     expect(screen.queryByTestId(T)).not.toBeInTheDocument();
+  });
+
+  it('허용 밖 이미지 호스트·공공누리 링크는 화면에서도 거른다(서버 검증과 이중)', () => {
+    render(
+      <SourceIntroduction
+        introduction={intro({
+          images: [
+            { url: 'https://evil.example/a.jpg', alt: 'x', kogl_type: 1, no_derivatives: false },
+          ],
+        })}
+        testId={T}
+      />,
+    );
+    expect(screen.queryByTestId(`${T}-image`)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(`${T}-license`)).not.toBeInTheDocument();
+    cleanup();
+    render(
+      <SourceIntroduction
+        introduction={intro({ license_url: 'javascript:alert(1)' })}
+        testId={T}
+      />,
+    );
+    expect(screen.getByTestId(`${T}-image`)).toBeInTheDocument();
+    expect(screen.queryByTestId(`${T}-license`)).not.toBeInTheDocument();
+  });
+
+  it('이미지 틀은 고정 높이이고 모서리를 깎지 않는다(변경금지 — 원본 그대로)', () => {
+    render(<SourceIntroduction introduction={intro()} testId={T} />);
+    const link = screen.getByTestId(`${T}-image-link`);
+    expect(link.className).toContain('h-56');
+    expect(link.className).not.toMatch(/rounded|overflow-hidden/);
   });
 
   it('이미지가 깨지면 공공누리 표시도 뺀다(소개문은 남는다)', () => {
