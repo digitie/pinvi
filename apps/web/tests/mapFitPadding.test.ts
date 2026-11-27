@@ -201,7 +201,7 @@ describe('하단 통계 칩 맞춤 여백', () => {
   });
 });
 
-it('검색 아래 경로·영역 컨트롤과 교통 패널 사이의 숨은 핀도 피한다', () => {
+it('검색 아래 오버레이 컨트롤과 교통 패널 사이의 숨은 핀도 피한다', () => {
   const stack = document.createElement('div');
   const geometry = document.createElement('div');
   const transport = document.createElement('div');

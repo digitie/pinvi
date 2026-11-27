@@ -58,6 +58,8 @@ Geo623은 공식202605 보존 원천67행을 실제COPY/generated columns/정본
 
 ## Map 1450 국립공원 경계 적재
 
+> 2026-11-27: PinVi 지도의 경로·영역 레이어를 소유자 결정으로 제거했다. SRCH-023/024/028은 blocked이고 `PINVI_E2E_GEOMETRY_*_ANCHOR_QUERY`는 더 전달하지 않는다. 아래 SRCH-028·anchor 절차는 기록으로만 남긴다.
+
 **최신 상태: 최초 적재·운영 검증 완료, 갱신 정책 때문에 OPEN.** [Claude Code 운영 결과](https://github.com/digitie/kor-travel-map/issues/1450#issuecomment-6670520886)는 정식 경계21건·서빙 Polygon·실제 SRCH-028 통과를 확인했다. [Pinvi PR692](https://github.com/digitie/pinvi/pull/692)/d02a35d가 scripted 복귀를 반영했다. 남은 것은 갱신 주기와 다른 미적재 dataset 포함 여부의 소유자 결정이다. 초회 요청을 다시 제출하지 않는다. 아래는 재발 진단 절차다.
 
 [Map1450](https://github.com/digitie/kor-travel-map/issues/1450)은 2026-11-05 zoom7 전국 조회에서 items/clusters가0건이었다는 운영 기록이다. 이 zoom은 시·도 cluster 모드이고 행정코드NULL을 제외하므로 이 응답만으로 DB 전체 area0건을 확정할 수 없다. 국립공원 경계는 `knps_park_boundaries`이고 `knps_protected_areas`는 한국보호지역 데이터다. 후자를 적재했다고 설악산 국립공원 경계를 확인한 것으로 처리하지 않는다.

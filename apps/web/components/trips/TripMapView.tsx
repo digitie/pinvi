@@ -746,7 +746,7 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
         {overlayTopLeft != null ? (
           <TripMapViewView0Part0 viewModel={viewModel} />
         ) : (
-          (showFeatures || transport.visible) && <TripMapViewView0Part1 viewModel={viewModel} />
+          transport.visible && <TripMapViewView0Part1 viewModel={viewModel} />
         )}
         <VWorldMap
           apiKey={apiKey}
@@ -916,7 +916,6 @@ function TripMapViewView0Part0({ viewModel }: { viewModel: TripMapViewView0Model
     overlayStackRef,
     overlayTopLeftClassName,
     overlayTopLeft,
-    showFeatures,
     transport,
     layerControls,
   } = viewModel;
@@ -928,7 +927,7 @@ function TripMapViewView0Part0({ viewModel }: { viewModel: TripMapViewView0Model
       data-map-overlay=""
     >
       <div className="pointer-events-auto">{overlayTopLeft}</div>
-      {(showFeatures || transport.visible) && (
+      {transport.visible && (
         <div className="pointer-events-auto mt-2 w-64 max-w-[80%]">{layerControls}</div>
       )}
     </div>
@@ -936,15 +935,13 @@ function TripMapViewView0Part0({ viewModel }: { viewModel: TripMapViewView0Model
 }
 
 function TripMapViewView0Part1({ viewModel }: { viewModel: TripMapViewView0Model }) {
-  const { showFeatures, transport, layerControls } = viewModel;
+  const { layerControls } = viewModel;
   return (
     <div
       className="pointer-events-none absolute left-2 top-2 z-10 w-64 max-w-[70%]"
       data-map-overlay=""
     >
-      {(showFeatures || transport.visible) && (
-        <div className="pointer-events-auto">{layerControls}</div>
-      )}
+      <div className="pointer-events-auto">{layerControls}</div>
     </div>
   );
 }

@@ -244,7 +244,7 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | #632 | closed, no change (D7) | 비관리자 admin API 는 404 RESOURCE_NOT_FOUND 유지 | ADM-003/004 |
 | #633 | fixed (#657, D8 변경) | 여행 휴지통·복원 | TRIP-043 — 삭제 → 휴지통 → 복원(초안·장소 보존) |
 | #634 | done (#659) | Kakao/Naver pick 자동 feature 제안의 admin 삭제·dry-run | POI-014/015, ADM-031, D1 |
-| #635 | done (#665 + 리뷰 PR) | route·area kind 렌더링 | SRCH-023/024 scripted(기본 근처 point 설악산국립공원·북한산성), SRCH-028 데이터 blocked |
+| #635 | done (#665 + 리뷰 PR) | route·area kind 렌더링 | SRCH-023/024 scripted였다가 2026-11-27 레이어 제거로 blocked(SRCH-028도) |
 | #636 | done (#688) | '일정 정보 알람으로 보내기' | NTF-020(chat 필요)·NTF-027 scripted |
 | #637 | done (#689) | 기상 특보 Telegram 알림 | NTF-018 scripted(동의), NTF-030 manual(실제 발표) |
 | #638 | done (#688) | 일간/주간 브리프 예약 알림 | NTF-019·NTF-028(chat 필요) scripted, NTF-029 manual(예약 회차) |
@@ -271,7 +271,7 @@ TRIP-043 은 고쳐진 동작을 단언하도록 바꿨다. CORE-024(#622)는 20
 | #684 | bug | 요청 한도 미들웨어가 핸들러 DB 오류를 503 "한도 저장소 사용 불가"로 바꿈 + 여행 조회 rise/set 동시 INSERT 경합 | TRIP-003 (2026-11-05 경합, 재실행 통과) |
 | #667 | done (#681) | 휴지통 30일 보존·첨부 객체 GC | TRIP-043(안내·복원 기한), TRIP-058(만료 = 삭제 + 30일), ADM-041(정리 확인창 취소만) |
 | #618·#623·#686 | done (#693) | 검사 격리·여행 지도 가림·선택 위치/offset | CORE-021, NEAR-006/024/025, CORE-025 — 운영 재실행으로 종료 |
-| kor-travel-map#1450 | data | 운영 Map area kind 0건(KNPS 국립공원 경계 미적재) | SRCH-028 (blocked) |
+| kor-travel-map#1450 | data | 운영 Map area kind 0건(KNPS 국립공원 경계 미적재) | SRCH-028 (적재 뒤 scripted, 2026-11-27 레이어 제거로 다시 blocked) |
 
 #624 는 prod 재확인(2026-11-03) 때 **500 INTERNAL_ERROR** 였고 #654 가 422 로 바꿨다. 리뷰 PR 이 다이얼로그에서
 요청 전에 종료일 필드로 안내하고 API 문구를 한국어('종료일은 시작일 이후여야 합니다.')로 맞췄다. 이 표의

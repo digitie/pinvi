@@ -45,7 +45,7 @@ function incidentsOf(results: readonly TransportLayerResult[]): HighwayIncidentI
 }
 
 /**
- * 교통 레이어 체크박스(주유소·교통 돌발) — 지도 레이어 패널에서 경로·영역 체크박스와 같은 줄에 놓인다
+ * 교통 레이어 체크박스(주유소·교통 돌발) — 지도 레이어 패널의 체크박스 줄이다
  * (`MapLayerControls`). `state.visible`이 false면 아무것도 그리지 않는다.
  */
 export function TransportLayerToggles({ state }: { state: TransportLayersState }) {

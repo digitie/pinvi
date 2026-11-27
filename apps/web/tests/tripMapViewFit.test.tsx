@@ -52,7 +52,7 @@ vi.mock('@/lib/useTransportLayers', () => ({
     detail: null,
   }),
 }));
-// 지도 레이어 패널(경로·영역·교통) — 교통 레이어가 보일 때 맞춤이 피할 패널이다.
+// 지도 레이어 패널(교통) — 교통 레이어가 보일 때 맞춤이 피할 패널이다.
 vi.mock('@/components/map/MapLayerControls', () => ({
   MapLayerControls: ({ transport }: { transport: { visible: boolean } | null }) =>
     transport?.visible ? <div data-map-fit-panel="" data-testid="fit-panel" /> : null,
