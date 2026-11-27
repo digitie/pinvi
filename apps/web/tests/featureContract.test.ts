@@ -42,6 +42,7 @@ describe('feature 공개 계약 — status 제거', () => {
         'marker_icon',
         'distance_m',
         'geometry',
+        'route',
       ].sort(),
     );
   });

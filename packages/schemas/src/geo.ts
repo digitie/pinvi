@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FeatureKindSchema, RouteSummarySchema } from './feature';
 
 /** kor-travel-geo v2 candidate는 풍부/가변이라 pass-through(record). 좌표는 (lon, lat). */
 const CandidateSchema = z.record(z.string(), z.unknown());
@@ -53,6 +54,9 @@ export const PlaceSearchResultSchema = z.object({
   marker_icon: z.string().nullable().default(null),
   provider_url: z.string().nullable().default(null),
   phone: z.string().nullable().default(null),
+  // 선택 키다(외부·주소 행에는 없다). 요약이 계약을 어기면 요약만 비운다.
+  kind: z.optional(FeatureKindSchema.nullable().catch(null)),
+  route: z.optional(RouteSummarySchema.nullable().catch(null)),
 });
 export type PlaceSearchResult = z.infer<typeof PlaceSearchResultSchema>;
 

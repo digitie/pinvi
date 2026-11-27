@@ -68,6 +68,7 @@ from app.schemas.feature import (
     FeatureSummary,
     FeatureWeatherCard,
     PlaceDetailCard,
+    RouteSummary,
 )
 from app.services.category_labels import (
     EMPTY_CATEGORY_LABELS,
@@ -215,6 +216,7 @@ def _summary_from_kor_travel_map(
         marker_icon=dto.get("marker_icon") or "marker",
         distance_m=float(distance) if distance is not None else None,
         geometry=dto.get("geometry"),
+        route=RouteSummary.from_kor_travel_map(dto.get("route")),
     )
 
 
@@ -251,6 +253,7 @@ def _detail_from_kor_travel_map(
         marker_icon=dto.get("marker_icon") or "marker",
         urls=dto.get("urls") if isinstance(dto.get("urls"), dict) else {},
         detail=dto.get("detail") if isinstance(dto.get("detail"), dict) else {},
+        route=RouteSummary.from_kor_travel_map(dto.get("route")),
         updated_at=dto.get("updated_at") or datetime.now(UTC),
     )
 

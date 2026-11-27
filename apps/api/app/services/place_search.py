@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import html
 import re
-from typing import Any
+from typing import Any, cast, get_args
 from urllib.parse import urlsplit, urlunsplit
 
+from app.schemas.feature import FeatureKind, RouteSummary
 from app.schemas.search import PlaceCoord, PlaceSearchResult
 from app.services.category_labels import EMPTY_CATEGORY_LABELS, CategoryLabels
 
@@ -121,7 +122,13 @@ def feature_item_to_result(
         category_label=labels.label(category),
         marker_color=_clean(item.get("marker_color")),
         marker_icon=_clean(item.get("marker_icon")),
+        kind=_feature_kind(item.get("kind")),
+        route=RouteSummary.from_kor_travel_map(item.get("route")),
     )
+
+
+def _feature_kind(value: object) -> FeatureKind | None:
+    return cast("FeatureKind", value) if value in get_args(FeatureKind) else None
 
 
 # geo v2 `match_kind` 중 도로명 주소 후보. 나머지(parcel=지번, region 등)는 `address`에 둔다.

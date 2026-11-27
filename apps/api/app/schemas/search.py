@@ -11,6 +11,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.feature import FeatureKind, RouteSummary
+
 PlaceSearchSource = Literal["feature", "my_poi", "address", "kakao", "naver"]
 
 
@@ -46,6 +48,10 @@ class PlaceSearchResult(BaseModel):
     provider_url: str | None = None
     # provider 전화 — 표시 전용, 절대 저장하지 않는다(ADR-054 §7).
     phone: str | None = None
+    # source=feature의 Map kind와 route 요약(Map ADR-128). 등산 코스를 일정에 넣으면 coord(=출발점)에
+    # POI가 생기고 요약은 feature_snapshot에 함께 남는다.
+    kind: FeatureKind | None = None
+    route: RouteSummary | None = None
 
 
 class PlaceSearchResponse(BaseModel):

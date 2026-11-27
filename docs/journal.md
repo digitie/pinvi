@@ -1,3 +1,17 @@
+## 2026-11-27 (claude) — 등산 코스를 일정에 추가(Map ADR-128 `route` 요약)
+
+- 출처: 소유자 결정 — 숲길 구간을 코스로 묶은 Map(ADR-128)의 등산 코스를 PinVi에서 일정에 넣는다. 기본값: 코스
+  **출발점**에 POI 하나(도착 POI는 만들지 않는다), `feature_id` = 코스 feature, 거리·소요시간은 기존 `feature_snapshot`에.
+- Map은 등산 코스 feature의 좌표(`lon`/`lat`)를 출발점으로 두고, 목록·상세·batch trip card에 `route` 요약
+  (`route_type`·`length_m`·`duration_minutes`·`duration_basis`·`difficulty`·`shape`·`start`/`end`)을 싣는다.
+- API: `RouteSummary` 스키마(`FeatureSummary`·`FeatureDetail`·검색 `PlaceSearchResult`에 `route`, 검색에 `kind`), batch
+  trip card의 additive `route`를 읽어 trip view snapshot에 싣는다(계약 위반 요약은 요약만 버림). 스키마 변경·migration 없음.
+- web: 지도 feature·검색 결과로 코스를 추가하면 snapshot에 `kind`·`route`가 남고, 일정 항목에
+  `등산 코스 · 4.2 km · 약 2시간 30분(추정) · 보통` 줄(`@pinvi/domain` `routeSummaryLine`)이 보인다. 검색 목록·여행 지도
+  팝업도 같은 줄을 보인다. 날씨·일출몰은 POI 좌표(= 출발점)를 그대로 쓴다.
+- 미구현(선택): 여행 지도에 코스 선 그리기 — in-bounds `include_geometry`·`kinds` 계약은 남아 있으나 레이어 코드는 #805가
+  지웠다. 비용 대비 후속.
+- 배포: Map API 회전(ADR-128 공개 `route`) 뒤에야 값이 채워진다. 그 전에는 `route`가 없어 종전과 같다.
 ## 2026-11-27 (claude) — 휴게소·고속도로 주유소 상세에 한국도로공사 메뉴(먹거리) 표시
 
 - 소유자 승인 계획(조사 보고서 2순위, LLM 없음): Map(ADR-127, kor-travel-map #1568)이 transport가 모은 한국도로공사
