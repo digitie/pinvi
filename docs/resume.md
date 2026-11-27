@@ -20,6 +20,7 @@
 - 배포: API·web 이미지(같은 회전, 순서 무관 — 새 필드는 nullable). 모바일은 다음 앱 빌드. 마이그레이션 없음.
 - 다음 후보: Map in-bounds에 제외 필터(클러스터 개수 정확도), Map 상태 표면에 `is_kpetro`·`is_electronic` 추가(transport export에는 있다) → PinVi 품질인증 배지.
 
+
 ## 2026-11-27 (claude) — web e2e 두 건 흔들림 원인 수정(main red 복구)
 
 - 출처: `web` workflow가 main `929b4243`(#805)에서 빨강. 실패는 두 시험이고 둘 다 앱 회귀가 아니라 시험의 측정 경쟁이다.

@@ -134,12 +134,9 @@ function FuelHistory({ featureId }: { featureId: string }) {
   );
   if (sold.length === 0) {
     return (
-      <p
-        className="text-sm text-muted"
-        data-testid="transport-price-history-unavailable"
-        data-reason=""
-      >
-        가격 추이는 아직 제공되지 않습니다.
+      // 추이는 왔지만 판매한 날이 없다 — "미제공"과 다르다(오류 아님).
+      <p className="text-sm text-muted" data-testid="transport-price-history-empty">
+        최근 {HISTORY_DAYS}일 동안 표시할 판매 가격이 없습니다.
       </p>
     );
   }

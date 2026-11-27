@@ -78,6 +78,23 @@ describe('fuel price rows', () => {
     ]);
   });
 
+  it('오래됨은 transport observed_at 규칙 — 제공기관 갱신 시각이 있으면 그것으로 판정한다', () => {
+    // 오늘 다시 수집했어도 공시가가 8일째 그대로면 오래됨(transport와 같다).
+    const stale = {
+      ...price('B027', 'gasoline', 1689),
+      provider_updated_at: '2026-10-15T09:00:00+09:00',
+    };
+    const fresh = {
+      ...price('D047', 'diesel', 1540, '2026-10-01T09:00:00+09:00'),
+      provider_updated_at: '2026-10-22T09:00:00+09:00',
+    };
+    const rows = fuelStationPriceRows([stale, fresh], NOW);
+    expect(rows.map((r) => [r.key, r.old, r.observedAt])).toEqual([
+      ['B027', true, '2026-10-15T09:00:00+09:00'],
+      ['D047', false, '2026-10-22T09:00:00+09:00'],
+    ]);
+  });
+
   it('같은 유종이 두 번 오면 첫 행만', () => {
     const rows = fuelStationPriceRows(
       [price('B027', 'gasoline', 1689), price('B027', 'gasoline', 1700)],

@@ -270,6 +270,7 @@ There are no progressive elevation tiers — the system either has the one shado
 | **cta(채운 CTA)** | `cta` / `cta-hover`                            | #e00b41 / #c8093a                     | oklch(57.7% 0.228 18.5) / oklch(53% 0.209 18.2)                         |
 | focus             | `focus`                                        | #ff385c                               | oklch(65.8% 0.231 17)                                                   |
 | error / success   | `error-text` / `success-text`                  | #c13515 / #1b873f                     | oklch(53.9% 0.182 33.7) / —                                             |
+| warning           | `warning-text` / `warning-bg`                  | #8a5300 / #fdf3e3                     | — (bg 위 5.76:1, 흰 배경 6.33:1 — "오래됨" 등 주의 배지)               |
 
 **대비 결정(C5)**: white 라벨을 Rausch `#ff385c` 위에 올리면 3.5:1(AA 미달)이라 **본문 크기 채운 CTA는 `cta`(#e00b41, 4.9:1)**를 쓴다. Rausch는 아이콘·워드마크·포커스 링·≥24px 텍스트 전용. 인라인 링크는 `text-ink underline`(hairline decoration → hover ink); `muted-soft`는 disabled 텍스트 전용(본문 3.1:1 미달). accent는 뷰포트당 1~2 moment(페이지당 채운 primary CTA 1개 — 마케팅은 hero, 폼은 submit; masthead·마무리 CTA·보조 액션은 secondary/ghost).
 

@@ -214,21 +214,27 @@ export function TransportItemCard({
         </Pressable>
       </View>
       {subtitle ? <Body>{subtitle}</Body> : null}
-      {fuel.brand ? <Body className="font-semibold">{fuel.brand}</Body> : null}
+      {/* 굵기는 weight가 아니라 정적 글꼴 family로(Body의 font-pinvi-regular 위에 weight만 얹으면 기기에서 굵지 않다). */}
+      {fuel.brand ? (
+        <Text className="text-sm font-pinvi-semibold text-ink">{fuel.brand}</Text>
+      ) : null}
       {fuel.rows.map((row) => (
         <View
           key={row.key}
           className="flex-row items-center justify-between gap-2 border-b border-hairline py-1"
           testID={`transport-fuel-price-${row.key}`}
+          accessible
+          accessibilityLabel={`${row.label} ${formatFuelPrice(row.price)}${row.old ? ', 오래됨' : ''}`}
         >
           <Body>{row.label}</Body>
           <View className="flex-row items-center gap-2">
             {row.old ? (
-              <Text className="rounded-full bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-text">
-                오래됨
-              </Text>
+              // iOS Text는 배경을 둥글게 자르지 않는다 — View가 모양을 갖는다.
+              <View className="overflow-hidden rounded-full bg-warning-bg px-2 py-0.5">
+                <Text className="text-xs font-pinvi-semibold text-warning-text">오래됨</Text>
+              </View>
             ) : null}
-            <Body className="font-bold">{formatFuelPrice(row.price)}</Body>
+            <Text className="text-sm font-pinvi-bold text-ink">{formatFuelPrice(row.price)}</Text>
           </View>
         </View>
       ))}

@@ -107,7 +107,8 @@ kor-travel-map 호출: `GET /v1/features/in-bounds` (평면 `lon`/`lat`, `cluste
 Map krex 교통 notice(`99000000` + `marker_icon=roadblock`)는 `items`에서 뺀다. 지도에서 이 둘은 transport 레이어
 ("주유소"·"교통 돌발" 토글)만 그린다 — 토글을 끄면 보이지 않고, 켜면 한 번만 보인다. `category`로 주유소 계층을 명시해
 고르면 그대로 돌려준다. Map 서버 클러스터(`clusters[]`) 개수는 Map이 세므로 이 항목을 포함한다(Map에 제외 필터가 없다).
-통합 검색(`GET /search`)과 여행 장소(POI)는 사용자가 고른 것이라 거르지 않는다.
+통합 검색(`GET /search`)과 여행 장소(POI)는 사용자가 고른 것이라 거르지 않는다. 거른 몫을 채우려고 Map에는 여유분(limit의
+1/5, 최소 20, Map 상한 안)을 더 청하고 응답은 `limit`으로 자른다(잘렸으면 `truncated=true`).
 
 Rate limit: 분당 60회 per user. 클라이언트 측 디바운스 250ms + AbortController 권장.
 

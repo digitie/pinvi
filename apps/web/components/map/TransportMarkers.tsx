@@ -7,7 +7,7 @@ import { ClusterLayer, MakiMarker, Marker } from '@/components/map/vworldPrimiti
 import { markerZIndex } from '@/lib/markerStacking';
 import type { TransportDetailTarget, TransportMapPoint } from '@/lib/useTransportLayers';
 import { transportLayerLabel, transportMarkerBudget } from '@pinvi/domain';
-import { useSyncExternalStore } from 'react';
+import { useSyncExternalStore, type CSSProperties } from 'react';
 
 export interface TransportMarkersProps {
   points: TransportMapPoint[];
@@ -20,8 +20,10 @@ export const TRANSPORT_BADGE_SIZE = 24;
 const TRANSPORT_BADGE_ICON_SIZE = 14;
 /** 화면 예산을 넘었을 때의 묶음 반경(px). 주유소 마커는 로고 + 가격 라벨이라 넓다. */
 const DENSE_CLUSTER_RADIUS = 60;
-/** 이 줌까지 묶는다(그 위는 펼친다). */
-const DENSE_CLUSTER_MAX_ZOOM = 16;
+/** 예산을 넘으면 이 줌까지 묶는다(예전과 같은 14 — 줌 15 이상은 늘 펼친다). */
+const DENSE_CLUSTER_MAX_ZOOM = 14;
+/** transport `clusterAtScale`의 상세 줌(11) 미만은 개수와 무관하게 묶는다 — 교통 돌발은 줌 7부터 온다. */
+const ALWAYS_CLUSTER_MAX_ZOOM = 10;
 
 function subscribeResize(callback: () => void) {
   window.addEventListener('resize', callback);
@@ -32,6 +34,9 @@ const viewportArea = () => `${window.innerWidth}x${window.innerHeight}`;
 /**
  * 화면 면적 대비 마커가 많을 때만 묶는다(transport `clusterAtScale`). 적으면 전부 펼쳐 가격 라벨을 바로
  * 읽게 한다 — 줌 11~14에서도 몇 곳뿐이면 묶음 거품을 보이지 않는다.
+ *
+ * 근사: transport는 지도 크기와 화면 안 장소 수로 세지만, 이 layer는 지도 인스턴스 밖(마커 portal)이라 창 크기와
+ * 받은 항목 수(주유소+돌발)로 센다. 여행 지도 반경 결과처럼 화면보다 넓은 응답은 조금 더 일찍 묶인다.
  */
 function useDenseClustering(count: number): boolean {
   const size = useSyncExternalStore(subscribeResize, viewportArea, () => '0x0');
@@ -54,8 +59,8 @@ export function TransportMarkers({ points, selectedId, onSelect }: TransportMark
     <ClusterLayer
       points={points}
       radius={DENSE_CLUSTER_RADIUS}
-      // 예산 안이면 묶지 않는다(maxZoom 0 = 어느 줌에서도 묶지 않음).
-      maxZoom={dense ? DENSE_CLUSTER_MAX_ZOOM : 0}
+      // 예산 안이면 줌 11부터 펼친다(supercluster는 maxZoom 이하 줌에서만 묶는다).
+      maxZoom={dense ? DENSE_CLUSTER_MAX_ZOOM : ALWAYS_CLUSTER_MAX_ZOOM}
       renderMarker={(point) => {
         const p = point as TransportMapPoint;
         const selected = p.id === selectedId;
@@ -121,29 +126,25 @@ function FuelStationMarker({
   ]
     .filter(Boolean)
     .join(' ');
-  const hover = [point.title, brand?.name, lines.join(' ')].filter(Boolean).join(' · ');
+  // hover 제목은 두지 않는다 — vworld 툴팁 상자가 바로 옆 가격 라벨을 되풀이한다. 이름은 접근 이름이 싣는다.
   return (
     <Marker
       lngLat={point.lngLat}
-      className="transport-map-marker fuel"
-      title={hover}
+      className="transport-map-marker transport-map-marker--fuel"
+      selected={selected}
       zIndex={markerZIndex(selected)}
       ariaLabel={ariaLabel}
       interactionId={point.id}
       onClick={onSelect}
     >
-      <span
-        className={`relative flex items-center rounded-[4px] border border-hairline bg-canvas p-0.5 shadow-[0_1px_3px_rgba(0,0,0,0.3)] pointer-coarse:before:absolute pointer-coarse:before:-inset-y-2 pointer-coarse:before:inset-x-0 pointer-coarse:before:content-[''] ${
-          selected ? 'outline-2 outline-offset-2 outline-primary' : ''
-        }`}
-        data-testid="fuel-station-marker"
-        data-selected={selected ? 'true' : undefined}
-      >
+      {/* 칩·라벨 모양은 globals.css `.fuel-marker-chip`·`.fuel-marker-price`(마커 예외, 토큰 색). */}
+      <span className="fuel-marker-chip" data-testid="fuel-station-marker">
         <FuelBrandIcon brand={brand} decorative />
         {lines.length > 0 && (
           <span
-            className="pointer-events-none absolute top-1/2 left-[calc(100%+4px)] min-w-[58px] -translate-y-1/2 rounded-[6px] border bg-canvas/95 px-1.5 py-[3px] text-left text-xs leading-tight font-bold whitespace-pre text-ink tabular-nums shadow-[0_1px_4px_rgba(0,0,0,0.24)]"
-            style={{ borderColor: point.color }}
+            className="fuel-marker-price"
+            // 테두리 = 마커 팔레트 색(transport와 같다). 데이터에서 오는 색이라 CSS 변수로 넘긴다.
+            style={{ '--marker-color': point.color } as CSSProperties}
             aria-hidden="true"
             data-testid="fuel-station-marker-price"
           >

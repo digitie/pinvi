@@ -17,6 +17,11 @@
   notice(`99000000`+`roadblock`)를 서버에서 뺀다. 주유소 계층을 `category`로 명시한 요청·통합 검색·여행 POI는 그대로. Map 서버 클러스터
   개수는 포함(Map에 제외 필터 없음 — 후속 후보).
 - 보이지 않는 것(Map이 싣지 않음, 지어내지 않음): 품질인증·전산보고, 시군구 등급·평균 대비, 30일 그래프. 모바일 지도 마커 모양은 그대로.
+- 적대 리뷰 2인(데이터·계약 / UI·a11y) 반영: "오래됨"을 transport `observed_at` 규칙(`provider_updated_at ?? collected_at`)으로,
+  in-bounds·nearby는 거를 몫만큼 Map에 더 청하고 `limit`으로 자름, 주유소 계층은 kind 무관 제외, 줌 10 이하 항상·예산 초과 시 줌 14까지 묶음,
+  판매 기록 없는 추이 문구 분리, live NEAR-005·008 갱신, 마커 칩·라벨을 globals.css 마커 예외 클래스로(토큰 색), 굵은 44px 표적·
+  focus-visible·선택 상태, `<details>` 펼침 아이콘, dl 이름은 section으로, 모바일 굵기는 정적 글꼴 family·"오래됨" View pill·행 접근 이름,
+  admin warning 토큰을 사용자 warning 토큰 별칭으로, DESIGN.md 표에 warning 추가, e2e 320px·묶음 거품·선택 확인.
 
 ## 2026-11-27 (claude) — web e2e 두 건 흔들림 원인 수정(main red 복구)
 

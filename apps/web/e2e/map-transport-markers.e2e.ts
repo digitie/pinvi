@@ -191,6 +191,7 @@ const fuelMarker = (page: Page, id: string) =>
   page.locator(`.maplibregl-marker[data-interaction-id="transport:fuel_station:${id}"]`);
 
 for (const viewport of [
+  { name: '320', width: 320, height: 640 },
   { name: '375', width: 375, height: 812 },
   { name: 'desktop', width: 1440, height: 900 },
 ]) {
@@ -211,6 +212,7 @@ for (const viewport of [
     await expect(first).toBeVisible({ timeout: 20_000 });
     // 예산 안 — 묶지 않고 세 곳 모두 펼친다.
     await expect(page.getByTestId('fuel-station-marker')).toHaveCount(3);
+    await expect(page.locator('.maplibregl-marker[data-is-cluster="true"]')).toHaveCount(0);
     const chip = first.getByTestId('fuel-station-marker');
     const box = (await chip.boundingBox())!;
     // 로고 40×24 + 안쪽 여백 2px + 테두리 1px — 예전 핀 마커보다 낮고, transport 칩과 같다.
@@ -230,6 +232,8 @@ for (const viewport of [
     await shot(page, `fuel-markers-sparse-${viewport.name}`);
 
     await chip.click();
+    // 누른 마커는 선택 상태다(칩 바깥 outline).
+    await expect(first).toHaveAttribute('data-selected', 'true');
     const prices = page.getByTestId('transport-fuel-prices');
     await expect(prices).toBeVisible();
     await expect(prices.getByTestId('transport-fuel-price')).toHaveCount(2);
@@ -266,7 +270,10 @@ for (const viewport of [
     await expect
       .poll(async () => page.getByTestId('fuel-station-marker').count(), { timeout: 20_000 })
       .toBeLessThan(64);
-    await expect.poll(async () => page.locator('.maplibregl-marker').count()).toBeGreaterThan(0);
+    // 실제로 묶음 거품이 있다(화면 밖 컬링만으로 줄어든 것이 아니다).
+    await expect
+      .poll(async () => page.locator('.maplibregl-marker[data-is-cluster="true"]').count())
+      .toBeGreaterThan(0);
     await shot(page, `fuel-markers-dense-${viewport.name}`);
   });
 }

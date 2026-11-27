@@ -2,7 +2,7 @@
 
 import { FuelBrandIcon } from '@/components/map/FuelBrandIcon';
 import { formatFuelPrice, fuelDateTime, type FuelBrand, type FuelPriceRow } from '@pinvi/domain';
-import { ClockAlert } from 'lucide-react';
+import { ChevronRight, ClockAlert } from 'lucide-react';
 
 /**
  * 주유소 정보 블록 — kor-travel-transport 공개 유가 화면(`/public/fuel`) 장소 상세와 같은 정보·순서:
@@ -31,46 +31,45 @@ export function FuelPriceList({ rows }: { rows: readonly FuelPriceRow[] }) {
       </p>
     );
   }
+  // dl에는 이름을 붙일 role이 없다 — 이름은 감싸는 section이 갖는다.
   return (
-    <dl
-      className="rounded-sm border border-hairline px-3"
-      data-testid="transport-fuel-prices"
-      aria-label="유종별 현재 가격"
-    >
-      {rows.map((row) => {
-        const checked = fuelDateTime(row.checkedAt);
-        return (
-          <div
-            key={row.key}
-            className="flex min-w-0 items-baseline justify-between gap-3 border-b border-hairline py-2 last:border-b-0"
-            data-testid="transport-fuel-price"
-            data-product={row.key}
-          >
-            <dt className="min-w-0 text-sm text-body [overflow-wrap:anywhere]">{row.label}</dt>
-            <dd className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
-              {row.old && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-text"
-                  title={checked ?? undefined}
-                  data-testid="transport-fuel-price-old"
-                >
-                  <ClockAlert size={14} aria-hidden="true" />
-                  오래됨
+    <section aria-label="유종별 현재 가격">
+      <dl className="rounded-sm border border-hairline px-3" data-testid="transport-fuel-prices">
+        {rows.map((row) => {
+          const checked = fuelDateTime(row.observedAt);
+          return (
+            <div
+              key={row.key}
+              className="flex min-w-0 items-baseline justify-between gap-3 border-b border-hairline py-2 last:border-b-0"
+              data-testid="transport-fuel-price"
+              data-product={row.key}
+            >
+              <dt className="min-w-0 text-sm text-body [overflow-wrap:anywhere]">{row.label}</dt>
+              <dd className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
+                {row.old && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-text"
+                    title={checked ?? undefined}
+                    data-testid="transport-fuel-price-old"
+                  >
+                    <ClockAlert size={14} aria-hidden="true" />
+                    오래됨
+                  </span>
+                )}
+                <span className="text-lg font-bold tabular-nums text-ink">
+                  {formatFuelPrice(row.price)}
                 </span>
-              )}
-              <span className="text-lg font-bold tabular-nums text-ink">
-                {formatFuelPrice(row.price)}
-              </span>
-              {checked && row.checkedAt && (
-                <time className="sr-only" dateTime={row.checkedAt}>
-                  확인 {checked}
-                </time>
-              )}
-            </dd>
-          </div>
-        );
-      })}
-    </dl>
+                {checked && row.observedAt && (
+                  <time className="sr-only" dateTime={row.observedAt}>
+                    관측 {checked}
+                  </time>
+                )}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </section>
   );
 }
 
@@ -101,8 +100,14 @@ export function FuelDataSource({
     return at ? [{ key: row.key, text: `${row.label} 제공기관 공시 ${at}` }] : [];
   });
   return (
-    <details className="text-xs text-muted" data-testid="fuel-data-source">
-      <summary className="focus-ring inline-flex min-h-11 cursor-pointer items-center rounded-sm font-semibold text-body">
+    <details className="group text-xs text-muted" data-testid="fuel-data-source">
+      {/* inline-flex라 기본 ▸ 표시가 사라지므로 펼침 상태를 아이콘으로 보인다. */}
+      <summary className="focus-ring inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-sm font-semibold text-body [&::-webkit-details-marker]:hidden">
+        <ChevronRight
+          size={14}
+          aria-hidden="true"
+          className="transition-transform duration-fast group-open:rotate-90 motion-reduce:transition-none"
+        />
         데이터 출처
       </summary>
       <div className="space-y-0.5 pb-1">

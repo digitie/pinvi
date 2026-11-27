@@ -8,7 +8,7 @@
  * - 유종 이름·순서: transport `FUEL_PRODUCT_LABELS`(휘발유·고급유·경유·등유·LPG)와 그 화면의 행 순서
  *   (오피넷 유종 코드 오름차순 — transport가 `product_code`로 정렬해 낸다).
  * - 가격은 `1,689원/L`.
- * - 7일(168시간)보다 오래 확인되지 않은 가격에는 "오래됨"을 붙인다.
+ * - 관측 시각(transport `observed_at` = 제공기관 갱신 시각, 없으면 수집 시각)이 7일(168시간)보다 오래면 "오래됨".
  * - 편의시설은 셀프·24시간·세차·정비·편의점 순서로, 값이 `true`인 것만.
  * - 상표는 오피넷 상표 코드가 이름보다 우선하고, 모르는 코드를 다른 정유사로 추측하지 않는다.
  *
@@ -88,11 +88,14 @@ export interface FuelPriceRow {
   key: string;
   label: string;
   price: number;
-  /** 이 가격을 현재가로 마지막으로 확인한 시각(ISO). */
-  checkedAt: string | null;
+  /**
+   * 관측 시각(ISO) — transport `observed_at`과 같은 뜻: 제공기관이 이 가격을 마지막으로 바꾼 시각이 있으면 그것,
+   * 없으면 transport가 이 가격을 수집한 시각. Map 상태 표면은 `observed_at`을 싣지 않아 같은 규칙으로 다시 만든다.
+   */
+  observedAt: string | null;
   /** 제공기관(오피넷·도로공사)이 이 가격을 마지막으로 바꾼 시각(ISO). 원천이 주지 않으면 null. */
   providerUpdatedAt: string | null;
-  /** 7일보다 오래 확인되지 않았다. */
+  /** 관측 시각이 7일보다 오래됐다(transport "오래됨" — 공시가가 7일 넘게 그대로면 붙는다). */
   old: boolean;
 }
 
@@ -113,13 +116,14 @@ export function fuelStationPriceRows(prices: readonly FuelPrice[], nowMs: number
       price.product_key;
     // 같은 유종이 두 번 오면 첫 행만(응답 순서를 바꾸지 않는다).
     if (rows.has(key)) continue;
+    const observedAt = price.provider_updated_at ?? price.collected_at;
     rows.set(key, {
       key,
       label: fuelProductLabel(price.product_key, price.product_name, price.product_code),
       price: price.price,
-      checkedAt: price.collected_at,
+      observedAt,
       providerUpdatedAt: price.provider_updated_at ?? null,
-      old: isOldFuelObservation(price.collected_at, nowMs),
+      old: isOldFuelObservation(observedAt, nowMs),
     });
   }
   return [...rows.values()].sort(codeOrder);
@@ -145,7 +149,7 @@ export function restAreaFuelPriceRows(
               key: code,
               label: FUEL_PRODUCT_LABEL_BY_CODE[code] ?? code,
               price,
-              checkedAt: prices.observed_at,
+              observedAt: prices.observed_at,
               providerUpdatedAt: null,
               old,
             },
