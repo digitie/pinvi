@@ -136,6 +136,47 @@ describe('TransportDetailDialog', () => {
     expect(detail).toHaveBeenCalledWith('fuel_station', 'f_fuel', expect.anything());
   });
 
+  it('짝지은 휴게소의 먹거리를 주유소 상세에 보인다', async () => {
+    detail.mockResolvedValue({
+      ...FUEL,
+      food: {
+        rest_area_name: '안산휴게소(강릉방향)',
+        std_rest_code: '000201',
+        menu_count: 30,
+        price_min: 3500,
+        price_median: 8000,
+        price_max: 13000,
+        featured: [{ name: '소떡소떡', price: 4500, tags: ['best'], season: 'all_year' }],
+        seasonal: [],
+        source_collected_at: '2026-11-27T18:50:00Z',
+        attribution: '한국도로공사',
+        paired_distance_m: 120,
+      },
+    });
+    render(
+      <TransportDetailDialog
+        target={{ layer: 'fuel_station', featureId: 'f_fuel', title: '주유소' }}
+        onClose={vi.fn()}
+      />,
+    );
+    const food = await screen.findByTestId('rest-area-food');
+    expect(food).toHaveTextContent('안산휴게소(강릉방향) 먹거리');
+    expect(food).toHaveTextContent('소떡소떡 대표 4,500원');
+    expect(food).toHaveTextContent('출처: 한국도로공사 · 기준일 2026-11-28');
+  });
+
+  it('먹거리가 없으면 먹거리 블록을 그리지 않는다', async () => {
+    detail.mockResolvedValue({ ...FUEL, food: null });
+    render(
+      <TransportDetailDialog
+        target={{ layer: 'fuel_station', featureId: 'f_fuel', title: '주유소' }}
+        onClose={vi.fn()}
+      />,
+    );
+    await screen.findByTestId('transport-fuel-prices');
+    expect(screen.queryByTestId('rest-area-food')).toBeNull();
+  });
+
   it('가격 추이가 unavailable이면 아직 제공되지 않음을 보인다', async () => {
     detail.mockResolvedValue(FUEL);
     fuelPriceHistory.mockResolvedValue(UNAVAILABLE_HISTORY);

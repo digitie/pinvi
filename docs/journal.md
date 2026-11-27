@@ -1,3 +1,14 @@
+## 2026-11-27 (claude) — 휴게소·고속도로 주유소 상세에 한국도로공사 메뉴(먹거리) 표시
+
+- 소유자 승인 계획(조사 보고서 2순위, LLM 없음): Map(ADR-127, kor-travel-map #1568)이 transport가 모은 한국도로공사
+  0502 휴게소 푸드메뉴를 휴게소에 잇고 요약해 `/v1/service/transport/{rest-areas,fuel-stations}/{id}` 상세에 싣는다.
+- API: `TransportDetailResponse.food`(`RestAreaFood`) — 휴게소는 Map `food`, 주유소는 Map `rest_area_food.rest_area` +
+  `paired_distance_m`. Map 블록이 계약과 다르면 `null`로 버리고 상세는 그대로(경고 로그 `map_transport_food_contract`).
+- web: `RestAreaFoodSection`(별도 컴포넌트) — 대표·추천 메뉴(6개 뒤 접기), 가격대(최저~최고·중앙), 계절 메뉴, "출처: 한국도로공사 ·
+  기준일 YYYY-MM-DD(KST)". 주유소에서는 "○○휴게소(△방향) 먹거리 · 이 주유소가 있는 휴게소 · N m". `TransportDetailDialog`에는
+  한 줄만 더했다(주유소 표시 작업 #806과 겹치지 않게).
+- Map service·admin OpenAPI 재vendor(Map #1568 머지 커밋 핀).
+
 ## 2026-11-27 (claude) — 로그인 유지(1년) — refresh 회전 계열·절대 만료·재사용 감지
 
 - 출처: 소유자 요청 "로그인 시 로그인 유지기능 추가. 유지 기간은 1년."

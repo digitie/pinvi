@@ -201,10 +201,52 @@ def list_body(dataset: str, *, truncated: bool = False) -> dict[str, Any]:
     return {"data": data, "meta": meta()}
 
 
-def detail_body(dataset: str) -> dict[str, Any]:
+#: Map `RestAreaFoodState`(Map ADR-127) — 휴게소 상세 ``food``, 주유소 상세 ``rest_area_food.rest_area``.
+REST_AREA_FOOD: dict[str, Any] = {
+    "feature_id": REST_AREA_ID,
+    "rest_area_name": "행담도휴게소",
+    "natural_key": "행담도휴게소::::",
+    "coord": {"lon": 126.8, "lat": 36.9},
+    "std_rest_code": "000341",
+    "ex_name": "행담도휴게소",
+    "route_code": "0150",
+    "route_name": "서해안선",
+    "direction_code": "up",
+    "link_method": "name_exact",
+    "link_confidence": 1.0,
+    "menu_count": 62,
+    "price_min": 3000,
+    "price_median": 9000,
+    "price_max": 16000,
+    "featured": [
+        {"name": "어묵우동", "price": 7500, "tags": ["best"], "season": "all_year"},
+        {"name": "한우국밥", "price": 13000, "tags": ["premium", "recommended"], "season": None},
+    ],
+    "seasonal": [{"name": "냉모밀", "price": 8000, "tags": [], "season": "summer"}],
+    "menu_updated_on": "2026-01-09",
+    "source_collected_at": "2026-11-27T18:50:00Z",
+    "attribution": "한국도로공사",
+}
+
+
+def detail_body(dataset: str, *, food: bool = True) -> dict[str, Any]:
     data: dict[str, Any] = {"item": item(dataset), "freshness": freshness(DATASET_NAMES[dataset])}
     if dataset == "rest-areas":
         data["fuel_price_freshness"] = None
+        data["food"] = copy.deepcopy(REST_AREA_FOOD) if food else None
+        data["food_freshness"] = freshness("transport.rest_area_food") if food else None
+    if dataset == "fuel-stations":
+        data["rest_area_food"] = (
+            {
+                "confidence": 0.95,
+                "method": "name_direction",
+                "distance_m": 55.0,
+                "rest_area": copy.deepcopy(REST_AREA_FOOD),
+            }
+            if food
+            else None
+        )
+        data["food_freshness"] = freshness("transport.rest_area_food") if food else None
     return {"data": data, "meta": meta(page=False)}
 
 

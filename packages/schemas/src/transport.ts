@@ -189,11 +189,42 @@ export const TransportStatusResponseSchema = z.object({
 });
 export type TransportStatusResponse = z.infer<typeof TransportStatusResponseSchema>;
 
+/** 휴게소 메뉴 하나(한국도로공사 0502, Map ADR-127). */
+export const RestAreaMenuItemSchema = z.object({
+  name: z.string(),
+  price: z.number().int().nullable().optional(),
+  tags: z.array(z.enum(['best', 'premium', 'recommended'])).default([]),
+  season: z.enum(['all_year', 'summer', 'winter']).nullable().optional(),
+});
+export type RestAreaMenuItem = z.infer<typeof RestAreaMenuItemSchema>;
+
+/**
+ * 휴게소 먹거리 요약 — 한국도로공사 원천 데이터(LLM 요약 아님). 주유소 상세에서는 같은 방향 휴게소의
+ * 값이고 `paired_distance_m`이 채워진다.
+ */
+export const RestAreaFoodSchema = z.object({
+  rest_area_name: z.string(),
+  std_rest_code: z.string(),
+  route_name: optionalText,
+  menu_count: z.number().int().nonnegative(),
+  price_min: z.number().int().nullable().optional(),
+  price_median: z.number().int().nullable().optional(),
+  price_max: z.number().int().nullable().optional(),
+  featured: z.array(RestAreaMenuItemSchema).default([]),
+  seasonal: z.array(RestAreaMenuItemSchema).default([]),
+  menu_updated_on: optionalText,
+  source_collected_at: Iso8601Schema,
+  attribution: z.string().default('한국도로공사'),
+  paired_distance_m: z.number().nullable().optional(),
+});
+export type RestAreaFood = z.infer<typeof RestAreaFoodSchema>;
+
 /** `GET /transport/{fuel-stations|rest-areas|highway-incidents|airports}/{feature_id}`. */
 export const TransportDetailResponseSchema = z.object({
   item: TransportItemSchema,
   freshness: TransportFreshnessSchema,
   fuel_price_freshness: TransportFreshnessSchema.nullable().optional(),
+  food: RestAreaFoodSchema.nullable().optional(),
 });
 export type TransportDetailResponse = z.infer<typeof TransportDetailResponseSchema>;
 

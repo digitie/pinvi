@@ -36,8 +36,10 @@ from app.schemas.transport import (
     FuelPriceHistoryPoint,
     FuelStationItem,
     HighwayIncidentItem,
+    RestAreaFood,
     RestAreaFuelPrices,
     RestAreaItem,
+    RestAreaMenuItem,
     TransportAddress,
     TransportCoord,
     TransportFreshness,
@@ -243,6 +245,8 @@ _MODEL_SCHEMAS: list[tuple[type[BaseModel], str, set[str]]] = [
     (TransportFreshness, "TransportFreshness", set()),
     (FuelPrice, "FuelPriceState", set()),
     (RestAreaFuelPrices, "RestAreaFuelPriceState", set()),
+    (RestAreaFood, "RestAreaFoodState", {"paired_distance_m"}),
+    (RestAreaMenuItem, "RestAreaMenuItemState", set()),
     (FuelPriceHistoryPoint, "PriceHistoryPoint", set()),
 ]
 

@@ -1,21 +1,21 @@
 {
   "map": {
     "admin": {
-      "openapi_sha256": "a370f2c9a1abf76dc722560bfd37ee32701fe390d3ab2dad86c44aa7cdf70e46",
-      "runtime_operation_contract_sha256": "8c2792a14d8e9065dd7a4e1f157c49022d3a6830b527363e6d4bc608886ffd87",
-      "source_canonical_sha256": "307549712f5fec3476d5b9e060a6871fff3419b4a3584c97f219521483691dbe",
-      "source_operation_contract_sha256": "8c2792a14d8e9065dd7a4e1f157c49022d3a6830b527363e6d4bc608886ffd87"
+      "openapi_sha256": "0440a3f633447d4516723051e60210c6d7c9e4d043ac167f0ec09c92d84675db",
+      "runtime_operation_contract_sha256": "7783b4f4f22d3eaf31a40058fc69fd74f95c0d88c75ee3faf16ed78e1bd15503",
+      "source_canonical_sha256": "a32add6af7a873a3531c3e91d27f1b453c737728b57ce91d9b9dbdc5e15086ed",
+      "source_operation_contract_sha256": "7783b4f4f22d3eaf31a40058fc69fd74f95c0d88c75ee3faf16ed78e1bd15503"
     },
     "full": {
-      "openapi_sha256": "a370f2c9a1abf76dc722560bfd37ee32701fe390d3ab2dad86c44aa7cdf70e46",
-      "runtime_operation_contract_sha256": "8c2792a14d8e9065dd7a4e1f157c49022d3a6830b527363e6d4bc608886ffd87",
-      "source_canonical_sha256": "307549712f5fec3476d5b9e060a6871fff3419b4a3584c97f219521483691dbe",
-      "source_operation_contract_sha256": "8c2792a14d8e9065dd7a4e1f157c49022d3a6830b527363e6d4bc608886ffd87"
+      "openapi_sha256": "0440a3f633447d4516723051e60210c6d7c9e4d043ac167f0ec09c92d84675db",
+      "runtime_operation_contract_sha256": "7783b4f4f22d3eaf31a40058fc69fd74f95c0d88c75ee3faf16ed78e1bd15503",
+      "source_canonical_sha256": "a32add6af7a873a3531c3e91d27f1b453c737728b57ce91d9b9dbdc5e15086ed",
+      "source_operation_contract_sha256": "7783b4f4f22d3eaf31a40058fc69fd74f95c0d88c75ee3faf16ed78e1bd15503"
     },
     "service": {
-      "openapi_sha256": "ed380047bc420e4469bd6f4f88740cfd54c23a50d1a88ccb97215737d76df275",
+      "openapi_sha256": "617e33b70f40089136050b599953d489782f21404a7c073830685d8b5cc9f5de",
       "runtime_operation_contract_sha256": "1b0e7bcd6fafc4a6814772e7b202f51d95d8b1ff893d4516c34d6868c011adf3",
-      "source_canonical_sha256": "996dd314af5e014a8a9e0b10ff40a7bfc4d14f6126829deba36293f366b4770f",
+      "source_canonical_sha256": "9e35b1cd4e5b96f603f65d3a3b1ce9b85c41d6c5c9c681176f98f5b8787a36a1",
       "source_operation_contract_sha256": "1b0e7bcd6fafc4a6814772e7b202f51d95d8b1ff893d4516c34d6868c011adf3"
     },
     "user": {

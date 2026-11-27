@@ -77,7 +77,15 @@
 
 ## 상세 — `GET /transport/{fuel-stations|rest-areas|highway-incidents|airports}/{feature_id}`
 
-`feature_id`는 `^[A-Za-z0-9_-]{1,128}$`(아니면 422). 응답 `{item, freshness, fuel_price_freshness?}`.
+`feature_id`는 `^[A-Za-z0-9_-]{1,128}$`(아니면 422). 응답 `{item, freshness, fuel_price_freshness?, food?}`.
+
+`food`(휴게소·고속도로 주유소, Map ADR-127): 한국도로공사 0502 휴게소 메뉴 요약 — `rest_area_name`·`std_rest_code`·
+`menu_count`·`price_min`/`price_median`/`price_max`·`featured[]`(대표 → 프리미엄 → 추천, `{name, price, tags[], season}`)·
+`seasonal[]`(여름·겨울)·`menu_updated_on`·`source_collected_at`(화면의 기준일)·`attribution`("한국도로공사"). 주유소는 Map이
+400 m 안 같은 방향 휴게소와 짝지은 경우(신뢰도 0.8 이상)에만 있고 `paired_distance_m`이 채워진다. 없거나 Map 블록이 계약과
+다르면 `null`이고 상세의 나머지는 그대로다(주유소에서 거리 `distance_m`이 없거나 이상해도 `null`). LLM 요약이 아니라
+원천 데이터만 보인다. Map의 `food_freshness`(데이터셋 신선도)는 싣지 않는다 — 화면은 수집일(`source_collected_at`)과 메뉴
+갱신일(`menu_updated_on`)을 직접 보인다(Map 적재가 8일 넘게 멈추면 `stale`이지만 메뉴는 천천히 바뀌어 같은 값을 보인다).
 404 `TRANSPORT_FEATURE_NOT_FOUND`, 503 `TRANSPORT_UNAVAILABLE`.
 
 `feature_id`는 Map `make_feature_id` 값이다 — POI의 `feature_id`(Map PG UUID)가 아니므로 `/features/{id}`·POI 추가에 쓰지 않는다.

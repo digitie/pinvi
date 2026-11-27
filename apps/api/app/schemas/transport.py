@@ -10,6 +10,7 @@ PG feature UUID와 **다른 이름공간**이다(ADR-076 D7) — POI 추가·`/f
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated, Literal, get_args
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
@@ -200,12 +201,45 @@ class TransportStatusResponse(BaseModel):
     layers: list[TransportLayerStatus] = Field(default_factory=list)
 
 
+class RestAreaMenuItem(_Upstream):
+    """휴게소 메뉴 하나(한국도로공사 0502 — Map `RestAreaMenuItemState`)."""
+
+    name: str
+    price: int | None = None
+    tags: list[Literal["best", "premium", "recommended"]] = Field(default_factory=list)
+    season: Literal["all_year", "summer", "winter"] | None = None
+
+
+class RestAreaFood(_Upstream):
+    """휴게소 먹거리 요약(Map `RestAreaFoodState`, Map ADR-127). LLM 요약이 아니라 원천 데이터다.
+
+    주유소 상세에서는 같은 방향 휴게소(400 m 안, Map 규칙의 신뢰도 0.8 이상 짝)의 값이고
+    ``paired_distance_m``이 채워진다.
+    """
+
+    rest_area_name: str
+    std_rest_code: str
+    route_name: str | None = None
+    menu_count: int = Field(ge=0)
+    price_min: int | None = None
+    price_median: int | None = None
+    price_max: int | None = None
+    featured: list[RestAreaMenuItem] = Field(default_factory=list)
+    seasonal: list[RestAreaMenuItem] = Field(default_factory=list)
+    menu_updated_on: date | None = None
+    source_collected_at: AwareDatetime
+    attribution: str = "한국도로공사"
+    paired_distance_m: float | None = None
+
+
 class TransportDetailResponse(BaseModel):
     """`GET /transport/{dataset}/{feature_id}`."""
 
     item: TransportItem
     freshness: TransportFreshness
     fuel_price_freshness: TransportFreshness | None = None
+    #: 휴게소·고속도로 주유소만 — 한국도로공사 메뉴 요약(없거나 읽지 못하면 null, Map ADR-127).
+    food: RestAreaFood | None = None
 
 
 #: Map `PriceHistoryBlock.reason` enum. 모르는 값은 `upstream_contract`로 접는다(원문 비노출).

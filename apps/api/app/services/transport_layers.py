@@ -37,6 +37,7 @@ from app.schemas.transport import (
     FuelPriceHistoryPoint,
     FuelPriceHistoryResponse,
     PriceHistoryUnavailableReason,
+    RestAreaFood,
     TransportDetailResponse,
     TransportFreshness,
     TransportItem,
@@ -453,7 +454,43 @@ async def detail(
             if layer == "rest_area"
             else None
         ),
+        food=_food(layer, data),
     )
+
+
+def _food(layer: TransportLayer, data: Mapping[str, Any]) -> RestAreaFood | None:
+    """휴게소 ``food``·주유소 ``rest_area_food.rest_area``(Map ADR-127). 모양이 다르면 버린다.
+
+    먹거리는 상세의 덧붙임이다 — Map이 이 블록을 잘못 보내도 휴게소·주유소 상세는 그대로 보인다.
+    """
+    if layer == "rest_area":
+        raw, distance = data.get("food"), None
+    elif layer == "fuel_station":
+        paired = data.get("rest_area_food")
+        if not isinstance(paired, Mapping):
+            return None
+        raw, distance = paired.get("rest_area"), paired.get("distance_m")
+    else:
+        return None
+    if raw is None:
+        return None
+    try:
+        food = RestAreaFood.model_validate(raw)
+    except ValidationError:
+        logger.warning("map_transport_food_contract layer=%s", layer)
+        return None
+    if layer == "fuel_station":
+        # Map 계약상 필수 거리다. 없거나 이상하면 어느 휴게소의 먹거리인지 보증할 수 없어 버린다.
+        if (
+            not isinstance(distance, int | float)
+            or isinstance(distance, bool)
+            or not math.isfinite(distance)
+            or distance < 0
+        ):
+            logger.warning("map_transport_food_contract layer=%s field=distance_m", layer)
+            return None
+        food = food.model_copy(update={"paired_distance_m": float(distance)})
+    return food
 
 
 _HISTORY_POINTS_ADAPTER: Final[TypeAdapter[list[FuelPriceHistoryPoint]]] = TypeAdapter(

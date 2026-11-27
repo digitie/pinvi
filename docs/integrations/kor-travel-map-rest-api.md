@@ -5,6 +5,11 @@
 > **상태(중대 변화)**: 2026-06-08 기준 **kor-travel-map이 운영급 HTTP API를 이미 구축했다.**
 > 더 이상 "목표/aspirational"이 아니라 **실재하는 계약**이다 — ADR-026/027(DEC-01=B)
 > 의 전제가 충족됨.
+> **2026-11-27 재vendor (service·admin/full, Map ADR-127 휴게소 먹거리)**: Map `c43bd2bb78833d8bb655abf3bc02cfbe6bc1a2f6`(#1568)
+> service `617e33b70f40089136050b599953d489782f21404a7c073830685d8b5cc9f5de`, admin(full)
+> `0440a3f633447d4516723051e60210c6d7c9e4d043ac167f0ec09c92d84675db`(user 불변). 바뀐 것은 transport 휴게소·주유소 상세의 nullable
+> `food`·`rest_area_food`·`food_freshness`(PinVi `TransportDetailResponse.food`로 투영)와 관리자 `/v1/ops/rest-area-food/review`다.
+>
 > **2026-11-18 재vendor (service·admin/full, Map T-READ-04)**: Map `8e90e56e21d9170e1dee962a359bc733d1da4461`의
 > `openapi.service.json`·`openapi.json`을 byte-exact로 vendor했다 — service SHA-256
 > `ed380047bc420e4469bd6f4f88740cfd54c23a50d1a88ccb97215737d76df275`, admin(full)
