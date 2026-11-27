@@ -527,7 +527,7 @@
   steps:
     - 당일 경주 → 1일차 불국사·석굴암·첨성대 → 3번째 행을 1번째 위로 드래그 → 새로고침
   expected:
-    - POST /pois/reorder 200, 순서 [첨성대, 불국사, 석굴암], 새로고침 후 동일
+    - POST /pois/{poi_id}/move 200, 순서 [첨성대, 불국사, 석굴암], 새로고침 후 동일
   cleanup:
     - afterEach deleteTrip(id)
   automation: scripted
@@ -1063,3 +1063,60 @@
   automation: scripted
   spec: specs/weather/weather-sun-astral.live.spec.ts#TRIP-071
   notes: "2026-11-16 소유자 요청 17. 배포 뒤에만 통과한다(요일 표시는 이번 변경)."
+
+- id: TRIP-072
+  title: 장소를 접힌 다른 일자로 끌어 놓으면 그 일자 맨 끝으로 옮겨지고 새로고침 후에도 유지
+  priority: P1
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - "account: test@test.com (user)"
+    - "data: Map has 불국사·석굴암·첨성대 features"
+  data_sources: [map:heritage, geo]
+  steps:
+    - "1박2일 경주 → 1일차 불국사·석굴암, 2일차 첨성대 → 1일차 펼친 채 불국사 행을 접힌 '2일차' 줄에 끌어 놓기 → 새로고침"
+  expected:
+    - "POST /pois/{poi_id}/move 200, 끄는 동안 2일차 줄 data-drop-target=true"
+    - "탭 '1일차' 1곳·'2일차' 2곳, 안내 '…2일차로 옮겼어요', 새로고침 뒤 2일차 순서 [첨성대, 불국사]"
+  cleanup:
+    - "afterEach deleteTrip(id)"
+  automation: scripted
+  spec: specs/trip/trip-cross-day.live.spec.ts#TRIP-072
+  notes: "2026-11-27 소유자 요청(날짜끼리 DnD). 배포 뒤에만 통과한다(이전 API에는 move가 없다). HTML5 DnD — 터치 프로젝트 skip."
+
+- id: TRIP-073
+  title: 빈 일자에도 끌어 놓을 수 있다 — 그 일자의 첫 장소가 된다
+  priority: P2
+  tags: [desktop, mutating, search, poi]
+  preconditions:
+    - "account: test@test.com (user)"
+    - "data: Map has 불국사·첨성대 features"
+  data_sources: [map:heritage, geo]
+  steps:
+    - "2박3일 경주 → 1일차 불국사·첨성대 → 첨성대 행을 빈 '3일차' 줄에 끌어 놓기"
+  expected:
+    - "POST /pois/{poi_id}/move 200, 응답 from_day_index=1·poi.day_index=3"
+    - "탭 '1일차' 1곳·'3일차' 1곳, 3일차 목록 [첨성대]"
+  cleanup:
+    - "afterEach deleteTrip(id)"
+  automation: scripted
+  spec: specs/trip/trip-cross-day.live.spec.ts#TRIP-073
+  notes: "2026-11-27 소유자 요청. 배포 뒤에만 통과한다."
+
+- id: TRIP-074
+  title: 장소 줄에서 Alt+아래 화살표 — 마지막 장소가 다음 일자 맨 앞으로, Alt+위로 되돌아온다
+  priority: P2
+  tags: [desktop, mutating, search, poi, a11y]
+  preconditions:
+    - "account: test@test.com (user)"
+    - "data: Map has 불국사·석굴암·첨성대 features"
+  data_sources: [map:heritage, geo]
+  steps:
+    - "1박2일 경주 → 1일차 불국사·석굴암, 2일차 첨성대 → 석굴암 장소 줄 버튼에 초점 → Alt+ArrowDown → Alt+ArrowUp"
+  expected:
+    - "Alt+ArrowDown: move 200, 2일차 선택·순서 [석굴암, 첨성대], 초점은 석굴암 줄"
+    - "Alt+ArrowUp: move 200, 1일차 선택·순서 [불국사, 석굴암], 초점 유지"
+  cleanup:
+    - "afterEach deleteTrip(id)"
+  automation: scripted
+  spec: specs/trip/trip-cross-day.live.spec.ts#TRIP-074
+  notes: "2026-11-27 소유자 요청 — 키보드로도 일자 사이 이동(HTML5 DnD는 키보드 미지원). 배포 뒤에만 통과한다."

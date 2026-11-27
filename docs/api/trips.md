@@ -622,7 +622,7 @@ Sprint 6에서 운영 dependency(Chromium/Playwright 또는 대체 renderer)와 
 
 POI / day / trip 변경 시 `WS /ws/trips/{trip_id}` 채널로 broadcast:
 
-- `poi.created`, `poi.updated`, `poi.deleted`, `poi.reordered`
+- `poi.created`, `poi.updated`, `poi.deleted`, `poi.reordered`, `poi.moved`
 - `day.created`, `day.updated`, `day.deleted`
 - `trip.updated`, `trip.member_changed`
 - `presence.update`

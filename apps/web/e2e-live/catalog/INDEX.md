@@ -7,7 +7,7 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 
 | area | total | scripted | manual | blocked |
 |---|---:|---:|---:|---:|
-| trip | 60 | 56 | 2 | 2 |
+| trip | 63 | 59 | 2 | 2 |
 | search | 55 | 44 | 6 | 5 |
 | nearby | 44 | 37 | 2 | 5 |
 | weather | 33 | 28 | 2 | 3 |
@@ -18,9 +18,9 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | core | 49 | 48 | 1 | 0 |
 | recommend | 3 | 3 | 0 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **586** | **530** | **29** | **27** |
+| **all** | **589** | **533** | **29** | **27** |
 
-Spec files: 67.
+Spec files: 68.
 
 ## Cases
 
@@ -86,6 +86,9 @@ Spec files: 67.
 | TRIP-058 | trip | 휴지통 30일 보존 — 만료 시각 = 삭제 시각 + 30일, 복원 가능, 복원 응답은 기한 해제 | P1 | desktop, mobile, mutating | scripted | `specs/trip/trip-list.live.spec.ts#TRIP-058` |
 | TRIP-070 | trip | 일자 편집·삭제 버튼 축소(접근 이름·24px 이상 유지), 일자 파일 버튼은 편집 옆·목록은 날짜 아래 | P2 | desktop, mutating, a11y | scripted | `specs/trip/trip-list-panel.live.spec.ts#TRIP-070` |
 | TRIP-071 | trip | 일자 목록 요일 표시 — 토요일 파랑, 일요일·공휴일 빨강, 공휴일 이름 뱃지(KASI 특일) | P2 | desktop, mutating | scripted | `specs/weather/weather-sun-astral.live.spec.ts#TRIP-071` |
+| TRIP-072 | trip | 장소를 접힌 다른 일자로 끌어 놓으면 그 일자 맨 끝으로 옮겨지고 새로고침 후에도 유지 | P1 | desktop, mutating, search, poi | scripted | `specs/trip/trip-cross-day.live.spec.ts#TRIP-072` |
+| TRIP-073 | trip | 빈 일자에도 끌어 놓을 수 있다 — 그 일자의 첫 장소가 된다 | P2 | desktop, mutating, search, poi | scripted | `specs/trip/trip-cross-day.live.spec.ts#TRIP-073` |
+| TRIP-074 | trip | 장소 줄에서 Alt+아래 화살표 — 마지막 장소가 다음 일자 맨 앞으로, Alt+위로 되돌아온다 | P2 | desktop, mutating, search, poi, a11y | scripted | `specs/trip/trip-cross-day.live.spec.ts#TRIP-074` |
 | SRCH-001 | search | 탐색 지도에서 2글자 검색('설악') → 8초 내 결과 목록 + 소스 배지 | P1 | desktop, mobile, search, perf | scripted | `specs/search/search-basic.live.spec.ts#SRCH-001` |
 | SRCH-002 | search | 정확한 이름 '안동하회마을' 검색 → '장소' 배지 행이 첫 번째, 둘째 줄은 카테고리 라벨 | P1 | desktop, search, poi | scripted | `specs/search/search-basic.live.spec.ts#SRCH-002` |
 | SRCH-003 | search | 1글자 입력('설')은 검색을 발화하지 않는다(MIN_CHARS=2) | P2 | desktop, search | scripted | `specs/search/search-basic.live.spec.ts#SRCH-003` |

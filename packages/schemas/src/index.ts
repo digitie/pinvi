@@ -190,6 +190,8 @@ export {
   PoiRiseSetStatusSchema,
   PoiUpdateSchema,
   PoiReorderRequestSchema,
+  PoiMoveRequestSchema,
+  PoiMoveResponseSchema,
   PoiResponseSchema,
   PoiSourceSchema,
   PoiPlaceDetailsSchema,
@@ -202,7 +204,7 @@ export type {
   PoiRiseSetStatus,
   PoiSource,
 } from './poi';
-export type { PoiReorderRequest, PoiUpdate } from './poi';
+export type { PoiMoveRequest, PoiMoveResponse, PoiReorderRequest, PoiUpdate } from './poi';
 
 export {
   NoticePoiSchema,

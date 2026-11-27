@@ -93,7 +93,7 @@ test('[TRIP-030] 드래그로 순서 변경 — 3번째를 1번째로, 새로고
   await selectDay(page, '1일차');
   await expect(poiRows(page)).toHaveCount(3);
 
-  const reorder = waitForRequest(page, /\/trips\/[0-9a-f-]{36}\/pois\/reorder/);
+  const reorder = waitForRequest(page, /\/trips\/[0-9a-f-]{36}\/pois\/[0-9a-f-]{36}\/move$/);
   await dragPoi(page, 2, 0);
   const res = await reorder;
   expect(res.ok()).toBeTruthy();
@@ -112,7 +112,7 @@ test('[TRIP-030] 드래그로 순서 변경 — 3번째를 1번째로, 새로고
   );
 
   // A second reorder on the persisted order must also succeed (#652: intermittent 409 SORT_ORDER_CONFLICT).
-  const reorder2 = waitForRequest(page, /\/trips\/[0-9a-f-]{36}\/pois\/reorder/);
+  const reorder2 = waitForRequest(page, /\/trips\/[0-9a-f-]{36}\/pois\/[0-9a-f-]{36}\/move$/);
   await dragPoi(page, 2, 0);
   expect((await reorder2).status(), 'second reorder').toBe(200);
   await expect.poll(async () => (await poiTitles(page)).map((t) => t.slice(0, 6))).toEqual(

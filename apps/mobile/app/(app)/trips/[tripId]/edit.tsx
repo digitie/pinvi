@@ -7,12 +7,13 @@ import type { TripStatus, TripVisibility, TripViewPoi, TripViewDay } from '@pinv
 import {
   STATUS_LABEL,
   VISIBILITY_LABEL,
-  arrayMove,
+  applyPoiMove,
   buildTripUpdate,
   friendlyErrorText,
   paletteHex,
-  reorderMoves,
+  poiStepMoveTarget,
   validateTripDateRange,
+  type PoiMoveTarget,
   type TripDateRangeError,
   type TripEditForm,
 } from '@pinvi/domain';
@@ -43,8 +44,8 @@ const STATUS_OPTIONS = (Object.keys(STATUS_LABEL) as TripStatus[]).map((s) => ({
 }));
 
 /**
- * 여행 편집 — 메타 수정(`tripApi.update`, If-Match version) + 일자별 POI 재정렬
- * (`reorderMoves` + `poiApi.reorder`) + POI 삭제. POI 필드(메모/비용) 편집은 후속.
+ * 여행 편집 — 메타 수정(`tripApi.update`, If-Match version) + POI 한 칸 이동(`poiApi.move`, 일자 경계를
+ * 넘으면 이전·다음 일자로) + POI 삭제. POI 필드(메모/비용) 편집은 후속.
  */
 export default function TripEditScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
@@ -89,6 +90,7 @@ export default function TripEditScreen() {
       delete next[dayIndex];
       return next;
     });
+  const clearOrders = (dayIndexes: number[]) => dayIndexes.forEach(clearOrder);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -103,22 +105,31 @@ export default function TripEditScreen() {
     onError: (err) => setFormError(friendlyErrorText(err)),
   });
 
-  const reorderMutation = useMutation({
+  const moveMutation = useMutation({
     mutationFn: ({
-      moves,
-      dayIndex,
+      poiId,
+      version,
+      target,
     }: {
-      dayIndex: number;
-      moves: { poi_id: string; new_sort_order: string }[];
-    }) => api.pois.reorder(tripId, { moves, day_index: dayIndex }),
-    onSuccess: async (_data, { dayIndex }) => {
+      poiId: string;
+      version: number;
+      target: PoiMoveTarget;
+      dayIndexes: number[];
+    }) =>
+      api.pois.move(tripId, poiId, version, {
+        day_index: target.dayIndex,
+        before_poi_id: target.beforePoiId,
+      }),
+    onSuccess: async (_data, { dayIndexes }) => {
       // 서버 순서를 받은 다음 override를 걷어야 순서가 튀지 않는다.
       await queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
-      clearOrder(dayIndex);
+      clearOrders(dayIndexes);
     },
-    onError: (err, { dayIndex }) => {
-      clearOrder(dayIndex); // rollback → 서버 순서
-      Alert.alert('재정렬 실패', friendlyErrorText(err));
+    onError: async (err, { dayIndexes }) => {
+      clearOrders(dayIndexes); // rollback → 서버 순서
+      // 409(다른 사람이 먼저 바꿈)면 최신 순서를 다시 받는다.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
+      Alert.alert('이동 실패', friendlyErrorText(err));
     },
   });
 
@@ -208,17 +219,27 @@ export default function TripEditScreen() {
     return days.find((d) => d.day_index === dayIndex)?.pois.map((p) => p.poi_id) ?? [];
   };
 
-  const move = (dayIndex: number, from: number, to: number) => {
-    const current = idsForDay(dayIndex);
-    if (to < 0 || to >= current.length) return;
-    const next = arrayMove(current, from, to);
-    setOrder((prev) => ({ ...prev, [dayIndex]: next }));
-    const day = days.find((d) => d.day_index === dayIndex);
-    const currentSortById = new Map<string, string>();
-    for (const p of day?.pois ?? []) currentSortById.set(p.poi_id, p.sort_order);
-    const moves = reorderMoves(next, currentSortById);
-    if (moves.length > 0) reorderMutation.mutate({ dayIndex, moves });
-    else clearOrder(dayIndex);
+  // 표시 순서(낙관 override 포함) — 한 칸 이동의 자리 계산과 낙관 반영이 같은 순서를 본다.
+  const dayOrders = days.map((d) => ({ dayIndex: d.day_index, poiIds: idsForDay(d.day_index) }));
+  const stepTarget = (poiId: string, direction: 'up' | 'down') =>
+    poiStepMoveTarget(dayOrders, poiId, direction);
+
+  // ↑/↓ 한 칸 이동 — 첫 장소의 ↑는 이전 일자 맨 끝, 마지막 장소의 ↓는 다음 일자 맨 앞(웹 키보드 이동과 같다).
+  const move = (poiId: string, direction: 'up' | 'down') => {
+    const target = stepTarget(poiId, direction);
+    const poi = poiById.get(poiId);
+    const from = dayOrders.find((d) => d.poiIds.includes(poiId));
+    if (!target || !poi || !from) return;
+    const next = applyPoiMove(dayOrders, poiId, target);
+    const touched = new Set([from.dayIndex, target.dayIndex]);
+    setOrder((prev) => {
+      const updated = { ...prev };
+      for (const day of next) {
+        if (touched.has(day.dayIndex)) updated[day.dayIndex] = day.poiIds;
+      }
+      return updated;
+    });
+    moveMutation.mutate({ poiId, version: poi.version, target, dayIndexes: [...touched] });
   };
 
   const onDelete = (dayIndex: number, poiId: string, title: string) => {
@@ -274,7 +295,8 @@ export default function TripEditScreen() {
         <View className="gap-1">
           <Subheading>일정 · 장소</Subheading>
           <Muted>
-            ↑/↓로 순서 변경, 장소를 눌러 메모/예산 편집, 삭제로 제거. 변경은 즉시 저장됩니다.
+            ↑/↓로 순서 변경(첫·마지막 장소는 이전·다음 일자로 넘어감), 장소를 눌러 메모/예산 편집,
+            삭제로 제거. 변경은 즉시 저장됩니다.
           </Muted>
         </View>
 
@@ -285,11 +307,12 @@ export default function TripEditScreen() {
           onDeleteDay={onDeleteDay}
           onDelete={onDelete}
           move={move}
+          canMove={(poiId, direction) => stepTarget(poiId, direction) != null}
           onEditPoi={(poiId) => router.push(`/trips/${tripId}/poi/${poiId}`)}
           pending={{
             day: deleteDayMutation.isPending,
             dayIndex: deleteDayMutation.variables?.dayIndex,
-            reorder: reorderMutation.isPending,
+            reorder: moveMutation.isPending,
             delete: deleteMutation.isPending,
             poiId: deleteMutation.variables?.poiId,
           }}
@@ -323,6 +346,7 @@ function TripDayList({
   onDeleteDay,
   onDelete,
   move,
+  canMove,
   onEditPoi,
   pending,
 }: {
@@ -331,7 +355,8 @@ function TripDayList({
   poiById: Map<string, TripViewPoi>;
   onDeleteDay: (day: number, version: number) => void;
   onDelete: (day: number, id: string, title: string) => void;
-  move: (day: number, from: number, to: number) => void;
+  move: (poiId: string, direction: 'up' | 'down') => void;
+  canMove: (poiId: string, direction: 'up' | 'down') => boolean;
   onEditPoi: (id: string) => void;
   pending: { day: boolean; dayIndex?: number; reorder: boolean; delete: boolean; poiId?: string };
 }) {
@@ -360,7 +385,7 @@ function TripDayList({
               {ids.length === 0 ? (
                 <Muted>이 날의 장소가 없습니다.</Muted>
               ) : (
-                ids.map((poiId, index) => {
+                ids.map((poiId) => {
                   const poi = poiById.get(poiId);
                   if (!poi) return null;
                   return (
@@ -382,15 +407,15 @@ function TripDayList({
                           label="↑"
                           variant="secondary"
                           className="flex-1"
-                          disabled={index === 0 || pending.reorder || pending.delete}
-                          onPress={() => move(day.day_index, index, index - 1)}
+                          disabled={!canMove(poiId, 'up') || pending.reorder || pending.delete}
+                          onPress={() => move(poiId, 'up')}
                         />
                         <Button
                           label="↓"
                           variant="secondary"
                           className="flex-1"
-                          disabled={index === ids.length - 1 || pending.reorder || pending.delete}
-                          onPress={() => move(day.day_index, index, index + 1)}
+                          disabled={!canMove(poiId, 'down') || pending.reorder || pending.delete}
+                          onPress={() => move(poiId, 'down')}
                         />
                         <Button
                           label="삭제"

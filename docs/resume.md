@@ -1,3 +1,40 @@
+## 2026-11-27 (claude) — 일정 장소를 날짜끼리도 끌어 옮기기
+
+- 출처: 소유자 요청 "pinvi 에서 같은 날짜안에서만 위치가 DND 가능한데 날짜끼리도 이동가능하도록". 웹 일정 패널은
+  펼친 일자 하나의 목록에서만 HTML5 DnD(라이브러리 없음)로 순서를 바꿨고(`/pois/reorder`, 클라이언트가 그 일자 전체의
+  새 키를 보냄), 다른 일자로는 장소 편집기의 일자 선택(`PATCH day_index` → 맨 끝)으로만 갔다.
+- API `POST /trips/{id}/pois/{poi_id}/move` `{day_index, before_poi_id|null}` + `If-Match`(옮길 장소 version). 같은
+  일자 안 이동과 다른 일자로의 이동이 한 요청·한 트랜잭션이다: Trip 잠금 → (장소 + 도착 일자) id 순 잠금·version 확인
+  → 서버가 최신 순서에 기준 장소로 자리를 정하고 보통은 이웃 키 중간값으로 옮긴 한 행만 쓴다(자리가 없을 때만 도착 일자를
+  균등 키로 다시 매김). 출발 일자는 쓰지 않는다(빠진 자리뿐). 제자리 이동은 쓰기·version·broadcast 없음. 기준 장소가 그 일자에 없으면 409
+  `SORT_ORDER_CONFLICT`, 자기 자신이면 422, 일자 없음 404, viewer 403. 실시간 `poi.moved`(metrics·web 무효화 목록 등록).
+  일자별 경로·거리는 저장하지 않고 요청 때 계산하므로 지울 캐시가 없고, cache target 투영은 기존 행 trigger가 받는다.
+- 웹: `usePoiDrag`(패널 하나가 끌기 상태를 공유) — 펼친 일자 행(위/아래 절반으로 앞/뒤), 접힌 일자 줄·빈 일자(맨 끝),
+  접힌 일자 미리보기 줄(앞/뒤)이 모두 놓을 자리다. 받을 일자는 primary 테두리·"N일차 맨 끝에 놓기" 안내, 행 사이는 2px 선.
+  장소 끌기가 아닌 끌기(파일)는 막지 않는다. Firefox용 `setData`. 같은 일자 순서 변경도 move로 바꿨다(클라이언트 키 계산
+  제거, version 충돌을 409로 드러냄). 접힌 일자로 옮기면 "…N일차로 옮겼어요" 안내(role=status).
+- 키보드: 장소 줄 버튼의 Alt+↑/↓로 한 칸, 첫·마지막 장소는 이전 일자 맨 끝·다음 일자 맨 앞. 옮긴 뒤 그 일자를
+  펼치고 초점을 그 줄로 돌려준다(초점이 body일 때만, 실패해도). 결과는 패널의 상시 live region에 "'X' — N일차 M번째로
+  옮겼습니다"/"옮기지 못했습니다"로 알린다. 줄마다 "N일차 M번째." + 사용법을 `aria-describedby`로 붙인다. 손잡이는
+  마우스 전용 표시(`aria-hidden`)로 남겼다 — 별도 초점 버튼은 줄마다 탭을 늘리고, Firefox는 `<button>` 위에서 끌기를
+  시작하지 못한다.
+- 적대 리뷰 2인 반영: (프론트) 행 사이 여백에서 놓으면 일자 맨 끝으로 가던 회귀 → 목록·미리보기 컨테이너가 dragover를
+  받아 포인터에 가장 가까운 틈으로 정한다. 전용 MIME `application/x-pinvi-poi`(입력란에 id가 글자로 들어가지 않음,
+  장소 끌기 아닌 끌기 무시) + window drop/dragend로 끌기 상태 정리, Safari `relatedTarget` 없음은 지우지 않음, 줄 표시는
+  그림자 대신 의사 요소. (백엔드) 매 이동이 뒤쪽 장소 version을 모두 올려 동행 편집에 엉뚱한 409를 내던 것 →
+  이웃 키 중간값으로 한 행만 쓰고 자리가 없을 때만 다시 매김. 다른 일자로 옮길 때 장소 댓글 `day_index`도 따라감
+  (`PATCH day_index`도). 잠금은 옮길 장소와 도착 일자를 한 문장에서 id 순으로. `optimize_trip_day`(persist)에 잠금·version
+  검사가 없는 것은 이번 변경 전부터의 문제라 후속 이슈로 남겼다.
+- 모바일(`trips/[tripId]/edit.tsx`): 기존 ↑/↓가 같은 규칙으로 일자를 넘는다(`poiApi.move`, 두 일자 낙관 순서). 모바일 앱에
+  끌어 놓기는 원래 없어 추가하지 않았다.
+- 시험: API 통합 `test_pois_move.py` 9건(한 행만 쓰기·자리 없을 때 다시 매김·댓글 일자·다른 여행 장소 포함, 다른 일자 기준 앞·빈 일자·맨 끝·같은 일자·제자리 무변경·version/기준/자기/일자
+  없음/지워진 장소·viewer 403/editor 200/외부인·동시 같은 version 하나만 성공·동시 같은 일자 둘 다 보존)과 기존 POI 통합
+  19건, unit `test_poi_even_ranks.py`, 전체 unit 2420(m05 두 건은 WSL에서 Windows worktree git 포인터를 못 읽는 환경 실패),
+  ruff·format·mypy strict. 웹 vitest 682(새 `tripPoiCrossDayDrag` 7, 행 사이 여백·MIME 포함), domain `poiMove.test.ts`, typecheck·lint·React Doctor
+  web/mobile 0. mocked Playwright `trip-detail.e2e.ts` 5건(접힌 일자·빈 일자·미리보기 줄 앞·키보드 초점·실제 마우스로 행 사이 여백·409 실패 초점)은 CI에서 돈다.
+  live 카탈로그 TRIP-072~074(쓰기 포함, 배포 뒤에만 통과)를 작성만 했고 돌리지 않았다. 기존 TRIP-030·시나리오 reorder
+  단언은 move 요청으로 바꿨다.
+- 배포: API·web 이미지(마이그레이션 없음). 모바일은 다음 앱 빌드. 구 web은 새 API에서도 `/reorder`로 그대로 동작한다.
 ## 2026-11-27 (claude) — web e2e 두 건 흔들림 원인 수정(main red 복구)
 
 - 출처: `web` workflow가 main `929b4243`(#805)에서 빨강. 실패는 두 시험이고 둘 다 앱 회귀가 아니라 시험의 측정 경쟁이다.

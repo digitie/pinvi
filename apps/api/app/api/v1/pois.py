@@ -12,14 +12,23 @@ from app.db import session as db_session
 from app.models.poi import TripDayPoi
 from app.schemas.envelope import Envelope
 from app.schemas.feature import ExternalRef
-from app.schemas.poi import PoiCreate, PoiReorderRequest, PoiResponse, PoiUpdate
+from app.schemas.poi import (
+    PoiCreate,
+    PoiMoveRequest,
+    PoiMoveResponse,
+    PoiReorderRequest,
+    PoiResponse,
+    PoiUpdate,
+)
 from app.services.feature_request import auto_fire_external_feature_request
 from app.services.poi import (
+    PoiMoveValidationError,
     PoiNotFoundError,
     PoiVersionConflictError,
     SortOrderConflictError,
     create_poi,
     get_poi,
+    move_poi,
     poi_rise_sets,
     reorder_pois,
     soft_delete_poi,
@@ -317,3 +326,69 @@ async def reorder_pois_endpoint(
         version=max((poi.version for poi in updated), default=None),
     )
     return Envelope.of(response)
+
+
+@router.post("/{poi_id}/move", response_model=Envelope[PoiMoveResponse])
+async def move_poi_endpoint(
+    trip_id: uuid.UUID,
+    poi_id: uuid.UUID,
+    body: PoiMoveRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    if_match: Annotated[int, Header(alias="If-Match")],
+) -> Envelope[PoiMoveResponse]:
+    """장소 하나를 일자 안에서, 또는 다른 일자로 옮긴다(드래그 앤 드롭 한 번 = 호출 한 번)."""
+    actor_id = uuid.UUID(current_user_id)
+    await _trip_or_404(db, trip_id, actor_id)
+    try:
+        poi = await get_poi(db, attachment_id=poi_id, trip_id=trip_id)
+        result = await move_poi(
+            db,
+            poi=poi,
+            expected_version=if_match,
+            day_index=body.day_index,
+            before_poi_id=body.before_poi_id,
+        )
+    except PoiNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except PoiMoveValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except (PoiVersionConflictError, SortOrderConflictError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    rise_sets = await poi_rise_sets(db, [result.poi, *result.changed])
+    moved = _to_response(result.poi, rise_set=rise_sets[result.poi.attachment_id])
+    changed = [_to_response(p, rise_set=rise_sets[p.attachment_id]) for p in result.changed]
+    if result.changed:
+        realtime_broker.publish_event_nowait(
+            trip_id=trip_id,
+            event_type="poi.moved",
+            actor_user_id=actor_id,
+            payload={
+                "poi_id": str(result.poi.attachment_id),
+                "from_day_index": result.from_day_index,
+                "to_day_index": result.poi.day_index,
+                "before_poi_id": str(body.before_poi_id) if body.before_poi_id else None,
+                "moves": [
+                    {
+                        "poi_id": str(p.attachment_id),
+                        "day_index": p.day_index,
+                        "new_sort_order": p.sort_order,
+                        "version": p.version,
+                    }
+                    for p in result.changed
+                ],
+            },
+            version=result.poi.version,
+        )
+    return Envelope.of(
+        PoiMoveResponse(poi=moved, from_day_index=result.from_day_index, changed=changed)
+    )

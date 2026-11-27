@@ -17,6 +17,7 @@ broker**로 시작한다. 지도 feature read와 무관하게 여행 계획(`app
   - `poi.updated`
   - `poi.deleted`
   - `poi.reordered`
+  - `poi.moved` (장소 한 곳 이동 — 같은 일자·다른 일자, `docs/api/pois.md` §3.2)
 - 클라이언트 이벤트:
   - `presence.heartbeat`
   - `presence.cursor`

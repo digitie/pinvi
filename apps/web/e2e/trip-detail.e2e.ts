@@ -2132,3 +2132,299 @@ test.describe('모바일 지도 비율·목록 탭 가운데·내 위치(2026-11
     await expect(button).toHaveAccessibleName('내 위치를 따라가는 중');
   });
 });
+
+// 2026-11-27 소유자 요청 — 같은 일자 안에서만 되던 장소 끌어 놓기를 일자끼리도.
+test.describe('장소를 다른 일자로 옮기기', () => {
+  const day = (index: number, date: string, pois: unknown[]) => ({
+    ...BASE_MARKER_DAY,
+    day_index: index,
+    date,
+    effective_date: date,
+    title: `${index}일차`,
+    pois,
+  });
+  const haeundae = { ...BASE_MARKER_POI, sort_order: '002s' };
+  const gwangalli = {
+    ...BASE_MARKER_POI,
+    poi_id: manualPoiId,
+    feature_id: null,
+    title: '광안리 해변',
+    sort_order: '005k',
+    feature: { coord: { lon: 129.118, lat: 35.153 } },
+    feature_resolution_state: 'not_linked',
+  };
+  const gamcheon = {
+    ...BASE_MARKER_POI,
+    poi_id: snapshotPoiId,
+    feature_id: 'feat-gamcheon',
+    title: '감천문화마을',
+    sort_order: '002s',
+    feature: { coord: { lon: 129.01, lat: 35.1 } },
+  };
+  const viewWith = (days: unknown[]) => ({ ...TRIP_VIEW, days });
+  const poiResponse = (
+    poi: { poi_id: string; feature_id: string | null; title: string },
+    dayIndex: number,
+    sortOrder: string,
+    version: number,
+  ) => ({
+    attachment_id: poi.poi_id,
+    trip_id: tripId,
+    day_index: dayIndex,
+    sort_order: sortOrder,
+    feature_id: poi.feature_id,
+    feature_link_broken_at: null,
+    feature_snapshot: { name: poi.title },
+    custom_marker_color: null,
+    custom_marker_icon: null,
+    source: 'feature',
+    external_ref: null,
+    planned_arrival_at: null,
+    planned_departure_at: null,
+    user_note: null,
+    budget_amount: null,
+    actual_amount: null,
+    currency: 'KRW',
+    user_url: null,
+    rise_set: null,
+    version,
+    created_at: '2026-06-01T09:00:00+09:00',
+    updated_at: '2026-06-01T09:00:00+09:00',
+  });
+
+  async function mockMove(
+    page: Page,
+    onMove: (poiId: string, body: Record<string, unknown>, ifMatch: string | undefined) => unknown,
+  ) {
+    await page.route(
+      /.*\/trips\/[0-9a-f-]{36}\/pois\/[0-9a-f-]{36}\/move$/,
+      async (route, request) => {
+        if (!isFetch(request.resourceType()) || request.method() !== 'POST') {
+          return route.fallback();
+        }
+        const movedId = new URL(request.url()).pathname.split('/').at(-2)!;
+        const data = onMove(
+          movedId,
+          request.postDataJSON() as Record<string, unknown>,
+          request.headers()['if-match'],
+        );
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data }) });
+      },
+    );
+  }
+
+  test('펼친 일자의 장소를 접힌 일자 줄에 끌어 놓으면 그 일자 맨 끝으로 옮긴다', async ({
+    page,
+  }) => {
+    let view = viewWith([
+      day(1, '2026-07-01', [haeundae, gwangalli]),
+      day(2, '2026-07-02', [gamcheon]),
+      day(3, '2026-07-03', []),
+    ]);
+    const calls: { poiId: string; body: Record<string, unknown>; ifMatch?: string }[] = [];
+    await mockMove(page, (movedId, body, ifMatch) => {
+      calls.push({ poiId: movedId, body, ifMatch });
+      view = viewWith([
+        day(1, '2026-07-01', [gwangalli]),
+        day(2, '2026-07-02', [gamcheon, { ...haeundae, sort_order: '005k', version: 2 }]),
+        day(3, '2026-07-03', []),
+      ]);
+      return {
+        poi: poiResponse(haeundae, 2, '005k', 2),
+        from_day_index: 1,
+        changed: [poiResponse(haeundae, 2, '005k', 2)],
+      };
+    });
+    await mockTripDetailRoutes(page, () => view);
+    await page.goto(`/trips/${tripId}`);
+    const rows = page.getByTestId('trip-poi-list').locator('> li');
+    await expect(rows).toHaveCount(2);
+
+    const source = rows.first();
+    const target = page.getByRole('tab', { name: '2일차', exact: true });
+    const dayRow = page.locator('[data-testid="trip-day-row"][data-day-index="2"]');
+    const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+    await source.dispatchEvent('dragstart', { dataTransfer });
+    await target.dispatchEvent('dragover', { dataTransfer });
+    await expect(dayRow).toHaveAttribute('data-drop-target', 'true');
+    await expect(dayRow.getByTestId('trip-day-drop-hint')).toHaveText('2일차 맨 끝에 놓기');
+    await target.dispatchEvent('drop', { dataTransfer });
+    await source.dispatchEvent('dragend', { dataTransfer });
+
+    await expect.poll(() => calls.length).toBe(1);
+    expect(calls[0]).toEqual({
+      poiId,
+      body: { day_index: 2, before_poi_id: null },
+      ifMatch: '1',
+    });
+    await expect(dayRow).not.toHaveAttribute('data-drop-target', 'true');
+    await expect(page.getByTestId('poi-add-notice')).toHaveText(
+      "'해운대 해수욕장'을(를) 2일차로 옮겼어요.",
+    );
+    await expect(rows).toHaveCount(1);
+    await expect(page.getByRole('tab', { name: '2일차', exact: true })).toContainText('2곳');
+  });
+
+  test('빈 일자와 접힌 일자 미리보기 줄 앞에도 놓을 수 있다', async ({ page }) => {
+    const view = viewWith([
+      day(1, '2026-07-01', [haeundae, gwangalli]),
+      day(2, '2026-07-02', [gamcheon]),
+      day(3, '2026-07-03', []),
+    ]);
+    const bodies: Record<string, unknown>[] = [];
+    await mockMove(page, (_movedId, body) => {
+      bodies.push(body);
+      return {
+        poi: poiResponse(gwangalli, Number(body.day_index), '002s', 2),
+        from_day_index: 1,
+        changed: [],
+      };
+    });
+    await mockTripDetailRoutes(page, () => view);
+    await page.goto(`/trips/${tripId}`);
+    const rows = page.getByTestId('trip-poi-list').locator('> li');
+    await expect(rows).toHaveCount(2);
+
+    // 빈 3일차 줄
+    let dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+    await rows.nth(1).dispatchEvent('dragstart', { dataTransfer });
+    const empty = page.getByRole('tab', { name: '3일차', exact: true });
+    await empty.dispatchEvent('dragover', { dataTransfer });
+    await empty.dispatchEvent('drop', { dataTransfer });
+    await rows.nth(1).dispatchEvent('dragend', { dataTransfer });
+    await expect.poll(() => bodies.length).toBe(1);
+    expect(bodies[0]).toEqual({ day_index: 3, before_poi_id: null });
+
+    // 접힌 2일차의 미리보기 줄 위쪽 절반 → 그 장소 앞
+    await expect(rows).toHaveCount(2);
+    dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+    await rows.nth(1).dispatchEvent('dragstart', { dataTransfer });
+    const preview = page.getByTestId('trip-day-preview-poi').filter({ hasText: '감천문화마을' });
+    const box = (await preview.boundingBox())!;
+    const point = { clientX: box.x + box.width / 2, clientY: box.y + 2 };
+    await preview.dispatchEvent('dragover', { dataTransfer, ...point });
+    await preview.dispatchEvent('drop', { dataTransfer, ...point });
+    await expect.poll(() => bodies.length).toBe(2);
+    expect(bodies[1]).toEqual({ day_index: 2, before_poi_id: snapshotPoiId });
+  });
+
+  test('장소 줄에서 Alt+아래 화살표 — 마지막 장소가 다음 일자 맨 앞으로 가고 초점이 따라간다', async ({
+    page,
+  }) => {
+    let view = viewWith([
+      day(1, '2026-07-01', [haeundae, gwangalli]),
+      day(2, '2026-07-02', [gamcheon]),
+    ]);
+    const bodies: Record<string, unknown>[] = [];
+    await mockMove(page, (_movedId, body) => {
+      bodies.push(body);
+      view = viewWith([
+        day(1, '2026-07-01', [haeundae]),
+        day(2, '2026-07-02', [
+          { ...gwangalli, sort_order: '002s', version: 2 },
+          { ...gamcheon, sort_order: '005k', version: 2 },
+        ]),
+      ]);
+      return { poi: poiResponse(gwangalli, 2, '002s', 2), from_day_index: 1, changed: [] };
+    });
+    await mockTripDetailRoutes(page, () => view);
+    await page.goto(`/trips/${tripId}`);
+    const rows = page.getByTestId('trip-poi-list').locator('> li');
+    await expect(rows).toHaveCount(2);
+
+    const rowButton = rows.nth(1).locator('button[aria-current]');
+    await expect(rowButton).toHaveAccessibleDescription(/1일차 2번째\..*위·아래 화살표로 한 칸씩/);
+    await rowButton.focus();
+    await page.keyboard.press('Alt+ArrowDown');
+    await expect.poll(() => bodies.length).toBe(1);
+    expect(bodies[0]).toEqual({ day_index: 2, before_poi_id: snapshotPoiId });
+    await expect(page.getByRole('tab', { name: '2일차', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(rows.first()).toContainText('광안리 해변');
+    await expect(rows.first().locator('button[aria-current]')).toBeFocused();
+  });
+
+  test('실제 마우스로 끌어 행 사이 여백에 놓으면 그 틈으로 간다(일자 맨 끝으로 튀지 않는다)', async ({
+    page,
+  }) => {
+    const yongkungsa = {
+      ...gwangalli,
+      poi_id: brokenPoiId,
+      title: '해동용궁사',
+      sort_order: '008c',
+    };
+    const view = viewWith([
+      day(1, '2026-07-01', [haeundae, gwangalli, yongkungsa]),
+      day(2, '2026-07-02', [gamcheon]),
+    ]);
+    const bodies: Record<string, unknown>[] = [];
+    await mockMove(page, (_movedId, body) => {
+      bodies.push(body);
+      return { poi: poiResponse(haeundae, 1, '006', 2), from_day_index: 1, changed: [] };
+    });
+    await mockTripDetailRoutes(page, () => view);
+    await page.goto(`/trips/${tripId}`);
+    const rows = page.getByTestId('trip-poi-list').locator('> li');
+    await expect(rows).toHaveCount(3);
+
+    const grip = rows.first().locator('[title="끌어서 순서 변경"]');
+    const from = (await grip.boundingBox())!;
+    const second = (await rows.nth(1).boundingBox())!;
+    const third = (await rows.nth(2).boundingBox())!;
+    // 둘째·셋째 행 사이 여백(행에 속하지 않는 margin) 한가운데.
+    const gapY = (second.y + second.height + third.y) / 2;
+    expect(third.y - (second.y + second.height)).toBeGreaterThan(2);
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(from.x + from.width / 2, gapY, { steps: 12 });
+    await expect(rows.nth(2)).toHaveAttribute('data-drop-indicator', 'before');
+    await page.mouse.up();
+    await expect.poll(() => bodies.length).toBe(1);
+    expect(bodies[0]).toEqual({ day_index: 1, before_poi_id: brokenPoiId });
+  });
+
+  test('키보드 이동이 409로 실패하면 초점이 그 장소 줄에 남고 실패를 알린다', async ({
+    page,
+  }) => {
+    const view = viewWith([
+      day(1, '2026-07-01', [haeundae, gwangalli]),
+      day(2, '2026-07-02', [gamcheon]),
+    ]);
+    let calls = 0;
+    await page.route(
+      /.*\/trips\/[0-9a-f-]{36}\/pois\/[0-9a-f-]{36}\/move$/,
+      async (route, request) => {
+        if (!isFetch(request.resourceType()) || request.method() !== 'POST') {
+          return route.fallback();
+        }
+        calls += 1;
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: { code: 'VERSION_CONFLICT', message: '동시 편집 충돌 — 다시 불러와 주세요.' },
+          }),
+        });
+      },
+    );
+    await mockTripDetailRoutes(page, () => view);
+    await page.goto(`/trips/${tripId}`);
+    const rows = page.getByTestId('trip-poi-list').locator('> li');
+    await expect(rows).toHaveCount(2);
+
+    await rows.first().locator('button[aria-current]').focus();
+    await page.keyboard.press('Alt+ArrowDown');
+    await expect.poll(() => calls).toBe(1);
+    await expect(page.getByTestId('poi-mutation-error')).toContainText('동시 편집 충돌');
+    await expect(page.getByTestId('trip-poi-move-status')).toHaveText(
+      "'해운대 해수욕장'을(를) 옮기지 못했습니다.",
+    );
+    await expect(rows.first().locator('button[aria-current]')).toBeFocused();
+    await expect(page.getByRole('tab', { name: '1일차', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+});

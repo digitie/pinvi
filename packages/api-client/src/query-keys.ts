@@ -231,6 +231,7 @@ const TRIP_DETAIL_REALTIME_EVENTS = new Set([
   'poi.created',
   'poi.updated',
   'poi.deleted',
+  'poi.moved',
   'poi.reordered',
 ]);
 

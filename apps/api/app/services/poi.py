@@ -5,14 +5,16 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.comment import TripComment
 from app.models.poi import TripDayPoi
 from app.models.poi_place_detail import TripPoiPlaceDetail
 from app.models.trip import Trip
@@ -193,6 +195,25 @@ async def get_poi(db: AsyncSession, *, attachment_id: uuid.UUID, trip_id: uuid.U
     return poi
 
 
+async def _carry_poi_comments(
+    db: AsyncSession, *, trip_id: uuid.UUID, poi_id: uuid.UUID, day_index: int
+) -> None:
+    """장소에 단 댓글의 일자를 장소를 따라 옮긴다.
+
+    일자 단위 관리자 작업(일자 삭제·다른 여행으로 이동)이 `day_index`로 댓글을 고르므로, 두면 옮긴 장소의
+    댓글이 출발 일자와 함께 지워지거나 딸려 간다(관리자 이동 `_move_or_delete_poi_comments`와 같은 규칙).
+    """
+    await db.execute(
+        update(TripComment)
+        .where(
+            TripComment.trip_id == trip_id,
+            TripComment.target_id == poi_id,
+            TripComment.deleted_at.is_(None),
+        )
+        .values(day_index=day_index)
+    )
+
+
 async def update_poi(
     db: AsyncSession,
     *,
@@ -244,6 +265,10 @@ async def update_poi(
         setattr(poi, key, value)
     poi.version += 1
     try:
+        if moved:
+            await _carry_poi_comments(
+                db, trip_id=poi.trip_id, poi_id=poi.attachment_id, day_index=poi.day_index
+            )
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -340,6 +365,205 @@ async def reorder_pois(
     for poi in updated:
         await db.refresh(poi)
     return updated
+
+
+class PoiMoveValidationError(PoiError):
+    code = "VALIDATION_ERROR"
+
+
+# `packages/domain/src/poiRank.ts` `evenRanks`와 같은 키: (i+1)*100을 base36 4자리로.
+_RANK_DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
+_RANK_SPACING = 100
+_RANK_WIDTH = 4
+# 클라이언트 키 상한(`PoiCreate.sort_order` max_length)과 같다.
+_RANK_MAX_LENGTH = 80
+
+
+def _base36(value: int) -> str:
+    digits = ""
+    while value:
+        value, remainder = divmod(value, 36)
+        digits = _RANK_DIGITS[remainder] + digits
+    return digits or "0"
+
+
+def even_ranks(count: int) -> list[str]:
+    """`count`개의 균등 간격 정렬 키(오름차순). 고정폭 0 채움이라 COLLATE "C" 순서 == 수치 순서.
+
+    4자리가 넘칠 만큼 많으면(약 1.6만 개) 모든 키를 같은 넓은 폭으로 맞춘다.
+    """
+    width = max(_RANK_WIDTH, len(_base36(count * _RANK_SPACING)))
+    return [_base36((index + 1) * _RANK_SPACING).rjust(width, "0") for index in range(count)]
+
+
+def rank_between(prev: str | None, next_: str | None) -> str | None:
+    """`prev` < 키 < `next_`인 새 정렬 키(COLLATE "C"). 만들 수 없으면 None.
+
+    fractional indexing 중간값 — 이웃 키 사이에 넣어 **옮긴 장소 한 행만** 쓰기 위한 것이다. 새로 붙이는
+    자리는 base36 문자이고, 두 이웃이 함께 가진 앞부분은 그대로 복사한다. 클라이언트가 만든
+    키(`a0`·`last+'m'`·`evenRanks`)가 섞여 있어 사이가 없을 수도 있으므로(예: `p`와 `p0`) 결과를 비교로
+    검증하고, 실패하면 None을 돌려 호출자가 그 일자를 다시 매기게 한다.
+    """
+    if prev is None and next_ is None:
+        return even_ranks(1)[0]
+    try:
+        key = _midpoint(prev or "", next_)
+    except (ValueError, IndexError):
+        return None
+    if not key or len(key) > _RANK_MAX_LENGTH:
+        return None
+    if prev is not None and not prev < key:
+        return None
+    if next_ is not None and not key < next_:
+        return None
+    return key
+
+
+def _midpoint(low: str, high: str | None) -> str:
+    """`low` < 결과 < `high`(None = 끝없음). 자릿수 문자는 `_RANK_DIGITS`만 허용한다."""
+    zero = _RANK_DIGITS[0]
+    if high is not None:
+        shared = 0
+        while shared < len(high) and (low[shared] if shared < len(low) else zero) == high[shared]:
+            shared += 1
+        if shared > 0:
+            return high[:shared] + _midpoint(low[shared:], high[shared:])
+    low_digit = _RANK_DIGITS.index(low[0]) if low else 0
+    high_digit = _RANK_DIGITS.index(high[0]) if high is not None else len(_RANK_DIGITS)
+    if high_digit - low_digit > 1:
+        return _RANK_DIGITS[(low_digit + high_digit) // 2]
+    if high is not None and len(high) > 1:
+        return high[0]
+    return _RANK_DIGITS[low_digit] + _midpoint(low[1:], None)
+
+
+@dataclass(frozen=True)
+class PoiMoveResult:
+    poi: TripDayPoi
+    from_day_index: int
+    # 정렬 키나 일자가 바뀐 POI 전부(도착 일자 순서). 옮긴 장소는 실제로 옮겼으면 언제나 들어 있다.
+    # 보통은 옮긴 장소 하나뿐이고, 이웃 키 사이에 자리가 없을 때만 도착 일자를 다시 매겨 더 늘어난다.
+    # 순서가 그대로인 이동이면 빈 목록.
+    changed: list[TripDayPoi]
+
+
+async def move_poi(
+    db: AsyncSession,
+    *,
+    poi: TripDayPoi,
+    expected_version: int,
+    day_index: int,
+    before_poi_id: uuid.UUID | None,
+) -> PoiMoveResult:
+    """POI 하나를 `day_index` 일자의 `before_poi_id` 바로 앞(없으면 맨 끝)으로 옮긴다.
+
+    같은 일자 안 순서 변경과 다른 일자로의 이동이 같은 경로다. 위치는 서버가 잠근 최신 순서에
+    기준 장소(`before_poi_id`)로 정하므로, 그 사이 다른 사람이 도착 일자에 장소를 더해도 덮어쓰지
+    않는다. 보통은 이웃 키 사이의 새 키로 **옮긴 장소 한 행만** 쓴다 — 순서와 무관한 다른 장소의
+    version을 올리면 그 장소를 편집 중인 동행이 엉뚱한 409를 받기 때문이다. 이웃 사이에 자리가 없을
+    때만 도착 일자를 균등 키로 다시 매겨 바뀐 행을 쓴다. 출발 일자는 빠진 자리만 남아 쓰지 않는다.
+
+    잠금: Trip 행 → (옮길 장소 + 도착 일자 장소)를 한 문장에서 `attachment_id` 순으로. POI를 id 순으로
+    잠그는 다른 경로(feature reference reconciliation)와 교착하지 않게 같은 순서를 쓴다.
+    """
+    source_trip_id = poi.trip_id
+    poi_id = poi.attachment_id
+    if before_poi_id == poi_id:
+        raise PoiMoveValidationError("장소를 자기 자신 앞으로 옮길 수 없습니다.")
+    if await _lock_active_trip(db, source_trip_id) is None:
+        raise PoiNotFoundError("POI를 찾을 수 없습니다.")
+    rows = list(
+        (
+            await db.execute(
+                select(TripDayPoi)
+                .where(
+                    TripDayPoi.trip_id == source_trip_id,
+                    TripDayPoi.deleted_at.is_(None),
+                    or_(TripDayPoi.attachment_id == poi_id, TripDayPoi.day_index == day_index),
+                )
+                .order_by(TripDayPoi.attachment_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalars()
+    )
+    locked = next((row for row in rows if row.attachment_id == poi_id), None)
+    if locked is None:
+        raise PoiNotFoundError("POI를 찾을 수 없습니다.")
+    poi = locked
+    if poi.version != expected_version:
+        raise PoiVersionConflictError("동시 편집 충돌 — 다시 불러와 주세요.")
+    from_day_index = poi.day_index
+    if day_index != from_day_index:
+        day = await db.scalar(
+            select(TripDay.day_index).where(
+                TripDay.trip_id == source_trip_id, TripDay.day_index == day_index
+            )
+        )
+        if day is None:
+            raise PoiNotFoundError("이동할 여행 일자를 찾을 수 없습니다.")
+    # 정렬은 키 순(COLLATE "C" == ASCII 문자열 비교, 활성 행 키는 유일).
+    others = sorted(
+        (row for row in rows if row.attachment_id != poi_id and row.day_index == day_index),
+        key=lambda row: row.sort_order,
+    )
+    if before_poi_id is None:
+        insert_at = len(others)
+    else:
+        anchor = next(
+            (i for i, other in enumerate(others) if other.attachment_id == before_poi_id), None
+        )
+        if anchor is None:
+            raise SortOrderConflictError(
+                "기준 장소가 그 일자에 없습니다. 다시 불러온 후 옮겨 주세요."
+            )
+        insert_at = anchor
+    ordered = [*others[:insert_at], poi, *others[insert_at:]]
+    if day_index == from_day_index:
+        current = sorted([*others, poi], key=lambda row: row.sort_order)
+        if [row.attachment_id for row in current] == [row.attachment_id for row in ordered]:
+            # 순서가 그대로인 드롭 — 아무것도 쓰지 않는다(version 불변). rollback은 읽은 객체를
+            # 만료시키므로 쓰기 없는 commit으로 잠금만 푼다.
+            await db.commit()
+            return PoiMoveResult(poi=poi, from_day_index=from_day_index, changed=[])
+
+    prev_key = others[insert_at - 1].sort_order if insert_at > 0 else None
+    next_key = others[insert_at].sort_order if insert_at < len(others) else None
+    new_key = rank_between(prev_key, next_key)
+    try:
+        if new_key is not None:
+            changed = [poi]
+            poi.sort_order = new_key
+        else:
+            # 이웃 사이에 자리가 없다 — 도착 일자를 균등 키로 다시 매긴다. 부분 UNIQUE(trip, day,
+            # sort_order)는 즉시 검사라 바뀌는 행을 임시 고유 키로 옮긴 뒤 최종 키를 쓴다.
+            ranks = even_ranks(len(ordered))
+            targets = {row.attachment_id: ranks[i] for i, row in enumerate(ordered)}
+            changed = [
+                row for row in ordered if row is poi or row.sort_order != targets[row.attachment_id]
+            ]
+            nonce = uuid.uuid4().hex
+            for index, row in enumerate(changed):
+                row.sort_order = f"move_{nonce}_{index}"
+            await db.flush()
+            for row in changed:
+                row.sort_order = targets[row.attachment_id]
+        poi.day_index = day_index
+        for row in changed:
+            row.version += 1
+        if day_index != from_day_index:
+            await _carry_poi_comments(
+                db, trip_id=source_trip_id, poi_id=poi_id, day_index=day_index
+            )
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise SortOrderConflictError(
+            "정렬 위치가 충돌했습니다. 다시 불러온 후 시도해 주세요."
+        ) from exc
+    for row in changed:
+        await db.refresh(row)
+    return PoiMoveResult(poi=poi, from_day_index=from_day_index, changed=changed)
 
 
 async def _fill_trip_primary_region_from_snapshot(

@@ -18,6 +18,7 @@ _KNOWN_EVENT_TYPES: Final = {
     "day.updated",
     "poi.created",
     "poi.deleted",
+    "poi.moved",
     "poi.reordered",
     "poi.updated",
     "pong",

@@ -5,7 +5,14 @@ import { TripAttachmentsDisclosure } from '@/components/trips/TripAttachments';
 import { PoiRiseSetLine } from '@/components/trips/TripDayHeader';
 import { TripWeatherSummary } from '@/components/trips/TripWeatherSummary';
 import { PoiWeatherBadge } from '@/components/weather/WeatherBadge';
-import { arrayMove, featureResolutionNotice, formatKstTime, paletteHex } from '@pinvi/domain';
+import { type PoiDrag, rowInsertIndex } from '@/lib/usePoiDrag';
+import {
+  featureResolutionNotice,
+  formatKstTime,
+  isNoopPoiMove,
+  paletteHex,
+  poiInsertTarget,
+} from '@pinvi/domain';
 import type {
   PoiUpdate,
   TripViewPoi,
@@ -14,7 +21,7 @@ import type {
   TripWeatherResolution,
 } from '@pinvi/schemas';
 import { AlertTriangle, CloudOff, EyeOff, GripVertical, Pencil, Trash2 } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type DragEvent, type KeyboardEvent, type ReactNode, useId, useState } from 'react';
 
 function formatTime(value: string | null): string | null {
   return value ? formatKstTime(value) : null;
@@ -40,7 +47,15 @@ export interface TripPoiListProps {
   compact?: boolean;
   /** 편집 가능(쓰기 권한)일 때만 D&D·편집·삭제 노출. */
   editable?: boolean;
-  onReorder?: (orderedPoiIds: string[]) => void;
+  /**
+   * 일정 패널이 함께 쓰는 끌어 놓기 상태(`usePoiDrag`). 주면 행을 끌어 같은 일자 안이나 다른 일자로
+   * 옮길 수 있다(`dayIndex` 필요). 다른 일자에서 끌어 온 장소도 이 목록 행 앞뒤에 놓인다.
+   */
+  drag?: PoiDrag;
+  /** 장소 줄 버튼에서 Alt+위·아래 화살표 — 한 칸 이동(첫·마지막 장소는 이전·다음 일자로 넘어간다). */
+  onStepMove?: (poiId: string, direction: 'up' | 'down') => void;
+  /** 장소 옮기기 사용법을 적은 요소 id(`aria-describedby`) — 일정 패널이 한 번만 그린다. */
+  gripHintId?: string;
   onEditPoi?: (poi: TripViewPoi, patch: PoiUpdate) => void | boolean | Promise<void | boolean>;
   onDelete?: (poiId: string) => void;
   savingPoiId?: string | null;
@@ -74,6 +89,81 @@ function PoiAttachments({
 const EMPTY_WEATHER_CARDS = {};
 const EMPTY_WEATHER_BY_FEATURE = {};
 
+/**
+ * 키보드 한 칸 이동 — 장소 줄 버튼의 Alt+↑/↓. 손잡이를 따로 초점 받게 하면 줄마다 탭이 하나 늘고,
+ * Firefox는 <button> 위에서 끌기를 시작하지 못해 손잡이를 버튼으로 바꿀 수 없다.
+ */
+function stepMoveProps(
+  poiId: string,
+  onStepMove: (poiId: string, direction: 'up' | 'down') => void,
+  describedBy: (string | undefined)[],
+) {
+  return {
+    'aria-describedby': describedBy.filter(Boolean).join(' '),
+    'aria-keyshortcuts': 'Alt+ArrowUp Alt+ArrowDown',
+    'data-poi-grip': poiId,
+    onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => {
+      if (!event.altKey) return;
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      event.preventDefault();
+      onStepMove(poiId, event.key === 'ArrowUp' ? 'up' : 'down');
+    },
+  };
+}
+
+/**
+ * 한 일자 목록의 끌어 놓기 배선. 놓을 자리는 목록 전체가 받는다 — 행 사이 여백(space-y)도 가까운 틈으로
+ * 읽어, 여백에서 놓아도 일자 맨 끝으로 가지 않는다(리뷰). 행 가운데보다 위면 그 행 앞, 마지막 행 가운데보다
+ * 아래면 맨 끝. 자리 표시는 이 일자를 가리키고 제자리 이동이 아닐 때만 행 위·아래 2px 선으로 그린다.
+ */
+function poiListDnd(drag: PoiDrag, dayIndex: number, pois: TripViewPoi[]) {
+  const dayOrder = { dayIndex, poiIds: pois.map((p) => p.poi_id) };
+  const dropTarget =
+    drag.source &&
+    drag.target?.dayIndex === dayIndex &&
+    !isNoopPoiMove(drag.source.poiId, dayOrder, drag.target)
+      ? drag.target
+      : null;
+  const indicator = (poiId: string, index: number): 'before' | 'after' | undefined => {
+    if (!dropTarget) return undefined;
+    if (dropTarget.beforePoiId === poiId) return 'before';
+    if (dropTarget.beforePoiId == null && index === pois.length - 1) return 'after';
+    return undefined;
+  };
+  const listTarget = (event: DragEvent<HTMLOListElement>) =>
+    poiInsertTarget(
+      dayOrder,
+      rowInsertIndex(event.currentTarget.querySelectorAll(':scope > li'), event.clientY),
+    );
+  return {
+    listProps: {
+      onDragOver: (event: DragEvent<HTMLOListElement>) => drag.over(listTarget(event), event),
+      onDrop: (event: DragEvent<HTMLOListElement>) => drag.drop(listTarget(event), event),
+    },
+    rowProps: (poiId: string, index: number) => {
+      const mark = indicator(poiId, index);
+      // 선은 레이아웃이 밀리지 않게 절대 위치 의사 요소로 그린다.
+      const className = [
+        drag.source?.poiId === poiId ? 'opacity-50' : '',
+        mark === 'before'
+          ? 'relative before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-primary'
+          : '',
+        mark === 'after'
+          ? 'relative after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary'
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+      return {
+        'data-drop-indicator': mark,
+        className: className || undefined,
+        onDragStart: (event: DragEvent<HTMLLIElement>) => drag.start({ poiId, dayIndex }, event),
+        onDragEnd: () => drag.end(),
+      };
+    },
+  };
+}
+
 export function TripPoiList({
   pois,
   dayIndex,
@@ -89,7 +179,9 @@ export function TripPoiList({
   showCurrentWeather = false,
   compact = false,
   editable = false,
-  onReorder,
+  drag,
+  onStepMove,
+  gripHintId,
   onEditPoi,
   onDelete,
   savingPoiId = null,
@@ -97,8 +189,8 @@ export function TripPoiList({
   onEditToggle,
   onRefreshWeather,
 }: TripPoiListProps) {
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [editingInternal, setEditingInternal] = useState<string | null>(null);
+  const rowIdPrefix = useId();
   const controlled = editingPoiIdProp !== undefined;
   const editingPoiId = controlled ? editingPoiIdProp : editingInternal;
   const setEditingPoiId = (next: string | null) => {
@@ -108,24 +200,17 @@ export function TripPoiList({
 
   if (pois.length === 0) return null;
 
-  const dndEnabled = editable && onReorder != null;
-
-  const handleDrop = (toIndex: number) => {
-    if (dragIndex == null || dragIndex === toIndex) {
-      setDragIndex(null);
-      return;
-    }
-    const order = arrayMove(
-      pois.map((p) => p.poi_id),
-      dragIndex,
-      toIndex,
-    );
-    onReorder?.(order);
-    setDragIndex(null);
-  };
+  const dnd =
+    editable && drag != null && dayIndex != null ? poiListDnd(drag, dayIndex, pois) : null;
+  const dndEnabled = dnd != null;
+  const keyboardMove = dndEnabled && onStepMove != null;
 
   return (
-    <ol className={compact ? 'space-y-1.5' : 'space-y-2'} data-testid="trip-poi-list">
+    <ol
+      className={compact ? 'space-y-1.5' : 'space-y-2'}
+      data-testid="trip-poi-list"
+      {...dnd?.listProps}
+    >
       {pois.map((poi, index) => {
         const arrival = formatTime(poi.planned_arrival_at);
         const departure = formatTime(poi.planned_departure_at);
@@ -133,15 +218,7 @@ export function TripPoiList({
         const editing = poi.poi_id === editingPoiId;
         const resolutionNotice = featureResolutionNotice(poi.feature_resolution_state);
         return (
-          <li
-            key={poi.poi_id}
-            draggable={dndEnabled}
-            onDragStart={dndEnabled ? () => setDragIndex(index) : undefined}
-            onDragOver={dndEnabled ? (event) => event.preventDefault() : undefined}
-            onDrop={dndEnabled ? () => handleDrop(index) : undefined}
-            onDragEnd={dndEnabled ? () => setDragIndex(null) : undefined}
-            className={dragIndex === index ? 'opacity-50' : undefined}
-          >
+          <li key={poi.poi_id} draggable={dndEnabled} {...dnd?.rowProps(poi.poi_id, index)}>
             <PoiAttachments tripId={showInlineAttachments ? tripId : undefined} poiId={poi.poi_id}>
               {({ trigger: attachmentTrigger, panel: attachmentPanel }) => (
                 <div
@@ -163,10 +240,21 @@ export function TripPoiList({
                         <GripVertical className="h-4 w-4" />
                       </span>
                     )}
+                    {keyboardMove && (
+                      <span id={`${rowIdPrefix}-${poi.poi_id}`} className="sr-only">
+                        {`${dayIndex}일차 ${index + 1}번째.`}
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => onSelectPoi?.(poi.poi_id)}
                       aria-current={selected}
+                      {...(keyboardMove
+                        ? stepMoveProps(poi.poi_id, onStepMove, [
+                            `${rowIdPrefix}-${poi.poi_id}`,
+                            gripHintId,
+                          ])
+                        : {})}
                       className="flex min-w-0 flex-1 items-start gap-3 text-left"
                     >
                       <span

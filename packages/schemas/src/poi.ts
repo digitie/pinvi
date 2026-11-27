@@ -81,6 +81,18 @@ export const PoiReorderRequestSchema = z.object({
 });
 export type PoiReorderRequest = z.infer<typeof PoiReorderRequestSchema>;
 
+/**
+ * `POST /trips/{trip_id}/pois/{poi_id}/move` — 장소 하나를 `day_index` 일자의 `before_poi_id`
+ * 바로 앞(null이면 맨 끝)으로 옮긴다. 같은 일자 안 순서 변경도 이 요청이다.
+ */
+export const PoiMoveRequestSchema = z
+  .object({
+    day_index: z.number().int().min(1),
+    before_poi_id: z.string().uuid().nullable(),
+  })
+  .strict();
+export type PoiMoveRequest = z.infer<typeof PoiMoveRequestSchema>;
+
 export const PoiResponseSchema = z.object({
   attachment_id: z.string().uuid(),
   trip_id: z.string().uuid(),
@@ -106,6 +118,17 @@ export const PoiResponseSchema = z.object({
   updated_at: Iso8601Schema,
 });
 export type PoiResponse = z.infer<typeof PoiResponseSchema>;
+
+/**
+ * 이동 응답 — `changed`는 정렬 키·일자가 바뀐 장소 전부. 옮겼으면 옮긴 장소는 언제나 들어 있고 보통은 그
+ * 하나뿐이다. 순서가 그대로인 이동이면 빈 목록.
+ */
+export const PoiMoveResponseSchema = z.object({
+  poi: PoiResponseSchema,
+  from_day_index: z.number().int(),
+  changed: z.array(PoiResponseSchema),
+});
+export type PoiMoveResponse = z.infer<typeof PoiMoveResponseSchema>;
 
 /**
  * 장소 영업 정보 — `GET|POST /trips/{id}/pois/{poi}/place-details[/refresh]`.

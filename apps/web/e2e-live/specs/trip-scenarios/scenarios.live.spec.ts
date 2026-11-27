@@ -253,7 +253,7 @@ async function checkReorder(page: Page, s: TripScenario, day: number, testInfo: 
   await selectDay(page, `${day}일차`);
   const before = await poiTitles(page);
   const last = before.length - 1;
-  const reorder = waitForRequest(page, /\/trips\/[0-9a-f-]{36}\/pois\/reorder/);
+  const reorder = waitForRequest(page, /\/trips\/[0-9a-f-]{36}\/pois\/[0-9a-f-]{36}\/move$/);
   await dragPoi(page, last, 0);
   expect((await reorder).ok(), `${s.id} reorder day ${day}`).toBeTruthy();
   const expected = [before[last]!, ...before.slice(0, last)];
