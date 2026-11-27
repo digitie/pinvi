@@ -1,3 +1,12 @@
+## 2026-11-28 (claude) — Map main(c82af3a1) service·admin/full 재vendor — 회전 짝 맞춤
+
+- 원인: Manager `m05_isolated_e2e.py --rotation-preflight`가 Map main·PinVi main 짝을 거절했다 — PinVi 계약 admin digest
+  (`0440a3f6…`, Map #1568)와 Map revision의 admin digest(`324e1e74…`)가 다르다. Map #1564(visitor_info)·containing-areas·#1569(courses)가
+  OpenAPI를 바꿨다.
+- Map `c82af3a1b9a8e2329793c02d46f898549a9038e3`의 `openapi.json`·`openapi.service.json`을 byte-exact vendor(user는 이미 같음),
+  `scripts/generate_m05_pair_contract.py --write`로 M05 pair 계약 재유도, service provenance·`.env.example`·api.yml 핀·계약 테스트 핀 갱신.
+- 앱 코드 변경 없음 — 바뀐 것은 additive(`FeatureTripCard.route` nullable, admin containing-areas 경로, visitor_info 스키마).
+
 ## 2026-11-27 (claude) — 장소 상세 출처 소개 일반화 + 이용 안내(Map visitor_info, ADR-126)
 
 - 목표: Map ADR-126(PR #1564·#1565)가 공개 `GET /v1/features/{id}`에 최상위 `visitor_info`(`PlaceVisitorInfo`)를 더했다 —
