@@ -140,6 +140,41 @@ async def test_detail_and_mismatched_id() -> None:
         await transport_layers.detail(_client(handler), "fuel_station", "other-id")
 
 
+async def test_detail_carries_rest_area_food_for_rest_areas_and_paired_fuel_stations() -> None:
+    handler, _ = _by_dataset(
+        {
+            "fuel-stations": httpx.Response(200, json=fx.detail_body("fuel-stations")),
+            "rest-areas": httpx.Response(200, json=fx.detail_body("rest-areas")),
+        }
+    )
+    rest = await transport_layers.detail(_client(handler), "rest_area", fx.REST_AREA_ID)
+    assert rest.food is not None
+    assert rest.food.std_rest_code == "000341"
+    assert rest.food.paired_distance_m is None
+    assert [m.tags for m in rest.food.featured] == [["best"], ["premium", "recommended"]]
+    station = await transport_layers.detail(_client(handler), "fuel_station", fx.FUEL_STATION_ID)
+    assert station.food is not None
+    assert station.food.rest_area_name == "행담도휴게소"
+    assert station.food.paired_distance_m == 55.0
+
+
+async def test_detail_without_or_with_a_broken_food_block_keeps_the_detail() -> None:
+    plain = fx.detail_body("rest-areas", food=False)
+    broken = fx.detail_body("fuel-stations")
+    broken["data"]["rest_area_food"]["rest_area"]["menu_count"] = "many"
+    handler, _ = _by_dataset(
+        {
+            "rest-areas": httpx.Response(200, json=plain),
+            "fuel-stations": httpx.Response(200, json=broken),
+        }
+    )
+    rest = await transport_layers.detail(_client(handler), "rest_area", fx.REST_AREA_ID)
+    assert rest.food is None
+    station = await transport_layers.detail(_client(handler), "fuel_station", fx.FUEL_STATION_ID)
+    assert station.food is None
+    assert isinstance(station.item, FuelStationItem)
+
+
 async def test_detail_404_propagates() -> None:
     handler, _ = _by_dataset(
         {"airports": httpx.Response(404, json=fx.problem_body(404, "NOT_FOUND"))}
