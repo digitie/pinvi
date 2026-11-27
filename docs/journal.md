@@ -32,6 +32,7 @@
   기존 auth/oauth/mobile/admin/retention 시험, web `loginRememberMe.test.tsx`.
 - 배포: API(0110 마이그레이션 — `api-entrypoint`가 기동 시 적용, `lock_timeout` 5초를 넘기면 그 기동이 실패하므로 컨테이너가 다시 뜨지 않으면 운영자가 API를 재기동)·web 이미지. 모바일은 다음 앱 빌드부터 체크박스가
   보인다(이전 빌드는 본문 없이 호출 → 유지 안 함).
+
 ## 2026-11-27 (claude) — 주유소·교통 돌발: transport 공개 유가 화면과 같은 표시, 장소 layer와 겹침 제거
 
 - 출처: 소유자 요청 "주유소 정보는 transport의 fuel 참고해서 동일한 스타일, 취급하지 않는 유종은 표시하지 말 것" + 후속 "주유소 마커가
