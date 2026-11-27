@@ -13,6 +13,7 @@
   15017313이 공원경계 3 km 버퍼였다) **배포 뒤에만** 켠다. 그 전엔 버퍼 면이 은평·도봉 시가지까지 "북한산 안"이라 답한다.
 - Map user OpenAPI 재vendor(`17ac805d…`), M05 pair 계약 재생성. 시험: unit(client·플래그·저하·계약 밖 행·route/area 제외),
   통합(detail-card 플래그 on/off), 계약 게이트(경로·query·필드), web vitest(칩·경고·옛 카드).
+
 ## 2026-11-27 (claude) — 등산 코스를 일정에 추가(Map ADR-128 `route` 요약)
 
 - 출처: 소유자 결정 — 숲길 구간을 코스로 묶은 Map(ADR-128)의 등산 코스를 PinVi에서 일정에 넣는다. 기본값: 코스
