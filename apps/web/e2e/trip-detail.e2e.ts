@@ -2385,7 +2385,7 @@ test.describe('장소를 다른 일자로 옮기기', () => {
     expect(bodies[0]).toEqual({ day_index: 1, before_poi_id: brokenPoiId });
   });
 
-  test('키보드 이동이 409로 실패하면 초점이 그 장소 줄로 돌아오고 실패를 알린다', async ({
+  test('키보드 이동이 409로 실패하면 초점이 그 장소 줄에 남고 실패를 알린다', async ({
     page,
   }) => {
     const view = viewWith([

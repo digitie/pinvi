@@ -70,15 +70,15 @@ export function usePoiDrag(
     setTarget(null);
   }, []);
 
-  // 끄는 행이 끌기 도중 사라지면(다른 사람이 옮기거나 지움) 그 행의 dragend를 React가 받지 못한다.
   // 패널 밖에 놓거나 취소해도 끝나도록 window에서도 끝을 받는다(놓을 자리의 drop은 전파를 멈추고 직접 끝낸다).
+  // 끄는 행이 끌기 도중 사라지면(다른 사람이 옮기거나 지움) 그 행의 dragend는 떨어져 나간 노드에서 나서
+  // window까지 오지 않는다 — 끌기가 끝난 뒤 첫 포인터 누름으로 남은 상태를 지운다(끌기 중에는 오지 않는다).
   useEffect(() => {
     if (source == null) return;
-    window.addEventListener('dragend', end);
-    window.addEventListener('drop', end);
+    const events = ['dragend', 'drop', 'pointerdown'] as const;
+    for (const type of events) window.addEventListener(type, end);
     return () => {
-      window.removeEventListener('dragend', end);
-      window.removeEventListener('drop', end);
+      for (const type of events) window.removeEventListener(type, end);
     };
   }, [source, end]);
 

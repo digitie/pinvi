@@ -2210,7 +2210,10 @@ function useTripPlanPoiMoves(viewModel: TripDetailView2Model) {
   }));
   // 끌어 놓기·키보드 이동 결과를 늘 있는 live region 하나로 알린다(접힌 일자로 간 안내 문단은 새로 생겨
   // 읽히지 않을 수 있다 — 리뷰).
-  const [moveAnnouncement, setMoveAnnouncement] = useState('');
+  const [moveAnnouncement, setAnnouncementText] = useState('');
+  // 같은 문장을 두 번 알려도(경계에서 같은 키 두 번) 낭독기가 다시 읽도록 끝에 보이지 않는 공백을 번갈아 붙인다.
+  const setMoveAnnouncement = (text: string) =>
+    setAnnouncementText((current) => (current === text ? `${text}\u00a0` : text));
   const announce = (source: PoiDragSource, target: PoiMoveTarget, outcome: PoiMoveOutcome) => {
     if (outcome === 'noop') return;
     const poi = view.days.flatMap((day) => day.pois).find((p) => p.poi_id === source.poiId);

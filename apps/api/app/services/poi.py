@@ -397,11 +397,12 @@ def even_ranks(count: int) -> list[str]:
 
 
 def rank_between(prev: str | None, next_: str | None) -> str | None:
-    """`prev` < 키 < `next_`인 새 정렬 키(base36, COLLATE "C"). 만들 수 없으면 None.
+    """`prev` < 키 < `next_`인 새 정렬 키(COLLATE "C"). 만들 수 없으면 None.
 
-    fractional indexing 중간값 — 이웃 키 사이에 넣어 **옮긴 장소 한 행만** 쓰기 위한 것이다. 클라이언트가 만든
-    키(`a0`·`last+'m'`·`evenRanks`)가 섞여 있어 사이가 없을 수도 있으므로(예: `p`와 `p0`) 결과를 검증하고,
-    실패하면 None을 돌려 호출자가 그 일자를 다시 매기게 한다.
+    fractional indexing 중간값 — 이웃 키 사이에 넣어 **옮긴 장소 한 행만** 쓰기 위한 것이다. 새로 붙이는
+    자리는 base36 문자이고, 두 이웃이 함께 가진 앞부분은 그대로 복사한다. 클라이언트가 만든
+    키(`a0`·`last+'m'`·`evenRanks`)가 섞여 있어 사이가 없을 수도 있으므로(예: `p`와 `p0`) 결과를 비교로
+    검증하고, 실패하면 None을 돌려 호출자가 그 일자를 다시 매기게 한다.
     """
     if prev is None and next_ is None:
         return even_ranks(1)[0]
