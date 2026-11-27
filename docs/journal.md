@@ -1,3 +1,22 @@
+## 2026-11-27 (claude) — web e2e 두 건 흔들림 원인 수정(main red 복구)
+
+- 출처: `web` workflow가 main `929b4243`(#805)에서 빨강. 실패는 두 시험이고 둘 다 앱 회귀가 아니라 시험의 측정 경쟁이다.
+- `admin-button-states.e2e.ts` "관리자 포커스 규칙은 … 사용자 화면 버튼에는 걸리지 않는다": 버튼 recipe의
+  `transition-colors`(Tailwind v4)가 `outline-color`도 전환한다. reduced-motion(0.01ms)이어도 전환은 다음 animation
+  frame에야 끝나서, Tab 직후 같은 task에서 읽으면 시작값(currentColor = 흰색)이 나온다(probe: 포커스 직후 동기 읽기
+  `rgb(255,255,255)` + `outline-color:running`, 2 rAF 뒤 `rgb(255,56,92)`). CI에서 규칙 제거 전후 한쪽만 frame 전에
+  읽혀 "규칙이 사용자 버튼을 바꾼다"로 오판했다(main push·#806 PR·#805 첫 PR run 3회 모두 같은 패턴). `tabFocusOutline`이 요소의
+  전환(`getAnimations()`)이 모두 끝난 뒤 최종값을 읽게 했다. 규칙·CSS는 그대로다.
+- `trip-detail.e2e.ts` "여행 장소 마커는 원형 + 상자 없는 이름 라벨 …"(VWorld canvas step): 핀 하나 여행은
+  `TripMapView.fitToPoints`가 `flyTo`(애니메이션, #619부터)로 맞추는데, 시험이 원과 라벨을 따로 `boundingBox`로 재
+  그 사이(~0.6 s) 카메라가 옮긴 거리(수십 px)가 섞였다(trace: 같은 시험 안에서 마커 translate 459→404 px 이동).
+  원·라벨을 한 `evaluate`에서 같은 layout으로 함께 재 간격(≥ 3 px, 설계 4 px)과 세로 가운데 정렬을 본다.
+  #805와의 관계: #805는 카메라·`mapFitPadding`을 바꾸지 않았고 마커 최종 위치도 같다(전후 모두 `translate(399px, 281px)`).
+  다만 geometry 레이어가 빠져 페이지가 가벼워지면서 마커가 ~2 s 일찍 보이게 돼(flyTo 끝나기 ~1.3 s 전) 원래부터 있던
+  측정 경쟁이 드러났다(#805 직전 `b83644db` 15/15 통과, main 15회 중 6회 실패).
+- 시험: WSL Docker `mcr.microsoft.com/playwright:v1.65.0-noble` + node 26.13.1, CI와 같은 config. 수정 전 main에서
+  trip-detail 15회 중 6회 실패 재현, 수정 뒤 `admin-button-states.e2e.ts` 전체 + 마커 시험 `--repeat-each 15` 90/90 통과.
+
 ## 2026-11-27 (claude) — 장소 상세에 TourAPI 소개문·대표 사진·출처/공공누리 표시
 
 - 목표: 한국관광공사 국문 관광정보 서비스(KorService2, data.go.kr 15101578) 운영계정 트래픽 증설을 위해 활용사례를
