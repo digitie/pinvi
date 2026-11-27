@@ -13,14 +13,21 @@ import {
   todayHoursLine,
   type MapLink,
 } from '@pinvi/domain';
-import type { FeatureWeatherCard, PoiPlaceDetails, TripViewPoi } from '@pinvi/schemas';
+import type {
+  FeatureWeatherCard,
+  PoiPlaceDetails,
+  SourceIntroduction as SourceIntroductionData,
+  TripViewPoi,
+} from '@pinvi/schemas';
+import { useFeatureIntroduction } from '../lib/featureIntroduction';
 import { MAP_APP_NAME, openMapLink } from '../lib/mapApps';
 import { useKakaoPhone, usePlaceDetails } from '../lib/placeDetails';
 import { usePoiWeather } from '../lib/poiWeather';
 import { WeatherBadge } from './PoiWeatherBadge';
+import { SourceIntroduction } from './SourceIntroduction';
 import { Button, Muted } from './ui';
 
-type SectionKey = 'hours' | 'memo' | 'links' | 'maps';
+type SectionKey = 'about' | 'hours' | 'memo' | 'links' | 'maps';
 
 export interface PlaceSheetProps {
   tripId: string;
@@ -51,7 +58,10 @@ export function PlaceSheet({ tripId, poi, coord, canEdit, onClose }: PlaceSheetP
     () => (coord ? buildMapLinks({ name, ...coord }, { appName: MAP_APP_NAME }) : []),
     [coord, name],
   );
+  // 출처 소개(TourAPI)는 보여 줄 값이 있을 때만 맨 앞 항목으로 둔다(빈 항목 없음).
+  const introduction = useFeatureIntroduction(poi.feature_id);
   const sectionKeys: SectionKey[] = [
+    ...(introduction ? ['about' as const] : []),
     'hours',
     'memo',
     'links',
@@ -88,6 +98,7 @@ export function PlaceSheet({ tripId, poi, coord, canEdit, onClose }: PlaceSheetP
                 detailsLoading={query.isLoading}
                 refresh={refresh}
                 mapLinks={mapLinks}
+                introduction={introduction}
               />
             </ScrollView>
           ) : null}
@@ -101,6 +112,7 @@ export function PlaceSheet({ tripId, poi, coord, canEdit, onClose }: PlaceSheetP
 }
 
 const SECTION_TITLES: Record<SectionKey, string> = {
+  about: '소개',
   hours: '영업 정보',
   memo: '메모',
   links: '링크',
@@ -201,6 +213,7 @@ function SectionContent({
   detailsLoading,
   refresh,
   mapLinks,
+  introduction,
 }: {
   section: SectionKey;
   tripId: string;
@@ -209,8 +222,11 @@ function SectionContent({
   detailsLoading: boolean;
   refresh: ReturnType<typeof usePlaceDetails>['refresh'];
   mapLinks: MapLink[];
+  introduction: SourceIntroductionData | null;
 }) {
   switch (section) {
+    case 'about':
+      return introduction ? <SourceIntroduction introduction={introduction} /> : null;
     case 'hours':
       return (
         <HoursContent

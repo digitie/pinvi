@@ -4,6 +4,7 @@ import { withOccurrenceKeys } from '@/lib/occurrenceKeys';
 import type { ExternalEnrichment, FeatureDetailCard } from '@pinvi/schemas';
 import { AlertTriangle, Clock, ExternalLink, Globe, Loader2, MapPin, Phone } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { SourceIntroduction } from '@/components/map/SourceIntroduction';
 
 /**
  * Feature 상세 detail-card 본문(TDR, ADR-056, F5). kind별 일반 사용자 노출 필드만 렌더하고, 옵트인
@@ -141,6 +142,10 @@ function FeatureDetailCardBodyView0Part0({
         <p className="text-xs font-medium text-muted" data-testid={`${testId}-category`}>
           {card.category_label}
         </p>
+      )}
+      {/* 출처 소개(TourAPI 대표 이미지·소개문·출처/공공누리 표시) — 값이 없으면 블록이 없다. */}
+      {card.kind === 'place' && card.introduction && (
+        <SourceIntroduction introduction={card.introduction} testId={`${testId}-introduction`} />
       )}
       {card.address_line && (
         <Row icon={<MapPin className="h-4 w-4" />} testId={`${testId}-address`}>

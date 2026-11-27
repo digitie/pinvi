@@ -9,10 +9,11 @@ const api = vi.hoisted(() => ({
   kakaoPhone: vi.fn(),
   weather: vi.fn(),
 }));
+const features = vi.hoisted(() => ({ detailCard: vi.fn() }));
 
 vi.mock('@pinvi/api-client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@pinvi/api-client')>();
-  return { ...actual, poiApi: () => api };
+  return { ...actual, poiApi: () => api, featureApi: () => features };
 });
 
 import { ApiError } from '@pinvi/api-client';
@@ -69,6 +70,9 @@ beforeEach(() => {
   api.refreshPlaceDetails.mockReset();
   api.kakaoPhone.mockReset();
   api.kakaoPhone.mockResolvedValue({ provider: 'kakao', matched: false });
+  features.detailCard.mockReset();
+  // 기본은 TourAPI 소개가 없는 장소다 — 소개 항목이 생기지 않는다.
+  features.detailCard.mockResolvedValue(placeCard(null));
   __clearKakaoPhoneCacheForTest();
   __resetPoiWeatherForTest(async () => ({
     feature_id: 'f_hahoe',
@@ -97,6 +101,26 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+function placeCard(introduction: unknown) {
+  return {
+    kind: 'place',
+    feature_id: 'f_hahoe',
+    name: '하회마을',
+    coord: null,
+    category: null,
+    category_label: null,
+    address_line: null,
+    marker_color: 'P-02',
+    marker_icon: 'attraction',
+    homepage_url: null,
+    enrichment: [],
+    degraded_providers: [],
+    phone: null,
+    business_hours: null,
+    introduction,
+  };
+}
+
 function renderPanel(onClose = vi.fn()) {
   render(
     <PlaceInfoPanel
@@ -110,6 +134,61 @@ function renderPanel(onClose = vi.fn()) {
 }
 
 describe('PlaceInfoPanel', () => {
+  it('TourAPI 소개가 있으면 맨 앞에 소개 항목을 두고 이미지·소개문·출처를 보인다', async () => {
+    api.placeDetails.mockResolvedValue(details());
+    features.detailCard.mockResolvedValue(
+      placeCard({
+        provider: 'tourapi',
+        attribution: '한국관광공사',
+        overview: '하회마을은 풍산 류씨가 600여 년간 대대로 살아온 동성마을이다.',
+        images: [
+          {
+            url: 'https://tong.visitkorea.or.kr/cms/resource/a.jpg',
+            alt: '하회마을 대표 사진',
+            kogl_type: 1,
+            no_derivatives: false,
+          },
+        ],
+        kogl_type: 1,
+        license_label: '공공누리 제1유형: 출처표시',
+        license_url: 'https://www.kogl.or.kr/info/licenseType1.do',
+      }),
+    );
+    renderPanel();
+    const toggle = await screen.findByTestId('place-info-about-toggle');
+    expect(features.detailCard).toHaveBeenCalledWith(
+      'f_hahoe',
+      expect.anything(),
+      expect.anything(),
+    );
+    const toggles = within(screen.getByTestId('place-info-sections')).getAllByRole('button');
+    expect(toggles[0]).toBe(toggle);
+    expect(toggle).toHaveTextContent('소개');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    const section = screen.getByTestId('place-info-about');
+    expect(section).toHaveAttribute('aria-label', '소개');
+    expect(within(section).getByTestId('place-info-introduction-image')).toHaveAttribute(
+      'alt',
+      '하회마을 대표 사진',
+    );
+    expect(within(section).getByTestId('place-info-introduction-overview')).toHaveTextContent(
+      '풍산 류씨',
+    );
+    expect(within(section).getByTestId('place-info-introduction-attribution')).toHaveTextContent(
+      '출처: 한국관광공사',
+    );
+  });
+
+  it('소개가 없거나 읽지 못하면 소개 항목을 만들지 않는다', async () => {
+    api.placeDetails.mockResolvedValue(details());
+    features.detailCard.mockRejectedValue(new Error('down'));
+    renderPanel();
+    expect(await screen.findByTestId('place-info-today-hours')).toBeInTheDocument();
+    await waitFor(() => expect(features.detailCard).toHaveBeenCalled());
+    expect(screen.queryByTestId('place-info-about-toggle')).toBeNull();
+  });
+
   it('shows a brief summary and keeps every section collapsed by default', async () => {
     api.placeDetails.mockResolvedValue(details());
     const onClose = renderPanel();

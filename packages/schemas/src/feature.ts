@@ -145,11 +145,37 @@ const detailCardBase = {
   degraded_providers: z.array(z.string()).default([]),
 };
 
+/** 공공누리 유형 — TourAPI 이미지는 제1유형(출처표시)·제3유형(출처표시+변경금지)만 온다. */
+export const KoglTypeSchema = z.union([z.literal(1), z.literal(3)]);
+export type KoglType = z.infer<typeof KoglTypeSchema>;
+
+/** 출처 원본 이미지 1장 — 원본 URL 그대로(서버 가공·썸네일 없음). no_derivatives면 크롭 금지. */
+export const SourceImageSchema = z.object({
+  url: z.string().max(2048),
+  alt: z.string().max(200),
+  kogl_type: KoglTypeSchema,
+  no_derivatives: z.boolean(),
+});
+export type SourceImage = z.infer<typeof SourceImageSchema>;
+
+/** 출처 장소 소개(TourAPI — 한국관광공사). overview는 평문(줄바꿈 보존)이며 텍스트로만 그린다. */
+export const SourceIntroductionSchema = z.object({
+  provider: z.literal('tourapi'),
+  attribution: z.string().max(100),
+  overview: z.string().max(20000).nullable().default(null),
+  images: z.array(SourceImageSchema).max(3).default([]),
+  kogl_type: KoglTypeSchema.nullable().default(null),
+  license_label: z.string().max(100).nullable().default(null),
+  license_url: z.string().max(200).nullable().default(null),
+});
+export type SourceIntroduction = z.infer<typeof SourceIntroductionSchema>;
+
 export const PlaceDetailCardSchema = z.object({
   ...detailCardBase,
   kind: z.literal('place'),
   phone: z.string().nullable().default(null),
   business_hours: z.string().nullable().default(null),
+  introduction: SourceIntroductionSchema.nullable().default(null),
 });
 export const EventDetailCardSchema = z.object({
   ...detailCardBase,

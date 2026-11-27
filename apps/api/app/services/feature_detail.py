@@ -26,6 +26,7 @@ from app.schemas.feature import (
 from app.services.category_labels import EMPTY_CATEGORY_LABELS, CategoryLabels
 from app.services.opening_hours import opening_hours_text
 from app.services.place_search import kakao_document_to_result, naver_item_to_result
+from app.services.source_introduction import tourapi_introduction
 
 # name 유사도/거리 임계 — 둘 다 만족해야 confident match(오귀속 방지, ADR-056).
 _NAME_SIM_THRESHOLD = 0.6
@@ -203,6 +204,7 @@ def build_detail_card(
             **common,
             phone=_phone(detail),
             business_hours=_business_hours(detail),
+            introduction=tourapi_introduction(detail, name=common["name"]),
         )
     if kind == "event":
         return EventDetailCard(

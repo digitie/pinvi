@@ -1,7 +1,9 @@
 'use client';
 
+import { SourceIntroduction } from '@/components/map/SourceIntroduction';
 import { PoiWeatherBadge } from '@/components/weather/WeatherBadge';
 import { WeatherForecastBody } from '@/components/weather/WeatherForecastPopup';
+import { useFeatureDetailCard } from '@/lib/useFeatureDetailCard';
 import { buildMapLinks, openMapLink, type MapLink } from '@/lib/mapLinks';
 import {
   useKakaoPhone,
@@ -27,6 +29,7 @@ import {
   CloudSun,
   ExternalLink,
   Globe,
+  Info,
   Link2,
   Loader2,
   Map as MapIcon,
@@ -39,7 +42,7 @@ import { useId, useMemo, useState, type ReactNode } from 'react';
 
 const LINK_CLASS = 'break-all text-primary underline-offset-2 hover:underline';
 
-type SectionKey = 'weather' | 'hours' | 'memo' | 'links' | 'maps';
+type SectionKey = 'about' | 'weather' | 'hours' | 'memo' | 'links' | 'maps';
 
 interface SectionDef {
   key: SectionKey;
@@ -400,6 +403,9 @@ export function PlaceInfoPanel({
     () => (coord ? buildMapLinks({ name, lat: coord.lat, lon: coord.lon }) : []),
     [coord, name],
   );
+  // 출처 소개(TourAPI 소개문·대표 이미지)는 지도 상세 카드와 같은 서버 투영을 읽는다 — 저장하지 않는다.
+  const { card: featureCard } = useFeatureDetailCard(poi.feature_id);
+  const introduction = featureCard?.kind === 'place' ? featureCard.introduction : null;
 
   const sections: SectionDef[] = [
     {
@@ -450,6 +456,15 @@ export function PlaceInfoPanel({
       content: <LinksContent userUrl={poi.user_url} website={details?.website ?? null} />,
     },
   ];
+  if (introduction) {
+    // 보여 줄 소개가 있을 때만 항목을 만든다(빈 항목 없음). 장소를 처음 보는 사람에게 가장 앞에 둔다.
+    sections.unshift({
+      key: 'about',
+      title: '소개',
+      icon: <Info className="h-4 w-4" />,
+      content: <SourceIntroduction introduction={introduction} testId="place-info-introduction" />,
+    });
+  }
   if (mapLinks.length > 0) {
     sections.push({
       key: 'maps',
