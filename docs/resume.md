@@ -1,6 +1,6 @@
-## 2026-11-27 (claude) — 장소 상세 출처 소개 일반화 + 이용 안내(Map visitor_info, ADR-125)
+## 2026-11-27 (claude) — 장소 상세 출처 소개 일반화 + 이용 안내(Map visitor_info, ADR-126)
 
-- 목표: Map ADR-125(PR #1564·#1565)가 공개 `GET /v1/features/{id}`에 최상위 `visitor_info`(`PlaceVisitorInfo`)를 더했다 —
+- 목표: Map ADR-126(PR #1564·#1565)가 공개 `GET /v1/features/{id}`에 최상위 `visitor_info`(`PlaceVisitorInfo`)를 더했다 —
   TourAPI(관광지·문화시설·레포츠·축제)·국가유산 설명문·박물관/미술관·휴양림 표준데이터의 이용시간·휴무·주차·요금·소개·이미지
   (이미지마다 공공누리 유형)·무장애·반려동물. #809의 TourAPI 전용 소개를 이 계약으로 일반화하고 이용 안내를 새로 보인다.
 - API: `PlaceDetailCard`·`EventDetailCard`에 `introduction`(일반화)·`visit_guide`(신규). `SourceIntroduction`은 원천 4종
@@ -27,6 +27,16 @@
   배지), mobile lint·typecheck·vitest 49(`TripDetailScreen` 이용 안내 항목). Playwright는 돌리지 않았다(mocked e2e
   `trip-detail`의 detail-card mock에 `visit_guide: null`만 더함).
 - 후속: `docs/tasks.md` T-VISITOR-INFO(Map main 재vendor, 제2·4유형 표시 판단, 개인정보처리방침 문구).
+
+- 적대 리뷰 2인 반영(후속 커밋): 영업 정보 `sources`에 visitor_info 필드의 실제 원천을 남기고 화면 `SOURCE_LABELS`에 원천
+  4종 추가(모르는 원천은 읽지 않음, 구조화 영업시간을 쓰면 휴무도 구조화 값 우선) · 패널/시트의 이용 안내에서 영업 정보
+  항목이 이미 보이는 이용시간·휴무를 뺌(`omitShownHours`) · Map 결정 번호를 ADR-126으로 정정 · 클라이언트 zod를 관용으로
+  (`provider`·분류·요금 대상은 문자열, 공공누리 유형은 정수, 블록 `.catch(null)`, 반려동물 2,000자·시설 코드 정규식) +
+  서버↔클라이언트 golden(`apps/web/tests/fixtures/detail-card-golden.json`) · #809 호환 최상위 `kogl_type`/`license_*`(첫 이미지,
+  deprecated) 복원 · 개인정보처리방침 §4에 장소 사진 외부 직접 로딩 고지(변호사 검토 표시) · 모바일 갤러리 `FlatList`
+  가상화 · 제0유형 fail-closed · `fee_text`가 있으면 0원을 "0원"으로 · `<script>`/`<style>` 내용째 제거 · 펼쳤을 때만
+  `aria-controls`, 모바일 배지 라벨에서 기호 제외, 무장애 줄 `break-words`, 갤러리 틀 고정 · 360px mocked e2e(사진 3장
+  갤러리·이미지별 공공누리·배지 `aria-expanded`·페이지 가로 스크롤 없음) 추가.
 
 ## 2026-11-27 (claude) — 장소 상세 "○○국립공원 안" (플래그 기본 꺼짐)
 
@@ -99,7 +109,6 @@
 - 보이지 않는 것(Map이 싣지 않음, 지어내지 않음): 품질인증·전산보고, 시군구 등급·평균 대비, 30일 그래프. 모바일 지도 마커 모양은 그대로.
 - 배포: API·web 이미지(같은 회전, 순서 무관 — 새 필드는 nullable). 모바일은 다음 앱 빌드. 마이그레이션 없음.
 - 다음 후보: Map in-bounds에 제외 필터(클러스터 개수 정확도), Map 상태 표면에 `is_kpetro`·`is_electronic` 추가(transport export에는 있다) → PinVi 품질인증 배지.
-
 
 ## 2026-11-27 (claude) — web e2e 두 건 흔들림 원인 수정(main red 복구)
 

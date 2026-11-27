@@ -7,6 +7,7 @@ import {
   petPolicyLines,
   sourceAttributionLine,
   visitGuideRows,
+  type VisitGuideOmittable,
 } from '@pinvi/domain';
 import type { VisitGuide as VisitGuideData } from '@pinvi/schemas';
 import { Accessibility, ChevronDown, PawPrint } from 'lucide-react';
@@ -36,7 +37,8 @@ function BadgeToggle({
     <button
       type="button"
       aria-expanded={expanded}
-      aria-controls={controls}
+      // 펼친 동안에만 패널이 있으므로 그때만 가리킨다(없는 id를 가리키지 않는다).
+      aria-controls={expanded ? controls : undefined}
       onClick={onToggle}
       className={`inline-flex min-h-11 items-center gap-1 rounded-sm border px-2.5 text-xs font-semibold ${
         expanded
@@ -58,16 +60,18 @@ function BadgeToggle({
 export interface VisitGuideProps {
   guide: VisitGuideData;
   testId: string;
+  /** 같은 화면의 영업 정보 항목이 이미 보이는 줄(이용시간·휴무) — 겹치지 않게 뺀다. */
+  omit?: readonly VisitGuideOmittable[];
 }
 
 /**
  * 이용 안내(Map visitor_info): 이용시간·휴무·요금·주차·예약·문의·교통·시설 등 원천 문장 그대로의 표 +
  * 무장애·반려동물 배지(눌러 펼침) + 출처(+ 기준일). 모든 문장은 텍스트로만 그리고 줄바꿈을 보존한다.
  */
-export function VisitGuide({ guide, testId }: VisitGuideProps) {
+export function VisitGuide({ guide, testId, omit }: VisitGuideProps) {
   const baseId = useId();
   const [open, setOpen] = useState<Panel | null>(null);
-  const rows = visitGuideRows(guide);
+  const rows = visitGuideRows(guide, { omit });
   const accessibility = hasAccessibilityBadge(guide) ? groupAccessibility(guide.accessibility) : [];
   const pet = hasPetBadge(guide) ? petPolicyLines(guide) : [];
   if (rows.length === 0 && accessibility.length === 0 && pet.length === 0) return null;
@@ -127,7 +131,10 @@ export function VisitGuide({ guide, testId }: VisitGuideProps) {
               <h4 className="text-xs font-semibold text-muted">{view.label}</h4>
               <ul className="space-y-0.5">
                 {view.items.map((item, index) => (
-                  <li key={`${item.facility}-${index}`} className="whitespace-pre-line text-body">
+                  <li
+                    key={`${item.facility}-${index}`}
+                    className="whitespace-pre-line break-words text-body"
+                  >
                     <span className="font-semibold text-ink">{item.label}</span>: {item.text}
                   </li>
                 ))}

@@ -7,6 +7,7 @@ import {
   petPolicyLines,
   sourceAttributionLine,
   visitGuideRows,
+  type VisitGuideOmittable,
 } from '@pinvi/domain';
 import type { VisitGuide as VisitGuideData } from '@pinvi/schemas';
 
@@ -27,6 +28,7 @@ function BadgeToggle({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ expanded }}
       onPress={onToggle}
       className={`min-h-11 justify-center rounded-sm border px-3 ${
@@ -35,7 +37,10 @@ function BadgeToggle({
       testID={testID}
     >
       <Text className={`text-xs font-semibold ${expanded ? 'text-canvas' : 'text-ink'}`}>
-        {label} {expanded ? '▴' : '▾'}
+        {label}
+        <Text accessible={false} importantForAccessibility="no">
+          {expanded ? ' ▴' : ' ▾'}
+        </Text>
       </Text>
     </Pressable>
   );
@@ -45,9 +50,16 @@ function BadgeToggle({
  * 이용 안내(Map visitor_info): 원천 문장 그대로의 이용시간·휴무·요금·주차 등 + 무장애·반려동물 배지(눌러
  * 펼침) + 출처(+ 기준일). 문장은 텍스트로만 그린다(RN Text는 줄바꿈을 그대로 보인다).
  */
-export function VisitGuide({ guide }: { guide: VisitGuideData }) {
+export function VisitGuide({
+  guide,
+  omit,
+}: {
+  guide: VisitGuideData;
+  /** 같은 시트의 영업 정보 항목이 이미 보이는 줄(이용시간·휴무) — 겹치지 않게 뺀다. */
+  omit?: readonly VisitGuideOmittable[];
+}) {
   const [open, setOpen] = useState<Panel | null>(null);
-  const rows = visitGuideRows(guide);
+  const rows = visitGuideRows(guide, { omit });
   const accessibility = hasAccessibilityBadge(guide) ? groupAccessibility(guide.accessibility) : [];
   const pet = hasPetBadge(guide) ? petPolicyLines(guide) : [];
   if (rows.length === 0 && accessibility.length === 0 && pet.length === 0) return null;

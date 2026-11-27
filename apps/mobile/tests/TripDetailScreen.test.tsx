@@ -481,7 +481,7 @@ describe('모바일 여행 상세 지도', () => {
     expect(server.paths.filter((p) => p.endsWith('/kakao-phone'))).toHaveLength(1);
   });
 
-  it('TourAPI 소개가 있는 장소는 소개 항목이 맨 앞에 생기고 원본 비율 이미지·출처를 보인다', async () => {
+  it('TourAPI 소개가 있는 장소는 고정 항목 뒤(지도 앱 앞)에 소개 항목이 생기고 원본 비율 이미지·출처를 보인다', async () => {
     renderScreen();
     fireEvent.click(await screen.findByRole('button', { name: 'marker 경포대' }));
     const sheet = await screen.findByTestId('place-sheet');

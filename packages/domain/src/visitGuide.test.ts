@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { VisitGuide } from '@pinvi/schemas';
 import {
   formatFees,
+  omitShownHours,
   groupAccessibility,
   hasAccessibilityBadge,
   hasPetBadge,
@@ -99,6 +100,31 @@ describe('visitGuide', () => {
     });
     expect(hasPetBadge(g)).toBe(true);
     expect(petPolicyLines(g).map((line) => line.label)).toEqual(['동반 구분', '필요 사항']);
+  });
+
+  it('요금 원문이 함께 있으면 0원을 무료로 해석하지 않는다', () => {
+    const fees = [
+      { audience: 'adult', amount_krw: 3000 },
+      { audience: 'child', amount_krw: 0 },
+    ];
+    expect(formatFees(fees, { zeroAsFree: false })).toBe('성인 3,000원 · 어린이 0원');
+    const rows = visitGuideRows(guide({ fees, fee_text: '어린이는 보호자 동반 시 무료' }));
+    expect(rows.find((row) => row.key === 'fees')?.lines).toEqual([
+      '성인 3,000원 · 어린이 0원',
+      '어린이는 보호자 동반 시 무료',
+    ]);
+    // 모르는 대상은 보이지 않는다.
+    expect(formatFees([{ audience: 'senior', amount_krw: 500 }])).toBeNull();
+  });
+
+  it('영업 정보 항목이 이미 보이는 이용시간·휴무는 뺀다', () => {
+    const g = guide({ usage_hours: '09:00~18:00', rest_days: '월요일' });
+    const omit = omitShownHours({ opening_hours: ['09:00~18:00'], closed_days: '월요일' });
+    expect(omit).toEqual(['usage_hours', 'rest_days']);
+    expect(visitGuideRows(g, { omit })).toEqual([]);
+    expect(visitGuideHasContent(g, { omit })).toBe(false);
+    expect(omitShownHours({ opening_hours: [], closed_days: null })).toEqual([]);
+    expect(omitShownHours(null)).toEqual([]);
   });
 
   it('출처뿐이면 내용이 없다', () => {

@@ -272,6 +272,9 @@ describe('PlaceInfoPanel', () => {
     expect(within(section).getByTestId('place-info-visit-guide-fees')).toHaveTextContent(
       '성인 5,000원',
     );
+    // 영업 정보 항목이 이미 이용시간을 보이므로 이용 안내에서는 뺀다(같은 원문이 두 번 보이지 않게).
+    expect(within(section).queryByTestId('place-info-visit-guide-usage_hours')).toBeNull();
+    expect(within(section).getByTestId('place-info-visit-guide-parking')).toHaveTextContent('가능');
     fireEvent.click(within(section).getByTestId('place-info-visit-guide-accessibility-toggle'));
     expect(within(section).getByTestId('place-info-visit-guide-accessibility')).toHaveTextContent(
       '주차: 장애인 주차 2면',

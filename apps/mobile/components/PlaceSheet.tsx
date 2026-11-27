@@ -5,6 +5,7 @@ import { useMinuteNow } from '@pinvi/hooks';
 import {
   activeAlerts,
   introductionHasContent,
+  omitShownHours,
   visitGuideHasContent,
   buildMapLinks,
   featureResolutionNotice,
@@ -68,7 +69,11 @@ export function PlaceSheet({ tripId, poi, coord, canEdit, onClose }: PlaceSheetP
       onImageError={(url) => setFailedImageUrls((prev) => new Set(prev).add(url))}
     />
   ) : null;
-  const guide = visitGuideHasContent(visitGuide) ? <VisitGuide guide={visitGuide} /> : null;
+  // 영업 정보 항목이 이미 보이는 이용시간·휴무는 이용 안내에서 뺀다(같은 원문이 두 번 보이지 않게).
+  const guideOmit = omitShownHours(details);
+  const guide = visitGuideHasContent(visitGuide, { omit: guideOmit }) ? (
+    <VisitGuide guide={visitGuide} omit={guideOmit} />
+  ) : null;
   const sectionKeys: SectionKey[] = [
     'hours',
     'memo',

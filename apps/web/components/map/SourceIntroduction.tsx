@@ -9,6 +9,7 @@ import type { SourceImage, SourceIntroduction as SourceIntroductionData } from '
 import { ExternalLink } from 'lucide-react';
 import { useId, useState } from 'react';
 
+const NO_FAILED: ReadonlySet<string> = new Set();
 const LINK_CLASS = 'text-ink underline underline-offset-2 hover:text-body';
 
 /**
@@ -103,17 +104,19 @@ export function SourceIntroduction({
   // 깨진 이미지·허용 밖 이미지는 빈 틀을 남기지 않고 뺀다 — 다 빠지고 소개문도 없으면 블록째 숨긴다.
   const images = visibleIntroductionImages(introduction, failed);
   if (!overview && images.length === 0) return null;
+  // 레이아웃은 처음 받은(허용된) 장수로 정한다 — 갤러리에서 한 장이 깨져 1장이 남아도 틀이 바뀌지 않게.
+  const gallery = visibleIntroductionImages(introduction, NO_FAILED).length > 1;
   const collapsible = overview ? introductionNeedsCollapse(overview) : false;
   return (
     <div className="space-y-2" data-testid={testId} data-provider={introduction.provider}>
-      {images.length === 1 && (
+      {!gallery && images.length === 1 && (
         <OriginalImage
           image={images[0]!}
           testId={testId}
           onError={() => markFailed(images[0]!.url)}
         />
       )}
-      {images.length > 1 && (
+      {gallery && images.length > 0 && (
         <ul
           className="flex snap-x gap-2 overflow-x-auto pb-1"
           aria-label={`사진 ${images.length}장`}

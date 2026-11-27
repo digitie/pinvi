@@ -32,6 +32,9 @@ function intro(over: Partial<SourceIntroduction> = {}): SourceIntroduction {
     reference_date: null,
     overview: null,
     images: [image()],
+    kogl_type: null,
+    license_label: null,
+    license_url: null,
     ...over,
   };
 }
@@ -123,5 +126,9 @@ describe('sourceIntroduction', () => {
       cardIntroduction({ ...base, kind: 'notice', body: null, start_date: null, end_date: null }),
     ).toBeNull();
     expect(cardIntroduction(null)).toBeNull();
+    // 모르는 원천은 보이지 않는다(출처 표시 조건을 모른다).
+    expect(
+      cardIntroduction({ ...event, introduction: intro({ provider: 'new_source' }) }),
+    ).toBeNull();
   });
 });

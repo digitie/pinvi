@@ -250,7 +250,7 @@ KoglType = Literal[0, 1, 2, 3, 4]
 IntroductionProvider = Literal[
     "tourapi", "krheritage", "datagokr_museum", "krforest_recreation_forest"
 ]
-"""출처 소개·이용 안내를 만든 원천 — Map `PlaceVisitorInfo.source`(ADR-125)와 같은 값."""
+"""출처 소개·이용 안내를 만든 원천 — Map `PlaceVisitorInfo.source`(ADR-126)와 같은 값."""
 
 
 class SourceImage(BaseModel):
@@ -280,6 +280,11 @@ class SourceIntroduction(BaseModel):
     reference_date: Date | None = None  # 원천 기준일(있을 때)
     overview: str | None = Field(default=None, max_length=20000)
     images: list[SourceImage] = Field(default_factory=list, max_length=10)
+    # deprecated — #809 클라이언트 호환용. 첫 이미지의 공공누리 표시(이미지가 없으면 null). 새 화면은
+    # `images[].kogl_type`·`license_label`·`license_url`을 이미지마다 쓴다. 옛 빌드가 사라지면 지운다.
+    kogl_type: KoglType | None = None
+    license_label: str | None = Field(default=None, max_length=100)
+    license_url: str | None = Field(default=None, max_length=200)
 
 
 FeeAudience = Literal["adult", "youth", "child"]
@@ -312,7 +317,7 @@ class VisitPetPolicy(BaseModel):
 
 
 class VisitGuide(BaseModel):
-    """이용 안내 — Map `visitor_info`(ADR-125)의 이용시간·휴무·주차·요금·무장애·반려동물 투영.
+    """이용 안내 — Map `visitor_info`(ADR-126)의 이용시간·휴무·주차·요금·무장애·반려동물 투영.
 
     문장 필드는 원천 문장 그대로의 평문이다(줄바꿈 보존, 해석·요약 없음). 화면은 텍스트로만 그리고
     `출처: {attribution}`(+ 기준일)을 함께 보인다. 배지는 `accessibility`가 비지 않음·`pet_policy` 있음으로만

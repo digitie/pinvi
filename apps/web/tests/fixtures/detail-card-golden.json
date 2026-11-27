@@ -1,0 +1,136 @@
+[
+  {
+    "feature_id": "01a1c43c-f414-77d4-8e4e-addb3b650f56",
+    "name": "산막이옛길",
+    "coord": {
+      "lon": 127.87,
+      "lat": 36.76
+    },
+    "category": "01080500",
+    "category_label": null,
+    "address_line": "충북 괴산군 칠성면 산막이옛길 88",
+    "marker_color": "P-13",
+    "marker_icon": "marker",
+    "homepage_url": "https://example.com",
+    "enrichment": [],
+    "degraded_providers": [],
+    "kind": "place",
+    "phone": null,
+    "business_hours": null,
+    "introduction": {
+      "provider": "tourapi",
+      "attribution": "한국관광공사",
+      "reference_date": "2026-11-01",
+      "overview": "괴산호를 따라 이어진 옛길이다.\n산막이마을까지 걷는다.",
+      "images": [
+        {
+          "url": "https://tong.visitkorea.or.kr/cms/resource/01/1_image2_1.jpg",
+          "alt": "산막이옛길 대표 사진",
+          "kogl_type": 3,
+          "no_derivatives": true,
+          "license_label": "공공누리 제3유형: 출처표시 + 변경금지",
+          "license_url": "https://www.kogl.or.kr/info/licenseType3.do"
+        },
+        {
+          "url": "https://tong.visitkorea.or.kr/cms/resource/02/2_image2_1.jpg",
+          "alt": "산막이옛길 출렁다리",
+          "kogl_type": 1,
+          "no_derivatives": false,
+          "license_label": "공공누리 제1유형: 출처표시",
+          "license_url": "https://www.kogl.or.kr/info/licenseType1.do"
+        }
+      ],
+      "kogl_type": 3,
+      "license_label": "공공누리 제3유형: 출처표시 + 변경금지",
+      "license_url": "https://www.kogl.or.kr/info/licenseType3.do"
+    },
+    "visit_guide": {
+      "provider": "tourapi",
+      "attribution": "한국관광공사",
+      "reference_date": "2026-11-01",
+      "usage_hours": "09:00~18:00\n(입장마감 17:00)",
+      "rest_days": "연중무휴",
+      "parking": "가능(대형 20대)",
+      "parking_fee": "소형 3,000원",
+      "fees": [
+        {
+          "audience": "adult",
+          "amount_krw": 2000
+        },
+        {
+          "audience": "child",
+          "amount_krw": 0
+        }
+      ],
+      "fee_text": "무료",
+      "discount": "경로 무료",
+      "reservation": "불필요",
+      "inquiry": "043-830-3114",
+      "transport": "괴산터미널에서 버스",
+      "facilities": "화장실\n전망대",
+      "capacity": "300명",
+      "accommodation_available": false,
+      "pet_note": "불가",
+      "accessibility": [
+        {
+          "group": "physical",
+          "facility": "parking",
+          "label": "주차",
+          "text": "장애인 주차 2면"
+        },
+        {
+          "group": "visual",
+          "facility": "braile_block",
+          "label": "점자블록",
+          "text": "입구"
+        }
+      ],
+      "pet_policy": {
+        "companion_type": "일부구역 동반가능",
+        "allowed_pets": "소형견",
+        "requirements": "목줄",
+        "notes": "실내 불가"
+      }
+    }
+  },
+  {
+    "feature_id": "01a1c43c-f414-77d4-8e4e-addb3b650f56",
+    "name": "진해군항제",
+    "coord": {
+      "lon": 127.87,
+      "lat": 36.76
+    },
+    "category": "01080500",
+    "category_label": null,
+    "address_line": "충북 괴산군 칠성면 산막이옛길 88",
+    "marker_color": "P-13",
+    "marker_icon": "marker",
+    "homepage_url": null,
+    "enrichment": [],
+    "degraded_providers": [],
+    "kind": "event",
+    "start_date": "2026-04-01",
+    "end_date": "2026-04-10",
+    "venue": null,
+    "introduction": {
+      "provider": "tourapi",
+      "attribution": "한국관광공사",
+      "reference_date": null,
+      "overview": "벚꽃이 피는 봄 축제",
+      "images": [
+        {
+          "url": "https://tong.visitkorea.or.kr/cms/resource/01/1_image2_1.jpg",
+          "alt": "진해군항제 대표 사진",
+          "kogl_type": 1,
+          "no_derivatives": false,
+          "license_label": "공공누리 제1유형: 출처표시",
+          "license_url": "https://www.kogl.or.kr/info/licenseType1.do"
+        }
+      ],
+      "kogl_type": 1,
+      "license_label": "공공누리 제1유형: 출처표시",
+      "license_url": "https://www.kogl.or.kr/info/licenseType1.do"
+    },
+    "visit_guide": null
+  }
+]

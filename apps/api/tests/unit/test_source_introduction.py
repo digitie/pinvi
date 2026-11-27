@@ -167,7 +167,9 @@ def test_disallowed_image_host_is_dropped() -> None:
     ("raw", "expected"),
     [
         ("첫 줄<br>둘째 줄", "첫 줄\n둘째 줄"),
-        ("<p>본문</p><script>alert(1)</script>", "본문alert(1)"),
+        ("<p>본문</p><script>alert(1)</script>", "본문"),
+        ("앞<style>p { color: red }</style>뒤", "앞뒤"),
+        ("앞<SCRIPT type=x>\nvar a = 1;\n</SCRIPT >뒤", "앞뒤"),
         ('<img src=x onerror="alert(1)">사진', "사진"),
         # 태그 꼴이 아닌 부등호는 본문이라 남긴다(화면이 텍스트로 이스케이프한다).
         ("a < b > c", "a < b > c"),

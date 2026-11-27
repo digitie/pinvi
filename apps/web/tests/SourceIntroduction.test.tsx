@@ -27,6 +27,9 @@ function intro(over: Partial<Intro> = {}): Intro {
     reference_date: null,
     overview: '괴산호를 따라 이어진 옛길이다.',
     images: [{ url: IMAGE, alt: '산막이옛길 대표 사진', ...TYPE3 }],
+    kogl_type: null,
+    license_label: null,
+    license_url: null,
     ...over,
   };
 }
@@ -202,10 +205,10 @@ describe('SourceIntroduction — 갤러리', () => {
     }
   });
 
-  it('갤러리 이미지 하나가 깨지면 그 이미지와 공공누리 표시만 빠진다', () => {
+  it('갤러리 이미지 하나가 깨지면 그 이미지와 공공누리 표시만 빠지고 갤러리 틀은 그대로다', () => {
     render(<SourceIntroduction introduction={gallery()} testId={T} />);
     fireEvent.error(screen.getAllByTestId(`${T}-image`)[1]!);
-    expect(screen.queryByTestId(`${T}-gallery`)).not.toBeInTheDocument();
+    expect(screen.getByTestId(`${T}-gallery`)).toBeInTheDocument();
     expect(screen.getAllByTestId(`${T}-image`)).toHaveLength(1);
     expect(screen.getAllByTestId(`${T}-license`)).toHaveLength(1);
   });

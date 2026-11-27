@@ -19,6 +19,18 @@ const COLLAPSE_MIN_LINES = 4;
 const IMAGE_HOST_SUFFIX: Partial<Record<IntroductionProvider, string>> = {
   tourapi: '.visitkorea.or.kr',
 };
+
+/** 화면이 아는 원천 — 이 밖의 원천은 출처 표시 조건을 모르므로 블록을 보이지 않는다. */
+const KNOWN_PROVIDERS: readonly string[] = [
+  'tourapi',
+  'krheritage',
+  'datagokr_museum',
+  'krforest_recreation_forest',
+] satisfies IntroductionProvider[];
+
+export function isKnownIntroductionProvider(provider: string): provider is IntroductionProvider {
+  return KNOWN_PROVIDERS.includes(provider);
+}
 const KOGL_LICENSE_PREFIX = 'https://www.kogl.or.kr/';
 
 export function introductionNeedsCollapse(text: string): boolean {
@@ -35,8 +47,8 @@ function isHttpsOn(url: string, check: (u: URL) => boolean): boolean {
 }
 
 /** 이미지 원본 URL이 그 원천의 허용 호스트 https인지(서버도 같은 규칙으로 거른다 — 이중 확인). */
-export function isIntroductionImageUrl(provider: IntroductionProvider, url: string): boolean {
-  const suffix = IMAGE_HOST_SUFFIX[provider];
+export function isIntroductionImageUrl(provider: string, url: string): boolean {
+  const suffix = isKnownIntroductionProvider(provider) ? IMAGE_HOST_SUFFIX[provider] : undefined;
   return suffix !== undefined && isHttpsOn(url, (u) => u.hostname.endsWith(suffix));
 }
 
@@ -74,16 +86,19 @@ export function introductionHasContent(
   );
 }
 
-/** 상세 카드의 출처 소개 — place·event(TourAPI 축제)만 가진다. */
+/** 상세 카드의 출처 소개 — place·event(TourAPI 축제)만 가진다. 모르는 원천이면 null. */
 export function cardIntroduction(
   card: FeatureDetailCard | null | undefined,
 ): SourceIntroduction | null {
-  return card && (card.kind === 'place' || card.kind === 'event') ? card.introduction : null;
+  const introduction =
+    card && (card.kind === 'place' || card.kind === 'event') ? card.introduction : null;
+  return introduction && isKnownIntroductionProvider(introduction.provider) ? introduction : null;
 }
 
-/** 상세 카드의 이용 안내 — place·event만 가진다. */
+/** 상세 카드의 이용 안내 — place·event만 가진다. 모르는 원천이면 null. */
 export function cardVisitGuide(card: FeatureDetailCard | null | undefined): VisitGuide | null {
-  return card && (card.kind === 'place' || card.kind === 'event') ? card.visit_guide : null;
+  const guide = card && (card.kind === 'place' || card.kind === 'event') ? card.visit_guide : null;
+  return guide && isKnownIntroductionProvider(guide.provider) ? guide : null;
 }
 
 /** 출처 줄 — "출처: 한국관광공사" 또는 "출처: … · 기준일 2026-05-31". */

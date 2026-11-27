@@ -1,8 +1,11 @@
-"""Map `visitor_info`(ADR-125) → 상세 카드 `introduction`·`visit_guide` 투영과 장소 영업 정보 추출."""
+"""Map `visitor_info`(ADR-126) → 상세 카드 `introduction`·`visit_guide` 투영과 장소 영업 정보 추출."""
 
 from __future__ import annotations
 
+import json
+import os
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -141,15 +144,31 @@ def test_image_license_fails_closed(license_value: Any) -> None:
     assert intro.overview is not None
 
 
-def test_kogl_type0_is_labeled_free_use() -> None:
-    assert image_license_type(_license(0)) == 0
+def test_kogl_type0_fails_closed_until_verified() -> None:
+    """제0유형은 원천 표기 근거를 확인하기 전까지 싣지 않는다."""
+    assert image_license_type(_license(0)) is None
     intro = visitor_introduction(
         _tourapi_info(images=[{"url": _IMG1, "license": _license(0)}]), name="x"
     )
     assert intro is not None
-    assert intro.images[0].license_label == "공공누리 제0유형: 자유이용"
-    assert intro.images[0].license_url == "https://www.kogl.or.kr/info/licenseType0.do"
-    assert intro.images[0].no_derivatives is False
+    assert intro.images == []
+    assert intro.kogl_type is None
+
+
+def test_deprecated_top_level_license_mirrors_first_image() -> None:
+    """#809 클라이언트 호환 — 최상위 공공누리 표시는 첫 이미지 값이다(이미지가 없으면 null)."""
+    intro = visitor_introduction(_tourapi_info(), name="x")
+    assert intro is not None
+    assert intro.kogl_type == 3
+    assert intro.license_label == intro.images[0].license_label
+    assert intro.license_url == "https://www.kogl.or.kr/info/licenseType3.do"
+    text_only = visitor_introduction(_tourapi_info(images=None), name="x")
+    assert text_only is not None
+    assert (text_only.kogl_type, text_only.license_label, text_only.license_url) == (
+        None,
+        None,
+        None,
+    )
 
 
 def test_disallowed_image_host_dropped() -> None:
@@ -392,6 +411,30 @@ def test_place_details_read_hours_and_rest_days_from_visitor_info() -> None:
     extracted = extract_place_details(dto, today=_TODAY)
     assert extracted.opening_hours == ["09:00~18:00\n(입장마감 17:00)"]
     assert extracted.closed_days == "연중무휴"
+    # visitor_info에서 온 값은 실제 원천을 출처로 남긴다(화면 "출처: 한국관광공사").
+    assert extracted.sources() == {"opening_hours": "tourapi", "closed_days": "tourapi"}
+
+
+def test_place_details_museum_source_recorded() -> None:
+    dto = _dto(
+        {"source": "datagokr_museum", "attribution": "x", "usage_hours": "09:00~18:00"},
+        detail={"facility_info": {"rstde_info": "매주 월요일"}},
+    )
+    extracted = extract_place_details(dto, today=_TODAY)
+    assert extracted.sources()["opening_hours"] == "datagokr_museum"
+    # 휴무는 옛 평면 키에서 왔으므로 Map 출처 그대로다.
+    assert extracted.closed_days == "매주 월요일"
+    assert extracted.sources()["closed_days"] == "kor_travel_map"
+
+
+def test_place_details_ignore_unknown_visitor_source() -> None:
+    dto = _dto(
+        {"source": "new_source", "attribution": "x", "usage_hours": "모름", "rest_days": "모름"},
+        detail={"facility_info": {"usetime": "10:00~17:00"}},
+    )
+    extracted = extract_place_details(dto, today=_TODAY)
+    assert extracted.opening_hours == ["10:00~17:00"]
+    assert extracted.closed_days is None
     assert extracted.sources()["opening_hours"] == "kor_travel_map"
 
 
@@ -405,6 +448,24 @@ def test_place_details_structured_hours_still_win() -> None:
     )
     extracted = extract_place_details(dto, today=_TODAY)
     assert extracted.opening_hours == ["월요일: 09:00~18:00"]
+    assert extracted.sources()["opening_hours"] == "kor_travel_map"
+
+
+def test_place_details_structured_closed_days_beat_visitor_rest_text() -> None:
+    """구조화 영업시간을 썼으면 휴무도 구조화 값(쉬는 요일)을 원문 문장보다 앞세운다(출처 일관)."""
+    periods = [
+        {"open": {"day": day, "time": "0900"}, "close": {"day": day, "time": "1800"}}
+        for day in range(2, 7)
+    ]
+    dto = _dto(
+        _tourapi_info(),
+        detail={"business_hours": {"periods": periods}, "facility_info": {}},
+    )
+    extracted = extract_place_details(dto, today=_TODAY)
+    assert extracted.closed_days is not None
+    assert extracted.closed_days.startswith("매주")
+    assert "연중무휴" not in extracted.closed_days
+    assert extracted.sources()["closed_days"] == "kor_travel_map"
 
 
 def test_place_details_fall_back_to_flat_keys_without_visitor_info() -> None:
@@ -412,3 +473,52 @@ def test_place_details_fall_back_to_flat_keys_without_visitor_info() -> None:
     extracted = extract_place_details(dto, today=_TODAY)
     assert extracted.opening_hours == ["10:00~17:00"]
     assert extracted.closed_days == "월요일"
+
+
+# ── 클라이언트 스키마 정합(golden) ───────────────────────────────────────────
+
+_GOLDEN = Path(__file__).resolve().parents[4] / "apps/web/tests/fixtures/detail-card-golden.json"
+
+
+def _golden_cards() -> list[dict[str, Any]]:
+    full = _tourapi_info(
+        reference_date="2026-11-01",
+        discount="경로 무료",
+        reservation="불필요",
+        transport="괴산터미널에서 버스",
+        facilities="화장실\n전망대",
+        capacity="300명",
+        accommodation_available=False,
+        fees=[{"audience": "adult", "amount_krw": 2000}, {"audience": "child", "amount_krw": 0}],
+        pet_policy={
+            "companion_type": "일부구역 동반가능",
+            "allowed_pets": "소형견",
+            "requirements": "목줄",
+            "notes": "실내 불가",
+        },
+    )
+    place = build_detail_card(_dto(full, urls={"homepage": "https://example.com"}))
+    festival = build_detail_card(
+        _dto(
+            {
+                "source": "tourapi",
+                "attribution": "한국관광공사",
+                "description": "벚꽃이 피는 봄 축제",
+                "images": [{"url": _IMG1, "license": _license(1)}],
+            },
+            kind="event",
+            name="진해군항제",
+            detail={"starts_on": "2026-04-01", "ends_on": "2026-04-10"},
+        )
+    )
+    return [place.model_dump(mode="json"), festival.model_dump(mode="json")]
+
+
+def test_detail_card_golden_matches_server_projection() -> None:
+    """웹 vitest(`detailCardGolden.test.ts`)가 이 파일을 `FeatureDetailCardSchema`로 읽는다 — 서버 응답과 클라이언트
+    스키마가 갈라지면 둘 중 한쪽이 빨갛게 된다. 재생성: `PINVI_WRITE_DETAIL_CARD_GOLDEN=1 pytest -k golden`."""
+    cards = _golden_cards()
+    if os.environ.get("PINVI_WRITE_DETAIL_CARD_GOLDEN") == "1":
+        _GOLDEN.parent.mkdir(parents=True, exist_ok=True)
+        _GOLDEN.write_text(json.dumps(cards, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    assert json.loads(_GOLDEN.read_text(encoding="utf-8")) == cards

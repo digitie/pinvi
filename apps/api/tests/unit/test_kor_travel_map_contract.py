@@ -380,7 +380,7 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
             "required": True,
             "nullable": False,
         },
-        # Map ADR-125 방문 안내 — `services/source_introduction.py`가 출처 소개·이용 안내로,
+        # Map ADR-126 방문 안내 — `services/source_introduction.py`가 출처 소개·이용 안내로,
         # `services/poi_place_details.py`가 이용시간·휴무 원문으로 읽는다.
         "visitor_info": {
             "type": "object",
@@ -389,7 +389,7 @@ _CONSUMED_FIELD_CONTRACTS: dict[str, dict[str, dict[str, Any]]] = {
             "nullable": True,
         },
     },
-    # `services/source_introduction.py`가 읽는 방문 안내 필드(Map ADR-125). 모르는 enum 값은
+    # `services/source_introduction.py`가 읽는 방문 안내 필드(Map ADR-126). 모르는 enum 값은
     # 소비 쪽에서 버리지만, 지금 아는 값이 줄거나 이름이 바뀌면 화면에서 조용히 사라지므로 고정한다.
     "PlaceVisitorInfo": {
         "source": {

@@ -274,11 +274,11 @@ iOS 앱 스킴(`nmap://`, `kakaomap://`) 뒤 화면이 그대로면 1.5초 뒤 �
 있으면 그대로). 예전에는 문자열만 읽어 구조화 값이 카드에서 빠졌다. 장소 영업 정보 저장과 같은 규칙
 (`app/services/opening_hours.py`)을 쓴다.
 
-## 지도 장소 상세 카드 출처 소개·이용 안내 (Map `visitor_info`, ADR-125)
+## 지도 장소 상세 카드 출처 소개·이용 안내 (Map `visitor_info`, ADR-126)
 
 `GET /features/{id}/detail-card`의 place 카드와 event 카드(TourAPI 축제)는 `introduction`(출처 소개)과
 `visit_guide`(이용 안내)를 함께 준다(보여 줄 값이 없으면 각각 `null`). 정본 입력은 Map 공개
-`GET /v1/features/{id}`의 최상위 `visitor_info`(`PlaceVisitorInfo`, Map ADR-125)다
+`GET /v1/features/{id}`의 최상위 `visitor_info`(`PlaceVisitorInfo`, Map ADR-126)다
 (`app/services/source_introduction.py`). Map이 `visitor_info`를 주지 않는 옛 응답이면 place만 #809의 평면 키
 (`detail.facility_info`의 `tourapi_content_id`·`overview`·`image_url`·`license`)로 `introduction`을 대신 만든다
 (`visit_guide`는 `null`).
@@ -301,7 +301,7 @@ iOS 앱 스킴(`nmap://`, `kakaomap://`) 뒤 화면이 그대로면 1.5초 뒤 �
 | `reference_date`                         | 원천 기준일(`YYYY-MM-DD`, 없으면 `null`) — 화면은 `출처: … · 기준일 …`로 적는다                                                                                                                                 |
 | `overview`                               | 소개문(TourAPI overview·국가유산 설명문·박물관 소개). 서버가 알려진 HTML 태그·제어 문자를 걷어 낸 평문(줄바꿈 보존, `<A코스>`·`<삼국유사>` 같은 본문 꺾쇠는 그대로). 20,000자를 넘으면 자르지 않고 싣지 않는다. |
 | `images[]`                               | 원본 이미지 URL(최대 10장, 첫 장이 대표). 원천 썸네일은 쓰지 않는다. `http`는 같은 주소 https로. 같은 URL은 한 번만.                                                                                            |
-| `images[].kogl_type`                     | 그 이미지의 공공누리 유형(0~4). 이미지마다 다를 수 있다(대표 사진 제3유형, 갤러리 제1유형 등).                                                                                                                  |
+| `images[].kogl_type`                     | 그 이미지의 공공누리 유형(1~4 — 제0유형은 근거 확인 전까지 싣지 않는다). 이미지마다 다를 수 있다(대표 사진 제3유형, 갤러리 제1유형 등).                                                                                                                  |
 | `images[].no_derivatives`                | 변경금지(제3·4유형)면 `true`                                                                                                                                                                                    |
 | `images[].license_label` / `license_url` | 표시 문구(`공공누리 제3유형: 출처표시 + 변경금지` 등)와 kogl.or.kr `licenseType{N}.do` 링크                                                                                                                     |
 
@@ -310,11 +310,23 @@ iOS 앱 스킴(`nmap://`, `kakaomap://`) 뒤 화면이 그대로면 1.5초 뒤 �
 않는다(`_SHOW_NONCOMMERCIAL_ONLY_IMAGES`). 국가유산 이미지(Map이 싣지 않음)와 옛 `image_url`·파일 이미지는 허용
 호스트가 없어 보이지 않는다.
 
+`kogl_type`·`license_label`·`license_url`(최상위)은 **deprecated**다 — #809 클라이언트(이미 깔린 앱) 호환용으로 첫
+이미지의 값을 그대로 담는다(이미지가 없으면 `null`). 새 화면은 `images[]`의 값을 이미지마다 쓴다.
+
+#809 대비 계약 변경: `provider`가 `tourapi` 하나에서 원천 4종으로 넓어졌고(클라이언트 스키마는 문자열로 받고 아는
+값만 보인다), `reference_date`가 생겼고, 이미지 최대 1장 → 10장, 공공누리 표시가 이미지마다(`images[].license_*`)로
+옮겨졌다. 클라이언트 zod는 `introduction`·`visit_guide` 블록 하나가 모양이 어긋나도 그 블록만 `null`로 두고 카드
+전체를 버리지 않는다(`.catch(null)`). 서버 투영과 클라이언트 스키마의 정합은 golden
+`apps/web/tests/fixtures/detail-card-golden.json`(서버 `test_visitor_info_projection.py`가 생성·대조, 웹
+`detailCardGolden.test.ts`가 파싱)으로 지킨다.
+
+소개문·이용 안내 문장 정리에서 `<script>`·`<style>`은 태그뿐 아니라 안의 내용까지 통째로 지운다.
+
 ### `visit_guide`
 
 `usage_hours`(이용시간)·`rest_days`(휴무일)·`parking`·`parking_fee`·`fee_text`·`discount`·`reservation`·`inquiry`·
 `transport`·`facilities`·`capacity`·`pet_note`는 원천 문장 그대로의 평문이다(태그·제어 문자만 걷음, 줄바꿈 보존,
-2,000자 넘으면 싣지 않음). `fees[]`는 원천이 숫자로 준 요금(`audience` adult/youth/child, `amount_krw`, 0 = 무료),
+2,000자 넘으면 싣지 않음). `fees[]`는 원천이 숫자로 준 요금(`audience` adult/youth/child, `amount_krw`),
 `accommodation_available`은 숙박 가능 여부, `accessibility[]`는 무장애 안내(`group` physical/visual/hearing/
 infant_family, `facility` 코드, `label` 시설 한글 이름, `text` 원문), `pet_policy`는 반려동물 동반 안내
 (`companion_type`·`allowed_pets`·`requirements`·`notes`). 모르는 `group`·`audience` 값은 버린다.
@@ -330,12 +342,16 @@ infant_family, `facility` 코드, `label` 시설 한글 이름, `text` 원문), 
   쪽은 저장하지 않고 같은 detail-card를 읽는다.
 - 이미지는 서버가 내려받거나 줄이지 않는다. 화면은 원본 URL을 크롭·필터 없이 원본 비율(`object-contain`, RN
   `resizeMode="contain"`)로 그리고, 누르면 원본을 새 창으로 연다. 여러 장이면 가로 갤러리(웹 `overflow-x-auto`, RN
-  가로 `ScrollView`), lazy loading. 공공누리 표시는 이미지마다 그 아래에 붙고, 불러오지 못한 이미지는 틀과 표시를 함께 뺀다.
+  가로 `FlatList` — 화면 근처 2~3장만 그린다), 웹은 lazy loading. 갤러리 레이아웃은 처음 받은 장수로 정해 한 장이
+  깨져도 틀이 바뀌지 않는다. 공공누리 표시는 이미지마다 그 아래에 붙고, 불러오지 못한 이미지는 틀과 표시를 함께 뺀다.
 - 소개문·이용 안내 문장은 텍스트로만 그린다(`dangerouslySetInnerHTML` 없음, 웹 `whitespace-pre-line`). 소개문은 4줄·140자를
   넘으면 접고 `소개 더 보기`로 펼친다.
-- 요금은 `성인 2,000원 · 청소년 1,000원 · 어린이 무료`로 적고 `fee_text` 원문을 그 아래 둔다.
+- 요금은 `성인 2,000원 · 청소년 1,000원 · 어린이 무료`로 적고 `fee_text` 원문을 그 아래 둔다. `fee_text`가 있으면 0원이
+  조건부일 수 있어 `무료`로 해석하지 않고 `0원`으로 적는다.
+- 여행 장소 정보 패널·장소 시트는 영업 정보 항목이 이미 보이는 이용시간·휴무를 이용 안내에서 뺀다(같은 원문이 두 번
+  보이지 않게, `omitShownHours`). 지도 상세 카드는 영업 정보 항목이 없으므로 다 보인다.
 - 배지 `무장애 안내`(`accessibility`가 비지 않을 때)와 `반려동물 동반`(`pet_policy`가 있을 때)은 아이콘·글자·펼침 표시가
-  있는 버튼(`aria-expanded`·`aria-controls`, 44px)이다 — 색만으로 뜻을 전하지 않는다. 무장애는 분류별로 `label: text`.
+  있는 버튼(`aria-expanded`, 펼쳤을 때만 `aria-controls`, 44px; 모바일은 펼침 기호 없이 글자만 읽힌다)이다 — 색만으로 뜻을 전하지 않는다. 무장애는 분류별로 `label: text`.
   `pet_note` 한 줄은 배지가 아니라 표 줄 `반려동물`이다(원문을 해석하지 않는다).
 - 출처 줄 `출처: {attribution}`(+ `· 기준일 {reference_date}`)은 소개·이용 안내 블록마다 늘 붙는다.
 - 이미지 URL(원천별 허용 호스트 https)과 공공누리 링크(`https://www.kogl.or.kr/`)는 화면도 `@pinvi/domain`으로 한 번 더
@@ -345,5 +361,8 @@ infant_family, `facility` 코드, `label` 시설 한글 이름, `text` 원문), 
 
 `app/services/poi_place_details.py`는 구조화 영업시간(`business_hours`)이 없을 때 `visitor_info.usage_hours`·
 `rest_days` 원문을 옛 평면 키(`usetime`·`restdate` 등)보다 먼저 읽는다(원문 한 줄 그대로 — 여러 줄이면 줄바꿈 포함).
+아는 원천(`source`)일 때만 읽고, 그 값을 쓴 필드는 `sources`에 실제 원천(`tourapi` 등)을 남겨 화면이
+`출처: 한국관광공사`처럼 정확히 보인다(`@pinvi/domain` `placeDetails.ts` `SOURCE_LABELS`). 구조화 영업시간을 썼으면 휴무도
+구조화 값(쉬는 요일·특별 휴무)을 `visitor_info.rest_days` 원문보다 앞세운다.
 저장된 행은 캐시라 Map이 `visitor_info`를 새로 줘도 그 장소에서 **"다시 읽어오기"를 누르기 전까지 예전 값**을 보인다
 (일괄 재수집 없음).

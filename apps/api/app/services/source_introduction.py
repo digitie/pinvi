@@ -1,6 +1,6 @@
 """장소 상세의 출처 소개·이용 안내 투영 — 소개문·원본 이미지(갤러리)·출처/공공누리 + 이용시간·요금·무장애·반려동물.
 
-정본 입력은 Map 공개 `GET /v1/features/{id}`의 최상위 `visitor_info`(`PlaceVisitorInfo`, Map ADR-125)다.
+정본 입력은 Map 공개 `GET /v1/features/{id}`의 최상위 `visitor_info`(`PlaceVisitorInfo`, Map ADR-126)다.
 Map은 TourAPI(관광지·문화시설·레포츠·축제)·국가유산청 설명문·박물관/미술관 표준데이터·휴양림 표준데이터의
 방문 안내를 이 typed 묶음 하나로 준다(원천 문장 그대로, 이미지마다 공공누리 유형). `visitor_info`가 없는
 옛 Map 응답이면 #809의 평면 키(`detail.facility_info.overview`/`image_url`/`license`, TourAPI 행만)로 대신한다.
@@ -9,7 +9,8 @@ Map은 TourAPI(관광지·문화시설·레포츠·축제)·국가유산청 설�
 
 - 출처 문구는 원천마다 PinVi가 고정한다(`SOURCE_ATTRIBUTION`) — Map 값으로 바꿔 달지 않는다. 모르는 원천
   (`source`)은 출처 표시 조건을 알 수 없으므로 통째로 싣지 않는다(fail-closed).
-- 이미지는 이미지마다 공공누리 유형이 확인된 것만 싣는다. 유형·변경/상업 허용 값이 서로 맞지 않거나 유형을
+- 이미지는 이미지마다 공공누리 유형(1~4)이 확인된 것만 싣는다. 제0유형은 원천 쪽 표기 근거를 확인하기
+  전까지 싣지 않는다(`_SHOW_KOGL_TYPE0_IMAGES`). 유형·변경/상업 허용 값이 서로 맞지 않거나 유형을
   모르면 싣지 않는다. 상업적 이용금지(제2·4유형)는 PinVi의 상업성 판단 전까지 싣지 않는다
   (`_SHOW_NONCOMMERCIAL_ONLY_IMAGES`).
 - 변경금지(제3·4유형)는 `no_derivatives=true` — 화면이 크롭·필터 없이 원본 비율로 그린다. 서버는 이미지를
@@ -50,7 +51,7 @@ SOURCE_ATTRIBUTION: Final[dict[IntroductionProvider, str]] = {
     "datagokr_museum": "공공데이터포털 전국박물관미술관정보표준데이터",
     "krforest_recreation_forest": "공공데이터포털 전국휴양림표준데이터",
 }
-"""원천별 출처 표시 문구(Map ADR-125 `attribution`과 같은 값을 PinVi가 고정)."""
+"""원천별 출처 표시 문구(Map ADR-126 `attribution`과 같은 값을 PinVi가 고정)."""
 
 _IMAGE_HOST_SUFFIX: Final[dict[IntroductionProvider, str]] = {"tourapi": ".visitkorea.or.kr"}
 """원천별 이미지 허용 호스트. 여기 없는 원천의 이미지는 받지 않는다(국가유산 — 라이선스 코드 미확인)."""
@@ -60,6 +61,9 @@ _OVERVIEW_MAX: Final = 20000
 """이보다 긴 소개문은 싣지 않는다 — 잘라 내면 변경금지 본문을 바꾸는 셈이다."""
 _GUIDE_TEXT_MAX: Final = 2000
 _ALT_MAX: Final = 200
+
+_SHOW_KOGL_TYPE0_IMAGES: Final = False
+"""공공누리 제0유형(자유이용) 이미지를 보일지 — 원천 표기 근거를 확인하기 전까지 싣지 않는다(fail-closed)."""
 
 _SHOW_NONCOMMERCIAL_ONLY_IMAGES: Final = False
 """공공누리 제2·4유형(상업적 이용금지) 이미지를 보일지 — PinVi의 상업성 판단(소유자) 전까지 싣지 않는다."""
@@ -94,6 +98,10 @@ _KOGL_BY_VALUE: Final[dict[str, KoglType]] = {
     "공공누리 제3유형(출처표시·변경금지)": 3,
 }
 _BR_RE: Final = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_BLOCK_RE: Final = re.compile(
+    r"<(script|style)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL | re.ASCII
+)
+"""`<script>`·`<style>`은 태그만이 아니라 안의 코드까지 통째로 지운다(본문이 아니다)."""
 _SPACE_RE: Final = re.compile("[ \t\u00a0\u3000]+")
 _FACILITY_RE: Final = re.compile(r"^[a-z_]{1,64}$")
 
@@ -144,7 +152,7 @@ def _plain(value: Any, max_length: int) -> str | None:
     text = _text(value)
     if text is None:
         return None
-    text = _TAG_RE.sub("", _BR_RE.sub("\n", text))
+    text = _TAG_RE.sub("", _BR_RE.sub("\n", _BLOCK_RE.sub("", text)))
     text = _drop_control(text)
     lines = [_SPACE_RE.sub(" ", line).strip() for line in text.replace("\r", "").split("\n")]
     paragraphs: list[str] = []
@@ -239,7 +247,16 @@ def image_license_type(raw: Any) -> KoglType | None:
         return None
     if not commercial and not _SHOW_NONCOMMERCIAL_ONLY_IMAGES:
         return None
+    if kind == 0 and not _SHOW_KOGL_TYPE0_IMAGES:
+        return None
     return cast(KoglType, kind)
+
+
+def visitor_info_source(info: Any) -> IntroductionProvider | None:
+    """Map `visitor_info.source` → 아는 원천이면 그 값, 아니면 None(모르는 원천은 통째로 쓰지 않는다)."""
+    if not isinstance(info, dict):
+        return None
+    return _provider(info)
 
 
 def _provider(info: dict[str, Any]) -> IntroductionProvider | None:
@@ -256,6 +273,27 @@ def _reference_date(value: Any) -> date | None:
         return date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _introduction(
+    *,
+    provider: IntroductionProvider,
+    reference_date: date | None,
+    overview: str | None,
+    images: list[SourceImage],
+) -> SourceIntroduction:
+    first = images[0] if images else None
+    return SourceIntroduction(
+        provider=provider,
+        attribution=SOURCE_ATTRIBUTION[provider],
+        reference_date=reference_date,
+        overview=overview,
+        images=images,
+        # deprecated(#809 클라이언트 호환) — 첫 이미지의 공공누리 표시. 새 화면은 이미지마다의 값을 쓴다.
+        kogl_type=first.kogl_type if first else None,
+        license_label=first.license_label if first else None,
+        license_url=first.license_url if first else None,
+    )
 
 
 def visitor_introduction(info: Any, *, name: str) -> SourceIntroduction | None:
@@ -282,9 +320,8 @@ def visitor_introduction(info: Any, *, name: str) -> SourceIntroduction | None:
         images.append(_image(url, _alt(name, raw.get("caption"), len(images)), license_type))
     if overview is None and not images:
         return None
-    return SourceIntroduction(
+    return _introduction(
         provider=provider,
-        attribution=SOURCE_ATTRIBUTION[provider],
         reference_date=_reference_date(info.get("reference_date")),
         overview=overview,
         images=images,
@@ -388,13 +425,11 @@ def tourapi_introduction(detail: Any, *, name: str) -> SourceIntroduction | None
     if overview is None and not images:
         return None
     # TourAPI 행의 출처는 늘 한국관광공사다 — Map 값으로 바꿔 달지 않는다(이용약관 필수 표시).
-    return SourceIntroduction(
-        provider="tourapi", attribution=TOURAPI_ATTRIBUTION, overview=overview, images=images
-    )
+    return _introduction(provider="tourapi", reference_date=None, overview=overview, images=images)
 
 
 def visitor_info_of(dto: dict[str, Any]) -> dict[str, Any] | None:
-    """Map 상세 dto의 최상위 `visitor_info`(ADR-125). 없거나 객체가 아니면 None."""
+    """Map 상세 dto의 최상위 `visitor_info`(ADR-126). 없거나 객체가 아니면 None."""
     info = dto.get("visitor_info")
     return info if isinstance(info, dict) else None
 

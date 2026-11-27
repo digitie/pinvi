@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { FlatList, Image, Linking, Pressable, Text, View } from 'react-native';
 import {
   introductionNeedsCollapse,
   isIntroductionImageUrl,
@@ -7,11 +7,10 @@ import {
   sourceAttributionLine,
   visibleIntroductionImages,
 } from '@pinvi/domain';
-import type {
-  IntroductionProvider,
-  SourceImage,
-  SourceIntroduction as SourceIntroductionData,
-} from '@pinvi/schemas';
+import type { SourceImage, SourceIntroduction as SourceIntroductionData } from '@pinvi/schemas';
+
+const NO_FAILED: ReadonlySet<string> = new Set();
+const GALLERY_ITEM_WIDTH = 260;
 
 /**
  * 원본 이미지 1장 + 그 이미지의 공공누리 표시 — 원본 URL 그대로 보이고 누르면 원본을 연다. 변경금지(제3·4유형)를
@@ -23,7 +22,7 @@ function OriginalImage({
   width,
   onError,
 }: {
-  provider: IntroductionProvider;
+  provider: string;
   image: SourceImage;
   width: number | '100%';
   onError: () => void;
@@ -65,6 +64,10 @@ function OriginalImage({
   );
 }
 
+function GallerySeparator() {
+  return <View style={{ width: 8 }} />;
+}
+
 /**
  * 출처 장소 소개: 원본 이미지(여러 장이면 가로 갤러리) · 소개문(길면 접기) · 출처(+ 기준일).
  * 깨진 이미지 기록은 시트가 가진다(항목 존재와 내용을 같은 기준으로 판정 — `introductionHasContent`).
@@ -82,10 +85,12 @@ export function SourceIntroduction({
   const { overview } = introduction;
   const images = visibleIntroductionImages(introduction, failedImageUrls);
   if (!overview && images.length === 0) return null;
+  // 레이아웃은 처음 받은(허용된) 장수로 정한다 — 갤러리에서 한 장이 깨져 1장이 남아도 틀이 바뀌지 않게.
+  const gallery = visibleIntroductionImages(introduction, NO_FAILED).length > 1;
   const collapsible = overview ? introductionNeedsCollapse(overview) : false;
   return (
     <View className="gap-2" testID="place-sheet-introduction">
-      {images.length === 1 ? (
+      {!gallery && images.length === 1 ? (
         <OriginalImage
           provider={introduction.provider}
           image={images[0]!}
@@ -93,23 +98,33 @@ export function SourceIntroduction({
           onError={() => onImageError(images[0]!.url)}
         />
       ) : null}
-      {images.length > 1 ? (
-        <ScrollView
+      {gallery && images.length > 0 ? (
+        // 화면 가까이 있는 사진만 그린다(가상화) — 보이지 않는 사진까지 미리 받지 않는다.
+        <FlatList
           horizontal
+          data={images}
+          keyExtractor={(image) => image.url}
+          initialNumToRender={2}
+          maxToRenderPerBatch={2}
+          windowSize={3}
+          removeClippedSubviews
+          getItemLayout={(_data, index) => ({
+            length: GALLERY_ITEM_WIDTH + 8,
+            offset: (GALLERY_ITEM_WIDTH + 8) * index,
+            index,
+          })}
+          ItemSeparatorComponent={GallerySeparator}
           accessibilityLabel={`사진 ${images.length}장`}
-          contentContainerClassName="gap-2"
           testID="place-sheet-introduction-gallery"
-        >
-          {images.map((image) => (
+          renderItem={({ item }) => (
             <OriginalImage
-              key={image.url}
               provider={introduction.provider}
-              image={image}
-              width={260}
-              onError={() => onImageError(image.url)}
+              image={item}
+              width={GALLERY_ITEM_WIDTH}
+              onError={() => onImageError(item.url)}
             />
-          ))}
-        </ScrollView>
+          )}
+        />
       ) : null}
       {overview ? (
         <View>

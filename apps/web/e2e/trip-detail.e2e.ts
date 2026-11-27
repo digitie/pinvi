@@ -252,6 +252,8 @@ interface MockTripDetailOptions {
   attachmentsByPath?: (pathname: string) => unknown[];
   onWeatherRequest?: (url: URL) => void;
   featuresInBounds?: unknown | (() => unknown);
+  /** detail-card 응답에 덧씌울 값(기본: 소개·이용 안내 없는 place 카드). */
+  detailCard?: (featureId: string) => Record<string, unknown>;
 }
 
 function emptyFeaturesInBounds() {
@@ -334,6 +336,7 @@ async function mockTripDetailRoutes(
           name: featureId,
           introduction: null,
           visit_guide: null,
+          ...options.detailCard?.(featureId),
         },
       }),
     });
@@ -1955,7 +1958,9 @@ test('여행 장소 마커는 원형 + 상자 없는 이름 라벨 + 현재 날�
       .getBoundingClientRect();
     return {
       gap: labelRect.left - dotRect.right,
-      centerDy: Math.abs(labelRect.top + labelRect.height / 2 - (dotRect.top + dotRect.height / 2)),
+      centerDy: Math.abs(
+        labelRect.top + labelRect.height / 2 - (dotRect.top + dotRect.height / 2),
+      ),
     };
   });
   // CirclePlaceMarker는 원과 라벨 사이 4px 간격, 세로 가운데 정렬이다.
@@ -2134,5 +2139,130 @@ test.describe('모바일 지도 비율·목록 탭 가운데·내 위치(2026-11
     await expect(button).toHaveAttribute('data-follow-mode', 'follow');
     await expect(button).toHaveAttribute('aria-pressed', 'true');
     await expect(button).toHaveAccessibleName('내 위치를 따라가는 중');
+  });
+});
+
+test.describe('장소 정보 패널 소개 갤러리·이용 안내 — 360px(ADR-126)', () => {
+  test.use({ viewport: { width: 360, height: 780 }, isMobile: true, hasTouch: true });
+
+  const kogl = (type: 1 | 3) => ({
+    kogl_type: type,
+    no_derivatives: type === 3,
+    license_label:
+      type === 3 ? '공공누리 제3유형: 출처표시 + 변경금지' : '공공누리 제1유형: 출처표시',
+    license_url: `https://www.kogl.or.kr/info/licenseType${type}.do`,
+  });
+  const images = [1, 2, 3].map((n) => ({
+    url: `https://tong.visitkorea.or.kr/cms/resource/e2e/${n}.png`,
+    alt: `해운대 사진 ${n}`,
+    ...kogl(n === 1 ? 3 : 1),
+  }));
+
+  test('사진 3장 갤러리는 페이지 가로 스크롤 없이 이미지마다 공공누리 링크, 배지는 aria-expanded로 펼친다', async ({
+    page,
+  }) => {
+    // 원천 이미지 서버로 실제 요청이 나가지 않게 1×1 PNG로 답한다.
+    await page.route(/^https:\/\/tong\.visitkorea\.or\.kr\/.*/, (route) =>
+      route.fulfill({
+        contentType: 'image/png',
+        body: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+          'base64',
+        ),
+      }),
+    );
+    await mockTripDetailRoutes(page, TRIP_VIEW, {
+      detailCard: () => ({
+        introduction: {
+          provider: 'tourapi',
+          attribution: '한국관광공사',
+          reference_date: null,
+          overview: '부산을 대표하는 해수욕장이다.',
+          images,
+          ...kogl(3),
+        },
+        visit_guide: {
+          provider: 'tourapi',
+          attribution: '한국관광공사',
+          reference_date: null,
+          usage_hours: null,
+          rest_days: null,
+          parking: '공영주차장 이용',
+          parking_fee: null,
+          fees: [],
+          fee_text: '무료',
+          discount: null,
+          reservation: null,
+          inquiry: '051-749-7621',
+          transport: null,
+          facilities: null,
+          capacity: null,
+          accommodation_available: null,
+          pet_note: null,
+          accessibility: [
+            { group: 'physical', facility: 'parking', label: '주차', text: '장애인 주차 10면' },
+          ],
+          pet_policy: {
+            companion_type: '동반 가능',
+            allowed_pets: null,
+            requirements: null,
+            notes: null,
+          },
+        },
+      }),
+    });
+    await stubTilesInCanvasMode(page);
+    await page.goto(`/trips/${tripId}`);
+    await page.getByRole('button', { name: '패널 열기' }).click();
+    await page
+      .getByRole('button', { name: /해운대 해수욕장/ })
+      .first()
+      .click();
+    const panel = page.getByTestId('place-info-panel');
+    await expect(panel).toBeVisible();
+
+    await panel.getByTestId('place-info-about-toggle').click();
+    const gallery = panel.getByTestId('place-info-introduction-gallery');
+    await expect(gallery).toBeVisible();
+    const figures = gallery.getByTestId('place-info-introduction-figure');
+    await expect(figures).toHaveCount(3);
+    for (let i = 0; i < 3; i += 1) {
+      const license = figures.nth(i).getByTestId('place-info-introduction-license');
+      await expect(license).toHaveAttribute(
+        'href',
+        /^https:\/\/www\.kogl\.or\.kr\/info\/licenseType[13]\.do$/,
+      );
+      await expect(figures.nth(i).getByTestId('place-info-introduction-image')).toHaveCSS(
+        'object-fit',
+        'contain',
+      );
+    }
+    await expect(figures.nth(0).getByTestId('place-info-introduction-license')).toHaveAttribute(
+      'data-kogl-type',
+      '3',
+    );
+    // 갤러리는 자기 안에서만 가로로 넘긴다 — 페이지는 가로로 넘치지 않는다.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    await panel.getByTestId('place-info-guide-toggle').click();
+    const badge = panel.getByTestId('place-info-visit-guide-accessibility-toggle');
+    await expect(badge).toHaveAttribute('aria-expanded', 'false');
+    await badge.click();
+    await expect(badge).toHaveAttribute('aria-expanded', 'true');
+    await expect(panel.getByTestId('place-info-visit-guide-accessibility')).toContainText(
+      '주차: 장애인 주차 10면',
+    );
+    const pet = panel.getByTestId('place-info-visit-guide-pet-toggle');
+    await pet.click();
+    await expect(pet).toHaveAttribute('aria-expanded', 'true');
+    await expect(badge).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(0);
   });
 });

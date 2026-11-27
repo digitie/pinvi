@@ -110,7 +110,7 @@ export type PoiResponse = z.infer<typeof PoiResponseSchema>;
 /**
  * 장소 영업 정보 — `GET|POST /trips/{id}/pois/{poi}/place-details[/refresh]`.
  * `status`: ready(값 있음) / empty(출처에 값 없음) / unavailable(출처 장애, 저장 안 됨).
- * `sources`: 필드 이름 → 출처 이름(`kor_travel_map`).
+ * `sources`: 필드 이름 → 출처 이름(`kor_travel_map`, Map visitor_info에서 온 필드는 `tourapi` 등 그 원천).
  */
 export const PoiPlaceDetailsSchema = z.object({
   poi_id: z.string().uuid(),

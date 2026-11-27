@@ -55,11 +55,58 @@ describe('VisitGuide', () => {
     expect(hoursText.textContent).toBe('09:00~18:00\n(입장마감 17:00)');
     expect(hoursText.className).toContain('whitespace-pre-line');
     const fees = screen.getByTestId(`${T}-fees`);
-    expect(fees).toHaveTextContent('성인 2,000원 · 청소년 1,000원 · 어린이 무료');
+    // 요금 원문이 함께 있으면 0원이 조건부일 수 있어 "무료"로 해석하지 않는다.
+    expect(fees).toHaveTextContent('성인 2,000원 · 청소년 1,000원 · 어린이 0원');
     // HTML 꼴 문자열은 해석하지 않는다.
     expect(within(fees).getByText('<b>단체</b> 할인')).toBeInTheDocument();
     expect(fees.querySelector('b')).toBeNull();
     expect(screen.getByTestId(`${T}-attribution`)).toHaveTextContent('출처: 한국관광공사');
+  });
+
+  it('요금 원문이 없으면 0원을 무료로 적는다', () => {
+    render(
+      <VisitGuide
+        guide={guide({
+          fees: [
+            { audience: 'adult', amount_krw: 2000 },
+            { audience: 'youth', amount_krw: 1000 },
+            { audience: 'child', amount_krw: 0 },
+          ],
+        })}
+        testId={T}
+      />,
+    );
+    expect(screen.getByTestId(`${T}-fees`)).toHaveTextContent(
+      '성인 2,000원 · 청소년 1,000원 · 어린이 무료',
+    );
+  });
+
+  it('펼치기 전에는 aria-controls가 없는 패널을 가리키지 않는다', () => {
+    render(
+      <VisitGuide
+        guide={guide({
+          accessibility: [{ group: 'hearing', facility: 'guide', label: '안내', text: '수어' }],
+        })}
+        testId={T}
+      />,
+    );
+    const toggle = screen.getByTestId(`${T}-accessibility-toggle`);
+    expect(toggle).not.toHaveAttribute('aria-controls');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-controls', screen.getByTestId(`${T}-accessibility`).id);
+  });
+
+  it('omit으로 준 이용시간·휴무는 그리지 않는다', () => {
+    render(
+      <VisitGuide
+        guide={guide({ usage_hours: '09:00~18:00', rest_days: '월요일', parking: '가능' })}
+        testId={T}
+        omit={['usage_hours', 'rest_days']}
+      />,
+    );
+    expect(screen.queryByTestId(`${T}-usage_hours`)).toBeNull();
+    expect(screen.queryByTestId(`${T}-rest_days`)).toBeNull();
+    expect(screen.getByTestId(`${T}-parking`)).toHaveTextContent('가능');
   });
 
   it('무장애 배지는 글자·아이콘이 있는 펼침 버튼이고 분류별로 보인다', () => {
