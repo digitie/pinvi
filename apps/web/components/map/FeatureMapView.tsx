@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  FeatureGeometryLayers,
-  FeatureGeometryPopup,
-} from '@/components/map/FeatureGeometryLayer';
 import { apiClient } from '@/lib/api';
-import type { GeometryFeature } from '@/lib/featureGeometry';
-import { useFeatureGeometry } from '@/lib/useFeatureGeometry';
 import { ApiError, featureApi, weatherApi } from '@pinvi/api-client';
 import type {
   FeaturesInBoundsResponse,
@@ -242,18 +236,6 @@ function useFeatureMapViewModel({
   // 최소 1회 조회가 끝났는지 — 조회 전에는 "표시할 장소가 없습니다"라고 단언하지 않는다
   // (지도 키 미설정·초기화 실패 시 지도 fallback과 모순되는 문구가 겹쳐 떴다, T-316 리뷰 P2).
   const [loaded, setLoaded] = useState(false);
-  const handleGeometrySelect = useCallback(
-    (feature: GeometryFeature) => {
-      userInteractedRef.current = true;
-      setSelected(null);
-      setSelectedWeatherMarker(null);
-      if (mobileLayout) setDetailFeatureId(feature.feature_id);
-    },
-    [mobileLayout],
-  );
-  const geometry = useFeatureGeometry({ active: true, onSelect: handleGeometrySelect });
-  const { onViewportChange: geometryViewportChange, clearSelection: clearGeometrySelection } =
-    geometry;
 
   const fetchInBounds = useCallback(async (map: MapLibreMap) => {
     const zoom = clampZoom(map.getZoom());
@@ -341,7 +323,6 @@ function useFeatureMapViewModel({
 
   const scheduleFetch = useCallback(
     (map: MapLibreMap) => {
-      geometryViewportChange(map);
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => {
         void fetchInBounds(map);
@@ -349,7 +330,7 @@ function useFeatureMapViewModel({
       }, DEBOUNCE_MS);
       transportViewportChange(map);
     },
-    [fetchInBounds, fetchWeatherMarkers, transportViewportChange, geometryViewportChange],
+    [fetchInBounds, fetchWeatherMarkers, transportViewportChange],
   );
 
   useEffect(() => {
@@ -371,7 +352,6 @@ function useFeatureMapViewModel({
   const handleMapLoad = useCallback(
     (map: MapLibreMap) => {
       mapRef.current = map;
-      geometryViewportChange(map);
       // `VWorldMap`은 moveend/zoomend만 노출한다. 자동 센터링을 취소해야 하는 것은 "사용자가
       // 직접 만졌는가"이므로 시작 이벤트를 직접 바인딩하고, 핸들러가 `originalEvent` 유무로
       // 사용자 제스처와 프로그램 이동을 가른다(`dragstart`만 사용자 전용이다).
@@ -386,13 +366,7 @@ function useFeatureMapViewModel({
         pendingFetchRef.current = map;
       }
     },
-    [
-      fetchInBounds,
-      fetchWeatherMarkers,
-      markUserInteracted,
-      transportViewportChange,
-      geometryViewportChange,
-    ],
+    [fetchInBounds, fetchWeatherMarkers, markUserInteracted, transportViewportChange],
   );
 
   /** 자동 센터링 결정이 끝났음을 알리고 보류된 in-bounds 조회를 연다. */
@@ -413,10 +387,9 @@ function useFeatureMapViewModel({
     (target: TransportDetailTarget) => {
       setSelected(null);
       setSelectedWeatherMarker(null);
-      clearGeometrySelection();
       openTransportDetailRaw(target);
     },
-    [openTransportDetailRaw, clearGeometrySelection],
+    [openTransportDetailRaw],
   );
 
   const handleViewportChange = useCallback(
@@ -465,7 +438,6 @@ function useFeatureMapViewModel({
 
   const handlePointClick = useCallback(
     (point: MapPoint) => {
-      clearGeometrySelection();
       if (point.kind === 'cluster') {
         const map = mapRef.current;
         if (map) flyTo(point.lon, point.lat, Math.min(map.getZoom() + 2, 17));
@@ -480,14 +452,13 @@ function useFeatureMapViewModel({
         setDetailFeatureId(point.featureId);
       }
     },
-    [flyTo, mobileLayout, clearGeometrySelection],
+    [flyTo, mobileLayout],
   );
 
   // 검색 결과(feature/my_poi/address/kakao/naver)로 지도를 이동. feature source면 마커도 선택.
   const handleSearchSelect = useCallback(
     (result: PlaceSearchResult) => {
       userInteractedRef.current = true;
-      clearGeometrySelection();
       const coord = result.coord;
       if (!coord) {
         // 위치를 만들지 않고 실제 feature 상세로 연결한다.
@@ -507,7 +478,7 @@ function useFeatureMapViewModel({
       }
       flyTo(coord.lon, coord.lat, 15);
     },
-    [flyTo, clearGeometrySelection],
+    [flyTo],
   );
 
   // "내 위치" 버튼 — 여행 지도와 같은 따라가기 모드(누르면 이동·따라가기, 손으로 끌면 해제, 다시 누르면 복귀).
@@ -651,7 +622,6 @@ function useFeatureMapViewModel({
     autoCenter,
     camera,
     className,
-    clearGeometrySelection,
     contextMenu,
     copyCoord,
     currentTemp,
@@ -663,7 +633,6 @@ function useFeatureMapViewModel({
     error,
     fetchInBounds,
     flyTo,
-    geometry,
     getMap,
     getSearchBias,
     handleContextMenu,
@@ -704,12 +673,10 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
     apiKey,
     camera,
     className,
-    clearGeometrySelection,
     contextMenu,
     copyCoord,
     detailFeatureId,
     flyTo,
-    geometry,
     handleContextMenu,
     handleMapLoad,
     handlePointClick,
@@ -778,12 +745,6 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
               className="h-full w-full"
               unsupportedTileFallback={{ label: 'VWorld tile' }}
             >
-              <FeatureGeometryLayers state={geometry} />
-              {/* 모바일은 탭하면 상세 시트가 바로 뜬다(ADR-056) — 같은 장소를 팝업으로 한 번 더 그리지
-                  않는다(모바일 "장소가 두 번 보인다": 팝업 + 상세 시트가 함께 떴다). */}
-              {!sheetOpen && (
-                <FeatureGeometryPopup state={geometry} onOpenDetail={setDetailFeatureId} />
-              )}
               <ClusterLayer
                 points={points}
                 radius={48}
@@ -839,7 +800,6 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
                       ariaLabel={weatherPoint.title}
                       simplifyAtZoom={isSelected ? 5 : 20}
                       onClick={() => {
-                        clearGeometrySelection();
                         setSelectedWeatherMarker(weatherPoint);
                         // feature/weather marker 팝업은 동시에 두 개가 뜨면 안 된다(T-368).
                         setSelected(null);
@@ -921,7 +881,7 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
       )}
       <FeatureDetailModalController
         featureId={detailFeatureId}
-        fallbackTitle={geometry.selection?.feature.name ?? selected?.title}
+        fallbackTitle={selected?.title}
         onClose={() => setDetailFeatureId(null)}
       />
       <TransportDetailDialog target={transport.detail} onClose={transport.closeDetail} />
@@ -940,7 +900,6 @@ function FeatureMapViewView0Part0({ viewModel }: { viewModel: FeatureMapViewView
     loaded,
     points,
     notice,
-    geometry,
     transport,
     openTransportDetail,
     myLocation,
@@ -1004,7 +963,6 @@ function FeatureMapViewView0Part0({ viewModel }: { viewModel: FeatureMapViewView
         )}
         {/* 접을 수 있는 레이어 패널. 교통 돌발 목록이 길어도 지도 높이의 절반을 넘지 않고 안에서 스크롤한다. */}
         <MapLayerControls
-          geometry={geometry}
           transport={transport}
           onOpenTransportDetail={openTransportDetail}
           collapsible

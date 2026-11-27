@@ -111,6 +111,31 @@ async function mockExploreRoutes(
       body: JSON.stringify({ data: { items: [], zoom: 14, bbox: BBOX } }),
     });
   });
+  // 지도 레이어 패널은 교통 레이어(주유소·교통 돌발)만 담는다 — 기능을 켜야 패널이 그려진다. 레이어
+  // 조회는 이 검사의 관심 밖이라 일시 오류로 답한다(레이어별 강등).
+  await page.route(/.*\/transport\/status$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.fallback();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          enabled: true,
+          layers: [
+            { layer: 'fuel_station', available: true, reason: null, freshness: null },
+            { layer: 'highway_incident', available: true, reason: null, freshness: null },
+          ],
+        },
+      }),
+    });
+  });
+  await page.route(/.*\/transport\/markers-in-bounds(\?.*)?$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.fallback();
+    await route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'upstream_unavailable', message: '잠시 후 다시' } }),
+    });
+  });
   // 선택 popup의 상세·날씨 — 이 검사는 popup 자리만 보므로 일시 오류로 답한다(popup은 제목으로 degrade).
   await page.route(/.*\/features\/[^/?]+\/(detail-card|weather)(\?.*)?$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.fallback();
@@ -180,9 +205,9 @@ test('탐색 지도는 390px 모바일에서 하단 탭바 위까지 지도로 �
   // 레이어 패널은 접고 펼 수 있다(켠 레이어는 그대로).
   await page.getByTestId('map-layer-controls-toggle').click();
   await expect(page.getByTestId('map-layer-controls')).toHaveAttribute('data-collapsed', 'true');
-  await expect(page.getByTestId('geometry-route-toggle')).toHaveCount(0);
+  await expect(page.getByTestId('transport-layer-toggle-fuel_station')).toHaveCount(0);
   await page.getByTestId('map-layer-controls-toggle').click();
-  await expect(page.getByTestId('geometry-route-toggle')).toBeVisible();
+  await expect(page.getByTestId('transport-layer-toggle-fuel_station')).toBeVisible();
 });
 
 test('탐색 지도 장소 마커는 여행 지도와 같은 원형 + 상자 없는 이름 라벨이다', async ({ page }) => {
@@ -286,7 +311,7 @@ test('탐색 지도 선택 popup은 왼쪽 위 레이어 체크박스를 덮지 
     })
     .toBe(false);
   // 체크박스가 맨 위 요소다 — 무엇에도 가리지 않고 눌린다(force 없이).
-  const toggle = page.getByTestId('geometry-route-toggle');
+  const toggle = page.getByTestId('transport-layer-toggle-fuel_station');
   const covered = await toggle.evaluate((el) => {
     const r = el.getBoundingClientRect();
     const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);

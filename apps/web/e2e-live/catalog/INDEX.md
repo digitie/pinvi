@@ -8,7 +8,7 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | area | total | scripted | manual | blocked |
 |---|---:|---:|---:|---:|
 | trip | 60 | 56 | 2 | 2 |
-| search | 55 | 47 | 6 | 2 |
+| search | 55 | 44 | 6 | 5 |
 | nearby | 44 | 37 | 2 | 5 |
 | weather | 33 | 28 | 2 | 3 |
 | share | 35 | 31 | 1 | 3 |
@@ -18,9 +18,9 @@ Runbook: `docs/runbooks/live-e2e-catalog.md`. Config: `apps/web/playwright.live-
 | core | 49 | 48 | 1 | 0 |
 | recommend | 3 | 3 | 0 | 0 |
 | trs | 190 | 190 | 0 | 0 |
-| **all** | **586** | **533** | **29** | **24** |
+| **all** | **586** | **530** | **29** | **27** |
 
-Spec files: 68.
+Spec files: 67.
 
 ## Cases
 
@@ -108,12 +108,12 @@ Spec files: 68.
 | SRCH-020 | search | 숙박·캠핑장 — '오토캠핑장' → 카테고리 라벨 캠핑 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-020` |
 | SRCH-021 | search | 음식점 — '안동찜닭' → feature 또는 kakao/naver 행 | P2 | desktop, search | scripted | `specs/search/search-sources.live.spec.ts#SRCH-021` |
 | SRCH-022 | search | 카페 — '카페' → 카테고리 라벨 카페/커피전문점 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-022` |
-| SRCH-023 | search | 대청봉 경로 — 근처 point로 이동 후 실제 선 클릭·목록·상세 | P1 | desktop, search, poi | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-023` |
-| SRCH-024 | search | 북한산 경로 — 근처 point 범위의 복수 선·토글 OFF | P3 | desktop, search | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-024` |
+| SRCH-023 | search | 대청봉 경로 — 근처 point로 이동 후 실제 선 클릭·목록·상세 | P1 | desktop, search, poi | blocked |  |
+| SRCH-024 | search | 북한산 경로 — 근처 point 범위의 복수 선·토글 OFF | P3 | desktop, search | blocked |  |
 | SRCH-025 | search | 국가유산 — '소수서원' → 라벨 국가유산/사적 | P1 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-025` |
 | SRCH-026 | search | 국가유산 — '도산서원' | P3 | desktop, search | manual |  |
 | SRCH-027 | search | 축제/행사 — '축제' → kind=event 상세에 기간(period) 표시 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-027` |
-| SRCH-028 | search | 설악산 영역 — 실제 면 클릭·큰 bounds 선택 후 상세 유지 | P2 | desktop, search, poi | scripted | `specs/search/search-geometry.live.spec.ts#SRCH-028` |
+| SRCH-028 | search | 설악산 영역 — 실제 면 클릭·큰 bounds 선택 후 상세 유지 | P2 | desktop, search, poi | blocked |  |
 | SRCH-029 | search | 수목원 — '국립수목원' → 라벨 수목원 | P3 | desktop, search | manual |  |
 | SRCH-030 | search | 휴양림 — '자연휴양림' → 라벨 휴양림 | P3 | desktop, search | manual |  |
 | SRCH-031 | search | 박물관/미술관 — '국립중앙박물관' → 라벨 박물관/문화시설 | P2 | desktop, search, poi | scripted | `specs/search/search-sources.live.spec.ts#SRCH-031` |
@@ -141,7 +141,7 @@ Spec files: 68.
 | SRCH-053 | search | 병원은 마지막 | P2 | desktop, search | scripted | `specs/search/search-ranking.live.spec.ts#SRCH-053` |
 | SRCH-054 | search | 역 정확 일치 — '서울역'은 '서울역'이 첫 행(서울역사박물관 등 아님) | P2 | desktop, search | scripted | `specs/search/search-ranking.live.spec.ts#SRCH-054` |
 | SRCH-055 | search | 2글자 검색 성능 스윕('설악','부산','제주') < 8s, 상세 카드 < 3s(기록·soft) | P2 | desktop, search, perf | scripted | `specs/search/search-perf.live.spec.ts#SRCH-055` |
-| NEAR-001 | nearby | 탐색 지도 레이어 패널 — 체크박스 4개(경로·영역·주유소·교통 돌발) 순서·교통 초기 꺼짐·요청 없음 | P1 | desktop, mobile, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-001` |
+| NEAR-001 | nearby | 탐색 지도 레이어 패널 — 체크박스 2개(주유소·교통 돌발) 순서·경로·영역 없음·교통 초기 꺼짐·요청 없음 | P1 | desktop, mobile, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-001` |
 | NEAR-002 | nearby | 공항·휴게소 제거 — 체크박스·라벨 없음, 두 레이어를 다 켜도 rest_area·airport 요청·마커·상태 줄 없음 | P1 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-002` |
 | NEAR-003 | nearby | 주유소 줌 문턱 — zoom 10에서 '확대하면 보여요'·요청 없음, zoom 12에서 요청·마커 | P1 | desktop, nearby | scripted | `specs/nearby/explore-panel.live.spec.ts#NEAR-003` |
 | NEAR-004 | nearby | 주유소 마커 → 상세 대화상자(유종별 가격·상표·편의·신선도·출처) | P1 | desktop, nearby | scripted | `specs/nearby/transport-detail.live.spec.ts#NEAR-004` |

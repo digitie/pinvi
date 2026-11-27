@@ -404,19 +404,11 @@ scripts/n150-live-catalog.sh --head --area trs --project desktop --grep @p1
 - 데이터 공백(브랜드 호텔·역·터미널·좌표 없는 축제 등)은 시나리오에 넣지 않았다 —
   kor-travel-map 의 데이터 공백 이슈(label `e2e-catalog`)가 추적한다.
 
-## 경로·영역 fixture (#635)
+## 경로·영역 fixture (#635, 2026-11-27 제거)
 
-- SRCH-023은 설악산 경로와 교차하는 point의 검색어를
-  `PINVI_E2E_GEOMETRY_SEORAK_ANCHOR_QUERY`로 받는다(기본 `설악산국립공원`).
-- SRCH-024는 북한산 경로 둘 이상과 교차하는 point의 검색어를
-  `PINVI_E2E_GEOMETRY_BUKHAN_ANCHOR_QUERY`로 받는다(기본 `북한산성`).
-- 기본값은 운영 Map 데이터로 확인했다(2026-11-05, 줌 15 화면에 대상 route 여럿). 검색 결과 중
-  anchor 이름을 담은 point feature 행으로 이동한다(같은 이름의 route 행은 고르지 않는다).
-- SRCH-028(area)은 설악산 국립공원 area와 교차하는 point의 검색어를
-  `PINVI_E2E_GEOMETRY_AREA_ANCHOR_QUERY`로 받는다(기본 `설악산국립공원`). 운영 Map의 KNPS 국립공원
-  경계 21건은 kor-travel-map#1450으로 적재했다(2026-11-06).
-- 도형에 없는 coord를 만들지 않는다. point는 카메라 이동용 fixture다.
-- 운영 origin guard는 유지한다. 격리 WSL 실제 HTTP/WebGL 검증은 별도 fixture에서 실행하며 운영 통과로 기록하지 않는다.
+- 소유자 결정(2026-11-27)으로 지도의 경로·영역 레이어를 뺐다. SRCH-023/024/028은 blocked이고
+  `search-geometry.live.spec.ts`와 `PINVI_E2E_GEOMETRY_*_ANCHOR_QUERY` 전달(`n150-playwright-runner.sh`)도 지웠다.
+  기존 mode600 E2E env 파일에 그 키가 남아 있어도 더는 컨테이너로 전달하지 않는다(무해).
 
 ### #668 명령 확인 (ADM-042/043)
 

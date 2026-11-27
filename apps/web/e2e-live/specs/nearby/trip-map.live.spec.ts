@@ -13,7 +13,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { runSearch, searchRows } from '../../helpers/search';
-import { renderedMap, waitForCamera } from '../../helpers/geometry';
+import { renderedMap, waitForCamera } from '../../helpers/mapCamera';
 import { normalizeFixtureName } from '../../helpers/searchFixture';
 import {
   createTrip,

@@ -52,17 +52,18 @@ test.describe('NEAR explore map panel', () => {
     await loginAsUser(page);
   });
 
-  test('NEAR-001 one layer panel: 경로·영역·주유소·교통 돌발 checkboxes in order, transport off, no markers request', async ({ page }) => {
+  test('NEAR-001 one layer panel: 주유소·교통 돌발 checkboxes in order (no 경로·영역), transport off, no markers request', async ({ page }) => {
     const rec = new TransportRecorder(page);
     const status = waitForRequest(page, STATUS_RE);
     await page.goto('/map');
     const statusRes = await status;
     expect(statusRes.ok()).toBe(true);
     await waitForControls(page);
-    // 2026-11-16: 별도 '교통 정보' 패널이 없어지고 경로·영역과 같은 체크박스 줄이 됐다.
+    // 2026-11-16: 별도 '교통 정보' 패널이 없어지고 지도 레이어 체크박스 줄이 됐다. 2026-11-27: 경로·영역 제거.
     await expect(controls(page).getByText('교통 정보', { exact: true })).toHaveCount(0);
     await expect(layerGroup(page).locator('label')).toHaveText(PANEL_LABELS);
-    await expect(page.getByTestId('geometry-route-toggle')).toHaveAttribute('type', 'checkbox');
+    await expect(page.getByTestId('geometry-route-toggle')).toHaveCount(0);
+    await expect(page.getByTestId('geometry-area-toggle')).toHaveCount(0);
     for (const layer of LAYERS) {
       await expect(chip(page, layer)).toHaveAttribute('type', 'checkbox');
       await expect(chip(page, layer)).not.toBeChecked();

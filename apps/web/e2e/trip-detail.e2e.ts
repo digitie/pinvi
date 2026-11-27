@@ -1474,7 +1474,7 @@ test('여행 지도 교통 레이어는 여행 장소 반경으로 조회하고 
   await expect(controls).toBeVisible();
   await expect(
     controls.getByRole('group', { name: '지도 레이어 표시' }).locator('label'),
-  ).toHaveText(['경로', '영역', '주유소', '교통 돌발']);
+  ).toHaveText(['주유소', '교통 돌발']);
   await expect(page.getByTestId('transport-layer-toggle-airport')).toHaveCount(0);
   await expect(page.getByTestId('transport-layer-toggle-rest_area')).toHaveCount(0);
 

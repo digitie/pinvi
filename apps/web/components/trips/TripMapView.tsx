@@ -1,10 +1,6 @@
 'use client';
 
 import {
-  FeatureGeometryLayers,
-  FeatureGeometryPopup,
-} from '@/components/map/FeatureGeometryLayer';
-import {
   ClusterLayer,
   MapFallback,
   MapLoadingSkeleton,
@@ -15,8 +11,6 @@ import {
   type MapLibreMap,
 } from '@/components/map/vworldPrimitives';
 import { apiClient } from '@/lib/api';
-import type { GeometryFeature } from '@/lib/featureGeometry';
-import { useFeatureGeometry } from '@/lib/useFeatureGeometry';
 import { ApiError, featureApi } from '@pinvi/api-client';
 import type { FeatureSummary, TripWeatherCard } from '@pinvi/schemas';
 import {
@@ -222,28 +216,10 @@ function useTripMapViewModel({
   const lastFitPointsRef = useRef<TripMapPoint[] | null>(null);
   const lastFitWithPanelRef = useRef(false);
   const { onViewportChange: transportViewportChange } = transport;
-  const handleGeometrySelect = useCallback(
-    (feature: GeometryFeature) => {
-      userMovedRef.current = true;
-      onSelectPoi?.(null);
-      setSelectedFeature(null);
-      if (mobileLayout) setDetailFeatureId(feature.feature_id);
-    },
-    [mobileLayout, onSelectPoi],
-  );
-  const geometry = useFeatureGeometry({
-    active: showFeatures,
-    hiddenFeatureIds,
-    onSelect: handleGeometrySelect,
-  });
-  const { onViewportChange: geometryViewportChange, clearSelection: clearGeometrySelection } =
-    geometry;
-  useEffect(() => {
-    if (selectedPoiId != null) clearGeometrySelection();
-  }, [selectedPoiId, clearGeometrySelection]);
-  const [previousGeometryPoiId, setPreviousGeometryPoiId] = useState(selectedPoiId);
-  if (previousGeometryPoiId !== selectedPoiId) {
-    setPreviousGeometryPoiId(selectedPoiId);
+  // 여행 장소를 고르면 지도 feature 선택(팝업)을 닫는다 — 두 팝업이 함께 뜨지 않게.
+  const [previousSelectedPoiId, setPreviousSelectedPoiId] = useState(selectedPoiId);
+  if (previousSelectedPoiId !== selectedPoiId) {
+    setPreviousSelectedPoiId(selectedPoiId);
     if (selectedPoiId != null && selectedFeature) setSelectedFeature(null);
   }
 
@@ -414,7 +390,6 @@ function useTripMapViewModel({
   const handleLoad = useCallback(
     (map: MapLibreMap) => {
       mapRef.current = map;
-      geometryViewportChange(map);
       fitCleanupRef.current?.();
       // moveend보다 먼저 기록해 드래그 도중 늦은 UI 응답이 시점을 되돌리지 않게 한다.
       const markUserMove = (event: { originalEvent?: unknown }) => {
@@ -481,23 +456,16 @@ function useTripMapViewModel({
       transportViewportChange(map);
       reportViewport(map);
     },
-    [
-      fitToPoints,
-      scheduleFeatureFetch,
-      transportViewportChange,
-      reportViewport,
-      geometryViewportChange,
-    ],
+    [fitToPoints, scheduleFeatureFetch, transportViewportChange, reportViewport],
   );
 
   const handleViewportChange = useCallback(
     (map: MapLibreMap) => {
-      geometryViewportChange(map);
       scheduleFeatureFetch(map);
       transportViewportChange(map);
       reportViewport(map);
     },
-    [scheduleFeatureFetch, transportViewportChange, reportViewport, geometryViewportChange],
+    [scheduleFeatureFetch, transportViewportChange, reportViewport],
   );
 
   // POI 목록이 바뀌면 경계 재조정. 교통 패널은 상태 조회 뒤에 나타나므로 보이게 되면 한 번 더
@@ -658,10 +626,9 @@ function useTripMapViewModel({
     [coordFromClientPoint, onCreatePoiAtCoordinate, openCoordinatePoiDialog],
   );
 
-  // 경로·영역·주유소·교통 돌발을 한 패널의 체크박스로 둔다(2026-11-16).
+  // 주유소·교통 돌발을 한 패널의 체크박스로 둔다(2026-11-16; 경로·영역은 2026-11-27 제거).
   const layerControls = (
     <MapLayerControls
-      geometry={showFeatures ? geometry : null}
       transport={transport}
       // 맞춤 뒤에 돌발 목록이 저절로 펼쳐져 핀을 덮지 않게 접어 둔다(#729).
       collapseIncidents
@@ -677,11 +644,9 @@ function useTripMapViewModel({
     apiKey,
     canAddFeature,
     className,
-    clearGeometrySelection,
     clearLongPress,
     detailFeatureId,
     featurePoints,
-    geometry,
     handleLoad,
     handleMouseDown,
     handleTouchMove,
@@ -728,11 +693,9 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
   const {
     apiKey,
     className,
-    clearGeometrySelection,
     clearLongPress,
     detailFeatureId,
     featurePoints,
-    geometry,
     handleLoad,
     handleMouseDown,
     handleTouchMove,
@@ -821,7 +784,6 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
           className={`h-full ${mapMinHeightClassName}`}
           unsupportedTileFallback={{ label: 'VWorld tile' }}
         >
-          <FeatureGeometryLayers state={geometry} />
           <ClusterLayer
             points={markerPoints}
             radius={28}
@@ -858,7 +820,6 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
                   ariaLabel={marker.point.title}
                   interactionId={'poi:' + marker.point.poiId}
                   onClick={() => {
-                    clearGeometrySelection();
                     setSelectedFeature(null);
                     onSelectPoi?.(marker.point.poiId);
                   }}
@@ -889,7 +850,6 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
                     title={marker.feature.name}
                     ariaLabel={marker.feature.name}
                     onClick={() => {
-                      clearGeometrySelection();
                       onSelectPoi?.(null);
                       setSelectedFeature(marker.feature);
                       // 모바일: weather 외 feature는 상세 시트를 바로 연다(ADR-056).
@@ -943,7 +903,7 @@ function TripMapViewView0({ viewModel }: { viewModel: TripMapViewView0Model }) {
       </div>
       <FeatureDetailModalController
         featureId={detailFeatureId}
-        fallbackTitle={geometry.selection?.feature.name ?? selectedFeature?.name}
+        fallbackTitle={selectedFeature?.name}
         onClose={() => setDetailFeatureId(null)}
       />
       <TransportDetailDialog target={transport.detail} onClose={transport.closeDetail} />
@@ -1102,24 +1062,20 @@ function TripMapMarkerLegendRow({
 function TripMapPopups({ viewModel }: { viewModel: TripMapViewView0Model }) {
   const {
     detailFeatureId,
-    geometry,
     mobileLayout,
     onSelectPoi,
     selected,
     selectedFeature,
     selectedResolutionNotice,
-    setDetailFeatureId,
     showSelectedPoiPopup,
   } = viewModel;
   if (mobileLayout && detailFeatureId != null) return null;
   const showPoiPopup =
     showSelectedPoiPopup &&
     selected != null &&
-    !geometry.selection &&
     (!mobileLayout || selectedResolutionNotice != null);
   return (
     <>
-      <FeatureGeometryPopup state={geometry} onOpenDetail={setDetailFeatureId} />
       {showPoiPopup && selected && (
           <Popup
             key={selected.poiId}
