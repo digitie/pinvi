@@ -43,6 +43,13 @@ class MobileRefreshRequest(BaseModel):
     refresh_token: str
 
 
+class MobileOAuthStartRequest(BaseModel):
+    """모바일 Google OAuth 시작 — 본문은 선택(이전 앱 빌드는 본문 없이 호출한다)."""
+
+    # "로그인 유지" — login state → callback → 교환 코드로 서버 쪽에서만 옮겨 싣는다.
+    remember_me: bool = False
+
+
 class MobileOAuthExchangeRequest(BaseModel):
     """모바일 OAuth 1회용 교환 코드 → 토큰. Google callback이 `pinvi://oauth?code=`로 준 code."""
 

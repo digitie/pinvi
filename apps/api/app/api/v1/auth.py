@@ -113,6 +113,7 @@ def _set_issue_cookies(response: Response, issue: IssuedAuthSession) -> None:
         response,
         access_token=issue.access_token,
         refresh_token=issue.refresh_token,
+        refresh_expires_at=issue.expires_at,
     )
 
 
@@ -122,12 +123,14 @@ async def _issue_session_and_set_cookies(
     db: DbSession,
     request: Request,
     user_id: uuid.UUID,
+    remember_me: bool = False,
 ) -> None:
     issue = await issue_user_session(
         db,
         user_id=user_id,
         user_agent=_request_user_agent(request),
         ip_address=_request_ip_address(request),
+        remember_me=remember_me,
     )
     _set_issue_cookies(response, issue)
 
@@ -283,7 +286,13 @@ async def login(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
 
-    await _issue_session_and_set_cookies(response, db=db, request=request, user_id=user.user_id)
+    await _issue_session_and_set_cookies(
+        response,
+        db=db,
+        request=request,
+        user_id=user.user_id,
+        remember_me=body.remember_me,
+    )
     return Envelope.of(_to_auth_user(user))
 
 

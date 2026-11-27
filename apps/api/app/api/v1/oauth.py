@@ -63,6 +63,7 @@ def _set_issue_cookies(response: RedirectResponse, issue: IssuedAuthSession) -> 
         response,
         access_token=issue.access_token,
         refresh_token=issue.refresh_token,
+        refresh_expires_at=issue.expires_at,
     )
 
 
@@ -174,7 +175,11 @@ async def oauth_start(
             detail={"code": "OAUTH_NOT_CONFIGURED", "message": f"{label} OAuth 미설정."},
         )
     state, nonce, code_verifier = await issue_login_state(
-        db, provider=provider, mode=body.mode, return_to=body.return_to
+        db,
+        provider=provider,
+        mode=body.mode,
+        return_to=body.return_to,
+        remember_me=body.remember_me,
     )
     url = build_authorize_url(
         provider=provider,
@@ -192,7 +197,7 @@ async def oauth_link(
     current_user_id: CurrentUserId,
     db: DbSession,
 ) -> Envelope[OAuthStartResponse]:
-    """로그인된 사용자의 provider 연결 authorize URL 발급."""
+    """로그인된 사용자의 provider 연결 authorize URL 발급. 연결 callback은 새 세션을 발급하지 않는다."""
     label = provider_label(provider)
     if not provider_configured(provider):
         raise HTTPException(
@@ -280,15 +285,16 @@ async def oauth_callback(
     except OAuthError as exc:
         return _flow_error(exc)
 
+    link_user_id = login_state.user_id if login_state.mode == "link" else None
     try:
-        if login_state.mode == "link" and login_state.user_id is not None:
+        if link_user_id is not None:
             await link_oauth_to_user(
                 db,
                 provider=provider,
-                user_id=login_state.user_id,
+                user_id=link_user_id,
                 claims=claims,
             )
-            user_id = login_state.user_id
+            user_id = link_user_id
         else:
             result = await resolve_oauth_login(db, provider=provider, claims=claims)
             user_id = result.user.user_id
@@ -296,7 +302,9 @@ async def oauth_callback(
         return _flow_error(exc)
 
     if is_mobile:
-        exchange_code = await mint_mobile_exchange(db, user_id=user_id)
+        exchange_code = await mint_mobile_exchange(
+            db, user_id=user_id, remember_me=login_state.remember_me
+        )
         return _mobile_redirect(params={"code": exchange_code})
 
     return_to = login_state.return_to_path or "/"
@@ -304,11 +312,18 @@ async def oauth_callback(
         url=f"{settings.pinvi_web_base_url}{return_to}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
+    if link_user_id is not None:
+        # 계정 연결은 이미 로그인한 사용자의 일이다 — 지금 세션을 그대로 두고 새 세션(새 회전 계열)을 열지
+        # 않는다. 열면 로그인 유지의 절대 만료(로그인 + 365일)가 연결할 때마다 다시 시작되고, state가 브라우저에
+        # 묶여 있지 않아 다른 브라우저가 연 callback이 그 브라우저를 연결한 사용자로 로그인시킨다.
+        return redirect
     issue = await issue_user_session(
         db,
         user_id=user_id,
         user_agent=_request_user_agent(request),
         ip_address=_request_ip_address(request),
+        # 소비한 state의 값 — callback 쿼리는 provider·공격자가 만질 수 있어 쓰지 않는다.
+        remember_me=login_state.remember_me,
     )
     _set_issue_cookies(redirect, issue)
     return redirect

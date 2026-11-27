@@ -1298,5 +1298,9 @@ SQL
   if [ "${applied_revision}" = "20261117_0109" ]; then
     apply_runtime_acl_repair
   fi
+  # 0110은 user_sessions·oauth 표에 로그인 유지 컬럼만 더한다(새 표 없음). exact head 복구 규칙을 잇는다.
+  if [ "${applied_revision}" = "20261127_0110" ]; then
+    apply_runtime_acl_repair
+  fi
 
 fi

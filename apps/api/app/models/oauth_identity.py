@@ -50,6 +50,8 @@ class OAuthLoginState(Base):
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     mode: Mapped[str] = mapped_column(String(16), nullable=False, server_default="login")
     return_to_path: Mapped[str | None] = mapped_column(String(255))
+    # start에서 고른 "로그인 유지" — callback은 쿼리 값이 아니라 이 값으로 세션 수명을 정한다(0110).
+    remember_me: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("app.users.user_id", ondelete="CASCADE"),
@@ -80,6 +82,8 @@ class OAuthMobileExchange(Base):
         ForeignKey("app.users.user_id", ondelete="CASCADE"),
         nullable=False,
     )
+    # callback이 login state에서 옮겨 싣는 "로그인 유지" — 교환 시점 세션 수명(0110).
+    remember_me: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

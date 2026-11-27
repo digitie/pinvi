@@ -1793,6 +1793,9 @@ export const AdminUserSessionRecordSchema = z.object({
   user_agent: z.string().nullable().default(null),
   ip_hash: z.string().nullable().default(null),
   is_active: z.boolean(),
+  /** "로그인 유지" 계열인지 + 계열의 절대 만료(로그인 + 365일). */
+  remember_me: z.boolean().default(false),
+  absolute_expires_at: Iso8601Schema.nullable().default(null),
 });
 export type AdminUserSessionRecord = z.infer<typeof AdminUserSessionRecordSchema>;
 

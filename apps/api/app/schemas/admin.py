@@ -1404,6 +1404,9 @@ class AdminUserSessionRecord(BaseModel):
     user_agent: str | None = None
     ip_hash: str | None = None
     is_active: bool
+    # "로그인 유지" 계열인지와 그 계열의 절대 만료(로그인 + 365일, 0110).
+    remember_me: bool = False
+    absolute_expires_at: datetime | None = None
 
 
 class AdminUserSessionsResponse(BaseModel):
