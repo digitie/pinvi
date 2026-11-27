@@ -320,6 +320,19 @@ async function mockTripDetailRoutes(
     });
   });
 
+  // 장소 정보 패널의 출처 소개(TourAPI)는 지도 상세 카드를 읽는다 — 소개 없는 place 카드로 답한다.
+  await page.route(/.*\/features\/[^/]+\/detail-card(\?.*)?$/, async (route, request) => {
+    if (!isFetch(request.resourceType())) return route.fallback();
+    const parts = new URL(request.url()).pathname.split('/');
+    const featureId = decodeURIComponent(parts[parts.length - 2] ?? '');
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { kind: 'place', feature_id: featureId, name: featureId, introduction: null },
+      }),
+    });
+  });
+
   await page.route(/.*\/features\/in-bounds(\?.*)?$/, async (route, request) => {
     if (!isFetch(request.resourceType())) return route.fallback();
     const data =
@@ -814,7 +827,9 @@ test('여행 지도는 feature를 보이고 빈 좌표에서 주소 포함 POI�
 
 // #733: 장소 추가 뒤 목록 행은 POST 응답으로 곧바로 보여야 한다. 그 뒤의 `GET /trips/{id}` 재조회는
 // weather 보강을 기다려 운영에서 2~7 s(겹치면 15 s 이상) 걸린다 — 여기서는 그 재조회를 붙잡아 둔다.
-test('검색 결과로 장소를 추가하면 느린 재조회를 기다리지 않고 목록에 곧바로 나타난다', async ({ page }) => {
+test('검색 결과로 장소를 추가하면 느린 재조회를 기다리지 않고 목록에 곧바로 나타난다', async ({
+  page,
+}) => {
   const addedPoiId = '44444444-4444-4444-8444-444444444451';
   let created = false;
   let releaseReload: () => void = () => undefined;
@@ -1546,15 +1561,31 @@ const LONG_TITLE_VIEW = {
   ...LONG_PANEL_VIEW,
   trip: {
     ...LONG_PANEL_VIEW.trip,
-    title: '아주 긴 여행 제목 — 강원 영월·경북 영주·안동을 잇는 늦가을 국가유산 답사와 동굴 탐방 4박 5일 일정',
+    title:
+      '아주 긴 여행 제목 — 강원 영월·경북 영주·안동을 잇는 늦가을 국가유산 답사와 동굴 탐방 4박 5일 일정',
   },
 };
 
 for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
-  { label: '', viewport: { width: 1440, height: 900 }, view: LONG_PANEL_VIEW, minMapHeight: 900 * 0.55 },
-  { label: '', viewport: { width: 1280, height: 720 }, view: LONG_PANEL_VIEW, minMapHeight: 720 * 0.5 },
+  {
+    label: '',
+    viewport: { width: 1440, height: 900 },
+    view: LONG_PANEL_VIEW,
+    minMapHeight: 900 * 0.55,
+  },
+  {
+    label: '',
+    viewport: { width: 1280, height: 720 },
+    view: LONG_PANEL_VIEW,
+    minMapHeight: 720 * 0.5,
+  },
   // 짧은 노트북 창 — 헤더·상단 패널을 빼면 지도 열이 지도 최소 높이(420px)보다 작아진다.
-  { label: '', viewport: { width: 1280, height: 600 }, view: LONG_PANEL_VIEW, minMapHeight: 600 * 0.45 },
+  {
+    label: '',
+    viewport: { width: 1280, height: 600 },
+    view: LONG_PANEL_VIEW,
+    minMapHeight: 600 * 0.45,
+  },
   // 셸 바닥(560px) — 지도 열이 fallback·로딩 상자의 고정 최소 높이(360px)보다 낮다.
   { label: '', viewport: { width: 1280, height: 560 }, view: LONG_PANEL_VIEW, minMapHeight: 200 },
   // 가장 좁은 데스크톱 + 긴 제목: 상단 패널이 높아도 문서는 스크롤하지 않고 지도는 줄어든 채 남는다.
@@ -1600,7 +1631,9 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
       await expect(mapBody).toBeVisible({ timeout: 20_000 });
       const bodyBox = await mapBody.boundingBox();
       expect(bodyBox).not.toBeNull();
-      expect(bodyBox!.y + bodyBox!.height).toBeLessThanOrEqual(surfaceBox.y + surfaceBox.height + 1);
+      expect(bodyBox!.y + bodyBox!.height).toBeLessThanOrEqual(
+        surfaceBox.y + surfaceBox.height + 1,
+      );
       expect(bodyBox!.height).toBeLessThanOrEqual(surfaceBox.height + 1);
       if (viewport.height <= 560) {
         // 이 창에서는 표면이 fallback 기본 최소 높이(360px)보다 낮아야 min-h-0 해제를 실제로 검사한다.
@@ -1613,7 +1646,9 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
         const panelEl = document.querySelector('[data-testid="trip-detail-panel"]')!;
         const scroller = [panelEl, ...panelEl.querySelectorAll('*')].find((element) => {
           const style = getComputedStyle(element);
-          return /(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight;
+          return (
+            /(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight
+          );
         });
         return {
           documentOverflow: root.scrollHeight - window.innerHeight,
@@ -1661,7 +1696,9 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
       expect(ring.edgesVisible).toEqual([true, true, true, true]);
       await page.keyboard.press('End');
       await expect
-        .poll(() => panelScroll.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 2))
+        .poll(() =>
+          panelScroll.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 2),
+        )
         .toBe(true);
       await expect(page.getByText('긴 목록 장소 30', { exact: true }).first()).toBeInViewport();
       expect(await page.evaluate(() => window.scrollY)).toBe(0);
@@ -1677,7 +1714,10 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
           .locator('[data-map-fit-anchor]')
           .boundingBox())!;
         const surfaceTop = surfaceBox.y;
-        const topClearance = Math.min(anchor.y + anchor.height - surfaceTop + 45, surfaceBox.height * 0.6);
+        const topClearance = Math.min(
+          anchor.y + anchor.height - surfaceTop + 45,
+          surfaceBox.height * 0.6,
+        );
         // 원형 마커(21px)로 줄어든 뒤로는 이 창에서 맞춤 폭이 MIN_FIT_SPAN(120)을 넘을 수 있다 — 낮은 지도
         // 여백 경로 자체는 tests/tripMapViewFit.test.tsx('낮은 지도…', 300px 컨테이너)가 고정한다. 여기서는
         // 어느 경로든 아래 실지도 단언(모든 핀이 보이는 지도 안)이 지켜지는지를 본다.
@@ -1694,25 +1734,28 @@ for (const { label, viewport, view, minMapHeight, minFitSpanPath } of [
       const markers = page.locator('.maplibregl-marker.trip-map-marker');
       await expect(markers.first()).toBeVisible({ timeout: 20_000 });
       await expect
-        .poll(async () => {
-          // 원형 마커는 원의 중심이 좌표다 — 이름 라벨을 뺀 원 상자를 잰다.
-          const boxes = await markers.evaluateAll((elements) =>
-            elements.map(
-              (element) =>
-                (
-                  element.querySelector('[data-testid="circle-place-marker-dot"]') ?? element
-                ).getBoundingClientRect().toJSON() as DOMRect,
-            ),
-          );
-          const visibleBottom = Math.min(mapBox!.y + mapBox!.height, viewport.height);
-          return boxes.filter(
-            (box) =>
-              box.left + box.width / 2 < mapBox!.x ||
-              box.left + box.width / 2 > mapBox!.x + mapBox!.width ||
-              box.bottom < mapBox!.y ||
-              box.bottom > visibleBottom,
-          ).length;
-        }, { timeout: 15_000 })
+        .poll(
+          async () => {
+            // 원형 마커는 원의 중심이 좌표다 — 이름 라벨을 뺀 원 상자를 잰다.
+            const boxes = await markers.evaluateAll((elements) =>
+              elements.map(
+                (element) =>
+                  (element.querySelector('[data-testid="circle-place-marker-dot"]') ?? element)
+                    .getBoundingClientRect()
+                    .toJSON() as DOMRect,
+              ),
+            );
+            const visibleBottom = Math.min(mapBox!.y + mapBox!.height, viewport.height);
+            return boxes.filter(
+              (box) =>
+                box.left + box.width / 2 < mapBox!.x ||
+                box.left + box.width / 2 > mapBox!.x + mapBox!.width ||
+                box.bottom < mapBox!.y ||
+                box.bottom > visibleBottom,
+            ).length;
+          },
+          { timeout: 15_000 },
+        )
         .toBe(0);
     });
   });
@@ -1746,8 +1789,13 @@ test('데스크톱 패널이 넘치지 않으면 스크롤 영역은 초점을 �
 test.describe('모바일 여행 지도 교통 결과(#712)', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
-  test('교통 결과가 와도 지도를 다시 맞추지 않고 같은 레이어를 다시 조회하지 않는다', async ({ page }) => {
-    test.skip(process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1', 'VWorld canvas 검증 환경에서 실행');
+  test('교통 결과가 와도 지도를 다시 맞추지 않고 같은 레이어를 다시 조회하지 않는다', async ({
+    page,
+  }) => {
+    test.skip(
+      process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1',
+      'VWorld canvas 검증 환경에서 실행',
+    );
     // 교통 돌발은 zoom 7 이상에서만 조회한다 — 맞춤 zoom이 그 위가 되게 영남 네 곳으로 좁힌다.
     const nearbyPois = [
       { lon: 128.6, lat: 35.87 },
@@ -1955,14 +2003,20 @@ test.describe('모바일 지도 비율·목록 탭 가운데·내 위치(2026-11
     await page.getByRole('button', { name: '패널 열기' }).click();
     await expectMobileSheetLayout(page);
     const target = LONG_PANEL_POIS[0]!;
-    await page.getByRole('button', { name: new RegExp(`${target.title}$`) }).first().click();
+    await page
+      .getByRole('button', { name: new RegExp(`${target.title}$`) })
+      .first()
+      .click();
     await expect(page.getByTestId('trip-detail-panel')).toBeHidden();
     const legend = page.locator(
       `[data-testid="trip-map-marker-style"][data-poi-id="${target.poi_id}"]`,
     );
     await expect(legend).toHaveAttribute('data-marker-selected', 'true');
 
-    test.skip(process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1', 'VWorld canvas 검증 환경에서 실행');
+    test.skip(
+      process.env.PINVI_E2E_EXPECT_VWORLD_CANVAS !== '1',
+      'VWorld canvas 검증 환경에서 실행',
+    );
     const dot = page
       .locator(`.maplibregl-marker.trip-map-marker[data-interaction-id="poi:${target.poi_id}"]`)
       .getByTestId('circle-place-marker-dot');
@@ -1984,7 +2038,10 @@ test.describe('모바일 지도 비율·목록 탭 가운데·내 위치(2026-11
     await page.mouse.up();
     await expect.poll(async () => (await offCentre()).dx).toBeGreaterThan(40);
     await page.getByRole('button', { name: '패널 열기' }).click();
-    await page.getByRole('button', { name: new RegExp(`${target.title}$`) }).first().click();
+    await page
+      .getByRole('button', { name: new RegExp(`${target.title}$`) })
+      .first()
+      .click();
     await expect.poll(async () => (await offCentre()).dx, { timeout: 10_000 }).toBeLessThan(4);
   });
 
@@ -1996,13 +2053,22 @@ test.describe('모바일 지도 비율·목록 탭 가운데·내 위치(2026-11
     const button = page.getByTestId('map-my-location');
     await expect(button).toBeVisible();
     const before = (await button.boundingBox())!;
-    await expect(page.getByTestId('map-my-location-control')).toHaveAttribute('data-lifted', 'false');
+    await expect(page.getByTestId('map-my-location-control')).toHaveAttribute(
+      'data-lifted',
+      'false',
+    );
 
     await page.getByRole('button', { name: '패널 열기' }).click();
-    await page.getByRole('button', { name: /해운대 해수욕장/ }).first().click();
+    await page
+      .getByRole('button', { name: /해운대 해수욕장/ })
+      .first()
+      .click();
     const panel = page.getByTestId('place-info-panel');
     await expect(panel).toBeVisible();
-    await expect(page.getByTestId('map-my-location-control')).toHaveAttribute('data-lifted', 'true');
+    await expect(page.getByTestId('map-my-location-control')).toHaveAttribute(
+      'data-lifted',
+      'true',
+    );
     const panelBox = (await panel.boundingBox())!;
     const lifted = (await button.boundingBox())!;
     // 버튼 아래 끝이 패널 위 끝보다 위 — 겹치지 않고, 실제로 눌린다.
@@ -2013,7 +2079,10 @@ test.describe('모바일 지도 비율·목록 탭 가운데·내 위치(2026-11
     // 패널을 닫으면 원래 자리로 돌아온다.
     await panel.getByRole('button', { name: /닫기/ }).first().click();
     await expect(panel).toHaveCount(0);
-    await expect(page.getByTestId('map-my-location-control')).toHaveAttribute('data-lifted', 'false');
+    await expect(page.getByTestId('map-my-location-control')).toHaveAttribute(
+      'data-lifted',
+      'false',
+    );
     expect(Math.round((await button.boundingBox())!.y)).toBe(Math.round(before.y));
   });
 

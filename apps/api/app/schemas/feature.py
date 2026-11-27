@@ -172,10 +172,42 @@ class DetailCardBase(BaseModel):
     degraded_providers: list[str] = Field(default_factory=list)
 
 
+KoglType = Literal[1, 3]
+"""공공누리 유형 — TourAPI 이미지는 제1유형(출처표시) 또는 제3유형(출처표시·변경금지)만 온다."""
+
+
+class SourceImage(BaseModel):
+    """출처 원본 이미지 1장. 원본 URL을 그대로 보여 주고 원본으로 연결한다(서버 가공·썸네일 없음)."""
+
+    url: str = Field(max_length=2048)  # https 원본 — 화면은 이 주소를 그대로 쓴다
+    alt: str = Field(max_length=200)
+    kogl_type: KoglType
+    # 제3유형(변경금지)이면 true — 화면은 크롭·필터 없이 원본 비율(object-fit: contain)로만 그린다.
+    no_derivatives: bool
+
+
+class SourceIntroduction(BaseModel):
+    """출처가 준 장소 소개(TourAPI 국문 관광정보 — 한국관광공사). 출처 표시는 화면 필수 항목이다.
+
+    `overview`는 서버가 HTML을 걷어 낸 평문이고(줄바꿈 보존), 화면은 텍스트로만 그린다.
+    `kogl_type`·`license_label`·`license_url`은 이미지의 공공누리 유형이다(TourAPI `cpyrhtDivCd`).
+    """
+
+    provider: Literal["tourapi"] = "tourapi"
+    attribution: str = Field(max_length=100)  # "한국관광공사"
+    overview: str | None = Field(default=None, max_length=20000)
+    images: list[SourceImage] = Field(default_factory=list, max_length=3)
+    kogl_type: KoglType | None = None
+    license_label: str | None = Field(default=None, max_length=100)
+    license_url: str | None = Field(default=None, max_length=200)
+
+
 class PlaceDetailCard(DetailCardBase):
     kind: Literal["place"] = "place"
     phone: str | None = None
     business_hours: str | None = None
+    # 출처 소개(소개문·대표 이미지·출처/공공누리 표시). 보여 줄 값이 없으면 null이다.
+    introduction: SourceIntroduction | None = None
 
 
 class EventDetailCard(DetailCardBase):

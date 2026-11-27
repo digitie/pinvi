@@ -19,6 +19,7 @@ export * from './placeWeather';
 export * from './poiRank';
 export * from './shareLink';
 export * from './shareUrl';
+export * from './sourceIntroduction';
 export * from './suggestParam';
 export * from './tripDateLabels';
 export * from './tripEdit';

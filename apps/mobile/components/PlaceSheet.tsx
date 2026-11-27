@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useMinuteNow } from '@pinvi/hooks';
 import {
   activeAlerts,
+  introductionHasContent,
   buildMapLinks,
   featureResolutionNotice,
   hasAnyPlaceDetail,
@@ -14,13 +15,15 @@ import {
   type MapLink,
 } from '@pinvi/domain';
 import type { FeatureWeatherCard, PoiPlaceDetails, TripViewPoi } from '@pinvi/schemas';
+import { useFeatureIntroduction } from '../lib/featureIntroduction';
 import { MAP_APP_NAME, openMapLink } from '../lib/mapApps';
 import { useKakaoPhone, usePlaceDetails } from '../lib/placeDetails';
 import { usePoiWeather } from '../lib/poiWeather';
 import { WeatherBadge } from './PoiWeatherBadge';
+import { SourceIntroduction } from './SourceIntroduction';
 import { Button, Muted } from './ui';
 
-type SectionKey = 'hours' | 'memo' | 'links' | 'maps';
+type SectionKey = 'about' | 'hours' | 'memo' | 'links' | 'maps';
 
 export interface PlaceSheetProps {
   tripId: string;
@@ -51,12 +54,26 @@ export function PlaceSheet({ tripId, poi, coord, canEdit, onClose }: PlaceSheetP
     () => (coord ? buildMapLinks({ name, ...coord }, { appName: MAP_APP_NAME }) : []),
     [coord, name],
   );
+  // 출처 소개(TourAPI)는 보여 줄 값이 있을 때만 항목으로 둔다(빈 항목 없음). 응답이 늦게 와도 앞 항목
+  // 버튼이 밀리지 않게 고정 항목 뒤(지도 앱 앞)에 붙는다. 깨진 이미지는 시트가 기억해 항목 존재와 내용이
+  // 같은 기준(`introductionHasContent`)을 쓴다 — 내용이 사라지면 항목과 펼침도 사라진다.
+  const introduction = useFeatureIntroduction(poi.feature_id);
+  const [failedImageUrls, setFailedImageUrls] = useState<ReadonlySet<string>>(() => new Set());
+  const about = introductionHasContent(introduction, failedImageUrls) ? (
+    <SourceIntroduction
+      introduction={introduction}
+      failedImageUrls={failedImageUrls}
+      onImageError={(url) => setFailedImageUrls((prev) => new Set(prev).add(url))}
+    />
+  ) : null;
   const sectionKeys: SectionKey[] = [
     'hours',
     'memo',
     'links',
+    ...(about ? ['about' as const] : []),
     ...(mapLinks.length ? ['maps' as const] : []),
   ];
+  const shownSection = openSection && sectionKeys.includes(openSection) ? openSection : null;
   const openEditor = () => {
     onClose();
     router.push(`/trips/${tripId}/poi/${poi.poi_id}`);
@@ -77,17 +94,18 @@ export function PlaceSheet({ tripId, poi, coord, canEdit, onClose }: PlaceSheetP
           testID="place-sheet"
         >
           <SheetSummary name={name} poi={poi} card={card} details={details} onClose={onClose} />
-          <SectionToggles keys={sectionKeys} open={openSection} onToggle={setOpenSection} />
-          {openSection ? (
-            <ScrollView className="mt-2" testID={`place-sheet-${openSection}`}>
+          <SectionToggles keys={sectionKeys} open={shownSection} onToggle={setOpenSection} />
+          {shownSection ? (
+            <ScrollView className="mt-2" testID={`place-sheet-${shownSection}`}>
               <SectionContent
-                section={openSection}
+                section={shownSection}
                 tripId={tripId}
                 poi={poi}
                 details={details}
                 detailsLoading={query.isLoading}
                 refresh={refresh}
                 mapLinks={mapLinks}
+                about={about}
               />
             </ScrollView>
           ) : null}
@@ -101,6 +119,7 @@ export function PlaceSheet({ tripId, poi, coord, canEdit, onClose }: PlaceSheetP
 }
 
 const SECTION_TITLES: Record<SectionKey, string> = {
+  about: '소개',
   hours: '영업 정보',
   memo: '메모',
   links: '링크',
@@ -201,6 +220,7 @@ function SectionContent({
   detailsLoading,
   refresh,
   mapLinks,
+  about,
 }: {
   section: SectionKey;
   tripId: string;
@@ -209,8 +229,11 @@ function SectionContent({
   detailsLoading: boolean;
   refresh: ReturnType<typeof usePlaceDetails>['refresh'];
   mapLinks: MapLink[];
+  about: ReactNode;
 }) {
   switch (section) {
+    case 'about':
+      return about;
     case 'hours':
       return (
         <HoursContent

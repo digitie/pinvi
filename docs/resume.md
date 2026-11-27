@@ -1,3 +1,36 @@
+## 2026-11-27 (claude) — 장소 상세에 TourAPI 소개문·대표 사진·출처/공공누리 표시
+
+- 목표: 한국관광공사 국문 관광정보 서비스(KorService2, data.go.kr 15101578) 운영계정 트래픽 증설을 위해 활용사례를
+  등록해야 하는데, PinVi 화면은 Map이 이미 적재한 TourAPI 소개문·이미지를 전혀 보이지 않았다(상세 카드는 이름·주소·
+  전화·영업시간뿐).
+- Map 변경 없음: Map 공개 `GET /v1/features/{id}`의 `detail.facility_info`가 이미 `tourapi_content_id`·`overview`·
+  `image_url`·`license`(공공누리 유형 이름)·`attribution`을 준다(공개 projection은 `payload`만 벗긴다 — prod 산막이옛길·
+  부산타워·남산서울타워로 확인).
+- API: `PlaceDetailCard.introduction`(`SourceIntroduction` — `attribution`·`overview`·`images[]`·`kogl_type`·
+  `license_label`·`license_url`). `app/services/source_introduction.py`가 `tourapi_content_id`가 있는 행만 투영한다.
+  소개문은 알려진 HTML 태그·제어 문자(Cc/Cf)를 걷어 낸 평문(줄바꿈 보존, `<A코스>` 같은 본문 꺾쇠는 원문 그대로), 20,000자를 넘으면 자르지 않고 뺀다(제3유형 변경금지).
+  이미지는 원본 `firstimage`만(원천 썸네일·서버 사본 없음), `*.visitkorea.or.kr` https만(http는 같은 주소 https로),
+  공공누리 유형(1·3)을 모르면 싣지 않는다. 제3유형은 `no_derivatives=true`.
+- 화면: 웹 `components/map/SourceIntroduction.tsx`(지도 상세 카드 주소 위 + 여행 `PlaceInfoPanel` `소개` 항목),
+  모바일 `components/SourceIntroduction.tsx`(`PlaceSheet` `소개` 항목 — 둘 다 고정 항목 뒤·지도 앱 앞, 늦게 생겨도 앞 버튼이 밀리지 않게). 이미지는 크롭·필터 없이 `object-contain`
+  (RN `resizeMode="contain"`)으로 그리고 원본을 새 창으로 연다. 소개문은 텍스트로만(4줄·140자 넘으면 `소개 더 보기`,
+  `aria-expanded`·`aria-controls`). 출처 줄 `출처: 한국관광공사`와, 이미지가 보일 때 공공누리 유형 링크(kogl.or.kr).
+  값이 없거나 이미지가 깨지면 빈 블록·항목·표시를 남기지 않는다. 여행 장소 쪽은 저장하지 않고 같은 detail-card를 읽는다
+  (`trip_poi_place_details`·마이그레이션 변경 없음).
+- 채움률: prod TourAPI place 18,227건 중 소개문 약 11%. 원인은 상세 예산(run당 600, `detailCommon2` 일 1,000 한도)과
+  schedule을 2026-11-24에야 켠 것(그 전에는 11-10 수동 1회) — 하루 순증 약 560건이라 약 한 달 뒤 다 찬다. Map 쪽 조정은
+  Map 저장소 몫(이 PR 범위 밖).
+- 적대 리뷰 2인(라이선스·XSS / UI·접근성) 반영: 태그 제거를 알려진 HTML 태그 이름으로 좁혀 `<A코스>`·`<Tip: 주차>` 같은
+  본문을 지우지 않는다. 공공누리 유형은 Map 라벨·`Type1/3` 정확히 일치만, 출처는 TourAPI 행이면 늘 `한국관광공사`(Map 값으로
+  바꾸지 않음), alt도 제어 문자 제거. 화면은 `@pinvi/domain` `sourceIntroduction.ts`로 이미지 호스트·kogl 링크를 한 번 더
+  거르고, 깨진 이미지 기록을 패널·시트가 가져 항목 존재와 내용을 같은 기준으로 정한다(이미지만 있는 소개가 깨지면 항목째
+  사라짐). 소개 항목은 늦게 생겨도 앞 버튼이 밀리지 않게 고정 항목 뒤·지도 앱 앞. 이미지 틀은 고정 높이·모서리 깎기 없음,
+  링크·토글 글자는 `text-ink` 밑줄(대비), 모바일 공공누리 링크는 44px 터치 영역.
+- 시험: api ruff·format·mypy --strict·unit(`test_source_introduction.py` 신규), web·mobile lint·typecheck·vitest
+  (`SourceIntroduction.test.tsx`·domain `sourceIntroduction.test.ts` 신규, `PlaceInfoPanel`·`TripDetailScreen` 확장) — Docker,
+  CI와 같은 명령. mocked e2e `trip-detail.e2e.ts`에 detail-card 경로 mock 추가(패널이 소개를 읽으므로 network fence).
+  모바일 RN Image 실패 이벤트는 jsdom에서 일으킬 수 없어 웹 시험과 domain 판정 시험으로 대신한다.
+
 ## 2026-11-27 (claude) — Expo 58.1.0 정렬(expo-doctor 외부 drift)
 
 - 출처: 2026-11-26 Expo가 SDK 58 기대 버전을 올려(`expo` ~58.1.0, `expo-dev-client` ~58.0.22, `expo-location` ~58.0.23,

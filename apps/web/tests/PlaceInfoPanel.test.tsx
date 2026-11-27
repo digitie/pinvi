@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { PoiPlaceDetails, TripViewPoi } from '@pinvi/schemas';
 
 const api = vi.hoisted(() => ({
@@ -9,10 +9,11 @@ const api = vi.hoisted(() => ({
   kakaoPhone: vi.fn(),
   weather: vi.fn(),
 }));
+const features = vi.hoisted(() => ({ detailCard: vi.fn() }));
 
 vi.mock('@pinvi/api-client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@pinvi/api-client')>();
-  return { ...actual, poiApi: () => api };
+  return { ...actual, poiApi: () => api, featureApi: () => features };
 });
 
 import { ApiError } from '@pinvi/api-client';
@@ -69,6 +70,9 @@ beforeEach(() => {
   api.refreshPlaceDetails.mockReset();
   api.kakaoPhone.mockReset();
   api.kakaoPhone.mockResolvedValue({ provider: 'kakao', matched: false });
+  features.detailCard.mockReset();
+  // 기본은 TourAPI 소개가 없는 장소다 — 소개 항목이 생기지 않는다.
+  features.detailCard.mockResolvedValue(placeCard(null));
   __clearKakaoPhoneCacheForTest();
   __resetPoiWeatherForTest(async () => ({
     feature_id: 'f_hahoe',
@@ -97,6 +101,26 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+function placeCard(introduction: unknown) {
+  return {
+    kind: 'place',
+    feature_id: 'f_hahoe',
+    name: '하회마을',
+    coord: null,
+    category: null,
+    category_label: null,
+    address_line: null,
+    marker_color: 'P-02',
+    marker_icon: 'attraction',
+    homepage_url: null,
+    enrichment: [],
+    degraded_providers: [],
+    phone: null,
+    business_hours: null,
+    introduction,
+  };
+}
+
 function renderPanel(onClose = vi.fn()) {
   render(
     <PlaceInfoPanel
@@ -110,6 +134,93 @@ function renderPanel(onClose = vi.fn()) {
 }
 
 describe('PlaceInfoPanel', () => {
+  const INTRO_IMAGE = 'https://tong.visitkorea.or.kr/cms/resource/a.jpg';
+  function hahoeIntro(overview: string | null) {
+    return {
+      provider: 'tourapi',
+      attribution: '한국관광공사',
+      overview,
+      images: [
+        { url: INTRO_IMAGE, alt: '하회마을 대표 사진', kogl_type: 1, no_derivatives: false },
+      ],
+      kogl_type: 1,
+      license_label: '공공누리 제1유형: 출처표시',
+      license_url: 'https://www.kogl.or.kr/info/licenseType1.do',
+    };
+  }
+
+  it('TourAPI 소개가 있으면 고정 항목 뒤(지도 앱 앞)에 소개 항목을 두고 이미지·소개문·출처를 보인다', async () => {
+    api.placeDetails.mockResolvedValue(details());
+    features.detailCard.mockResolvedValue(
+      placeCard(hahoeIntro('하회마을은 풍산 류씨가 600여 년간 대대로 살아온 동성마을이다.')),
+    );
+    renderPanel();
+    const toggle = await screen.findByTestId('place-info-about-toggle');
+    expect(features.detailCard).toHaveBeenCalledWith(
+      'f_hahoe',
+      expect.anything(),
+      expect.anything(),
+    );
+    // 늦게 생겨도 앞 항목 버튼은 밀리지 않는다 — 날씨·영업 정보·메모·링크 다음, 지도 앱 앞.
+    const keys = within(screen.getByTestId('place-info-sections'))
+      .getAllByRole('button')
+      .map((button) => button.getAttribute('data-testid'));
+    expect(keys).toEqual([
+      'place-info-weather-toggle',
+      'place-info-hours-toggle',
+      'place-info-memo-toggle',
+      'place-info-links-toggle',
+      'place-info-about-toggle',
+      'place-info-maps-toggle',
+    ]);
+    expect(toggle).toHaveTextContent('소개');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    const section = screen.getByTestId('place-info-about');
+    expect(section).toHaveAttribute('aria-label', '소개');
+    expect(within(section).getByTestId('place-info-introduction-image')).toHaveAttribute(
+      'alt',
+      '하회마을 대표 사진',
+    );
+    expect(within(section).getByTestId('place-info-introduction-overview')).toHaveTextContent(
+      '풍산 류씨',
+    );
+    expect(within(section).getByTestId('place-info-introduction-attribution')).toHaveTextContent(
+      '출처: 한국관광공사',
+    );
+  });
+
+  it('이미지만 있는 소개는 이미지가 깨지면 항목째 사라지고 펼침도 풀린다(빈 항목 없음)', async () => {
+    api.placeDetails.mockResolvedValue(details());
+    features.detailCard.mockResolvedValue(placeCard(hahoeIntro(null)));
+    renderPanel();
+    fireEvent.click(await screen.findByTestId('place-info-about-toggle'));
+    fireEvent.error(screen.getByTestId('place-info-introduction-image'));
+    expect(screen.queryByTestId('place-info-about-toggle')).toBeNull();
+    expect(screen.queryByTestId('place-info-about')).toBeNull();
+    for (const key of ['weather', 'hours', 'memo', 'links', 'maps']) {
+      expect(screen.getByTestId(`place-info-${key}-toggle`)).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
+    }
+  });
+
+  it.each([
+    ['소개 없음', () => features.detailCard.mockResolvedValue(placeCard(null))],
+    ['읽기 실패', () => features.detailCard.mockRejectedValue(new Error('down'))],
+  ])('%s이면 응답을 처리한 뒤에도 소개 항목을 만들지 않는다', async (_label, arrange) => {
+    api.placeDetails.mockResolvedValue(details());
+    arrange();
+    renderPanel();
+    await waitFor(() => expect(features.detailCard).toHaveBeenCalled());
+    // 응답 promise가 처리될 때까지 기다린 뒤 확인한다(늦게 나타나는 회귀를 잡는다).
+    await act(async () => {
+      await features.detailCard.mock.results[0]?.value?.catch(() => undefined);
+    });
+    expect(screen.queryByTestId('place-info-about-toggle')).toBeNull();
+  });
+
   it('shows a brief summary and keeps every section collapsed by default', async () => {
     api.placeDetails.mockResolvedValue(details());
     const onClose = renderPanel();

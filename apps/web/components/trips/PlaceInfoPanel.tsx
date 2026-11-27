@@ -1,7 +1,9 @@
 'use client';
 
+import { SourceIntroduction } from '@/components/map/SourceIntroduction';
 import { PoiWeatherBadge } from '@/components/weather/WeatherBadge';
 import { WeatherForecastBody } from '@/components/weather/WeatherForecastPopup';
+import { useFeatureDetailCard } from '@/lib/useFeatureDetailCard';
 import { buildMapLinks, openMapLink, type MapLink } from '@/lib/mapLinks';
 import {
   useKakaoPhone,
@@ -12,6 +14,7 @@ import {
 import { useMinuteNow, usePoiWeather } from '@/lib/usePoiWeather';
 import {
   activeAlerts,
+  introductionHasContent,
   hasAnyPlaceDetail,
   placeDetailsSourceLine,
   telHref,
@@ -27,6 +30,7 @@ import {
   CloudSun,
   ExternalLink,
   Globe,
+  Info,
   Link2,
   Loader2,
   Map as MapIcon,
@@ -39,7 +43,7 @@ import { useId, useMemo, useState, type ReactNode } from 'react';
 
 const LINK_CLASS = 'break-all text-primary underline-offset-2 hover:underline';
 
-type SectionKey = 'weather' | 'hours' | 'memo' | 'links' | 'maps';
+type SectionKey = 'about' | 'weather' | 'hours' | 'memo' | 'links' | 'maps';
 
 interface SectionDef {
   key: SectionKey;
@@ -400,6 +404,11 @@ export function PlaceInfoPanel({
     () => (coord ? buildMapLinks({ name, lat: coord.lat, lon: coord.lon }) : []),
     [coord, name],
   );
+  // 출처 소개(TourAPI 소개문·대표 이미지)는 지도 상세 카드와 같은 서버 투영을 읽는다 — 저장하지 않는다.
+  const { card: featureCard } = useFeatureDetailCard(poi.feature_id);
+  const introduction = featureCard?.kind === 'place' ? featureCard.introduction : null;
+  // 깨진 이미지는 패널이 기억한다 — 항목을 접었다 펴도 다시 받지 않고, 항목 존재와 내용이 같은 기준을 쓴다.
+  const [failedImageUrls, setFailedImageUrls] = useState<ReadonlySet<string>>(() => new Set());
 
   const sections: SectionDef[] = [
     {
@@ -450,6 +459,23 @@ export function PlaceInfoPanel({
       content: <LinksContent userUrl={poi.user_url} website={details?.website ?? null} />,
     },
   ];
+  if (introductionHasContent(introduction, failedImageUrls)) {
+    // 보여 줄 소개가 있을 때만 항목을 만든다(빈 항목 없음). 응답이 늦게 와도 앞 항목 버튼이 밀리지 않게
+    // 고정 항목 뒤(지도 앱 앞)에 붙는다. 이미지가 깨져 내용이 사라지면 항목도 사라진다(펼침도 풀린다).
+    sections.push({
+      key: 'about',
+      title: '소개',
+      icon: <Info className="h-4 w-4" />,
+      content: (
+        <SourceIntroduction
+          introduction={introduction}
+          testId="place-info-introduction"
+          failedImageUrls={failedImageUrls}
+          onImageError={(url) => setFailedImageUrls((prev) => new Set(prev).add(url))}
+        />
+      ),
+    });
+  }
   if (mapLinks.length > 0) {
     sections.push({
       key: 'maps',
@@ -464,7 +490,9 @@ export function PlaceInfoPanel({
       ),
     });
   }
+  // 펼친 항목이 사라지면(소개 이미지가 깨진 경우) 펼침도 푼다 — 상태 값은 렌더 때 정규화한다.
   const current = sections.find((section) => section.key === openSection) ?? null;
+  const shownSection = current?.key ?? null;
 
   return (
     <aside
@@ -492,7 +520,7 @@ export function PlaceInfoPanel({
       </header>
       <SectionToggles
         sections={sections}
-        openSection={openSection}
+        openSection={shownSection}
         panelId={panelId}
         onToggle={setOpenSection}
       />

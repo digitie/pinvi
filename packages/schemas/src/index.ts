@@ -692,6 +692,9 @@ export {
   ExternalRefSchema,
   FeatureRequestSourceSchema,
   ExternalEnrichmentSchema,
+  KoglTypeSchema,
+  SourceImageSchema,
+  SourceIntroductionSchema,
   PlaceDetailCardSchema,
   EventDetailCardSchema,
   NoticeDetailCardSchema,
@@ -722,6 +725,9 @@ export type {
   FeatureRequestSource,
   ExternalEnrichment,
   FeatureDetailCard,
+  KoglType,
+  SourceImage,
+  SourceIntroduction,
 } from './feature';
 export {
   WeatherConditionSchema,
