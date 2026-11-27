@@ -1938,7 +1938,18 @@ test('여행 장소 마커는 원형 + 상자 없는 이름 라벨 + 현재 날�
     return { bg: style.backgroundColor, shadow: style.boxShadow, border: style.borderTopWidth };
   });
   expect(labelStyle).toEqual({ bg: 'rgba(0, 0, 0, 0)', shadow: 'none', border: '0px' });
-  expect((await label.boundingBox())!.x).toBeGreaterThan(dotBox.x + dotBox.width - 1);
+  // 핀 하나 여행은 flyTo(애니메이션)로 맞추므로 이 시점에도 마커가 움직이는 중일 수 있다. 원과 라벨을
+  // 따로 boundingBox로 재면 그 사이 카메라가 옮긴 거리(수십 px)가 섞인다 — 같은 layout에서 함께 잰다.
+  const labelGap = await marker.evaluate((el) => {
+    const dotRect = el
+      .querySelector('[data-testid="circle-place-marker-dot"]')!
+      .getBoundingClientRect();
+    const labelRect = el
+      .querySelector('[data-testid="circle-place-marker-label"]')!
+      .getBoundingClientRect();
+    return labelRect.left - dotRect.right;
+  });
+  expect(labelGap).toBeGreaterThan(-1);
   await expect(marker.getByTestId('place-weather-glyph')).toHaveAttribute(
     'data-weather-kind',
     'rain',

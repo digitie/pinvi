@@ -348,7 +348,13 @@ async function tabFocusOutline(page: Page, selector: string) {
   await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('Tab');
   await expect(target).toBeFocused();
-  return target.evaluate((el) => {
+  return target.evaluate(async (el) => {
+    // `transition-colors`는 outline-color도 전환한다. reduced-motion(0.01ms)이어도 전환은 다음 animation
+    // frame에야 끝나므로, 그 전에 읽으면 시작값(currentColor)이 나온다 — 규칙과 무관한 흰색이 섞여
+    // 비교가 흔들렸다(2026-11-27 main). 요소의 전환이 모두 끝난 뒤의 최종 계산값을 읽는다.
+    await Promise.all(
+      el.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
+    );
     const s = getComputedStyle(el);
     return [s.outlineStyle, s.outlineWidth, s.outlineOffset, s.outlineColor, s.boxShadow].join(' | ');
   });
