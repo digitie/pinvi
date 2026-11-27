@@ -222,6 +222,7 @@ function detailCard(path: string) {
       ? {
           provider: 'tourapi',
           attribution: '한국관광공사',
+          reference_date: null,
           overview: server.introOverview,
           images: [
             {
@@ -229,11 +230,43 @@ function detailCard(path: string) {
               alt: '경포대 대표 사진',
               kogl_type: 3,
               no_derivatives: true,
+              license_label: '공공누리 제3유형: 출처표시 + 변경금지',
+              license_url: 'https://www.kogl.or.kr/info/licenseType3.do',
             },
           ],
-          kogl_type: 3,
-          license_label: '공공누리 제3유형: 출처표시 + 변경금지',
-          license_url: 'https://www.kogl.or.kr/info/licenseType3.do',
+        }
+      : null,
+    visit_guide: withIntro
+      ? {
+          provider: 'tourapi',
+          attribution: '한국관광공사',
+          reference_date: null,
+          usage_hours: '상시 개방',
+          rest_days: null,
+          parking: '가능',
+          parking_fee: null,
+          fees: [
+            { audience: 'adult', amount_krw: 2000 },
+            { audience: 'child', amount_krw: 0 },
+          ],
+          fee_text: null,
+          discount: null,
+          reservation: null,
+          inquiry: null,
+          transport: null,
+          facilities: null,
+          capacity: null,
+          accommodation_available: null,
+          pet_note: null,
+          accessibility: [
+            { group: 'physical', facility: 'route', label: '접근로', text: '경사로 있음' },
+          ],
+          pet_policy: {
+            companion_type: '동반 가능',
+            allowed_pets: null,
+            requirements: null,
+            notes: null,
+          },
         }
       : null,
   };
@@ -448,7 +481,7 @@ describe('모바일 여행 상세 지도', () => {
     expect(server.paths.filter((p) => p.endsWith('/kakao-phone'))).toHaveLength(1);
   });
 
-  it('TourAPI 소개가 있는 장소는 소개 항목이 맨 앞에 생기고 원본 비율 이미지·출처를 보인다', async () => {
+  it('TourAPI 소개가 있는 장소는 고정 항목 뒤(지도 앱 앞)에 소개 항목이 생기고 원본 비율 이미지·출처를 보인다', async () => {
     renderScreen();
     fireEvent.click(await screen.findByRole('button', { name: 'marker 경포대' }));
     const sheet = await screen.findByTestId('place-sheet');
@@ -463,6 +496,7 @@ describe('모바일 여행 상세 지도', () => {
       'place-sheet-memo-toggle',
       'place-sheet-links-toggle',
       'place-sheet-about-toggle',
+      'place-sheet-guide-toggle',
       'place-sheet-maps-toggle',
     ]);
     fireEvent.click(toggle);
@@ -481,6 +515,31 @@ describe('모바일 여행 상세 지도', () => {
     ).toBeTruthy();
   });
 
+  it('이용 안내 항목은 요금·출처와 무장애·반려동물 배지(펼침)를 보인다', async () => {
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: 'marker 경포대' }));
+    const sheet = await screen.findByTestId('place-sheet');
+    const toggle = await within(sheet).findByTestId('place-sheet-guide-toggle');
+    expect(toggle.textContent).toBe('이용 안내');
+    fireEvent.click(toggle);
+    const guide = await within(sheet).findByTestId('place-sheet-visit-guide');
+    expect(within(guide).getByTestId('place-sheet-visit-guide-fees').textContent).toContain(
+      '성인 2,000원 · 어린이 무료',
+    );
+    expect(within(guide).getByTestId('place-sheet-visit-guide-attribution').textContent).toBe(
+      '출처: 한국관광공사',
+    );
+    expect(within(guide).queryByTestId('place-sheet-visit-guide-accessibility')).toBeNull();
+    fireEvent.click(within(guide).getByTestId('place-sheet-visit-guide-accessibility-toggle'));
+    expect(
+      within(guide).getByTestId('place-sheet-visit-guide-accessibility').textContent,
+    ).toContain('접근로: 경사로 있음');
+    fireEvent.click(within(guide).getByTestId('place-sheet-visit-guide-pet-toggle'));
+    expect(within(guide).getByTestId('place-sheet-visit-guide-pet').textContent).toContain(
+      '동반 가능',
+    );
+  });
+
   it('소개가 없는 장소는 소개 항목을 만들지 않는다', async () => {
     renderScreen();
     fireEvent.click(await screen.findByRole('button', { name: 'marker 오죽헌' }));
@@ -496,6 +555,7 @@ describe('모바일 여행 상세 지도', () => {
     });
     expect(within(sheet).getByTestId('place-sheet-hours-toggle')).toBeTruthy();
     expect(within(sheet).queryByTestId('place-sheet-about-toggle')).toBeNull();
+    expect(within(sheet).queryByTestId('place-sheet-guide-toggle')).toBeNull();
   });
 
   it('메모·지도 앱 항목, 보기 전용 동행에게는 편집 연결이 없다', async () => {

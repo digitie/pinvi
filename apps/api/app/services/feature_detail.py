@@ -26,7 +26,11 @@ from app.schemas.feature import (
 from app.services.category_labels import EMPTY_CATEGORY_LABELS, CategoryLabels
 from app.services.opening_hours import opening_hours_text
 from app.services.place_search import kakao_document_to_result, naver_item_to_result
-from app.services.source_introduction import tourapi_introduction
+from app.services.source_introduction import (
+    source_introduction,
+    source_visit_guide,
+    visitor_introduction,
+)
 
 # name 유사도/거리 임계 — 둘 다 만족해야 confident match(오귀속 방지, ADR-056).
 _NAME_SIM_THRESHOLD = 0.6
@@ -204,7 +208,8 @@ def build_detail_card(
             **common,
             phone=_phone(detail),
             business_hours=_business_hours(detail),
-            introduction=tourapi_introduction(detail, name=common["name"]),
+            introduction=source_introduction(dto, name=common["name"]),
+            visit_guide=source_visit_guide(dto),
         )
     if kind == "event":
         return EventDetailCard(
@@ -214,6 +219,9 @@ def build_detail_card(
             ),
             end_date=_pick(detail, "ends_on", "end_date", "close_date", "period_end", "to"),
             venue=_pick(detail, "venue_name", "venue", "place", "location"),
+            # TourAPI 축제는 Map `visitor_info`로 소개문·대표 이미지를 준다(평면 키 대체 경로는 place 전용).
+            introduction=visitor_introduction(dto.get("visitor_info"), name=common["name"]),
+            visit_guide=source_visit_guide(dto),
         )
     if kind == "notice":
         return NoticeDetailCard(

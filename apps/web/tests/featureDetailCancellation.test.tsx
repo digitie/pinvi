@@ -27,6 +27,7 @@ function card(id: string): FeatureDetailCard {
     phone: null,
     business_hours: null,
     introduction: null,
+    visit_guide: null,
   };
 }
 function deferred<T>() {

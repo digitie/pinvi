@@ -1,6 +1,7 @@
 'use client';
 
 import { SourceIntroduction } from '@/components/map/SourceIntroduction';
+import { VisitGuide } from '@/components/map/VisitGuide';
 import { PoiWeatherBadge } from '@/components/weather/WeatherBadge';
 import { WeatherForecastBody } from '@/components/weather/WeatherForecastPopup';
 import { useFeatureDetailCard } from '@/lib/useFeatureDetailCard';
@@ -14,7 +15,11 @@ import {
 import { useMinuteNow, usePoiWeather } from '@/lib/usePoiWeather';
 import {
   activeAlerts,
+  cardIntroduction,
+  cardVisitGuide,
   introductionHasContent,
+  omitShownHours,
+  visitGuideHasContent,
   hasAnyPlaceDetail,
   placeDetailsSourceLine,
   telHref,
@@ -27,6 +32,7 @@ import {
   AlertTriangle,
   ChevronDown,
   Clock,
+  ClipboardList,
   CloudSun,
   ExternalLink,
   Globe,
@@ -43,7 +49,7 @@ import { useId, useMemo, useState, type ReactNode } from 'react';
 
 const LINK_CLASS = 'break-all text-primary underline-offset-2 hover:underline';
 
-type SectionKey = 'about' | 'weather' | 'hours' | 'memo' | 'links' | 'maps';
+type SectionKey = 'about' | 'guide' | 'weather' | 'hours' | 'memo' | 'links' | 'maps';
 
 interface SectionDef {
   key: SectionKey;
@@ -69,14 +75,19 @@ function DetailsList({ details }: { details: PoiPlaceDetails }) {
         <DetailRow label="영업시간">
           <ul data-testid="place-info-opening-hours">
             {details.opening_hours.map((line) => (
-              <li key={line}>{line}</li>
+              // 출처 원문 이용시간은 여러 줄일 수 있다(Map visitor_info `usage_hours`) — 줄바꿈 보존.
+              <li key={line} className="whitespace-pre-line">
+                {line}
+              </li>
             ))}
           </ul>
         </DetailRow>
       )}
       {details.closed_days && (
         <DetailRow label="휴무일">
-          <span data-testid="place-info-closed-days">{details.closed_days}</span>
+          <span className="whitespace-pre-line" data-testid="place-info-closed-days">
+            {details.closed_days}
+          </span>
         </DetailRow>
       )}
       {details.phone && (
@@ -404,9 +415,10 @@ export function PlaceInfoPanel({
     () => (coord ? buildMapLinks({ name, lat: coord.lat, lon: coord.lon }) : []),
     [coord, name],
   );
-  // 출처 소개(TourAPI 소개문·대표 이미지)는 지도 상세 카드와 같은 서버 투영을 읽는다 — 저장하지 않는다.
+  // 출처 소개(소개문·원본 이미지)·이용 안내는 지도 상세 카드와 같은 서버 투영을 읽는다 — 저장하지 않는다.
   const { card: featureCard } = useFeatureDetailCard(poi.feature_id);
-  const introduction = featureCard?.kind === 'place' ? featureCard.introduction : null;
+  const introduction = cardIntroduction(featureCard);
+  const visitGuide = cardVisitGuide(featureCard);
   // 깨진 이미지는 패널이 기억한다 — 항목을 접었다 펴도 다시 받지 않고, 항목 존재와 내용이 같은 기준을 쓴다.
   const [failedImageUrls, setFailedImageUrls] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -474,6 +486,17 @@ export function PlaceInfoPanel({
           onImageError={(url) => setFailedImageUrls((prev) => new Set(prev).add(url))}
         />
       ),
+    });
+  }
+  // 영업 정보 항목이 이미 보이는 이용시간·휴무는 이용 안내에서 뺀다(같은 원문이 두 번 보이지 않게).
+  const guideOmit = omitShownHours(details, visitGuide?.provider);
+  if (visitGuideHasContent(visitGuide, { omit: guideOmit })) {
+    // 이용 안내(이용시간·휴무·요금·주차·무장애·반려동물)도 값이 있을 때만, 소개 뒤·지도 앱 앞에 붙는다.
+    sections.push({
+      key: 'guide',
+      title: '이용 안내',
+      icon: <ClipboardList className="h-4 w-4" />,
+      content: <VisitGuide guide={visitGuide} testId="place-info-visit-guide" omit={guideOmit} />,
     });
   }
   if (mapLinks.length > 0) {

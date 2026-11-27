@@ -7,6 +7,11 @@ import { kstDateKey } from './weatherNow';
 
 const SOURCE_LABELS: Record<string, string> = {
   kor_travel_map: '공공데이터(한국 여행 지도)',
+  // Map visitor_info(ADR-126)의 이용시간·휴무를 쓴 필드는 그 원천을 출처로 적는다.
+  tourapi: '한국관광공사',
+  krheritage: '국가유산청, www.khs.go.kr',
+  datagokr_museum: '공공데이터포털 전국박물관미술관정보표준데이터',
+  krforest_recreation_forest: '공공데이터포털 전국휴양림표준데이터',
 };
 const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 

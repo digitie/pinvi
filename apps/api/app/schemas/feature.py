@@ -244,42 +244,115 @@ class DetailCardBase(BaseModel):
     containing_areas: list[ContainingArea] = Field(default_factory=list)
 
 
-KoglType = Literal[1, 3]
-"""공공누리 유형 — TourAPI 이미지는 제1유형(출처표시) 또는 제3유형(출처표시·변경금지)만 온다."""
+KoglType = Literal[0, 1, 2, 3, 4]
+"""공공누리 유형 0~4(kogl.or.kr `licenseType{0..4}.do`). 3·4유형은 변경금지, 2·4유형은 상업적 이용금지."""
+
+IntroductionProvider = Literal[
+    "tourapi", "krheritage", "datagokr_museum", "krforest_recreation_forest"
+]
+"""출처 소개·이용 안내를 만든 원천 — Map `PlaceVisitorInfo.source`(ADR-126)와 같은 값."""
 
 
 class SourceImage(BaseModel):
-    """출처 원본 이미지 1장. 원본 URL을 그대로 보여 주고 원본으로 연결한다(서버 가공·썸네일 없음)."""
+    """출처 원본 이미지 1장. 원본 URL을 그대로 보여 주고 원본으로 연결한다(서버 가공·썸네일 없음).
+
+    공공누리 표시는 이미지마다 다르다(대표 사진 제3유형, 갤러리 제1유형 등) — 화면은 이미지마다 붙인다.
+    """
 
     url: str = Field(max_length=2048)  # https 원본 — 화면은 이 주소를 그대로 쓴다
     alt: str = Field(max_length=200)
     kogl_type: KoglType
-    # 제3유형(변경금지)이면 true — 화면은 크롭·필터 없이 원본 비율(object-fit: contain)로만 그린다.
+    # 변경금지(제3·4유형)면 true — 화면은 크롭·필터 없이 원본 비율(object-fit: contain)로만 그린다.
     no_derivatives: bool
+    license_label: str = Field(max_length=100)
+    license_url: str = Field(max_length=200)  # kogl.or.kr 유형 설명
 
 
 class SourceIntroduction(BaseModel):
-    """출처가 준 장소 소개(TourAPI 국문 관광정보 — 한국관광공사). 출처 표시는 화면 필수 항목이다.
+    """출처가 준 장소 소개 — 소개문·원본 이미지(갤러리)·출처 표시. 출처 표시는 화면 필수 항목이다.
 
     `overview`는 서버가 HTML을 걷어 낸 평문이고(줄바꿈 보존), 화면은 텍스트로만 그린다.
-    `kogl_type`·`license_label`·`license_url`은 이미지의 공공누리 유형이다(TourAPI `cpyrhtDivCd`).
+    `attribution`은 원천별로 PinVi가 고정한 출처 문구다(Map 값으로 바꿔 달지 않는다).
     """
 
-    provider: Literal["tourapi"] = "tourapi"
-    attribution: str = Field(max_length=100)  # "한국관광공사"
+    provider: IntroductionProvider
+    attribution: str = Field(max_length=100)
+    reference_date: Date | None = None  # 원천 기준일(있을 때)
     overview: str | None = Field(default=None, max_length=20000)
-    images: list[SourceImage] = Field(default_factory=list, max_length=3)
+    images: list[SourceImage] = Field(default_factory=list, max_length=10)
+    # deprecated — #809 클라이언트 호환용. 첫 이미지의 공공누리 표시(이미지가 없으면 null). 새 화면은
+    # `images[].kogl_type`·`license_label`·`license_url`을 이미지마다 쓴다. 옛 빌드가 사라지면 지운다.
     kogl_type: KoglType | None = None
     license_label: str | None = Field(default=None, max_length=100)
     license_url: str | None = Field(default=None, max_length=200)
+
+
+FeeAudience = Literal["adult", "youth", "child"]
+AccessibilityGroup = Literal["physical", "visual", "hearing", "infant_family"]
+
+
+class VisitFee(BaseModel):
+    """구조화 요금 1건(원천이 숫자로 줄 때만). 0원은 무료."""
+
+    audience: FeeAudience
+    amount_krw: int = Field(ge=0, le=10_000_000)
+
+
+class AccessibilityItem(BaseModel):
+    """무장애 안내 1항목 — `label`은 시설 한글 이름, `text`는 원천 문장 그대로."""
+
+    group: AccessibilityGroup
+    facility: str = Field(max_length=64)
+    label: str = Field(max_length=2000)
+    text: str = Field(max_length=2000)
+
+
+class VisitPetPolicy(BaseModel):
+    """반려동물 동반 안내(TourAPI `detailPetTour2`) — 원천 문장 그대로."""
+
+    companion_type: str | None = Field(default=None, max_length=2000)
+    allowed_pets: str | None = Field(default=None, max_length=2000)
+    requirements: str | None = Field(default=None, max_length=2000)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class VisitGuide(BaseModel):
+    """이용 안내 — Map `visitor_info`(ADR-126)의 이용시간·휴무·주차·요금·무장애·반려동물 투영.
+
+    문장 필드는 원천 문장 그대로의 평문이다(줄바꿈 보존, 해석·요약 없음). 화면은 텍스트로만 그리고
+    `출처: {attribution}`(+ 기준일)을 함께 보인다. 배지는 `accessibility`가 비지 않음·`pet_policy` 있음으로만
+    판단한다(원문을 해석하지 않는다).
+    """
+
+    provider: IntroductionProvider
+    attribution: str = Field(max_length=100)
+    reference_date: Date | None = None
+    usage_hours: str | None = Field(default=None, max_length=2000)
+    rest_days: str | None = Field(default=None, max_length=2000)
+    parking: str | None = Field(default=None, max_length=2000)
+    parking_fee: str | None = Field(default=None, max_length=2000)
+    fees: list[VisitFee] = Field(default_factory=list, max_length=3)
+    fee_text: str | None = Field(default=None, max_length=2000)
+    discount: str | None = Field(default=None, max_length=2000)
+    reservation: str | None = Field(default=None, max_length=2000)
+    inquiry: str | None = Field(default=None, max_length=2000)
+    transport: str | None = Field(default=None, max_length=2000)
+    facilities: str | None = Field(default=None, max_length=2000)
+    capacity: str | None = Field(default=None, max_length=2000)
+    accommodation_available: bool | None = None
+    pet_note: str | None = Field(default=None, max_length=2000)
+    accessibility: list[AccessibilityItem] = Field(default_factory=list, max_length=40)
+    pet_policy: VisitPetPolicy | None = None
 
 
 class PlaceDetailCard(DetailCardBase):
     kind: Literal["place"] = "place"
     phone: str | None = None
     business_hours: str | None = None
-    # 출처 소개(소개문·대표 이미지·출처/공공누리 표시). 보여 줄 값이 없으면 null이다.
+    # 출처 소개(소개문·원본 이미지·출처/공공누리 표시). 보여 줄 값이 없으면 null이다.
     introduction: SourceIntroduction | None = None
+    # 이용 안내(이용시간·휴무·주차·요금·무장애·반려동물). 보여 줄 값이 없으면 null이다.
+    visit_guide: VisitGuide | None = None
 
 
 class EventDetailCard(DetailCardBase):
@@ -287,6 +360,9 @@ class EventDetailCard(DetailCardBase):
     start_date: str | None = None
     end_date: str | None = None
     venue: str | None = None
+    # TourAPI 축제는 Map이 소개문·대표 이미지를 `visitor_info`로 준다(place와 같은 투영).
+    introduction: SourceIntroduction | None = None
+    visit_guide: VisitGuide | None = None
 
 
 class NoticeDetailCard(DetailCardBase):

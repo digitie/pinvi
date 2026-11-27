@@ -52,9 +52,8 @@ def test_type3_image_overview_and_attribution() -> None:
     assert image.alt == "산막이옛길 대표 사진"
     assert image.kogl_type == 3
     assert image.no_derivatives is True
-    assert intro.kogl_type == 3
-    assert intro.license_label == "공공누리 제3유형: 출처표시 + 변경금지"
-    assert intro.license_url == "https://www.kogl.or.kr/info/licenseType3.do"
+    assert image.license_label == "공공누리 제3유형: 출처표시 + 변경금지"
+    assert image.license_url == "https://www.kogl.or.kr/info/licenseType3.do"
 
 
 def test_type1_image_allows_derivatives_flag_false() -> None:
@@ -62,7 +61,7 @@ def test_type1_image_allows_derivatives_flag_false() -> None:
     assert intro is not None
     assert intro.images[0].kogl_type == 1
     assert intro.images[0].no_derivatives is False
-    assert intro.license_url == "https://www.kogl.or.kr/info/licenseType1.do"
+    assert intro.images[0].license_url == "https://www.kogl.or.kr/info/licenseType1.do"
 
 
 def test_raw_type_codes_are_understood() -> None:
@@ -84,16 +83,12 @@ def test_unknown_license_drops_image_but_keeps_overview() -> None:
     assert intro is not None
     assert intro.images == []
     assert intro.overview is not None
-    assert intro.kogl_type is None
-    assert intro.license_label is None
-    assert intro.license_url is None
 
 
 def test_overview_only_has_no_license_mark() -> None:
     intro = tourapi_introduction(_detail(image_url=None), name="남산서울타워")
     assert intro is not None
     assert intro.images == []
-    assert intro.license_label is None
     assert intro.attribution == "한국관광공사"
 
 
@@ -166,14 +161,15 @@ def test_disallowed_image_host_is_dropped() -> None:
     intro = tourapi_introduction(_detail(image_url="https://evil.example/a.jpg"), name="x")
     assert intro is not None
     assert intro.images == []
-    assert intro.license_label is None
 
 
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
         ("첫 줄<br>둘째 줄", "첫 줄\n둘째 줄"),
-        ("<p>본문</p><script>alert(1)</script>", "본문alert(1)"),
+        ("<p>본문</p><script>alert(1)</script>", "본문"),
+        ("앞<style>p { color: red }</style>뒤", "앞뒤"),
+        ("앞<SCRIPT type=x>\nvar a = 1;\n</SCRIPT >뒤", "앞뒤"),
         ('<img src=x onerror="alert(1)">사진', "사진"),
         # 태그 꼴이 아닌 부등호는 본문이라 남긴다(화면이 텍스트로 이스케이프한다).
         ("a < b > c", "a < b > c"),

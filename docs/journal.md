@@ -1,3 +1,58 @@
+## 2026-11-27 (claude) — 장소 상세 출처 소개 일반화 + 이용 안내(Map visitor_info, ADR-126)
+
+- 목표: Map ADR-126(PR #1564·#1565)가 공개 `GET /v1/features/{id}`에 최상위 `visitor_info`(`PlaceVisitorInfo`)를 더했다 —
+  TourAPI(관광지·문화시설·레포츠·축제)·국가유산 설명문·박물관/미술관·휴양림 표준데이터의 이용시간·휴무·주차·요금·소개·이미지
+  (이미지마다 공공누리 유형)·무장애·반려동물. #809의 TourAPI 전용 소개를 이 계약으로 일반화하고 이용 안내를 새로 보인다.
+- API: `PlaceDetailCard`·`EventDetailCard`에 `introduction`(일반화)·`visit_guide`(신규). `SourceIntroduction`은 원천 4종
+  (`provider`)·`reference_date`·이미지 최대 10장이고, 공공누리 표시는 이미지마다(`kogl_type` 0~4·`license_label`·
+  `license_url`) — 최상위 `kogl_type`/`license_*`는 없앴다. 출처 문구는 원천별 PinVi 고정값, 모르는 원천은 통째로 뺀다.
+  이미지 라이선스는 fail-closed(유형·변경/상업 허용 값 모순·미상이면 뺌), 상업적 이용금지(제2·4유형)는 상업성 판단 전까지
+  뺀다. 이미지 허용 호스트는 TourAPI `*.visitkorea.or.kr`뿐(국가유산 이미지·옛 `image_url` 안 보임). `visitor_info`가 없는
+  옛 Map 응답이면 #809 평면 키로 대신한다.
+- 영업 정보: `poi_place_details.extract_place_details`가 구조화 영업시간이 없을 때 `visitor_info.usage_hours`·`rest_days`를
+  옛 평면 키보다 먼저 읽는다. 저장 행은 캐시라 "다시 읽어오기" 전에는 예전 값이다.
+- 화면: 웹 `SourceIntroduction`(1장 = 전체 폭, 여러 장 = 가로 갤러리, 이미지마다 공공누리 링크, 출처 + 기준일)·새
+  `VisitGuide`(원천 문장 표, 요금 `성인 2,000원 · 청소년 1,000원 · 어린이 무료` + 원문, 무장애·반려동물 펼침 배지 —
+  아이콘·글자·`aria-expanded`). 지도 상세 카드(place·축제)와 여행 `PlaceInfoPanel`(`소개`·`이용 안내` 항목), 모바일
+  `PlaceSheet`(같은 두 항목). 판정·문구는 `@pinvi/domain` `sourceIntroduction.ts`·`visitGuide.ts`.
+- 계약: Map user OpenAPI를 Map main `622dc703`(#1564 `aa5f0eb5` + #1565 머지, sha256 `bcc05c77…`)으로 재vendor — PinVi main
+  핀 `3010d7ed`(#811) 대비 `visitor_info`(축제 kind=event 포함)와 그 schema 6개, 함께 들어온 Map #1569의 route 요약
+  (`RouteSummaryOut`·`RouteEndpointOut`, `FeatureSummary`·`NearbyFeatureSummary`·`FeatureDetailResponse.route`)이 더해진 것뿐이다
+  (삭제·경로 변경 없음 — #811·#812·#813이 쓰는 필드는 그대로, 계약 게이트로 확인). 게이트에 `visitor_info`·`PlaceVisitorInfo`·
+  `PlaceImage`·`ContentLicense`·`PlaceFee`·`AccessibilityNote`·`PetPolicy` 소비 필드를 고정, M05 pair 계약 user digest 재생성.
+  service·admin 스냅샷은 main(#813 등)의 것을 그대로 둔다.
+- 시험(Docker, CI와 같은 명령): api `ruff check`·`ruff format --check`·`mypy --strict app`·unit 2,492 통과(새
+  `test_visitor_info_projection.py` — 원천 4종·축제·라이선스 fail-closed·평면 키 대체·영업 정보), 실패 3건
+  (`test_api_image_provenance`·`test_m05_legacy_rebaseline_receipt`·`test_m05_restore_drill`)은 같은 base에서도 나는 컨테이너
+  환경 문제(root·git 미가용)이고 `test_m05_activation_receipt`는 worktree git 포인터 때문에 수집 불가로 뺐다. schemas·domain
+  typecheck·vitest(새 `visitGuide.test.ts`), web lint·typecheck·vitest 670(새 `VisitGuide.test.tsx`, 갤러리·이미지별 공공누리·
+  배지), mobile lint·typecheck·vitest 49(`TripDetailScreen` 이용 안내 항목). Playwright는 돌리지 않았다(mocked e2e
+  `trip-detail`의 detail-card mock에 `visit_guide: null`만 더함).
+- 후속: `docs/tasks.md` T-VISITOR-INFO(Map main 재vendor, 제2·4유형 표시 판단, 개인정보처리방침 문구).
+
+- 적대 리뷰 2인 반영(후속 커밋): 영업 정보 `sources`에 visitor_info 필드의 실제 원천을 남기고 화면 `SOURCE_LABELS`에 원천
+  4종 추가(모르는 원천은 읽지 않음, 구조화 영업시간을 쓰면 휴무도 구조화 값 우선) · 패널/시트의 이용 안내에서 영업 정보
+  항목이 이미 보이는 이용시간·휴무를 뺌(`omitShownHours`) · Map 결정 번호를 ADR-126으로 정정 · 클라이언트 zod를 관용으로
+  (`provider`·분류·요금 대상은 문자열, 공공누리 유형은 정수, 블록 `.catch(null)`, 반려동물 2,000자·시설 코드 정규식) +
+  서버↔클라이언트 golden(`apps/web/tests/fixtures/detail-card-golden.json`) · #809 호환 최상위 `kogl_type`/`license_*`(첫 이미지,
+  deprecated) 복원 · 개인정보처리방침 §4에 장소 사진 외부 직접 로딩 고지(변호사 검토 표시) · 모바일 갤러리 `FlatList`
+  가상화 · 제0유형 fail-closed · `fee_text`가 있으면 0원을 "0원"으로 · `<script>`/`<style>` 내용째 제거 · 펼쳤을 때만
+  `aria-controls`, 모바일 배지 라벨에서 기호 제외, 무장애 줄 `break-words`, 갤러리 틀 고정 · 360px mocked e2e(사진 3장
+  갤러리·이미지별 공공누리·배지 `aria-expanded`·페이지 가로 스크롤 없음) 추가.
+
+- 리뷰 후속(2026-11-28): TourAPI 행의 옛 평면 키 이용시간·휴무도 출처 `tourapi`, `SOURCE_LABELS.krheritage`를
+  `국가유산청, www.khs.go.kr`로, `omitShownHours`는 저장된 그 필드 출처가 이용 안내 원천과 같을 때만 뺀다. pois.md에 #809
+  호환 한계(원천≠tourapi·이미지 3장 초과·유형∉{1,3}이면 #809 앱의 카드 전체가 `RESPONSE_SHAPE_INVALID`, 모든 사진 아래 첫
+  이미지 표시만) + 모바일 0.1.0 미출시(eas `internal`, submit 없음) 확인을 적었다. react-doctor(`--blocking warning`) 지적
+  (index key, 모바일 소개 복잡도·inline renderItem) 정리, `removeClippedSubviews` 제거, 표시 전용 enum 주석.
+- 검증(CI와 같은 명령, 로컬 Docker): api ruff·format·mypy·관련 unit, 프런트 lockfile·styling·check:dependencies·web/mobile
+  `npm run doctor`(No issues)·lint·typecheck·vitest(web 699·mobile 51·domain 206·schemas 27)·web build. **Playwright는 N150에서
+  실행**: 커밋 `8b40d3db`(이 기록을 더하기 전, 코드는 같다)의 `git archive`를 N150(`digitie-at-n150`, x86_64, Ubuntu 26.04) 임시 디렉터리에 풀고
+  `scripts/n150-playwright-runner.sh -- npm -w @pinvi/web exec -- playwright test trip-detail.e2e.ts --workers=2`
+  (공식 이미지 `mcr.microsoft.com/playwright:v1.65.0-noble`, 전용 볼륨 접두사, mocked origin 13805) → **32 passed, 4 skipped**
+  (VWorld canvas 전용 시험은 `PINVI_E2E_EXPECT_VWORLD_CANVAS` 없이 skip), 새 360px 갤러리·이용 안내 시험 통과(5.1분). 실행 뒤
+  임시 디렉터리·볼륨은 지웠다.
+
 ## 2026-11-27 (claude) — 장소 상세 "○○국립공원 안 / ○○ 보호지역 안"(플래그, 기본 꺼짐)
 
 - Map 새 공개 API `GET /v1/features/{id}/containing-areas`(Map PR #1567, 대표점 한 점을 덮는 공개 area, 작은 면 먼저)를

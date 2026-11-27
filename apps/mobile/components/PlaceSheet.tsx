@@ -5,6 +5,8 @@ import { useMinuteNow } from '@pinvi/hooks';
 import {
   activeAlerts,
   introductionHasContent,
+  omitShownHours,
+  visitGuideHasContent,
   buildMapLinks,
   featureResolutionNotice,
   hasAnyPlaceDetail,
@@ -15,15 +17,16 @@ import {
   type MapLink,
 } from '@pinvi/domain';
 import type { FeatureWeatherCard, PoiPlaceDetails, TripViewPoi } from '@pinvi/schemas';
-import { useFeatureIntroduction } from '../lib/featureIntroduction';
+import { useFeatureSourceInfo } from '../lib/featureIntroduction';
 import { MAP_APP_NAME, openMapLink } from '../lib/mapApps';
 import { useKakaoPhone, usePlaceDetails } from '../lib/placeDetails';
 import { usePoiWeather } from '../lib/poiWeather';
 import { WeatherBadge } from './PoiWeatherBadge';
 import { SourceIntroduction } from './SourceIntroduction';
+import { VisitGuide } from './VisitGuide';
 import { Button, Muted } from './ui';
 
-type SectionKey = 'about' | 'hours' | 'memo' | 'links' | 'maps';
+type SectionKey = 'about' | 'guide' | 'hours' | 'memo' | 'links' | 'maps';
 
 export interface PlaceSheetProps {
   tripId: string;
@@ -54,10 +57,10 @@ export function PlaceSheet({ tripId, poi, coord, canEdit, onClose }: PlaceSheetP
     () => (coord ? buildMapLinks({ name, ...coord }, { appName: MAP_APP_NAME }) : []),
     [coord, name],
   );
-  // 출처 소개(TourAPI)는 보여 줄 값이 있을 때만 항목으로 둔다(빈 항목 없음). 응답이 늦게 와도 앞 항목
+  // 출처 소개·이용 안내는 보여 줄 값이 있을 때만 항목으로 둔다(빈 항목 없음). 응답이 늦게 와도 앞 항목
   // 버튼이 밀리지 않게 고정 항목 뒤(지도 앱 앞)에 붙는다. 깨진 이미지는 시트가 기억해 항목 존재와 내용이
   // 같은 기준(`introductionHasContent`)을 쓴다 — 내용이 사라지면 항목과 펼침도 사라진다.
-  const introduction = useFeatureIntroduction(poi.feature_id);
+  const { introduction, visitGuide } = useFeatureSourceInfo(poi.feature_id);
   const [failedImageUrls, setFailedImageUrls] = useState<ReadonlySet<string>>(() => new Set());
   const about = introductionHasContent(introduction, failedImageUrls) ? (
     <SourceIntroduction
@@ -66,11 +69,17 @@ export function PlaceSheet({ tripId, poi, coord, canEdit, onClose }: PlaceSheetP
       onImageError={(url) => setFailedImageUrls((prev) => new Set(prev).add(url))}
     />
   ) : null;
+  // 영업 정보 항목이 이미 보이는 이용시간·휴무는 이용 안내에서 뺀다(같은 원문이 두 번 보이지 않게).
+  const guideOmit = omitShownHours(details, visitGuide?.provider);
+  const guide = visitGuideHasContent(visitGuide, { omit: guideOmit }) ? (
+    <VisitGuide guide={visitGuide} omit={guideOmit} />
+  ) : null;
   const sectionKeys: SectionKey[] = [
     'hours',
     'memo',
     'links',
     ...(about ? ['about' as const] : []),
+    ...(guide ? ['guide' as const] : []),
     ...(mapLinks.length ? ['maps' as const] : []),
   ];
   const shownSection = openSection && sectionKeys.includes(openSection) ? openSection : null;
@@ -106,6 +115,7 @@ export function PlaceSheet({ tripId, poi, coord, canEdit, onClose }: PlaceSheetP
                 refresh={refresh}
                 mapLinks={mapLinks}
                 about={about}
+                guide={guide}
               />
             </ScrollView>
           ) : null}
@@ -120,6 +130,7 @@ export function PlaceSheet({ tripId, poi, coord, canEdit, onClose }: PlaceSheetP
 
 const SECTION_TITLES: Record<SectionKey, string> = {
   about: '소개',
+  guide: '이용 안내',
   hours: '영업 정보',
   memo: '메모',
   links: '링크',
@@ -221,6 +232,7 @@ function SectionContent({
   refresh,
   mapLinks,
   about,
+  guide,
 }: {
   section: SectionKey;
   tripId: string;
@@ -230,10 +242,13 @@ function SectionContent({
   refresh: ReturnType<typeof usePlaceDetails>['refresh'];
   mapLinks: MapLink[];
   about: ReactNode;
+  guide: ReactNode;
 }) {
   switch (section) {
     case 'about':
       return about;
+    case 'guide':
+      return guide;
     case 'hours':
       return (
         <HoursContent

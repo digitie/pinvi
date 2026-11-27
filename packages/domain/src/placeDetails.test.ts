@@ -40,6 +40,14 @@ describe('장소 정보 공용 문구', () => {
         details({ sources: { phone: 'kor_travel_map' }, fetched_at: '2026-11-16T20:00:00Z' }),
       ),
     ).toBe('출처: 공공데이터(한국 여행 지도) · 2026-11-17 확인');
+    // Map visitor_info에서 온 이용시간·휴무는 그 원천을 출처로 적는다.
+    expect(
+      placeDetailsSourceLine(
+        details({
+          sources: { opening_hours: 'tourapi', closed_days: 'tourapi', phone: 'kor_travel_map' },
+        }),
+      ),
+    ).toBe('출처: 한국관광공사, 공공데이터(한국 여행 지도)');
     expect(telHref('033-640 (5000)')).toBe('tel:0336405000');
   });
 

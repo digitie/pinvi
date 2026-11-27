@@ -19,9 +19,9 @@
       "source_operation_contract_sha256": "1b0e7bcd6fafc4a6814772e7b202f51d95d8b1ff893d4516c34d6868c011adf3"
     },
     "user": {
-      "openapi_sha256": "17ac805d0eb48b20379a07f55a0487d371a12fdf4690ba4dd4146e19a484f22f",
+      "openapi_sha256": "bcc05c775483b1da60a5275cf93fba317658f0209469c1b54330d1b92b49b63a",
       "runtime_operation_contract_sha256": "1dbdf9ef8841108c883f53806e6e5c89e56cbb525304a8c74b7d2f12a66a6bf7",
-      "source_canonical_sha256": "2f031ddd78fbd0b6437cd28e3cbaebdbbb6e22d56cb0928f4b0f40bc1cce59ae",
+      "source_canonical_sha256": "6427d40e10812a9041217e04d33470e0c9ba4e4d0aba7ecf32973ceaf03331d6",
       "source_operation_contract_sha256": "1dbdf9ef8841108c883f53806e6e5c89e56cbb525304a8c74b7d2f12a66a6bf7"
     }
   },

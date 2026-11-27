@@ -12,6 +12,7 @@
 - [ ] OAuth login state 브라우저 묶기(보안 리뷰 #807 minor, 기존 문제) — 웹 start가 state nonce를 HttpOnly·SameSite=Lax 단기 cookie로 내리고 callback이 대조(모바일 딥링크 흐름 제외). 로그인 유지로 login CSRF 피해가 7일 미끄럼 → 1년 고정으로 커졌다.
 - [ ] (소유자 결정) '로그인 유지'를 끈 웹 로그인의 `pinvi_refresh`를 브라우저 세션 cookie(Max-Age 없음)로 바꿀지 — 지금은 종전대로 7일 persistent cookie이고 안내 문구가 그렇게 말한다(#807 리뷰).
 - [ ] T-TOURAPI-USECASE — #809 배포 뒤 소유자가 data.go.kr 15101578 활용사례 등록 + 운영계정 트래픽 증설 신청(화면 캡처: 지도 상세 카드 소개·출처·공공누리). 후속: ① 개인정보처리방침 외부 전송 목록에 "장소 대표 사진은 이용자 기기가 한국관광공사 이미지 서버(`tong.visitkorea.or.kr`)에서 직접 받는다(IP·User-Agent 전달, Referer 없음)" 추가(법무 검토), ② 웹 `useFeatureDetailCard`에 캐시(패널을 열 때마다 detail-card 재요청), ③ 웹 `PlaceInfoPanel` 기존 `LINK_CLASS`(`text-primary`) 대비 4.5:1 미달.
+- [ ] T-VISITOR-INFO — Map ADR-126 visitor_info 소비 후속: ② 공공누리 제2·4유형(상업적 이용금지) 이미지 표시 여부를 소유자가 PinVi 상업성으로 판단(`source_introduction._SHOW_NONCOMMERCIAL_ONLY_IMAGES`), ③ 개인정보처리방침 §4-3(장소 사진 외부 직접 로딩) 초안의 변호사 검토 — T-TOURAPI-USECASE ①을 대신한다, ④ 공공누리 제0유형 원천 표기 근거 확인 뒤 `_SHOW_KOGL_TYPE0_IMAGES`.
 - [ ] #637 — Weather201의 공식 지역별 발령/해제·행정구역 매핑 계약을 선병합하고 Pinvi 대표지역 특보 알림을 후속 구현한다.
 
 이 문서는 완료되지 않은 작업만 의존 순서대로 한 줄씩 나열한다. lane, 담당자 구분,

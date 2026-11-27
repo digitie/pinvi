@@ -105,7 +105,8 @@ class PoiPlaceDetails(BaseModel):
 
     `status`: ready = 값이 하나 이상 있음, empty = 출처를 조회했지만 줄 값이 없음,
     unavailable = 출처 장애로 아직 받지 못함(저장하지 않았고 다음 열람 때 다시 시도).
-    `sources`는 필드 이름 → 출처 이름(현재 `kor_travel_map`뿐)이다.
+    `sources`는 필드 이름 → 출처 이름(`kor_travel_map`, 또는 Map visitor_info에서 온 필드는 그 원천
+    `tourapi`·`krheritage`·`datagokr_museum`·`krforest_recreation_forest`)이다.
     """
 
     poi_id: uuid.UUID

@@ -9,8 +9,10 @@
 - 장소를 지우면(`services.poi.soft_delete_poi`) 행도 지운다. 영구 삭제는 FK CASCADE다.
 
 출처: kor-travel-map feature 상세(공공데이터)만 저장한다. Map place detail의 `business_hours`(Google
-Places 호환 `FeatureOpeningHours` — `weekday_text`/`periods`/`special_days`), 출처 원문 영업시간
-문자열(`facility_info.operating_time` 등), `phones[]`, `urls.homepage`를 읽는다. Kakao/Naver Local은
+Places 호환 `FeatureOpeningHours` — `weekday_text`/`periods`/`special_days`), Map 최상위 `visitor_info`
+(ADR-126)의 `usage_hours`/`rest_days` 원문, 옛 출처 원문 영업시간 문자열(`facility_info.operating_time` 등),
+`phones[]`, `urls.homepage`를 읽는다(우선순위: 구조화 → `visitor_info` → 옛 평면 키). 저장된 행은 캐시라
+`visitor_info`가 새로 생겨도 "다시 읽어오기" 전까지는 예전 값을 보인다. Kakao/Naver Local은
 응답 저장이 금지(ADR-054, 상세 카드의 라이브 표시로만 쓴다)이고, Google Places Details는 콘텐츠 캐시
 금지와 비 Google 지도 위 표시 금지 약관 때문에 쓰지 않는다.
 """
@@ -32,6 +34,7 @@ from app.services.feature_detail import _clean, _homepage, _phone, _pick
 from app.services.opening_hours import DISPLAY_ORDER as _DISPLAY_ORDER
 from app.services.opening_hours import WEEKDAYS as _WEEKDAYS
 from app.services.opening_hours import hours_from_structured as _hours_from_structured
+from app.services.source_introduction import guide_text, visitor_info_of, visitor_info_source
 
 MAP_SOURCE = "kor_travel_map"
 REFRESH_INTERVAL = timedelta(seconds=60)
@@ -73,6 +76,9 @@ class ExtractedPlaceDetails:
     closed_days: str | None = None
     phone: str | None = None
     website: str | None = None
+    # 필드 이름 → 실제 출처(기본은 `kor_travel_map`). Map `visitor_info`에서 온 값은 그 원천
+    # (`tourapi`·`krheritage`·`datagokr_museum`·`krforest_recreation_forest`)을 적어 화면이 정확한 출처를 보인다.
+    origins: dict[str, str] = field(default_factory=dict)
 
     @property
     def empty(self) -> bool:
@@ -85,7 +91,7 @@ class ExtractedPlaceDetails:
             "phone": self.phone is not None,
             "website": self.website is not None,
         }
-        return {name: MAP_SOURCE for name, ok in present.items() if ok}
+        return {name: self.origins.get(name, MAP_SOURCE) for name, ok in present.items() if ok}
 
 
 def _upcoming_closed_dates(hours: dict[str, Any], today: date) -> list[str]:
@@ -119,13 +125,40 @@ def extract_place_details(dto: dict[str, Any], *, today: date) -> ExtractedPlace
             closed_dates = _upcoming_closed_dates(structured, today)
             if hours_lines:
                 break
+    structured_used = bool(hours_lines)
+    # Map `visitor_info`(ADR-126)의 이용시간·휴무 원문 — 구조화 영업시간이 없을 때 옛 평면 키보다 먼저 쓴다.
+    # 아는 원천(`source`)일 때만 읽고, 그 값을 쓴 필드는 실제 원천을 출처로 남긴다.
+    info = visitor_info_of(dto)
+    visitor_source = visitor_info_source(info)
+    visitor = info if info is not None and visitor_source is not None else {}
+    origins: dict[str, str] = {}
+    # 옛 평면 키(`facility_info.usetime`·`restdate` 등)도 TourAPI 행(`tourapi_content_id`)이면 원천은
+    # 한국관광공사다 — 출처를 `tourapi`로 남긴다.
+    facility_origin = (
+        "tourapi"
+        if isinstance(facility, dict) and _clean(facility.get("tourapi_content_id"))
+        else None
+    )
     if not hours_lines:
-        text = _pick(facility, *_HOURS_TEXT_KEYS) or _pick(detail, *_HOURS_TEXT_KEYS)
+        visitor_hours = guide_text(visitor.get("usage_hours"))
+        facility_hours = None if visitor_hours else _pick(facility, *_HOURS_TEXT_KEYS)
+        text = visitor_hours or facility_hours or _pick(detail, *_HOURS_TEXT_KEYS)
         if text:
             hours_lines = [text]
+        if visitor_hours and visitor_source:
+            origins["opening_hours"] = visitor_source
+        elif facility_hours and facility_origin:
+            origins["opening_hours"] = facility_origin
 
     closed_parts: list[str] = []
-    closed_text = _pick(facility, *_CLOSED_TEXT_KEYS) or _pick(detail, *_CLOSED_TEXT_KEYS)
+    # 구조화 영업시간을 썼으면 휴무도 그 구조화 값(쉬는 요일·특별 휴무)을 원문 문장보다 앞세운다.
+    visitor_rest = None if structured_used else guide_text(visitor.get("rest_days"))
+    facility_rest = None if visitor_rest else _pick(facility, *_CLOSED_TEXT_KEYS)
+    closed_text = visitor_rest or facility_rest or _pick(detail, *_CLOSED_TEXT_KEYS)
+    if visitor_rest and visitor_source:
+        origins["closed_days"] = visitor_source
+    elif facility_rest and facility_origin:
+        origins["closed_days"] = facility_origin
     if closed_text:
         closed_parts.append(closed_text)
     elif closed_weekdays:
@@ -141,6 +174,7 @@ def extract_place_details(dto: dict[str, Any], *, today: date) -> ExtractedPlace
         closed_days=" · ".join(closed_parts) or None,
         phone=_phone(detail) or _clean(dto.get("phone")),
         website=_homepage(dto.get("urls"), detail),
+        origins=origins,
     )
 
 
