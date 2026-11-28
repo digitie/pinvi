@@ -1,3 +1,10 @@
+## 2026-11-28 (claude) — kor-travel-common 최신 채택(py 0.1.0.dev3·ui 0.2.8·tokens 0.1.9)
+
+- Python(api·etl) 핀 f1faf56(dev2) → aefdc86(tag `py-v0.1.0.dev3`, common registry canonical ref), 정책 checkout ref 120c749 → 73761c5(common #98).
+  dev2 대비 추가분은 `kortravelcommon.dagster_ops`(공용 Dagster 실행 상태·제어 계약)뿐이라 앱 코드 변경 없음.
+- web: ui 0.2.6→0.2.8·tokens 0.1.7→0.1.9(mobile은 tokens만), guard common-ref 73761c5, pack e131a1e(artifact 15246325203, SHA256 대조 일치).
+  0.2.8은 수집 파이프라인·Dagster workbench export 추가(additive). toast는 받지 않는다. OpenAPI·마이그레이션 변경 없음.
+
 ## 2026-11-28 (claude) — Map main(c82af3a1) service·admin/full 재vendor — 회전 짝 맞춤
 
 - 원인: Manager `m05_isolated_e2e.py --rotation-preflight`가 Map main·PinVi main 짝을 거절했다 — PinVi 계약 admin digest

@@ -888,8 +888,8 @@ wheels = [
 
 [[package]]
 name = "kor-travel-common"
-version = "0.1.0.dev2"
-source = { git = "https://github.com/digitie/kor-travel-common.git?subdirectory=packages%2Fpy%2Fkor-travel-common&rev=f1faf56365854cefcc9e1f02f51c5b9c7e6a13ae#f1faf56365854cefcc9e1f02f51c5b9c7e6a13ae" }
+version = "0.1.0.dev3"
+source = { git = "https://github.com/digitie/kor-travel-common.git?subdirectory=packages%2Fpy%2Fkor-travel-common&rev=aefdc8695aecc09fd73c97c083b00e6379681c07#aefdc8695aecc09fd73c97c083b00e6379681c07" }
 
 [package.optional-dependencies]
 http = [
@@ -1302,7 +1302,7 @@ requires-dist = [
     { name = "freezegun", marker = "extra == 'dev'", specifier = ">=1.5" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "httpx", marker = "extra == 'dev'", specifier = "==0.28.1" },
-    { name = "kor-travel-common", extras = ["http"], git = "https://github.com/digitie/kor-travel-common.git?subdirectory=packages%2Fpy%2Fkor-travel-common&rev=f1faf56365854cefcc9e1f02f51c5b9c7e6a13ae" },
+    { name = "kor-travel-common", extras = ["http"], git = "https://github.com/digitie/kor-travel-common.git?subdirectory=packages%2Fpy%2Fkor-travel-common&rev=aefdc8695aecc09fd73c97c083b00e6379681c07" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13" },
     { name = "passlib", extras = ["argon2"], specifier = ">=1.7" },
     { name = "prometheus-client", specifier = ">=0.22" },
