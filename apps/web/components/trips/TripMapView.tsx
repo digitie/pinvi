@@ -536,11 +536,15 @@ function useTripMapViewModel({
   }
 
   // 외부에서 POI 를 선택하면 해당 위치로 이동. 고른 장소·포커스 요청이 그대로인 재실행(장소 목록을 다시 받아
-  // `selected` 참조만 바뀜)은 사용자 선택이 아니므로 따라가는 중이면 옮기지 않는다.
+  // `selected` 참조만 바뀜, 일자를 숨겼다 다시 보여 고른 장소가 지도 목록에서 잠깐 빠졌다 돌아옴)은 사용자 선택이
+  // 아니므로 따라가는 중이면 옮기지 않는다. 사용자 선택은 **선택 id(`selectedPoiId`)·포커스 요청**으로만 가른다.
   const lastFocusRef = useRef<{ poiId: string; focusRequest: number } | null>(null);
   useEffect(() => {
-    // 선택을 풀면 잊는다 — 같은 장소를 다시 고르는 것도 고른 이동이다.
-    if (!selected) lastFocusRef.current = null;
+    // 사용자가 선택을 풀면 잊는다 — 같은 장소를 다시 고르는 것도 고른 이동이다. 목록 가시성 때문에 `selected`가
+    // 잠깐 null이 되는 것은 선택 해제가 아니다.
+    if (selectedPoiId == null) lastFocusRef.current = null;
+  }, [selectedPoiId]);
+  useEffect(() => {
     if (selected && mapRef.current) {
       const last = lastFocusRef.current;
       const chosen = last?.poiId !== selected.poiId || last.focusRequest !== focusRequest;

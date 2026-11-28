@@ -296,6 +296,32 @@ describe('useLocationFollow — 사용자가 고른 이동과 화면이 알아�
     expect(hook.result.current.position).toEqual([127.1, 37.5]);
   });
 
+  it('첫 위치를 기다리는 동안 기본 묶음 거품을 누르면 첫 위치가 카메라를 뺏지 않는다', async () => {
+    const { hook, state, map, container } = setup();
+    await act(() => hook.result.current.activate());
+    expect(hook.result.current.mode).toBe('locating');
+    const bubble = document.createElement('div');
+    bubble.dataset.isCluster = 'true';
+    container.append(bubble);
+    bubble.addEventListener('click', (event) => event.stopPropagation());
+    act(() => bubble.click());
+    act(() => state.onPosition?.([127.1, 37.5]));
+    expect(map.flyTo).not.toHaveBeenCalled();
+    expect(hook.result.current.mode).toBe('tracking');
+  });
+
+  it('측위를 멈추면 묶음 거품 감지도 뗀다', async () => {
+    const { hook, state, container } = setup();
+    const add = vi.spyOn(container, 'addEventListener');
+    const remove = vi.spyOn(container, 'removeEventListener');
+    await act(() => hook.result.current.activate());
+    expect(add).toHaveBeenCalledWith('click', expect.any(Function), true);
+    act(() => state.onPosition?.([127.1, 37.5]));
+    act(() => hook.result.current.stop());
+    const listener = add.mock.calls.find((call) => call[0] === 'click')?.[1];
+    expect(remove).toHaveBeenCalledWith('click', listener, true);
+  });
+
   it('지도가 늦게 붙는 경로에서도 그 사이 고른 이동이 있었으면 카메라를 옮기지 않는다', async () => {
     vi.useFakeTimers();
     try {

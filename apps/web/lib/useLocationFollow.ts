@@ -109,6 +109,16 @@ export function useLocationFollow({
     setMode(next);
   }, []);
 
+  /**
+   * 사용자가 고른 카메라 이동(검색 결과 선택·목록 선택·묶음 펼치기·"여기서 주변 보기")을 **옮기기 직전에** 알린다.
+   * 따라가는 중이면 따라가기를 끄고(점은 계속 갱신), 첫 위치를 기다리는 중이면 첫 위치에서 카메라를 옮기지 않게
+   * 한다. 화면이 알아서 하는 이동(재맞춤·popup 비키기)에는 부르지 않는다.
+   */
+  const notifyUserMove = useCallback(() => {
+    if (modeRef.current === 'follow') changeMode('tracking');
+    else if (modeRef.current === 'locating') movedWhileLocatingRef.current = true;
+  }, [changeMode]);
+
   const moveCamera = useCallback(
     (map: MapLibreMap | null, kind: 'fly' | 'ease', center: [number, number], duration?: number) => {
       if (!map) return;
@@ -193,31 +203,51 @@ export function useLocationFollow({
   // 있어(CI #759 canvas 1회) 마우스·터치·포인터 원본 이벤트가 있는 move도 함께 본다.
   useEffect(() => {
     if (!followMap) return undefined;
-    const release = () => {
-      if (modeRef.current === 'follow') changeMode('tracking');
-    };
+    // 손으로 옮긴 것도 고른 이동이다 — 따라가는 중이면 끄고, (지도가 이미 붙은) 첫 위치 대기 중이면 첫 위치가
+    // 카메라를 뺏지 않게 표시한다.
+    const release = notifyUserMove;
     const handleMove = (event: { originalEvent?: Event }) => {
       if (event.originalEvent && isUserPanEvent(event.originalEvent)) release();
     };
     const handleMoveEnd = () => setCameraMoving(false);
-    // 기본 묶음 거품(`ClusterLayer`에 renderCluster가 없을 때)은 라이브러리가 직접 flyTo해 호출부가 알릴 틈이
-    // 없다. 거품의 click 핸들러는 전파를 막으므로 지도 컨테이너에서 캡처 단계로 본다(사용자 클릭 = 고른 이동).
-    const container = followMap.getContainer();
-    const handleClusterClick = (event: Event) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest(CLUSTER_MARKER_SELECTOR)) release();
-    };
     followMap.on('dragstart', release);
     followMap.on('move', handleMove);
     followMap.on('moveend', handleMoveEnd);
-    container.addEventListener('click', handleClusterClick, true);
     return () => {
       followMap.off('dragstart', release);
       followMap.off('move', handleMove);
       followMap.off('moveend', handleMoveEnd);
-      container.removeEventListener('click', handleClusterClick, true);
     };
-  }, [followMap, changeMode]);
+  }, [followMap, notifyUserMove]);
+
+  // 기본 묶음 거품(`ClusterLayer`에 renderCluster가 없을 때)은 라이브러리가 직접 flyTo해 호출부가 알릴 틈이 없다.
+  // 거품의 click 핸들러는 전파를 막으므로 지도 컨테이너에서 캡처 단계로 본다(사용자 클릭 = 고른 이동). 첫 위치를
+  // 기다리는 동안(`locating`)의 클릭도 잡아야 첫 위치가 카메라를 뺏지 않으므로, 측위를 시작하면 지도가 있는 즉시
+  // 붙인다(없으면 생길 때까지 250ms마다 확인).
+  useEffect(() => {
+    if (!watching) return undefined;
+    let container: HTMLElement | null = null;
+    const handleClusterClick = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(CLUSTER_MARKER_SELECTOR)) notifyUserMove();
+    };
+    const attach = () => {
+      const map = getMapRef.current();
+      if (!map) return false;
+      container = map.getContainer();
+      container.addEventListener('click', handleClusterClick, true);
+      return true;
+    };
+    const timer = attach()
+      ? null
+      : setInterval(() => {
+          if (attach() && timer) clearInterval(timer);
+        }, 250);
+    return () => {
+      if (timer) clearInterval(timer);
+      container?.removeEventListener('click', handleClusterClick, true);
+    };
+  }, [watching, notifyUserMove]);
 
   const startWatch = useCallback(() => {
     if (modeRef.current !== 'off') return;
@@ -225,16 +255,6 @@ export function useLocationFollow({
     changeMode('locating');
     setError(null);
     setWatching(true);
-  }, [changeMode]);
-
-  /**
-   * 사용자가 고른 카메라 이동(검색 결과 선택·목록 선택·묶음 펼치기·"여기서 주변 보기")을 **옮기기 직전에** 알린다.
-   * 따라가는 중이면 따라가기를 끄고(점은 계속 갱신), 첫 위치를 기다리는 중이면 첫 위치에서 카메라를 옮기지 않게
-   * 한다. 화면이 알아서 하는 이동(재맞춤·popup 비키기)에는 부르지 않는다.
-   */
-  const notifyUserMove = useCallback(() => {
-    if (modeRef.current === 'follow') changeMode('tracking');
-    else if (modeRef.current === 'locating') movedWhileLocatingRef.current = true;
   }, [changeMode]);
 
   /** 따라가는 중인가 — 화면이 자동 맞춤을 건너뛸지 콜백·effect 안에서 읽는다(렌더 중에는 `mode`를 쓴다). */

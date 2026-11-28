@@ -23,6 +23,16 @@
   선택 뒤 첫 위치가 카메라를 뺏지 않음(즉시·지도 늦게 붙는 경로), 따라가는 중 버튼 재클릭 복구. `tripMapViewFit.test.tsx` 2건 — 따라가는
   동안 목록 변경·패널 크기 변경에 재맞춤 없음(끄면 다음 계기부터 맞춤), 목록 선택은 알린 뒤 이동·같은 선택 재실행은 이동 안 함·포커스
   요청은 다시 이동. web lint·typecheck·vitest 전체 707(Docker node 26.13.1). Playwright는 돌리지 않았다.
+- 재리뷰 2인 후속(결함 없음·머지 가능 판정 뒤 경미 사항): ① 기본 묶음 거품 캡처 click 감지를 첫 위치 뒤가 아니라 측위를
+  시작하는 즉시(지도가 생기면 바로) 붙여, 첫 위치 대기 중 거품 클릭도 `notifyUserMove`로 처리(첫 위치가 카메라를 뺏지 않음).
+  ② 여행 지도 `lastFocusRef`는 `selectedPoiId`가 null이 될 때만 잊는다 — 일자 숨김/재표시로 고른 장소가 지도 목록에서 잠깐
+  빠졌다 돌아오는 것을 고른 이동으로 오인하지 않는다. ③ 탐색 지도 배선 컴포넌트 시험(`FeatureMapView.followIntent.test.tsx`:
+  검색 선택·서버 묶음 마커·"여기서 주변 보기"가 flyTo 직전에 알림, 좌표 없는 결과는 알리지 않음). ④ 실제 브라우저 회귀를
+  `apps/web/e2e/map-location-follow.e2e.ts`에 추가(가짜 GPS — `addInitScript`로 `navigator.geolocation` 제어, 재리뷰 하네스
+  R1·R6에서 옮김): 따라가기 중 검색 선택 → 위치 갱신 → popup 화면 안·`tracking`, 측위 대기 중 선택 → 첫 위치가 카메라를
+  뺏지 않음. `test:e2e:map-canvas` grep에 추가(CI web.yml이 실행). **실제 브라우저 재현: PR 전 R1·R2·R5·R6 실패, PR 후 통과**
+  (재리뷰어 하네스, Docker `pinvi-pw-node26:1.65.0` canvas 모드). 로컬 검증: web lint·typecheck·vitest 714, 같은 이미지에서
+  `map-location-follow.e2e.ts` canvas 3건 통과.
 
 ## 2026-11-28 (claude) — kor-travel-common 최신 채택(py 0.1.0.dev3·ui 0.2.8·tokens 0.1.9)
 

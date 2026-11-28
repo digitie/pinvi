@@ -441,4 +441,22 @@ describe('TripMapView와 내 위치 따라가기(2026-11-28 "dmz 자생" 보고 
     expect(h.notifyUserMove).toHaveBeenCalledTimes(3);
     expect(map.flyTo).toHaveBeenCalledTimes(3);
   });
+
+  it('일자를 숨겼다 다시 보여 고른 장소가 목록에서 잠깐 빠졌다 돌아와도 고른 이동으로 보지 않는다', () => {
+    const map = fakeMap({ x: 300, y: 300 });
+    h.map = map;
+    h.following = true;
+    const view = render(<TripMapView points={POINTS} overlayTopLeft={overlay} />);
+    view.rerender(<TripMapView points={POINTS} selectedPoiId="north" overlayTopLeft={overlay} />);
+    expect(h.notifyUserMove).toHaveBeenCalledTimes(1);
+    map.flyTo.mockClear();
+
+    // 선택 id는 그대로, 지도 목록에서만 빠진다(일자 숨김) → 다시 보인다(일자 재표시).
+    view.rerender(
+      <TripMapView points={[POINTS[1]!]} selectedPoiId="north" overlayTopLeft={overlay} />,
+    );
+    view.rerender(<TripMapView points={POINTS} selectedPoiId="north" overlayTopLeft={overlay} />);
+    expect(h.notifyUserMove).toHaveBeenCalledTimes(1);
+    expect(map.flyTo).not.toHaveBeenCalled();
+  });
 });
