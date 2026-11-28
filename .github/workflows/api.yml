@@ -120,7 +120,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: digitie/kor-travel-common
-          ref: 120c749b7f87e5b5d3e63f43edd6a136cf421db7
+          ref: 73761c5d0a14e3df409e5b1c86f954eb219dae66
           path: common-python-policy
           persist-credentials: false
 
