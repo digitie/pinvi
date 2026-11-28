@@ -13,6 +13,10 @@ const h = vi.hoisted(() => ({
   map: null as unknown,
   onMoveEnd: null as ((event: unknown) => void) | null,
   mobile: true,
+  // 내 위치 따라가기 대역 — 함수는 렌더마다 같은 참조(실제 훅의 useCallback처럼).
+  following: false,
+  isFollowing: () => h.following,
+  notifyUserMove: vi.fn(),
 }));
 
 vi.mock('@/components/map/vworldPrimitives', () => ({
@@ -66,6 +70,15 @@ vi.mock('@/components/map/FeatureDetailModalController', () => ({
   FeatureDetailModalController: () => null,
 }));
 vi.mock('@/lib/useMobileWebLayout', () => ({ useMobileWebLayout: () => h.mobile }));
+vi.mock('@/components/map/MyLocationControl', () => ({
+  useMyLocationControl: () => ({
+    mode: h.following ? 'follow' : 'off',
+    position: null,
+    isFollowing: h.isFollowing,
+    notifyUserMove: h.notifyUserMove,
+  }),
+  MyLocationControl: () => null,
+}));
 
 import { TripMapView } from '@/components/trips/TripMapView';
 
@@ -146,6 +159,8 @@ afterEach(() => {
   h.onMoveEnd = null;
   h.popupClose = null;
   h.mobile = true;
+  h.following = false;
+  h.notifyUserMove.mockReset();
 });
 
 describe('TripMapView 맞춤 배선', () => {
@@ -362,4 +377,86 @@ it('크기가 같으면 맞춤 때 resize하지 않는다', () => {
 
   expect(map.fitBounds).toHaveBeenCalled();
   expect(map.resize).not.toHaveBeenCalled();
+});
+
+describe('TripMapView와 내 위치 따라가기(2026-11-28 "dmz 자생" 보고 후속)', () => {
+  it('따라가는 동안에는 장소 목록이 바뀌거나 패널 크기가 바뀌어도 다시 맞추지 않고 따라가기도 끄지 않는다', () => {
+    const resize = ownedResizeObserver();
+    h.transportVisible = true;
+    const map = fakeMap({ x: 72, y: 207 });
+    h.map = map;
+    const view = render(<TripMapView points={POINTS} transportLayers overlayTopLeft={overlay} />);
+    const fitted = map.fitBounds.mock.calls.length;
+    map.flyTo.mockClear();
+
+    h.following = true;
+    // TripDetail의 mapPoints는 여행을 다시 받으면 새 참조가 된다(같은 장소여도).
+    view.rerender(
+      <TripMapView points={[...POINTS]} transportLayers overlayTopLeft={overlay} />,
+    );
+    act(() => resize.notify());
+    expect(map.fitBounds).toHaveBeenCalledTimes(fitted);
+    expect(map.flyTo).not.toHaveBeenCalled();
+    expect(h.notifyUserMove).not.toHaveBeenCalled();
+
+    // 따라가기를 끄면 다음 맞춤 계기(장소 목록 변경)부터 다시 맞춘다.
+    h.following = false;
+    view.rerender(<TripMapView points={[POINTS[1]!, POINTS[0]!]} transportLayers overlayTopLeft={overlay} />);
+    expect(map.fitBounds.mock.calls.length).toBeGreaterThan(fitted);
+  });
+
+  it('목록에서 장소를 고르면 알리고 옮긴다 — 같은 선택에서 목록만 다시 받으면 따라가는 동안 옮기지 않는다', () => {
+    const map = fakeMap({ x: 300, y: 300 });
+    h.map = map;
+    h.following = true;
+    const view = render(<TripMapView points={POINTS} overlayTopLeft={overlay} />);
+    map.flyTo.mockClear();
+
+    view.rerender(<TripMapView points={POINTS} selectedPoiId="north" overlayTopLeft={overlay} />);
+    expect(h.notifyUserMove).toHaveBeenCalledTimes(1);
+    expect(map.flyTo).toHaveBeenCalledTimes(1);
+    expect(h.notifyUserMove.mock.invocationCallOrder[0]!).toBeLessThan(
+      map.flyTo.mock.invocationCallOrder[0]!,
+    );
+
+    // 여행을 다시 받아 selected 참조만 바뀐다 — 사용자 선택이 아니다.
+    view.rerender(
+      <TripMapView points={[...POINTS]} selectedPoiId="north" overlayTopLeft={overlay} />,
+    );
+    expect(h.notifyUserMove).toHaveBeenCalledTimes(1);
+    expect(map.flyTo).toHaveBeenCalledTimes(1);
+
+    // 같은 장소라도 다시 누르면(focusRequest) 고른 이동이다.
+    view.rerender(
+      <TripMapView points={POINTS} selectedPoiId="north" focusRequest={1} overlayTopLeft={overlay} />,
+    );
+    expect(h.notifyUserMove).toHaveBeenCalledTimes(2);
+    expect(map.flyTo).toHaveBeenCalledTimes(2);
+
+    // 선택을 풀었다가 같은 장소를 다시 고르는 것도 고른 이동이다.
+    view.rerender(<TripMapView points={POINTS} focusRequest={1} overlayTopLeft={overlay} />);
+    view.rerender(
+      <TripMapView points={POINTS} selectedPoiId="north" focusRequest={1} overlayTopLeft={overlay} />,
+    );
+    expect(h.notifyUserMove).toHaveBeenCalledTimes(3);
+    expect(map.flyTo).toHaveBeenCalledTimes(3);
+  });
+
+  it('일자를 숨겼다 다시 보여 고른 장소가 목록에서 잠깐 빠졌다 돌아와도 고른 이동으로 보지 않는다', () => {
+    const map = fakeMap({ x: 300, y: 300 });
+    h.map = map;
+    h.following = true;
+    const view = render(<TripMapView points={POINTS} overlayTopLeft={overlay} />);
+    view.rerender(<TripMapView points={POINTS} selectedPoiId="north" overlayTopLeft={overlay} />);
+    expect(h.notifyUserMove).toHaveBeenCalledTimes(1);
+    map.flyTo.mockClear();
+
+    // 선택 id는 그대로, 지도 목록에서만 빠진다(일자 숨김) → 다시 보인다(일자 재표시).
+    view.rerender(
+      <TripMapView points={[POINTS[1]!]} selectedPoiId="north" overlayTopLeft={overlay} />,
+    );
+    view.rerender(<TripMapView points={POINTS} selectedPoiId="north" overlayTopLeft={overlay} />);
+    expect(h.notifyUserMove).toHaveBeenCalledTimes(1);
+    expect(map.flyTo).not.toHaveBeenCalled();
+  });
 });

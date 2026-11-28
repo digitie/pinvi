@@ -432,6 +432,14 @@ function useFeatureMapViewModel({
     setWeather,
   );
 
+  // "내 위치" 버튼 — 여행 지도와 같은 따라가기 모드(누르면 이동·따라가기, 손으로 끌면 해제, 다시 누르면 복귀).
+  // 동의는 버튼을 누를 때마다 서버에서 다시 확인한다(위치정보법 제16조, `useMyLocationControl`).
+  const getMap = useCallback(() => mapRef.current, []);
+  const myLocation = useMyLocationControl(getMap);
+  // 사용자가 고른 이동(검색 선택·묶음 펼치기·"여기서 주변 보기")은 옮기기 직전에 알려 따라가기를 끈다 — 그러지
+  // 않으면 다음 위치 갱신이 지도를 내 위치로 되돌려 고른 장소가 사라진다(2026-11-28 "dmz 자생" 보고).
+  const { notifyUserMove } = myLocation;
+
   const flyTo = useCallback((lon: number, lat: number, zoom?: number) => {
     mapRef.current?.flyTo(zoom != null ? { center: [lon, lat], zoom } : { center: [lon, lat] });
   }, []);
@@ -440,7 +448,10 @@ function useFeatureMapViewModel({
     (point: MapPoint) => {
       if (point.kind === 'cluster') {
         const map = mapRef.current;
-        if (map) flyTo(point.lon, point.lat, Math.min(map.getZoom() + 2, 17));
+        if (map) {
+          notifyUserMove();
+          flyTo(point.lon, point.lat, Math.min(map.getZoom() + 2, 17));
+        }
         return;
       }
       setSelected(point);
@@ -452,7 +463,7 @@ function useFeatureMapViewModel({
         setDetailFeatureId(point.featureId);
       }
     },
-    [flyTo, mobileLayout],
+    [flyTo, mobileLayout, notifyUserMove],
   );
 
   // 검색 결과(feature/my_poi/address/kakao/naver)로 지도를 이동. feature source면 마커도 선택.
@@ -476,15 +487,11 @@ function useFeatureMapViewModel({
         // 외부/주소 결과는 feature 상세가 없으므로 선택 해제하고 이동만 한다.
         setSelected(null);
       }
+      notifyUserMove();
       flyTo(coord.lon, coord.lat, 15);
     },
-    [flyTo],
+    [flyTo, notifyUserMove],
   );
-
-  // "내 위치" 버튼 — 여행 지도와 같은 따라가기 모드(누르면 이동·따라가기, 손으로 끌면 해제, 다시 누르면 복귀).
-  // 동의는 버튼을 누를 때마다 서버에서 다시 확인한다(위치정보법 제16조, `useMyLocationControl`).
-  const getMap = useCallback(() => mapRef.current, []);
-  const myLocation = useMyLocationControl(getMap);
 
   /**
    * 진입 시 자동 센터링(T-325, `docs/architecture/user-location.md` §1 "지도 초기 중심점").
@@ -644,6 +651,7 @@ function useFeatureMapViewModel({
     loading,
     mapRef,
     myLocation,
+    notifyUserMove,
     notice,
     openTransportDetail,
     points,
@@ -695,6 +703,7 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
     transport,
     userLocation,
     myLocation,
+    notifyUserMove,
     weatherPoints,
     mobileLayout,
   } = viewModel;
@@ -841,6 +850,7 @@ function FeatureMapViewView0({ viewModel }: { viewModel: FeatureMapViewView0Mode
                   type="button"
                   className="block w-full px-3 py-2 text-left text-ink hover:bg-surface-soft"
                   onClick={() => {
+                    notifyUserMove();
                     flyTo(contextMenu.lon, contextMenu.lat, 15);
                     setContextMenu(null);
                   }}

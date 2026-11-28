@@ -1,3 +1,40 @@
+## 2026-11-28 (claude) — 내 위치 따라가기가 검색 선택 이동을 되돌리던 문제(탐색·여행 지도, PR #816)
+
+- 보고(소유자): "dmz 자생"으로 검색해 DMZ 자생식물원을 고른 뒤 지도에서 누르려 하면 지도가 리셋되는 듯 검색 결과가 사라진다.
+- 원인(코드 분석 기반, 소유자 확인 대기): `apps/web/lib/useLocationFollow.ts` 따라가기(follow) 모드는 손으로 끈 이동(`dragstart`·
+  마우스/터치 move)만 해제 신호로 봤다. 검색 선택(`FeatureMapView.handleSearchSelect`의 `flyTo`)·묶음 펼치기·여행 지도 장소 선택처럼
+  사용자가 고른 카메라 이동은 원본 이벤트가 없어 해제되지 않았고, 다음 `watchPosition` 갱신이 `easeTo`로 지도를 내 위치로
+  되돌렸다(진행 중인 `flyTo`도 끊는다). 고른 장소의 popup이 화면 밖으로 밀려 "리셋·결과 사라짐"으로 보인다. 따라가기를 켠 적이
+  없으면 나지 않는다 — 소유자 화면의 따라가기 상태는 확인하지 못했고(배포 PinVi는 공개 URL이 없어 실기 재현 못 함), 검색 선택 뒤
+  카메라를 되돌리는 다른 경로는 코드에서 찾지 못했다.
+- 수정(적대 리뷰 2인 반영 후 최종): 이동을 둘로 나눴다.
+  - **사용자가 고른 이동**은 호출부가 옮기기 직전에 `notifyUserMove()`로 알리고, 따라가는 중이면 `tracking`(따라가기 해제, 점은 계속
+    갱신, 버튼으로 복귀)으로 바꾼다 — 탐색 지도 검색 선택·서버 묶음 마커·"여기서 주변 보기", 여행 지도 목록/마커 장소 선택(고른
+    장소·포커스 요청이 바뀐 경우만). 라이브러리 기본 묶음 거품(`ClusterLayer`)은 직접 `flyTo`하므로 훅이 지도 컨테이너 캡처 click에서
+    `[data-is-cluster="true"]`를 보고 같은 처리를 한다.
+  - **화면이 알아서 하는 이동**(여행 장소 재맞춤, popup 비키기, resize, 자동 센터링)은 따라가기를 끄지 않는다. 여행 지도는 따라가는
+    동안 자동 재맞춤(`fitToPoints` — 장소 목록 참조 변경·패널 크기 변경)과, 같은 선택의 재실행 `flyTo`를 하지 않는다(`isFollowing()`).
+  - 첫 측위 전(`locating`)에 고른 이동이 있었으면 첫 위치에서 카메라를 옮기지 않고 `tracking`으로 점만 찍는다(지도 늦게 붙는 경로 포함).
+  - 따라가는 중에 버튼을 다시 누르면 카메라를 다시 잡는다(복구 경로).
+  - 1차 안(원본 이벤트 없는 `movestart`를 화면 이동으로 추론 + 거리 문턱)은 버렸다 — 사용자 선택 이동과 화면 자동 이동이 MapLibre
+    이벤트로는 구별되지 않아 재맞춤·popup 비키기가 따라가기를 끄고, 표시 ref가 moveend 유실 시 묶일 수 있었다.
+- 시험: `useLocationFollow.test.ts` 가짜 지도를 MapLibre 6.17처럼(카메라 호출 안 동기 `movestart`, 진행 중 이동을 끊으면 `moveend` 먼저)
+  보강하고 6건 — 우리 ease 진행 중 검색 flyTo 끼어듦, 재맞춤 `fitBounds`·popup `panBy`는 유지, 기본 묶음 거품 클릭은 해제, 첫 측위 전
+  선택 뒤 첫 위치가 카메라를 뺏지 않음(즉시·지도 늦게 붙는 경로), 따라가는 중 버튼 재클릭 복구. `tripMapViewFit.test.tsx` 2건 — 따라가는
+  동안 목록 변경·패널 크기 변경에 재맞춤 없음(끄면 다음 계기부터 맞춤), 목록 선택은 알린 뒤 이동·같은 선택 재실행은 이동 안 함·포커스
+  요청은 다시 이동. web lint·typecheck·vitest 전체 707(Docker node 26.13.1). Playwright는 돌리지 않았다.
+- 재리뷰 2인 후속(결함 없음·머지 가능 판정 뒤 경미 사항): ① 기본 묶음 거품 캡처 click 감지를 첫 위치 뒤가 아니라 측위를
+  시작하는 즉시 문서 캡처 단계에 붙이고(클릭 순간 이 훅의 지도 컨테이너 안 거품인지 확인 — react-doctor effect 정리 규칙도
+  만족), 첫 위치 대기 중 거품 클릭도 `notifyUserMove`로 처리(첫 위치가 카메라를 뺏지 않음).
+  ② 여행 지도 `lastFocusRef`는 `selectedPoiId`가 null이 될 때만 잊는다 — 일자 숨김/재표시로 고른 장소가 지도 목록에서 잠깐
+  빠졌다 돌아오는 것을 고른 이동으로 오인하지 않는다. ③ 탐색 지도 배선 컴포넌트 시험(`FeatureMapView.followIntent.test.tsx`:
+  검색 선택·서버 묶음 마커·"여기서 주변 보기"가 flyTo 직전에 알림, 좌표 없는 결과는 알리지 않음). ④ 실제 브라우저 회귀를
+  `apps/web/e2e/map-location-follow.e2e.ts`에 추가(가짜 GPS — `addInitScript`로 `navigator.geolocation` 제어, 재리뷰 하네스
+  R1·R6에서 옮김): 따라가기 중 검색 선택 → 위치 갱신 → popup 화면 안·`tracking`, 측위 대기 중 선택 → 첫 위치가 카메라를
+  뺏지 않음. `test:e2e:map-canvas` grep에 추가(CI web.yml이 실행). **실제 브라우저 재현: PR 전 R1·R2·R5·R6 실패, PR 후 통과**
+  (재리뷰어 하네스, Docker `pinvi-pw-node26:1.65.0` canvas 모드). 로컬 검증: web `npm run doctor`(No issues)·lint·typecheck·vitest 715, 같은 이미지에서
+  `map-location-follow.e2e.ts` canvas 3건 통과.
+
 ## 2026-11-28 (claude) — kor-travel-common 최신 채택(py 0.1.0.dev3·ui 0.2.8·tokens 0.1.9)
 
 - Python(api·etl) 핀 f1faf56(dev2) → aefdc86(tag `py-v0.1.0.dev3`, common registry canonical ref), 정책 checkout ref 120c749 → 73761c5(common #98).

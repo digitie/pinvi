@@ -8,6 +8,13 @@
  * - 따라가는 동안 위치가 바뀌면 지도 중심이 그 위치로 부드럽게 옮겨진다(줌은 그대로).
  * - 사용자가 지도를 손으로 끌면(`dragstart`) 따라가기만 끈다 — 파란 점은 계속 갱신된다.
  *   다시 누르면 현재 위치로 돌아가 따라가기를 다시 켠다.
+ * - 사용자가 **고른** 이동(검색 결과 선택, 목록에서 장소 선택, 묶음 펼치기, "여기서 주변 보기")도 따라가기를
+ *   끈다. 호출부가 카메라를 옮기기 직전에 `notifyUserMove()`로 알린다(라이브러리 묶음 거품 클릭은 이 훅이 지도
+ *   DOM에서 직접 알아챈다). 그러지 않으면 다음 위치 갱신이 지도를 내 위치로 되돌려 방금 고른 장소가 화면 밖으로
+ *   사라진다(2026-11-28 소유자 보고 "dmz 자생" 검색 → 선택 → 지도가 리셋되는 듯 검색 결과가 사라짐).
+ * - 화면이 **알아서** 하는 이동(여행 장소 재맞춤, popup 비키기, resize, 자동 센터링)은 따라가기를 끄지 않는다.
+ *   그런 이동도 사용자 선택 이동도 원본 이벤트가 없어 `movestart`로는 가를 수 없으므로 추론하지 않고, 의도는
+ *   호출부가 명시한다. 여행 지도는 따라가는 동안 자동 재맞춤을 하지 않는다(`isFollowing()`).
  * - 화면을 떠나면 측위를 멈춘다. 좌표는 화면 상태로만 들고 저장하거나 보내지 않는다.
  */
 
@@ -19,6 +26,9 @@ export type LocationFollowMode = 'off' | 'locating' | 'follow' | 'tracking';
 
 /** 처음 위치로 옮길 때의 줌 — 탐색 지도 "내 위치"와 같은 거리감(동네 단위). */
 export const FOLLOW_INITIAL_ZOOM = 15;
+
+/** vworld-map-web `ClusterMarker`가 마커 루트에 다는 표시 — 기본 묶음 거품은 라이브러리가 직접 flyTo한다. */
+export const CLUSTER_MARKER_SELECTOR = '[data-is-cluster="true"]';
 
 export interface WatchPositionSource {
   watch(
@@ -85,6 +95,9 @@ export function useLocationFollow({
   // 우리가 부른 카메라 이동(flyTo/easeTo)이 진행 중인가 — 끝나면(moveend) false. 화면·검사가 "따라가기 시점이
   // 자리 잡았다"를 알 수 있게 `ready`로 내보낸다.
   const [cameraMoving, setCameraMoving] = useState(false);
+  // 첫 위치를 기다리는 동안(`locating`) 사용자가 장소를 골라 지도를 옮겼는가 — 그러면 첫 위치에서 카메라를
+  // 빼앗지 않고 점만 찍는다(`tracking`).
+  const movedWhileLocatingRef = useRef(false);
   const modeRef = useRef<LocationFollowMode>('off');
   const getMapRef = useRef(getMap);
   useEffect(() => {
@@ -96,6 +109,16 @@ export function useLocationFollow({
     setMode(next);
   }, []);
 
+  /**
+   * 사용자가 고른 카메라 이동(검색 결과 선택·목록 선택·묶음 펼치기·"여기서 주변 보기")을 **옮기기 직전에** 알린다.
+   * 따라가는 중이면 따라가기를 끄고(점은 계속 갱신), 첫 위치를 기다리는 중이면 첫 위치에서 카메라를 옮기지 않게
+   * 한다. 화면이 알아서 하는 이동(재맞춤·popup 비키기)에는 부르지 않는다.
+   */
+  const notifyUserMove = useCallback(() => {
+    if (modeRef.current === 'follow') changeMode('tracking');
+    else if (modeRef.current === 'locating') movedWhileLocatingRef.current = true;
+  }, [changeMode]);
+
   const moveCamera = useCallback(
     (map: MapLibreMap | null, kind: 'fly' | 'ease', center: [number, number], duration?: number) => {
       if (!map) return;
@@ -105,7 +128,8 @@ export function useLocationFollow({
       } else {
         map.easeTo({ center, duration });
       }
-      // 이미 그 자리라 움직이지 않으면 moveend가 오지 않을 수 있다 — 다음 프레임에 확인한다.
+      // maplibre-gl 6.17은 제자리 이동에도 moveend를 낸다. 이 다음 프레임 확인은 moveend를 놓쳐도(다른 moveend
+      // 리스너의 예외 등) `ready`가 묶이지 않게 하는 무해한 중복 안전장치다.
       requestAnimationFrame(() => {
         if (typeof map.isMoving !== 'function' || !map.isMoving()) setCameraMoving(false);
       });
@@ -128,6 +152,11 @@ export function useLocationFollow({
         setFollowMap(map);
         if (first) {
           first = false;
+          // 기다리는 동안 사용자가 장소를 골라 지도를 옮겼으면 그 이동(검색 flyTo 등)을 끊지 않는다.
+          if (movedWhileLocatingRef.current) {
+            changeMode('tracking');
+            return;
+          }
           changeMode('follow');
           moveCamera(map, 'fly', coord);
           return;
@@ -148,7 +177,8 @@ export function useLocationFollow({
   }, [watching, source, changeMode, moveCamera]);
 
   // 첫 위치가 지도 로드보다 먼저 오면(버튼을 일찍 누름) 지도를 기다렸다가 붙이고, 따라가는 중이면 그때
-  // 위치로 옮긴다 — 그러지 않으면 끌기 감지가 붙지 않아 따라가기가 풀리지 않는다.
+  // 위치로 옮긴다 — 그러지 않으면 끌기 감지가 붙지 않아 따라가기가 풀리지 않는다. 그 사이 사용자가 장소를
+  // 골랐으면 `notifyUserMove`가 이미 `tracking`으로 바꿔 두었으므로 옮기지 않는다.
   const positionRef = useRef<[number, number] | null>(null);
   useEffect(() => {
     positionRef.current = position;
@@ -173,9 +203,9 @@ export function useLocationFollow({
   // 있어(CI #759 canvas 1회) 마우스·터치·포인터 원본 이벤트가 있는 move도 함께 본다.
   useEffect(() => {
     if (!followMap) return undefined;
-    const release = () => {
-      if (modeRef.current === 'follow') changeMode('tracking');
-    };
+    // 손으로 옮긴 것도 고른 이동이다 — 따라가는 중이면 끄고, (지도가 이미 붙은) 첫 위치 대기 중이면 첫 위치가
+    // 카메라를 뺏지 않게 표시한다.
+    const release = notifyUserMove;
     const handleMove = (event: { originalEvent?: Event }) => {
       if (event.originalEvent && isUserPanEvent(event.originalEvent)) release();
     };
@@ -188,18 +218,41 @@ export function useLocationFollow({
       followMap.off('move', handleMove);
       followMap.off('moveend', handleMoveEnd);
     };
-  }, [followMap, changeMode]);
+  }, [followMap, notifyUserMove]);
+
+  // 기본 묶음 거품(`ClusterLayer`에 renderCluster가 없을 때)은 라이브러리가 직접 flyTo해 호출부가 알릴 틈이 없다.
+  // 거품의 click 핸들러는 전파를 막으므로 지도 컨테이너에서 캡처 단계로 본다(사용자 클릭 = 고른 이동). 첫 위치를
+  // 기다리는 동안(`locating`)의 클릭도 잡아야 첫 위치가 카메라를 뺏지 않으므로, 측위를 시작하면 바로 문서에
+  // 캡처 리스너를 붙이고 클릭 순간의 지도 컨테이너 안 거품인지 본다(지도가 늦게 생겨도 따로 기다릴 필요가 없다).
+  useEffect(() => {
+    if (!watching) return undefined;
+    const handleClusterClick = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest(CLUSTER_MARKER_SELECTOR)) return;
+      // 이 훅의 지도 안 거품만 — 같은 화면의 다른 지도는 제 훅이 본다.
+      if (getMapRef.current()?.getContainer().contains(target)) notifyUserMove();
+    };
+    document.addEventListener('click', handleClusterClick, true);
+    return () => document.removeEventListener('click', handleClusterClick, true);
+  }, [watching, notifyUserMove]);
 
   const startWatch = useCallback(() => {
     if (modeRef.current !== 'off') return;
+    movedWhileLocatingRef.current = false;
     changeMode('locating');
     setError(null);
     setWatching(true);
   }, [changeMode]);
 
-  /** 버튼 동작: 꺼짐 → 동의 확인 후 시작 / 따라가기 꺼짐 → 현재 위치로 돌아가 다시 따라가기. */
+  /** 따라가는 중인가 — 화면이 자동 맞춤을 건너뛸지 콜백·effect 안에서 읽는다(렌더 중에는 `mode`를 쓴다). */
+  const isFollowing = useCallback(() => modeRef.current === 'follow', []);
+
+  /**
+   * 버튼 동작: 꺼짐 → 동의 확인 후 시작 / 따라가기 꺼짐·따라가는 중 → 현재 위치로 돌아가 (다시) 따라가기.
+   * 따라가는 중에 눌러도 카메라를 다시 잡는다 — 무엇이 지도를 옮겨 두었든 버튼 한 번으로 복구된다.
+   */
   const activate = useCallback(async () => {
-    if (modeRef.current === 'tracking' && position) {
+    if ((modeRef.current === 'tracking' || modeRef.current === 'follow') && position) {
       changeMode('follow');
       moveCamera(getMapRef.current(), 'ease', position, 500);
       return;
@@ -218,6 +271,8 @@ export function useLocationFollow({
     error,
     ready,
     activate,
+    notifyUserMove,
+    isFollowing,
     startWatch,
     stop,
     clearError: () => setError(null),
