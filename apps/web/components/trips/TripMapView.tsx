@@ -207,6 +207,9 @@ function useTripMapViewModel({
   const mobileLayout = useMobileWebLayout();
   const getMap = useCallback(() => mapRef.current, []);
   const myLocation = useMyLocationControl(getMap);
+  // 따라가기와 지도 이동: 사용자가 고른 이동(목록에서 장소 선택)은 알려 따라가기를 끄고, 화면이 알아서 하는
+  // 재맞춤(장소 목록 변경·패널 크기 변경)은 따라가는 동안 하지 않는다 — 둘이 지도를 번갈아 빼앗지 않게.
+  const { notifyUserMove, isFollowing } = myLocation;
   // 여행 지도의 교통 레이어는 화면 범위가 아니라 여행 장소 반경(주유소 10 km·교통 돌발 20 km)이다.
   const transportNearPoints = useMemo(() => dedupeTransportNearPoints(points), [points]);
   const transport = useTransportLayers({ active: transportLayers, nearPoints: transportNearPoints });
@@ -298,6 +301,9 @@ function useTripMapViewModel({
   const fitToPoints = useCallback(
     (map: MapLibreMap) => {
       lastFitPointsRef.current = points;
+      // 내 위치를 따라가는 중에는 자동 맞춤을 하지 않는다(따라가기는 유지) — 따라가기를 끄면 다음 맞춤 계기부터
+      // 다시 맞춘다. 이 목록은 맞춘 것으로 친다(따라가기를 끈 순간 지난 변경으로 지도를 빼앗지 않게).
+      if (isFollowing()) return;
       // 맞춤이 시점을 새로 정했다 — 그 전의 사용자 이동은 더는 지킬 시점이 아니다.
       userMovedRef.current = false;
       const bounds = pointsBounds(points);
@@ -372,7 +378,7 @@ function useTripMapViewModel({
         });
       }
     },
-    [points],
+    [points, isFollowing],
   );
 
   const fitToPointsRef = useRef(fitToPoints);
@@ -529,9 +535,18 @@ function useTripMapViewModel({
     }
   }
 
-  // 외부에서 POI 를 선택하면 해당 위치로 이동.
+  // 외부에서 POI 를 선택하면 해당 위치로 이동. 고른 장소·포커스 요청이 그대로인 재실행(장소 목록을 다시 받아
+  // `selected` 참조만 바뀜)은 사용자 선택이 아니므로 따라가는 중이면 옮기지 않는다.
+  const lastFocusRef = useRef<{ poiId: string; focusRequest: number } | null>(null);
   useEffect(() => {
+    // 선택을 풀면 잊는다 — 같은 장소를 다시 고르는 것도 고른 이동이다.
+    if (!selected) lastFocusRef.current = null;
     if (selected && mapRef.current) {
+      const last = lastFocusRef.current;
+      const chosen = last?.poiId !== selected.poiId || last.focusRequest !== focusRequest;
+      lastFocusRef.current = { poiId: selected.poiId, focusRequest };
+      if (chosen) notifyUserMove();
+      else if (isFollowing()) return;
       // 사용자가 고른 장소로 가는 이동 — 늦게 나타난 교통 패널의 재맞춤이 되돌리지 않게.
       userMovedRef.current = true;
       const map = mapRef.current;
@@ -554,7 +569,7 @@ function useTripMapViewModel({
         offset: [0, (padding.top - padding.bottom) / 2],
       });
     }
-  }, [selected, focusRequest]);
+  }, [selected, focusRequest, notifyUserMove, isFollowing]);
 
   const coordFromClientPoint = useCallback((clientX: number, clientY: number) => {
     const map = mapRef.current;
