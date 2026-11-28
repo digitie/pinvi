@@ -222,31 +222,18 @@ export function useLocationFollow({
 
   // 기본 묶음 거품(`ClusterLayer`에 renderCluster가 없을 때)은 라이브러리가 직접 flyTo해 호출부가 알릴 틈이 없다.
   // 거품의 click 핸들러는 전파를 막으므로 지도 컨테이너에서 캡처 단계로 본다(사용자 클릭 = 고른 이동). 첫 위치를
-  // 기다리는 동안(`locating`)의 클릭도 잡아야 첫 위치가 카메라를 뺏지 않으므로, 측위를 시작하면 지도가 있는 즉시
-  // 붙인다(없으면 생길 때까지 250ms마다 확인).
+  // 기다리는 동안(`locating`)의 클릭도 잡아야 첫 위치가 카메라를 뺏지 않으므로, 측위를 시작하면 바로 문서에
+  // 캡처 리스너를 붙이고 클릭 순간의 지도 컨테이너 안 거품인지 본다(지도가 늦게 생겨도 따로 기다릴 필요가 없다).
   useEffect(() => {
     if (!watching) return undefined;
-    let container: HTMLElement | null = null;
     const handleClusterClick = (event: Event) => {
       const target = event.target;
-      if (target instanceof Element && target.closest(CLUSTER_MARKER_SELECTOR)) notifyUserMove();
+      if (!(target instanceof Element) || !target.closest(CLUSTER_MARKER_SELECTOR)) return;
+      // 이 훅의 지도 안 거품만 — 같은 화면의 다른 지도는 제 훅이 본다.
+      if (getMapRef.current()?.getContainer().contains(target)) notifyUserMove();
     };
-    const attach = () => {
-      const map = getMapRef.current();
-      if (!map) return false;
-      container = map.getContainer();
-      container.addEventListener('click', handleClusterClick, true);
-      return true;
-    };
-    const timer = attach()
-      ? null
-      : setInterval(() => {
-          if (attach() && timer) clearInterval(timer);
-        }, 250);
-    return () => {
-      if (timer) clearInterval(timer);
-      container?.removeEventListener('click', handleClusterClick, true);
-    };
+    document.addEventListener('click', handleClusterClick, true);
+    return () => document.removeEventListener('click', handleClusterClick, true);
   }, [watching, notifyUserMove]);
 
   const startWatch = useCallback(() => {

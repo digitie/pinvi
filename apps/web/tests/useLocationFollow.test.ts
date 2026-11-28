@@ -37,7 +37,9 @@ type Handler = (event?: { originalEvent?: Event }) => void;
  */
 function fakeMap(zoom = 10) {
   const handlers = new Map<string, Handler>();
+  // 실제 지도처럼 문서에 붙인다 — 거품 클릭 감지는 문서 캡처 단계에서 지도 컨테이너 안인지 본다.
   const container = document.createElement('div');
+  document.body.append(container);
   let moving = false;
   let center: [number, number] = [127, 37.5];
   let target: [number, number] | null = null;
@@ -311,15 +313,27 @@ describe('useLocationFollow — 사용자가 고른 이동과 화면이 알아�
   });
 
   it('측위를 멈추면 묶음 거품 감지도 뗀다', async () => {
-    const { hook, state, container } = setup();
-    const add = vi.spyOn(container, 'addEventListener');
-    const remove = vi.spyOn(container, 'removeEventListener');
+    const { hook, state } = setup();
+    const add = vi.spyOn(document, 'addEventListener');
+    const remove = vi.spyOn(document, 'removeEventListener');
     await act(() => hook.result.current.activate());
     expect(add).toHaveBeenCalledWith('click', expect.any(Function), true);
     act(() => state.onPosition?.([127.1, 37.5]));
     act(() => hook.result.current.stop());
     const listener = add.mock.calls.find((call) => call[0] === 'click')?.[1];
     expect(remove).toHaveBeenCalledWith('click', listener, true);
+    add.mockRestore();
+    remove.mockRestore();
+  });
+
+  it('다른 지도(이 훅의 지도 컨테이너 밖)의 묶음 거품은 따라가기를 끄지 않는다', async () => {
+    const { hook } = await following();
+    const other = document.createElement('div');
+    other.dataset.isCluster = 'true';
+    document.body.append(other);
+    act(() => other.click());
+    expect(hook.result.current.mode).toBe('follow');
+    other.remove();
   });
 
   it('지도가 늦게 붙는 경로에서도 그 사이 고른 이동이 있었으면 카메라를 옮기지 않는다', async () => {
